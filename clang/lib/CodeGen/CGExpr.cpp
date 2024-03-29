@@ -2634,7 +2634,7 @@ static llvm::Constant *EmitFunctionDeclPointer(CodeGenModule &CGM,
       // isn't the same as the type of a use.  Correct for this with a
       // bitcast.
       QualType NoProtoType =
-          CGM.getContext().getFunctionNoProtoType(Proto->getReturnType());
+          CGM.getContext().getFunctionNoProtoType(Proto->getReturnType(), Proto->getExtInfo());
       NoProtoType = CGM.getContext().getPointerType(NoProtoType);
       V = llvm::ConstantExpr::getBitCast(V,
                                       CGM.getTypes().ConvertType(NoProtoType));

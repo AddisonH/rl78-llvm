@@ -231,6 +231,9 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
     return createRISCVTargetCodeGenInfo(CGM, XLen, ABIFLen);
   }
 
+   case llvm::Triple::RL78:
+    return createRL78TargetCodeGenInfo(CGM);
+
   case llvm::Triple::systemz: {
     bool SoftFloat = CodeGenOpts.FloatABI == "soft";
     bool HasVector = !SoftFloat && Target.getABI() == "vector";
@@ -4349,10 +4352,21 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     IsIncompleteFunction = true;
   }
 
-  llvm::Function *F =
-      llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,
+  llvm::Function *F = nullptr;
+  if (Context.getLangOpts().RenesasRL78) {
+    unsigned int FunctionAddressSpace =
+        Context.getLangOpts().RenesasRL78CodeModel
+            ? Context.getTargetAddressSpace(LangAS::__far_code)
+            : Context.getTargetAddressSpace(LangAS::Default);
+    if (const FunctionDecl *FD = cast_or_null<FunctionDecl>(D))
+      FunctionAddressSpace = Context.getTargetAddressSpace(FD->getType().getAddressSpace());
+    F = llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,
+                               FunctionAddressSpace,
+                               Entry ? StringRef() : MangledName, &getModule());
+  } else {
+    F = llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,
                              Entry ? StringRef() : MangledName, &getModule());
-
+  }
   // If we already created a function with the same mangled name (but different
   // type) before, take its name and add it to the list of functions to be
   // replaced with F at the end of CodeGen.
@@ -4980,6 +4994,8 @@ LangAS CodeGenModule::GetGlobalConstantAddressSpace() const {
     // UniformConstant storage class is not viable as pointers to it may not be
     // casted to Generic pointers which are used to model HIP's "flat" pointers.
     return LangAS::cuda_device;
+  if(LangOpts.getRenesasRL78RomModel() == clang::LangOptions::RL78RomModelKind::Far)
+    return LangAS::__far_data;
   if (auto AS = getTarget().getConstantAddressSpace())
     return *AS;
   return LangAS::Default;
@@ -4997,7 +5013,7 @@ static llvm::Constant *
 castStringLiteralToDefaultAddressSpace(CodeGenModule &CGM,
                                        llvm::GlobalVariable *GV) {
   llvm::Constant *Cast = GV;
-  if (!CGM.getLangOpts().OpenCL) {
+  if (!CGM.getLangOpts().OpenCL && !CGM.getLangOpts().RenesasRL78) {
     auto AS = CGM.GetGlobalConstantAddressSpace();
     if (AS != LangAS::Default)
       Cast = CGM.getTargetCodeGenInfo().performAddrSpaceCast(

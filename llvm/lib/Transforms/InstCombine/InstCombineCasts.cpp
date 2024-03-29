@@ -1934,6 +1934,17 @@ Instruction *InstCombinerImpl::commonPointerCastTransforms(CastInst &CI) {
       return replaceOperand(CI, 0, GEP->getOperand(0));
     }
   }
+  // For RL78 bitcasting a near data pointer to a near function pointer
+  // is not allowed. We change the order
+  /*if(!DestTy->isOpaquePointerTy() && !SrcTy->isOpaquePointerTy()) {
+  // TODO: this needs to be looked into. No idea for now how to check for the
+  pointed type. Type *DestElemTy = CI.getp; Type *SrcElemTy =
+  SrcTy->getContainedType(); if (DestElemTy->isFunctionTy() !=
+  SrcElemTy->isFunctionTy()) { PointerType *SrcDestASTy =
+        PointerType::get(SrcElemTy, DestTy->getAddressSpace());
+    Value *AddrSpaceCast = Builder.CreateAddrSpaceCast(Src, SrcDestASTy);
+    return new BitCastInst(AddrSpaceCast, CI.getType());
+  }}*/
 
   return commonCastTransforms(CI);
 }

@@ -4033,9 +4033,26 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         if (Offs.isNonNegative() && cast<GEPOperator>(I).isInBounds())
           Flags.setNoUnsignedWrap(true);
 
-        OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, N.getValueType());
-
-        N = DAG.getNode(ISD::ADD, dl, N.getValueType(), N, OffsVal, Flags);
+        if (DAG.getTarget().getTargetTriple().isRL78() &&
+            N.getValueType().getSizeInBits() == 32) {
+          // Since for RL78 data alocation is prohibited accross segments,
+          // offsets are
+          // added to the lower 16bytes only
+          OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, MVT::i16);
+          SDValue LowAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
+                                           N, DAG.getConstant(0, dl, MVT::i16));
+          SDValue HighAddress =
+              DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
+                          DAG.getConstant(1, dl, MVT::i16));
+          SDValue LowAddressAndOffset =
+              DAG.getNode(ISD::ADD, dl, LowAddress.getValueType(), LowAddress,
+                          OffsVal, Flags);
+          N = DAG.getNode(ISD::BUILD_PAIR, dl, N.getValueType(),
+                          LowAddressAndOffset, HighAddress, Flags);
+        } else {
+          OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, N.getValueType());
+          N = DAG.getNode(ISD::ADD, dl, N.getValueType(), N, OffsVal, Flags);
+        }
         continue;
       }
 
@@ -5916,7 +5933,8 @@ void SelectionDAGBuilder::lowerCallToExternalSymbol(const CallInst &I,
   assert(FunctionName && "FunctionName must not be nullptr");
   SDValue Callee = DAG.getExternalSymbol(
       FunctionName,
-      DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout()));
+      DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout(), 
+      DAG.getDataLayout().getProgramAddressSpace()));
   LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
@@ -7006,7 +7024,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     CLI.setDebugLoc(sdl).setChain(getRoot()).setLibCallee(
         CallingConv::C, I.getType(),
         DAG.getExternalSymbol(TrapFuncName.data(),
-                              TLI.getPointerTy(DAG.getDataLayout())),
+                              TLI.getPointerTy(DAG.getDataLayout(), DAG.getDataLayout().getProgramAddressSpace())),
         std::move(Args));
 
     std::pair<SDValue, SDValue> Result = TLI.LowerCallTo(CLI);
@@ -8202,9 +8220,9 @@ static SDValue getMemCmpLoad(const Value *PtrVal, MVT LoadVT,
         Type::getIntNTy(PtrVal->getContext(), LoadVT.getScalarSizeInBits());
     if (LoadVT.isVector())
       LoadTy = FixedVectorType::get(LoadTy, LoadVT.getVectorNumElements());
-
+    // TODO: RL78 change: added address space too, since we need to handle far-rom.
     LoadInput = ConstantExpr::getBitCast(const_cast<Constant *>(LoadInput),
-                                         PointerType::getUnqual(LoadTy));
+                                         PointerType::get(LoadTy, LoadInput->getType()->getPointerAddressSpace()));
 
     if (const Constant *LoadCst =
             ConstantFoldLoadFromConstPtr(const_cast<Constant *>(LoadInput),
@@ -9316,7 +9334,11 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
         OpFlag = InlineAsm::convertMemFlagWordToMatchingFlagWord(OpFlag);
         OpFlag = InlineAsm::getFlagWordForMatchingOp(OpFlag,
                                                     OpInfo.getMatchedOperand());
-        AsmNodeOperands.push_back(DAG.getTargetConstant(
+        if(llvm::isUInt<32>(OpFlag) && (TLI.getPointerTy(DAG.getDataLayout()).getSizeInBits() < 32))
+          AsmNodeOperands.push_back(DAG.getTargetConstant(
+            OpFlag, getCurSDLoc(), MVT::i32));
+        else
+          AsmNodeOperands.push_back(DAG.getTargetConstant(
             OpFlag, getCurSDLoc(), TLI.getPointerTy(DAG.getDataLayout())));
         AsmNodeOperands.push_back(AsmNodeOperands[CurOp+1]);
         break;
