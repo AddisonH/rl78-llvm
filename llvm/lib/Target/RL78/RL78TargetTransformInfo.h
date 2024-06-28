@@ -40,6 +40,8 @@ public:
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
+  TTI::MemCmpExpansionOptions enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const;
+
   bool hasDivRemOp(Type *DataType, bool IsSigned);
 };
 

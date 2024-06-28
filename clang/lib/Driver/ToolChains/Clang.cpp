@@ -2224,6 +2224,11 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   //CmdArgs.push_back("-Werror=vla");
   CmdArgs.push_back("-Wvla");
 
+  if (Args.getLastArg(options::OPT_ffinite_loops) == nullptr) {
+    // By default, we don't want to replace infinite loops with unreachable.
+    CmdArgs.push_back("-fno-finite-loops");
+  }
+
   //TODO: maybe we can remove this at some point.
   CmdArgs.push_back("-fno-aligned-allocation");
 
@@ -2239,12 +2244,32 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("--trap-unreachable=true");
 
-  Arg *OptLevel = Args.getLastArg(options::OPT_O_Group);
-  if (OptLevel == nullptr ||
-      OptLevel->getNumValues() == 0 ||
-        (OptLevel->getValue()[0] != 's' && OptLevel->getValue()[0] != 'z')) {
-    return;
+  Arg *OptArg = Args.getLastArg(options::OPT_O_Group);
+  char OptLevel = (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
+
+  // Aggressive (-O3) speed optimizations
+  if (OptLevel == '3') {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-inline-threshold=600");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-unroll-runtime");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-enable-dfa-jump-thread");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-allow-unroll-and-jam");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-enable-unroll-and-jam");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-unroll-runtime-epilog");
   }
+
+  if (OptLevel != 's' && OptLevel != 'z')
+    return;
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-split-spill-mode=size");
@@ -6860,10 +6885,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   const Arg *mCode =
       Args.getLastArg(options::OPT_mnear_code, options::OPT_mfar_code);
-  if (!C.getDriver().CCCIsCXX() &&
-      (/*(mCode == nullptr && CPU != "RL78_S1") ||*/
-       (mCode != nullptr &&
-        mCode->getOption().getID() == options::OPT_mfar_code))) {
+  if (mCode != nullptr &&
+      mCode->getOption().getID() == options::OPT_mfar_code) {
     CmdArgs.push_back("-mfar-code");
   }
 

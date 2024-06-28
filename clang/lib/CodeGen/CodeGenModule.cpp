@@ -980,7 +980,8 @@ void CodeGenModule::Release() {
     getModule().addModuleFlag(llvm::Module::Error, "min_enum_size", EnumWidth);
   }
 
-  if (Arch == llvm::Triple::riscv32 || Arch == llvm::Triple::riscv64) {
+  if (Arch == llvm::Triple::riscv32 || Arch == llvm::Triple::riscv64 ||
+      Arch == llvm::Triple::RL78) {
     StringRef ABIStr = Target.getABI();
     llvm::LLVMContext &Ctx = TheModule.getContext();
     getModule().addModuleFlag(llvm::Module::Error, "target-abi",
@@ -4354,14 +4355,23 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
 
   llvm::Function *F = nullptr;
   if (Context.getLangOpts().RenesasRL78) {
-    unsigned int FunctionAddressSpace =
-        Context.getLangOpts().RenesasRL78CodeModel
-            ? Context.getTargetAddressSpace(LangAS::__far_code)
-            : Context.getTargetAddressSpace(LangAS::Default);
-    if (const FunctionDecl *FD = cast_or_null<FunctionDecl>(D))
-      FunctionAddressSpace = Context.getTargetAddressSpace(FD->getType().getAddressSpace());
+    auto FunctionAddressSpace =
+      Context.getLangOpts().RenesasRL78CodeModel ? LangAS::__far_code : LangAS::Default;
+    if (const FunctionDecl *FD = cast_or_null<FunctionDecl>(D)) {
+      auto FDTy = FD->getType();
+      if (FDTy.hasAddressSpace())
+        FunctionAddressSpace = FDTy.getAddressSpace();
+      else
+        FunctionAddressSpace =
+            cast<FunctionType>(FDTy.getTypePtr()->getUnqualifiedDesugaredType())->getFar() ?
+                LangAS::__far_code : LangAS::Default;
+    }
+    // RL78: the thunks for vtable are always using the default/near address space
+    // (they are created to access the far virtual methods)
+    if (IsThunk && ForVTable)
+      FunctionAddressSpace = LangAS::Default;
     F = llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,
-                               FunctionAddressSpace,
+                               Context.getTargetAddressSpace(FunctionAddressSpace),
                                Entry ? StringRef() : MangledName, &getModule());
   } else {
     F = llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,

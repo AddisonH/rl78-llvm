@@ -7866,7 +7866,7 @@ static void handleRL78InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL,
 
   // Silently drop the __far attribute
   FunctionDecl *FD = cast<FunctionDecl>(D);
-  if (FD->getType().getAddressSpace() == LangAS::__far_code &&
+  if (getAddressSpace(FD->getType(), S.Context) == LangAS::__far_code &&
       (brk || !ExtraDataVects.empty())) {
     const FunctionProtoType *FPT = FD->getType()->castAs<FunctionProtoType>();
     FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
@@ -8934,7 +8934,7 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
       break;
   case ParsedAttr::AT_RL78Far:
     if (isa<FunctionDecl>(D) &&
-        cast<FunctionDecl>(D)->getType().getAddressSpace() == LangAS::__far_code) {
+        getAddressSpace(cast<FunctionDecl>(D)->getType(), S.Context) == LangAS::__far_code) {
       if (D->hasAttr<RL78CalltAttr>()) {
         S.Diag(AL.getLoc(), diag::err_attributes_are_not_compatible)
             << AL << "'__callt'";
@@ -9773,7 +9773,7 @@ void Sema::ProcessDeclAttributeList(
   }
    if (D->hasAttr<RL78CalltAttr>() && isa<FunctionDecl>(D)) {
     QualType FnType = cast<FunctionDecl>(D)->getType();
-    if (FnType.getAddressSpace() == LangAS::__far_code) {
+    if (getAddressSpace(FnType, Context) == LangAS::__far_code) {
       bool HasExplicitFar = false;
       for (const ParsedAttr &AL : AttrList) {
         if (AL.getKind() == ParsedAttr::AT_RL78Far) {

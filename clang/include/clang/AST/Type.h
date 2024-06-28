@@ -6749,14 +6749,10 @@ inline bool QualType::isReferenceable() const {
 }
 
 inline SplitQualType QualType::split() const {
-  if (!hasLocalNonFastQualifiers()) {
-    Qualifiers q = Qualifiers::fromFastMask(getLocalFastQualifiers());
-    if (isa<FunctionType>(getTypePtr()->getUnqualifiedDesugaredType()) &&
-      cast<FunctionType>(getTypePtr()->getUnqualifiedDesugaredType())->getFar() &&
-      !q.hasAddressSpace())
-    q.addAddressSpace(LangAS::__far_code);
-    return SplitQualType(getTypePtrUnsafe(), q);
-  }
+  if (!hasLocalNonFastQualifiers())
+    return SplitQualType(getTypePtrUnsafe(),
+                         Qualifiers::fromFastMask(getLocalFastQualifiers()));
+
   const ExtQuals *eq = getExtQualsUnsafe();
   Qualifiers qs = eq->getQualifiers();
   qs.addFastQualifiers(getLocalFastQualifiers());
@@ -6768,10 +6764,6 @@ inline Qualifiers QualType::getLocalQualifiers() const {
   if (hasLocalNonFastQualifiers())
     Quals = getExtQualsUnsafe()->getQualifiers();
   Quals.addFastQualifiers(getLocalFastQualifiers());
-  if (isa<FunctionType>(getTypePtr()->getUnqualifiedDesugaredType()) &&
-      cast<FunctionType>(getTypePtr()->getUnqualifiedDesugaredType())->getFar() &&
-      !Quals.hasAddressSpace())
-    Quals.addAddressSpace(LangAS::__far_code);
   return Quals;
 }
 
@@ -7616,6 +7608,9 @@ QualType DecayedType::getPointeeType() const {
 void FixedPointValueToString(SmallVectorImpl<char> &Str, llvm::APSInt Val,
                              unsigned Scale);
 
+/// A simple wrapper over QualType::getAddressSpace() to accommodate the RL78
+/// far code AS.
+LangAS getAddressSpace(QualType Type, const ASTContext &Ctx);
 } // namespace clang
 
 #endif // LLVM_CLANG_AST_TYPE_H

@@ -29,6 +29,7 @@ class RL78TargetInfo : public TargetInfo {
   bool has64BitDoubles;
   bool farCodeModel;
   bool isMDADisabled;
+  std::string ABI;
 
 public:
   RL78TargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts);
@@ -93,10 +94,10 @@ public:
       else 
          Builder.defineMacro("__UCHAR");
 
-      //TODO: signed/unsigned bitfields __SBIT / __UBIT
-      // -fsigned-bitfields is default, and clang doesn't yet support
-      // -funsigned-bitfields.
-      Builder.defineMacro("__SBIT");
+      if (Opts.UnsignedBitfields)
+        Builder.defineMacro("__UBIT");
+      else
+        Builder.defineMacro("__SBIT");
     }
 
   }
@@ -113,6 +114,21 @@ public:
     }
     return false;
   }
+
+  bool setABI(const std::string &Name) override {
+    const auto validABI =
+        llvm::StringSwitch<bool>(Name)
+            .Cases("nc_d32", "nc_d32_mda", "nc_d32_nomda", true)
+            .Cases("nc_d64", "nc_d64_mda", "nc_d64_nomda", true)
+            .Cases("fc_d32", "fc_d32_mda", "fc_d32_nomda", true)
+            .Cases("fc_d64", "fc_d64_mda", "fc_d64_nomda", true)
+            .Default(false);
+    if (validABI)
+      ABI = Name;
+    return validABI;
+  }
+
+  StringRef getABI() const override { return ABI; }
 
   bool validateAsmConstraint(const char *&Name,
                              TargetInfo::ConstraintInfo &info) const override {

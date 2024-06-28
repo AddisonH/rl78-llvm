@@ -38,11 +38,6 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
     return;
   }
 
-  if(D.CCCIsCXX() && mCode && mCode->getOption().getID() == options::OPT_mfar_code) {
-    D.Diag(diag::err_drv_unsupported_opt) << "-mfar-code";
-    return;
-  }
-
   // Add any that the user explicitly requested on the command line,
   // which may override the defaults.
   handleTargetFeaturesGroup(D, Triple, Args, Features, options::OPT_m_rl78_Features_Group);

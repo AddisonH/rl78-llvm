@@ -24,6 +24,14 @@ using namespace llvm;
 
 #define DEBUG_TYPE "RL78tti"
 
+TTI::MemCmpExpansionOptions
+RL78TTIImpl::enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const {
+  TTI::MemCmpExpansionOptions Options;
+  Options.LoadSizes = { 2, 1 };
+  Options.MaxNumLoads = TLI->getMaxExpandSizeMemcmp(OptSize);
+  return Options;
+}
+
 bool RL78TTIImpl::hasDivRemOp(Type *DataType, bool IsSigned) {
   EVT VT = TLI->getValueType(DL, DataType);
   return !IsSigned && ST->isRL78S3CoreType() &&

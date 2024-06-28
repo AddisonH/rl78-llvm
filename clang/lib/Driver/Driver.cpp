@@ -710,8 +710,7 @@ static llvm::Triple computeTargetTriple(const Driver &D,
 // option occurs last.
 static driver::LTOKind parseLTOMode(Driver &D, const llvm::opt::ArgList &Args,
                                     OptSpecifier OptEq, OptSpecifier OptNeg) {
-  llvm::Triple Triple(D.getTargetTriple());
-  if (!Args.hasFlag(OptEq, OptNeg, false) || Triple.getArch() == llvm::Triple::RL78)
+  if (!Args.hasFlag(OptEq, OptNeg, false))
     return LTOK_None;
 
   const Arg *A = Args.getLastArg(OptEq);

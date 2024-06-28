@@ -8671,9 +8671,9 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
     case ParsedAttr::AT_RL78Far:
       if (type.hasAddressSpace()) {
         state.getSema().Diag(attr.getLoc(), diag::error_rl78_storage_attribute)
-            << (type.getAddressSpace() == LangAS::__far_code
+            << (getAddressSpace(type, state.getSema().Context) == LangAS::__far_code
                     ? "__far_code"
-                    : ((type.getAddressSpace() == LangAS::__far_data)
+                    : ((getAddressSpace(type, state.getSema().Context) == LangAS::__far_data)
                            ? "__far_data"
                            : "__near"));
       } else {
@@ -8688,9 +8688,9 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
     case ParsedAttr::AT_RL78Near:
       if (type.hasAddressSpace()) {
         state.getSema().Diag(attr.getLoc(), diag::error_rl78_storage_attribute)
-            << (type.getAddressSpace() == LangAS::__far_code
+            << (getAddressSpace(type, state.getSema().Context) == LangAS::__far_code
                     ? "__far_code"
-                    : ((type.getAddressSpace() == LangAS::__far_data)
+                    : ((getAddressSpace(type, state.getSema().Context) == LangAS::__far_data)
                            ? "__far_data"
                            : "__near"));
       } else {

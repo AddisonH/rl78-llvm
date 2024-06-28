@@ -92,6 +92,12 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
       farCodeModel = false;
   }
 
+  std::string ABI{farCodeModel ? "fc" : "nc"};
+  ABI += (has64BitDoubles ? "_d64" : "_d32");
+  if (Opts.CPU == "RL78_S2")
+    ABI += ((isMDADisabled ? "_nomda" : "_mda"));
+  setABI(ABI);
+
   TLSSupported = false;
   IntWidth = 16;
   IntAlign = 16;

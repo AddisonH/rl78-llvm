@@ -9915,7 +9915,7 @@ static bool isStdBuiltin(ASTContext &Ctx, FunctionDecl *FD,
 }
 
 static void dropFarFromFunctionDecl(ASTContext &Context, FunctionDecl *NewFD) {
-  if (NewFD->getType().getAddressSpace() == LangAS::__far_code) {
+  if (getAddressSpace(NewFD->getType(), Context) == LangAS::__far_code) {
     const FunctionProtoType *FPT =
         NewFD->getType()->castAs<FunctionProtoType>();
     FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();

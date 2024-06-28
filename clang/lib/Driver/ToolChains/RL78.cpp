@@ -193,7 +193,6 @@ void RL78ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
       DriverArgs.hasArg(options::OPT_nostdincxx))
     return;
 
-  const Driver &D = getDriver();
   std::string SysRoot(computeSysRoot());
   if (SysRoot.empty())
     return;
@@ -241,6 +240,21 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   ArgStringList CmdArgs;
 
   auto &TC = static_cast<const toolchains::RL78ToolChain &>(getToolChain());
+
+  // Extract all the -m options
+  std::vector<llvm::StringRef> Features;
+  handleTargetFeaturesGroup(TC.getDriver(), TC.getTriple(), Args, Features,
+                            options::OPT_m_rl78_Features_Group);
+
+  // Add features to mattr
+  std::string MAttrString = "-plugin-opt=-mattr=";
+  for (auto OneFeature : Features) {
+    MAttrString.append(Args.MakeArgString(OneFeature));
+    if (OneFeature != Features.back())
+      MAttrString.append(",");
+  }
+  if (!Features.empty())
+    CmdArgs.push_back(Args.MakeArgString(MAttrString));
 
   AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
 

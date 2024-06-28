@@ -126,7 +126,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
           NumBytesForCSRegs += 2;
           unsigned CFIIndex =
               MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                  nullptr, -NumBytesForCSRegs - 4));
+                  nullptr, NumBytesForCSRegs + 4));
           BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
               .addCFIIndex(CFIIndex);
         }
@@ -141,7 +141,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
       NumBytesForCSRegs += 2;
       unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-          nullptr, -NumBytesForCSRegs - 4));
+          nullptr, NumBytesForCSRegs + 4));
       BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     } else {
@@ -152,7 +152,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         NumBytesForCSRegs += 2;
         unsigned CFIIndex =
             MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                nullptr, -NumBytesForCSRegs - 4));
+                nullptr, NumBytesForCSRegs + 4));
         BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
       }
@@ -163,7 +163,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         NumBytesForCSRegs += 2;
         unsigned CFIIndex =
             MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                nullptr, -NumBytesForCSRegs - 4));
+                nullptr, NumBytesForCSRegs + 4));
         BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
       }
@@ -223,7 +223,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       llvm_unreachable("Invalid stack allocation!");
 
     unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-        nullptr, -(NumBytes + NumBytesForCSRegs) - 4));
+        nullptr, (NumBytes + NumBytesForCSRegs) + 4));
     BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
         .addCFIIndex(CFIIndex);
   }
@@ -506,7 +506,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       llvm_unreachable("Invalid stack allocation!");
 
     unsigned CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(nullptr, -4));
+        MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(nullptr, 4));
     BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
         .addCFIIndex(CFIIndex);
   }
@@ -521,7 +521,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
           .addReg(RL78::R1);
       NumBytes -= 2;
       unsigned CFIIndex = MF.addFrameInst(
-          MCCFIInstruction::cfiDefCfaOffset(nullptr, -NumBytes - 4));
+          MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
       BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     } else {
@@ -531,7 +531,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
             .addReg(RL78::R1);
         NumBytes -= 2;
         unsigned CFIIndex = MF.addFrameInst(
-            MCCFIInstruction::cfiDefCfaOffset(nullptr, -NumBytes - 4));
+            MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
         BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
       }
@@ -541,7 +541,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
             .addReg(RL78::R1);
         NumBytes -= 2;
         unsigned CFIIndex = MF.addFrameInst(
-            MCCFIInstruction::cfiDefCfaOffset(nullptr, -NumBytes - 4));
+            MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
         BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
       }
@@ -554,7 +554,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
                   RL78::RP0 + ((reg - 1) % 4));
           NumBytes -= 2;
           unsigned CFIIndex = MF.addFrameInst(
-              MCCFIInstruction::cfiDefCfaOffset(nullptr, -NumBytes - 4));
+              MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
           BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
               .addCFIIndex(CFIIndex);
         }

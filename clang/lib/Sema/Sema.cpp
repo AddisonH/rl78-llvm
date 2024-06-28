@@ -1494,9 +1494,6 @@ NamedDecl *Sema::getCurFunctionOrMethodDecl() const {
 LangAS Sema::getDefaultCXXMethodAddrSpace() const {
   if (getLangOpts().OpenCL)
     return getASTContext().getDefaultOpenCLPointeeAddrSpace();
-  // TODO: enable this when mfar-code works for C++
-  // if (getLangOpts().RenesasRL78CodeModel)
-  //  return LangAS::__far;
   return LangAS::Default;
 }
 

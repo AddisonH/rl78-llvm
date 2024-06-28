@@ -1458,8 +1458,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
     // So we can handle combining into divwu.
     setTargetDAGCombine(ISD::UDIV);
     setTargetDAGCombine(ISD::UREM);
-    // To match MACH/MACHU.
-    setTargetDAGCombine(ISD::ADD);
   } else {
     //
     setOperationAction(ISD::UDIV, MVT::i16, LibCall);
@@ -1517,6 +1515,14 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::TRAP);
   // To eliminate casts between far_code and far_data
   //setTargetDAGCombine(ISD::ADDRSPACECAST);
+
+  // To replace special cases of 16bit ops
+  setTargetDAGCombine(ISD::AND);
+  setTargetDAGCombine(ISD::OR);
+  setTargetDAGCombine(ISD::XOR);
+
+  // To match MACH/MACHU on S3 or other optimizations.
+  setTargetDAGCombine(ISD::ADD);
 
   setStackPointerRegisterToSaveRestore(RL78::SPreg);
 
@@ -1577,6 +1583,10 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setLibcallName(RTLIB::SRA_I64, "_COM_llsar");           // was __ashrdi3
   setLibcallName(RTLIB::SRL_I64, "_COM_llshr");           // was __lshrdi3
   setLibcallName(RTLIB::SHL_I64, "_COM_llshl");           // was __ashldi3
+
+  // Override MaxLoadsPerMemcmp value (from the default 8) for -O3
+  if (TM.getOptLevel() == CodeGenOpt::Aggressive)
+    MaxLoadsPerMemcmp = 32;
 }
 
 bool RL78TargetLowering::useSoftFloat() const { return true; }
@@ -3000,8 +3010,10 @@ SDValue RL78TargetLowering::PerformMULADDCombine(SDNode *N,
   SDLoc dl(N);
   unsigned op = ISD::DELETED_NODE;
   SDValue MulA, MulB, AddX;
+  // Try to combine into MACH/MACHU
   // Assume that the multiplication was already combined to (u/s)mul_lohi.
-  if (N->getOpcode() == ISD::ADD && N->getValueType(0) == MVT::i32) {
+  if (Subtarget->isRL78S3CoreType() && N->getOpcode() == ISD::ADD &&
+      N->getValueType(0) == MVT::i32) {
     if (N->getOperand(0)->getOpcode() == ISD::BUILD_PAIR &&
         (N->getOperand(0)->getOperand(0)->getOpcode() == ISD::SMUL_LOHI ||
          N->getOperand(0)->getOperand(0)->getOpcode() == ISD::UMUL_LOHI)) {
@@ -3044,6 +3056,46 @@ SDValue RL78TargetLowering::PerformMULADDCombine(SDNode *N,
   }
 }
 
+SDValue RL78TargetLowering::PerformXORAddCombine(SDNode *N,
+                                                 DAGCombinerInfo &DCI) const {
+  SDLoc dl(N);
+  unsigned op = ISD::DELETED_NODE;
+  SDValue X, Y;
+
+  //  X^0xFFFF + Y <=> Y - 1 - X
+  if (N->getValueType(0) == MVT::i16 && !DCI.isBeforeLegalizeOps()) {
+    if (N->getOperand(0).getOpcode() == ISD::XOR &&
+        N->getOperand(0).getOperand(1).getOpcode() == ISD::Constant &&
+        N->getOperand(0).getConstantOperandVal(1) == 0xFFFF) {
+      X = N->getOperand(0).getOperand(0);
+      Y = N->getOperand(1);
+    } else if (N->getOperand(1).getOpcode() == ISD::XOR &&
+               N->getOperand(1).getOperand(1).getOpcode() == ISD::Constant &&
+               N->getOperand(1).getConstantOperandVal(1) == 0xFFFF) {
+      X = N->getOperand(1).getOperand(0);
+      Y = N->getOperand(0);
+    } else {
+      return SDValue();
+    }
+    SDValue One = DCI.DAG.getConstant(1, dl, MVT::i16, true);
+    SDValue Sub1 = DCI.DAG.getNode(ISD::SUB, dl, MVT::i16, Y, One);
+    return DCI.DAG.getNode(ISD::SUB, dl, MVT::i16, Sub1, X);
+  }
+  return SDValue();
+}
+
+SDValue RL78TargetLowering::PerformADDCombine(SDNode *N,
+                                                 DAGCombinerInfo &DCI) const {
+  SDValue MulAddCombine = PerformMULADDCombine(N, DCI);
+  if (MulAddCombine.getNode())
+    return MulAddCombine;
+
+  SDValue XorAddCombine = PerformXORAddCombine(N, DCI);
+  if (XorAddCombine.getNode())
+    return XorAddCombine;
+  return SDValue();
+}
+
 SDValue RL78TargetLowering::PerformTruncateCombine(SDNode *N,
                                                    DAGCombinerInfo &DCI) const {
   // Trunc (i32 >> 16) to i16 => extract high(i32).
@@ -3060,6 +3112,76 @@ SDValue RL78TargetLowering::PerformTruncateCombine(SDNode *N,
   return SDValue();
 }
 
+SDValue RL78TargetLowering::PerformANDCombine(SDNode *N,
+                                              DAGCombinerInfo &DCI) const {
+  SDLoc dl(N);
+  assert(N->getOpcode() == ISD::AND);
+
+  if (!DCI.isBeforeLegalizeOps() && N->getValueType(0) == MVT::i16) {
+
+    bool isXNeg =
+        N->getOperand(0)->getOpcode() == ISD::XOR &&
+        N->getOperand(0)->getOperand(1).getOpcode() == ISD::Constant &&
+        N->getOperand(0)->getConstantOperandVal(1) == 0xFFFF;
+    bool isYNeg =
+        N->getOperand(1)->getOpcode() == ISD::XOR &&
+        N->getOperand(1)->getOperand(1).getOpcode() == ISD::Constant &&
+        N->getOperand(1)->getConstantOperandVal(1) == 0xFFFF;
+
+    SDValue X = isXNeg ? N->getOperand(0)->getOperand(0) : N->getOperand(0);
+    SDValue Y = isYNeg ? N->getOperand(1)->getOperand(0) : N->getOperand(1);
+
+    // (~X & ~Y) change to ~(X | Y)
+    if (isXNeg && isYNeg) {
+      SDValue OR = DCI.DAG.getNode(ISD::OR, dl, MVT::i16, X, Y);
+      return DCI.DAG.getNode(ISD::XOR, dl, MVT::i16, OR,
+                             DCI.DAG.getConstant(0xFFFF, dl, MVT::i16));
+    }
+
+    // (~X & Y) change to ((X | Y) - X)
+    if (isXNeg && !isYNeg) {
+      SDValue OR = DCI.DAG.getNode(ISD::OR, dl, MVT::i16, X, Y);
+      return DCI.DAG.getNode(ISD::SUB, dl, MVT::i16, OR, X);
+    }
+
+     // (X & ~Y) change to (X - (X & Y))
+     if (!isXNeg && isYNeg) {
+      SDValue AND = DCI.DAG.getNode(ISD::AND, dl, MVT::i16, X, Y);
+      return DCI.DAG.getNode(ISD::SUB, dl, MVT::i16, X, AND);
+    }
+  }
+  return SDValue();
+}
+
+SDValue RL78TargetLowering::PerformORCombine(SDNode *N,
+                                             DAGCombinerInfo &DCI) const {
+    SDLoc dl(N);
+    assert(N->getOpcode() == ISD::OR);
+    
+    // if haveNoCommonBitsSet(mask_a, mask_b)
+    // Replace
+    //   (a & mask_a) or (b & mask_b)
+    // with
+    //   (a & mask_a) add (b & mask_b)
+    if (!DCI.isBeforeLegalizeOps() &&
+        N->getValueType(0) == MVT::i16 &&
+        DCI.DAG.haveNoCommonBitsSet(N->getOperand(0), N->getOperand(1))) {
+    return DCI.DAG.getNode(ISD::ADD, dl, MVT::i16, N->getOperand(0),
+                           N->getOperand(1));
+    }
+
+    return SDValue();
+}
+
+
+SDValue RL78TargetLowering::PerformXORCombine(SDNode *N,
+                                              DAGCombinerInfo &DCI) const {
+    assert(N->getOpcode() == ISD::XOR);
+    
+    return SDValue();
+}
+
+
 SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
                                               DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
@@ -3072,7 +3194,7 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::UREM:
       return PerformUDIVREMCombine(N, DCI, ISD::UDIV);
   case ISD::ADD:
-      return PerformMULADDCombine(N, DCI);
+      return PerformADDCombine(N, DCI);
   case ISD::TRUNCATE:
       return PerformTruncateCombine(N, DCI);
   case ISD::TRAP:
@@ -3139,6 +3261,12 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
          CastNode->getSrcAddressSpace() == RL78AS::FarData && CastNode->getDestAddressSpace() == RL78AS::FarCode) 
           return CastNode->getOperand(0);
   }*/
+  case ISD::AND:
+      return PerformANDCombine(N, DCI);
+  case ISD::OR:
+      return PerformORCombine(N, DCI);
+  case ISD::XOR:
+      return PerformXORCombine(N, DCI);
   default:
       return SDValue();
   }
@@ -4048,6 +4176,30 @@ RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
   return BB;
 }
 
+static bool LowerXorSpecialCases(unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) {
+    if(MI.getOpcode() != RL78::XOR16_rp_imm)
+        return false;
+
+    DebugLoc DL = MI.getDebugLoc();
+    MachineFunction *MF = BB->getParent();
+    const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
+
+    //~X <=> X ^ 0xFFFF <=> -1 - X.
+    if ((MI.getOperand(2).getImm() & 0xFFFF) == 0xFFFF) {
+        BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_imm), RL78::RP0).addImm(0xFFFF);
+        BuildMI(*BB, MI, DL, TII->get(RL78::SUBW_rp_rp), RL78::RP0)
+            .addReg(RL78::RP0)
+            .add(MI.getOperand(1));
+        BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
+            .add(MI.getOperand(0))
+            .addReg(RL78::RP0, RegState::Kill);
+        MI.eraseFromParent();
+        return true;
+    }
+
+    return false;
+}
+
 MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
     unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
   DebugLoc DL = MI.getDebugLoc();
@@ -4056,6 +4208,9 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
   // BB->dump();
   unsigned ImmLo = (unsigned)MI.getOperand(2).getImm() & 0xFF;
   unsigned ImmHi = ((unsigned)MI.getOperand(2).getImm() >> 8) & 0xFF;
+
+  if(LowerXorSpecialCases(opcode, MI, BB))
+      return BB;
 
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
   // Part Low -> rs = R0    Part High -> rs = R1

@@ -2086,6 +2086,12 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     llvm::Type *DstTy = ConvertType(DestTy);
     if (SrcTy->isPtrOrPtrVectorTy() && DstTy->isPtrOrPtrVectorTy() &&
         SrcTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace()) {
+      // RL78: silenty cast a null ptr to a function pointer type when -mfar-code,
+      // so that a function pointer could be compared to ((void*)0) / NULL
+      if (CGF.getContext().getLangOpts().RenesasRL78CodeModel &&
+          cast<PointerType>(DestTy)->getPointeeType()->isFunctionType() &&
+          Src == llvm::ConstantPointerNull::get(CGF.VoidPtrTy))
+        return Builder.CreatePointerBitCastOrAddrSpaceCast(Src, DstTy);
       llvm_unreachable("wrong cast for pointers in different address spaces"
                        "(must be an address space cast)!");
     }
@@ -2223,7 +2229,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     if (CGF.getLangOpts().RenesasRL78 &&
         E->getType()->getPointeeType()->isFunctionType() !=
             DestTy->getPointeeType()->isFunctionType() &&
-        (DestTy->getPointeeType().getAddressSpace() == LangAS::__far_code ||
+        (getAddressSpace(DestTy->getPointeeType(), CGF.getContext()) == LangAS::__far_code ||
          DestTy->getPointeeType().getAddressSpace() == LangAS::__far_data)) {
 
       LangAS FirstAS =

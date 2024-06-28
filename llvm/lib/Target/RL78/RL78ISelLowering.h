@@ -267,8 +267,13 @@ private:
   SDValue PerformMULCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformUDIVREMCombine(SDNode *N, DAGCombinerInfo &DCI,
                                 ISD::NodeType otherNodeType) const;
+  SDValue PerformADDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformMULADDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformXORAddCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformTruncateCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformANDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformXORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   MachineBasicBlock *LowerEXTEND(bool sext, MachineInstr &MI,
                                  MachineBasicBlock *BB) const;

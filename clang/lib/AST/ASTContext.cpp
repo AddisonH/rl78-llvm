@@ -2263,12 +2263,12 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
   case Type::RValueReference:
     // alignof and sizeof should never enter this code path here, so we go
     // the pointer route.
-    AS = cast<ReferenceType>(T)->getPointeeType().getAddressSpace();
+    AS = getAddressSpace(cast<ReferenceType>(T)->getPointeeType(), *this);
     Width = Target->getPointerWidth(AS);
     Align = Target->getPointerAlign(AS);
     break;
   case Type::Pointer:
-    AS = cast<PointerType>(T)->getPointeeType().getAddressSpace();
+    AS = getAddressSpace(cast<PointerType>(T)->getPointeeType(), *this);
     Width = Target->getPointerWidth(AS);
     Align = Target->getPointerAlign(AS);
     break;
@@ -11992,6 +11992,13 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
 
     // Constructors and destructors are required.
     if (FD->hasAttr<ConstructorAttr>() || FD->hasAttr<DestructorAttr>())
+      return true;
+
+    // RL78: Always emit far the virtual methods as they aren't emitted at all if used
+    // only through ptrs to member functions (FIXME: find a better solution for this?)
+    if (getTargetInfo().getTriple().isRL78() &&
+        FD->getType()->getAs<FunctionType>()->getFar() &&
+        isa<CXXMethodDecl>(FD) && cast<CXXMethodDecl>(FD)->isVirtual())
       return true;
 
     // The key function for a class is required.  This rule only comes
