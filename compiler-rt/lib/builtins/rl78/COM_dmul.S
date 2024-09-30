@@ -17,10 +17,14 @@
 //		x = [SP+4]
 //		y = [SP+12]
 //	output:
-//		[AX]
+//		[AX] ([A:DE] for far data)
 //===----------------------------------------------------------------------===//
   #include "def.S"
-  
+
+#ifdef __FAR_DATA__
+#define __COM_dmul  __COM_dmul_nd
+#endif
+
   .PUBLIC __COM_dmul
   .EXTERN __COM_mulul
   .EXTERN __REL_d_check
@@ -794,6 +798,59 @@ __COM_dmul:
 #endif
 .Lfunc_end1:
   .size __COM_dmul, .Lfunc_end1-__COM_dmul
+
+#ifdef __FAR_DATA__
+#undef __COM_dmul
+  .globl __COM_dmul
+  .type  __COM_dmul,@function
+__COM_dmul:
+  subw  sp, #8        ; space for the tmp retval
+  push  ax            ; save the addr of the org retval (far ptr)
+  push  de
+#ifdef __OPTIMIZE_SIZE__
+  mov   e, #8         ; copy args using a loop
+1:
+  movw  ax,[sp+30]
+  push  ax
+  dec   e
+  bnz   $1b
+#else
+  movw  ax,[sp+30]    ; copy arg 2
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+  movw  ax,[sp+30]    ; copy arg 1
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+  movw  ax,[sp+30]
+  push  ax
+#endif
+  movw  ax, sp        ; set AX to the addr of the tmp retval
+  addw  ax, #20
+  call  !!__COM_dmul_nd
+  addw  sp, #16       ; get rid of the arg copies from the stack
+  pop   hl            ; get the addr of org retval in ES:HL
+  pop   ax
+  mov   es, a
+  pop   ax            ; copy the tmp retval to the org one
+  movw  es:[hl], ax
+  pop   ax
+  movw  es:[hl+2], ax
+  pop   ax
+  movw  es:[hl+4], ax
+  pop   ax
+  movw  es:[hl+6], ax
+  ret
+.Lfunc_end2:
+  .size __COM_dmul, .Lfunc_end2-__COM_dmul
+#endif
 
   .weak ___muldf3
   .type ___muldf3,@function

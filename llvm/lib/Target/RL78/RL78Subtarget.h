@@ -92,6 +92,7 @@ public:
 
   bool Has64BitDoubles() const { return has64BitDoubles; }
   bool HasFarCodeModel() const { return hasFarCodeModel; }
+  bool HasFarDataModel() const { return hasFarDataModel; }
   bool isRL78S1CoreType() const { return coreType == RL78_S1; }
   bool isRL78S3CoreType() const { return coreType == RL78_S3; }
   bool isUseMDA() const { return (coreType == RL78_S2) && (!disableMDA); }

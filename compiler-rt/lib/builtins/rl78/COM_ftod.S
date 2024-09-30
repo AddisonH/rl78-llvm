@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifdef __FAR_DATA__
+#define __COM_ftod  __COM_ftod_nd
+#endif
+
   .file   "COM_ftod.S"
 
   .text
@@ -128,6 +132,37 @@ __COM_ftod:
   ret
 .Lfunc_end1:
   .size __COM_ftod, .Lfunc_end1-__COM_ftod
+
+#ifdef __FAR_DATA__
+#undef __COM_ftod
+  .globl __COM_ftod
+  .type  __COM_ftod,@function
+__COM_ftod:
+  subw  sp, #8        ; space for the tmp retval
+  push  ax            ; save the addr of the org retval (far ptr)
+  push  de
+  movw  ax, [sp+16]   ; copy arg to DE:BC
+  movw  bc, ax
+  movw  ax, [sp+18]
+  movw  de, ax
+  movw  ax, sp        ; set AX to the addr of the tmp retval
+  addw  ax, #4
+  call  !!__COM_ftod_nd
+  pop   hl            ; get the addr of org retval in ES:HL
+  pop   ax
+  mov   es, a
+  pop   ax            ; copy the tmp retval to the org one
+  movw  es:[hl], ax
+  pop   ax
+  movw  es:[hl+2], ax
+  pop   ax
+  movw  es:[hl+4], ax
+  pop   ax
+  movw  es:[hl+6], ax
+  ret
+.Lfunc_end2:
+  .size __COM_ftod, .Lfunc_end2-__COM_ftod
+#endif
 
   .weak ___extendsfdf2
   .type ___extendsfdf2,@function

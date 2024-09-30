@@ -612,7 +612,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       // mov A, src -> 1,2 bytes and clocks 1
       // mov dst, A -> 1,2 bytes and clocks 1
       // pop AX -> 1 byte and clocks 1
-      if (MBB.getParent()->getFunction().hasMinSize() &&
+      if (MBB.getParent()->getFunction().hasOptSize() &&
           (DestReg != RL78::R0)) {
         BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
             .addReg(RL78::RP0, RegState::Kill);

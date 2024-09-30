@@ -596,8 +596,9 @@ llvm::Type *
 ItaniumCXXABI::ConvertMemberPointerType(const MemberPointerType *MPT) {
   if (MPT->isMemberDataPointer())
     return CGM.PtrDiffTy;
-  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code
-  auto PtrDiffTy = CGM.getContext().getLangOpts().RenesasRL78CodeModel
+  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code and -mfar-data
+  const auto &langOpts = CGM.getContext().getLangOpts();
+  auto PtrDiffTy = langOpts.RenesasRL78CodeModel || langOpts.RenesasRL78DataModel
                        ? CGM.Int32Ty : CGM.PtrDiffTy;
   return llvm::StructType::get(/*CGM.*/PtrDiffTy, CGM.PtrDiffTy);
 }
@@ -633,8 +634,9 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
   auto *RD =
       cast<CXXRecordDecl>(MPT->getClass()->castAs<RecordType>()->getDecl());
 
-  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code
-  auto PtrDiffTy = CGM.getContext().getLangOpts().RenesasRL78CodeModel
+  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code and -mfar-data
+  const auto &langOpts = CGM.getContext().getLangOpts();
+  auto PtrDiffTy = langOpts.RenesasRL78CodeModel || langOpts.RenesasRL78DataModel
                        ? CGM.Int32Ty : CGM.PtrDiffTy;
 
   llvm::Constant *ptrdiff_1 = llvm::ConstantInt::get(/*CGM.*/PtrDiffTy, 1);
@@ -692,7 +694,8 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
   if (!UseARMMethodPtrABI) {
     // RL78: For virtual member function pointers, the 'ptr' field is actually
     // an offset, so cast it to CGF.PtrDiffTy (16-bit)
-    if (CGM.getContext().getLangOpts().RenesasRL78CodeModel) {
+    const auto &langOpts = CGM.getContext().getLangOpts();
+    if (langOpts.RenesasRL78CodeModel || langOpts.RenesasRL78DataModel) {
       VTableOffset = Builder.CreateTrunc(VTableOffset, CGF.PtrDiffTy);
       ptrdiff_1 = llvm::ConstantInt::get(CGM.PtrDiffTy, 1);
     }
@@ -1023,8 +1026,9 @@ ItaniumCXXABI::EmitNullMemberPointer(const MemberPointerType *MPT) {
   if (MPT->isMemberDataPointer())
     return llvm::ConstantInt::get(CGM.PtrDiffTy, -1ULL, /*isSigned=*/true);
 
-  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code
-  auto PtrDiffTy = CGM.getContext().getLangOpts().RenesasRL78CodeModel
+  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code and -mfar-data
+  const auto &langOpts = CGM.getContext().getLangOpts();
+  auto PtrDiffTy = langOpts.RenesasRL78CodeModel || langOpts.RenesasRL78DataModel
                        ? CGM.Int32Ty : CGM.PtrDiffTy;
 
   llvm::Constant *Values[2] = {llvm::ConstantInt::get(/*CGM.*/PtrDiffTy, 0),
@@ -1052,14 +1056,16 @@ llvm::Constant *ItaniumCXXABI::BuildMemberPointer(const CXXMethodDecl *MD,
 
   CodeGenTypes &Types = CGM.getTypes();
 
-  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code
+  // RL78: the 'ptr' field of 'memptr' is 32-bit for -mfar-code and -mfar-data
   llvm::IntegerType *PtrDiffTy = CGM.PtrDiffTy;
   llvm::PointerType *RL78FarPtrTy = nullptr;
 
-  if (CGM.getContext().getLangOpts().RenesasRL78CodeModel) {
+  const auto &langOpts = CGM.getContext().getLangOpts();
+  if (langOpts.RenesasRL78CodeModel || langOpts.RenesasRL78DataModel) {
     PtrDiffTy = CGM.Int32Ty;
     RL78FarPtrTy = llvm::PointerType::get(CGM.getLLVMContext(),
-      CGM.getContext().getTargetInfo().getTargetAddressSpace(LangAS::__far_code));
+        CGM.getContext().getTargetInfo().getTargetAddressSpace(
+            langOpts.RenesasRL78DataModel ? LangAS::Default : LangAS::__far_code));
   }
 
   // Get the function pointer (or index if this is a virtual function).

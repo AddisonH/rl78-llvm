@@ -1527,7 +1527,7 @@ bool RL78AsmParser::LookupRelocationAttribute(
   // Not exactly an appropriate place, but check for section name correctness
   // too.
   if (SectionName.compare("") != 0 &&
-      !std::regex_match(SectionName.str(), std::regex("[A-Za-z0-9\._@]+")))
+      !std::regex_match(SectionName.str(), std::regex("[A-Za-z0-9\\._@]+")))
     return TokError("invalid characters in section name");
 
   *RelocationAttributeDesc = &RelocationAttributeMatch->second;

@@ -801,13 +801,15 @@ EncompassingIntegerType(ArrayRef<struct WidthAndSignedness> Types) {
 }
 
 Value *CodeGenFunction::EmitVAStartEnd(Value *ArgValue, bool IsStart) {
-  llvm::Type *DestType = Int8PtrTy;
+  llvm::Type *DestType =
+      getLangOpts().RenesasRL78DataModel ? AllocaInt8PtrTy : Int8PtrTy;
+
   if (ArgValue->getType() != DestType)
-    ArgValue =
-        Builder.CreateBitCast(ArgValue, DestType, ArgValue->getName().data());
+    ArgValue = Builder.CreatePointerBitCastOrAddrSpaceCast(
+        ArgValue, DestType, ArgValue->getName().data());
 
   Intrinsic::ID inst = IsStart ? Intrinsic::vastart : Intrinsic::vaend;
-  return Builder.CreateCall(CGM.getIntrinsic(inst), ArgValue);
+  return Builder.CreateCall(CGM.getIntrinsic(inst, DestType), ArgValue);
 }
 
 /// Checks if using the result of __builtin_object_size(p, @p From) in place of
@@ -2638,11 +2640,12 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Value *DstPtr = EmitVAListRef(E->getArg(0)).getPointer();
     Value *SrcPtr = EmitVAListRef(E->getArg(1)).getPointer();
 
-    llvm::Type *Type = Int8PtrTy;
+    llvm::Type *Type =
+        getLangOpts().RenesasRL78DataModel ? AllocaInt8PtrTy : Int8PtrTy;
 
-    DstPtr = Builder.CreateBitCast(DstPtr, Type);
-    SrcPtr = Builder.CreateBitCast(SrcPtr, Type);
-    Builder.CreateCall(CGM.getIntrinsic(Intrinsic::vacopy), {DstPtr, SrcPtr});
+    DstPtr = Builder.CreatePointerBitCastOrAddrSpaceCast(DstPtr, Type);
+    SrcPtr = Builder.CreatePointerBitCastOrAddrSpaceCast(SrcPtr, Type);
+    Builder.CreateCall(CGM.getIntrinsic(Intrinsic::vacopy, {Type}), {DstPtr, SrcPtr});
     return RValue::get(nullptr);
   }
   case Builtin::BI__builtin_abs:
@@ -3809,12 +3812,14 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_return_address: {
     Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
                                                    getContext().UnsignedIntTy);
-    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress);
+    auto PtrTy = getContext().getLangOpts().RenesasRL78 ? AllocaInt8PtrTy : Int8PtrTy;
+    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress, PtrTy);
     return RValue::get(Builder.CreateCall(F, Depth));
   }
   case Builtin::BI_ReturnAddress: {
-    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress);
-    return RValue::get(Builder.CreateCall(F, Builder.getInt32(0)));
+    auto PtrTy = getContext().getLangOpts().RenesasRL78 ? AllocaInt8PtrTy : Int8PtrTy;
+    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress, PtrTy);
+    return RValue::get(Builder.CreateCall(F, Builder.getIntN(getTarget().getIntWidth(), 0)));
   }
   case Builtin::BI__builtin_frame_address: {
     Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
@@ -3907,8 +3912,9 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Builder.CreateStore(FrameAddr, Buf);
 
     // Store the stack pointer to the setjmp buffer.
-    Value *StackAddr =
-        Builder.CreateCall(CGM.getIntrinsic(Intrinsic::stacksave));
+    Value *StackAddr = Builder.CreateCall(CGM.getIntrinsic(
+        Intrinsic::stacksave,
+        getLangOpts().RenesasRL78DataModel ? AllocaInt8PtrTy : Int8PtrTy));
     Address StackSaveSlot = Builder.CreateConstInBoundsGEP(Buf, 2);
     Builder.CreateStore(StackAddr, StackSaveSlot);
 

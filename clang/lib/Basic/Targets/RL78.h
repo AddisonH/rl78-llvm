@@ -28,6 +28,7 @@ class RL78TargetInfo : public TargetInfo {
   std::string CPUName;
   bool has64BitDoubles;
   bool farCodeModel;
+  bool farDataModel;
   bool isMDADisabled;
   std::string ABI;
 
@@ -65,6 +66,9 @@ public:
       Builder.defineMacro("__RL78_64BIT_DOUBLES__");
     else
       Builder.defineMacro("__RL78_32BIT_DOUBLES__");
+
+    if (Opts.RenesasRL78DataModel)
+      Builder.defineMacro("__FAR_DATA__");
 
     if(Opts.getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far)
       Builder.defineMacro("__FAR_ROM__");
@@ -118,11 +122,16 @@ public:
   bool setABI(const std::string &Name) override {
     const auto validABI =
         llvm::StringSwitch<bool>(Name)
-            .Cases("nc_d32", "nc_d32_mda", "nc_d32_nomda", true)
-            .Cases("nc_d64", "nc_d64_mda", "nc_d64_nomda", true)
-            .Cases("fc_d32", "fc_d32_mda", "fc_d32_nomda", true)
-            .Cases("fc_d64", "fc_d64_mda", "fc_d64_nomda", true)
+            .Cases("nc_nd_d32", "nc_nd_d32_mda", "nc_nd_d32_nomda", "nc_nd_d64",
+                   "nc_nd_d64_mda", "nc_nd_d64_nomda", true)
+            .Cases("nc_fd_d32", "nc_fd_d32_mda", "nc_fd_d32_nomda", "nc_fd_d64",
+                   "nc_fd_d64_mda", "nc_fd_d64_nomda", true)
+            .Cases("fc_nd_d32", "fc_nd_d32_mda", "fc_nd_d32_nomda", "fc_nd_d64",
+                   "fc_nd_d64_mda", "fc_nd_d64_nomda", true)
+            .Cases("fc_fd_d32", "fc_fd_d32_mda", "fc_fd_d32_nomda", "fc_fd_d64",
+                   "fc_fd_d64_mda", "fc_fd_d64_nomda", true)
             .Default(false);
+    assert(validABI);
     if (validABI)
       ABI = Name;
     return validABI;

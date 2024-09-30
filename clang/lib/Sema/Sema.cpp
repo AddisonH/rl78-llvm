@@ -2748,6 +2748,11 @@ void Sema::ActOnCCRLPragmaEntry(const SmallVectorImpl<RenesasCCRLPragmaEntry> &P
     for (const auto &newEntry : PragmaEntries) {
       for (const RenesasCCRLPragmaEntry &entry : RenesasCCRLPragmaEntries) {
         if (newEntry.Identifier.compare(entry.Identifier) == 0) {
+          if (newEntry.PragmaType == RenesasCCRLPragmaType::CCRLInterrupt &&
+              entry.PragmaType == RenesasCCRLPragmaType::CCRLInterrupt) {
+            RenesasCCRLPragmaEntries.push_back(newEntry);
+            return;
+          }
           // CCRL specification:
           // -If another #pragma is specified, a compilation error will occur.
           if ((newEntry.PragmaType == RenesasCCRLPragmaType::CCRLSaddr) ||

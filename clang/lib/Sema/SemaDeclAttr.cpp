@@ -7849,14 +7849,14 @@ static void handleRL78InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL,
   }
 
   if (hasFunctionProto(D) && getFunctionOrMethodNumParams(D) != 0) {
-    S.Diag(D->getLocation(), diag::warn_rl78_interrupt_attribute) << 0;
+    S.Diag(D->getLocation(), diag::warn_rl78_interrupt_attribute_parameters) << 0;
     return;
   }
 
   if (!getFunctionOrMethodResultType(D)->isVoidType()) {
     // TODO: revisit error message
     S.Diag(getFunctionOrMethodResultSourceRange(D).getBegin(),
-           diag::err_anyx86_interrupt_attribute)
+           diag::warn_rl78_interrupt_attribute_return_type)
         << (S.Context.getTargetInfo().getTriple().getArch() == llvm::Triple::x86
                 ? 0
                 : 1)

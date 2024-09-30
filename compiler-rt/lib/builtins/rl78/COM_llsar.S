@@ -18,18 +18,27 @@
 __COM_llsar:
   ;arithmetic right shift on 64-bit integer
   ;Vars: P - return value pointer
-  ;  : A - 64-bit int to shift
-  ;   : B - Nr. of times to shift
-  ;input: AX  -> P
-  ;     C -> B
+  ;    : A - 64-bit int to shift
+  ;    : B - Nr. of times to shift
+  ;input: AX -> P  (or A:DE -> P for far data)
+  ;       C  -> B
   ;    [sp+4] -> word #1 of A
   ;    [sp+6] -> word #2 of A
   ;    [sp+8] -> word #3 of A
-  ;  [sp+10] -> word #4 of A
+  ;    [sp+10]-> word #4 of A
+#ifdef __FAR_DATA__
+  mov es, a
+  push de
+  pop hl
+#define ES_PREFIX es:
+#else
   movw hl, ax
+#define ES_PREFIX
+#endif
   cmp0 c
   bz  $2f
-1:
+
+1: ; shift the 64-bit value on the stack, 1 bit per iteration
   movw ax, [sp+10]
   sarw ax, 1
   movw [sp+10], ax
@@ -55,15 +64,17 @@ __COM_llsar:
   dec c
   bnz   $1b
 
-2:  movw ax, [sp+10]
-  movw [hl+6], ax
+2: ; copy the stack value to the return location
+  movw ax, [sp+10]
+  movw ES_PREFIX[hl+6], ax
   movw ax, [sp+8]
-  movw [hl+4], ax
+  movw ES_PREFIX[hl+4], ax
   movw ax, [sp+6]
-  movw [hl+2], ax
+  movw ES_PREFIX[hl+2], ax
   movw ax, [sp+4]
-  movw [hl], ax
+  movw ES_PREFIX[hl], ax
   ret
+
 .Lfunc_end1:
   .size __COM_llsar, .Lfunc_end1-__COM_llsar
 

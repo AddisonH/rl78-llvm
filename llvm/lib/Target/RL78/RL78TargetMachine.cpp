@@ -36,35 +36,39 @@ static std::string computeDataLayout(const Triple &T, StringRef FS) {
   size_t FarFlagPos = FS.rfind("+far-code");
   size_t NearFlagPos = FS.rfind("+near-code");
 
-  if (FarFlagPos != StringRef::npos &&
-      (NearFlagPos == StringRef::npos || NearFlagPos < FarFlagPos)) {
-    return "e"    // little endian
-           "-m:o" // Mach-O mangling: Private symbols get L prefix. Other
-                  // symbols get a _ prefix.
-           "-p0:16:16:16" // default: 16 bit width, 16 bit aligned
-           "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
-           "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
-           "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
-           "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain
-           "-n8:8"                            // 8 bit native integer width
-           "-n16:16"                          // 16 bit native integer width
-           "-S16"                             // 16 bit natural stack alignment
-           "-P3"                              // use far pointers for functions
-        ;
+  const auto farCodeModel =
+      FarFlagPos != StringRef::npos &&
+      (NearFlagPos == StringRef::npos || NearFlagPos < FarFlagPos);
+  const auto farDataModel = FS.rfind("+far-data") != StringRef::npos;
+
+  std::string DL;
+  llvm::raw_string_ostream SS(DL);
+
+  // NOTE: keep in sync with def from clang/lib/Basic/Targets/RL78.cpp
+  SS << "e"               // little endian
+        "-m:o";           // Mach-O mangling: Private symbols get L prefix.
+                          // Other symbols get a _ prefix.
+  if (farDataModel) {
+    SS << "-p0:32:16:16"  // default: 32 bit width, 16 bit aligned
+          "-A1";          // near allocas
   } else {
-    return "e"    // Little endian.
-           "-m:o" // Mach-O mangling: Private symbols get L prefix. Other
-                  // symbols get a _ prefix.
-           "-p0:16:16:16" // Default: 16 bit width, 16 bit aligned.
-           "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
-           "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
-           "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
-           "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain.
-           "-n8:8"                            // 8 bit native integer width.
-           "-n16:16"                          // 16 bit native integer width.
-           "-S16"                             // 16 bit natural stack alignment.
-        ;
+    SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
   }
+
+  SS << "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
+        "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
+        "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
+        "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain
+        "-n8:8"                            // 8 bit native integer width
+        "-n16:16"                          // 16 bit native integer width
+        "-S16";                            // 16 bit natural stack alignment
+
+  if (farCodeModel)
+    SS << "-P3"; // Use far pointers for functions.
+
+  SS.flush();
+
+  return DL;
 }
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {

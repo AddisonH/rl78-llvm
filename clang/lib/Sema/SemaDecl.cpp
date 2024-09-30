@@ -7046,14 +7046,8 @@ void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
 
       // If -mfar-rom is specified make all global constants __far except the
       // ones explictly marked as __near.
-
-      // If __far data model make all global variables __far except the ones
-      // explictly marked as
-      // __near, saddr, const or have the address space set.
-      if ((getLangOpts().RenesasRL78DataModel &&
-               !Var->hasAttr<RL78SaddrAttr>() &&
-               !NewVarType.getQualifiers().hasConst() ||
-           getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far &&
+      // NOTE: for -mfar-data the default AS is far => we don't need to change the AS
+      if ((getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far &&
                NewVarType.getQualifiers().hasConst()) &&
           NewVarType.getQualifiers().getAddressSpace() == LangAS::Default) {
 
@@ -11108,6 +11102,10 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
           // TODO: check that we don't have conflicting attributes
           switch (entry.PragmaType) {
           case Sema::RenesasCCRLPragmaType::CCRLInterrupt:
+            if (!NewFD->getDeclaredReturnType().getTypePtr()->isVoidType())
+              Diag(NewFD->getLocation(), diag::warn_rl78_interrupt_attribute_return_type);
+            if ( !NewFD->param_empty())
+              Diag(NewFD->getLocation(), diag::warn_rl78_interrupt_attribute_parameters);
             // Silently drop __far or #pragma __far if vect was specified
             if(!entry.ExtraDataVects.empty())
                 dropFarFromFunctionDecl(Context, NewFD);
@@ -11143,21 +11141,45 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
             else
               NewFD->addAttr(RL78CalltAttr::CreateImplicit(Context));
             break;
-          case Sema::RenesasCCRLPragmaType::CCRLNear:
+          case Sema::RenesasCCRLPragmaType::CCRLNear: {
+            //If #pragma near is specified, __callt/__far function keywords are ignored
+            if (const FunctionNoProtoType * FPT = dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
+              if (FPT->getFar()) {
+                FunctionType::ExtInfo EPI = FPT->getExtInfo();
+                EPI = EPI.withFar(false);
+                NewFD->setType(Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
+              }
+            }
+            else if (const FunctionProtoType * FPT = dyn_cast<FunctionProtoType>(NewFD->getType())) {
+              if (FPT->getFar()) {
+                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
+                EPI.ExtInfo = EPI.ExtInfo.withFar(false);
+                NewFD->setType(Context.getFunctionType(FPT->getReturnType(), FPT->getParamTypes(), EPI));
+              }
+            }
+            if (NewFD->hasAttr<RL78CalltAttr>()) {
+              NewFD->dropAttr<RL78CalltAttr>();
+            }
             NewFD->addAttr(RL78NearAttr::CreateImplicit(Context));
             break;
+          }
           case Sema::RenesasCCRLPragmaType::CCRLFar:
             // Only add far if no __callt/brk_interrupt/interrupt was used so
             // far
             if (!NewFD->hasAttr<RL78CalltAttr>() &&
                 !NewFD->hasAttr<RL78InterruptAttr>() &&
                 !NewFD->hasAttr<RL78BRKInterruptAttr>()) {
-              const FunctionProtoType *FPT =
-                  NewFD->getType()->castAs<FunctionProtoType>();
-              FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-              EPI.ExtInfo = EPI.ExtInfo.withFar(true);
-              NewFD->setType(Context.getFunctionType(
+              if (const FunctionProtoType * FPT = dyn_cast<FunctionProtoType>(NewFD->getType())) {
+                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
+                EPI.ExtInfo = EPI.ExtInfo.withFar(true);
+                NewFD->setType(Context.getFunctionType(
                   FPT->getReturnType(), FPT->getParamTypes(), EPI));
+              } else if (const FunctionNoProtoType * FPT = dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
+                  FunctionType::ExtInfo EPI = FPT->getExtInfo();
+                  EPI = EPI.withFar(true);
+                  NewFD->setType(
+                    Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
+              }
             }
             break;
           case Sema::RenesasCCRLPragmaType::CCRLAddress:

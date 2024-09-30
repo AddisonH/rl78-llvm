@@ -3221,8 +3221,11 @@ static bool HandleSizeof(EvalInfo &Info, SourceLocation Loc,
       Type->getPointeeType()->getUnqualifiedDesugaredType()->isFunctionType()) {
     const FunctionType *FT = cast<FunctionType>(
         Type->getPointeeType()->getUnqualifiedDesugaredType());
-    Size =
-        FT->getFar() ? CharUnits::fromQuantity(4) : CharUnits::fromQuantity(2);
+    // -mfar-data: unless func has an explicit AS, sizeof(pfunc) == sizeof(ptr)
+    Size = FT->getFar() || (Info.Ctx.getLangOpts().RenesasRL78DataModel &&
+                            !FT->getNonDefaultAS())
+               ? CharUnits::fromQuantity(4)
+               : CharUnits::fromQuantity(2);
   } else {
     Size = Info.Ctx.getTypeSizeInChars(Type);
   }

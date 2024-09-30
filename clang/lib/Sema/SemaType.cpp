@@ -5085,12 +5085,10 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         }
       }
 
-     // RL78 mfar-rom / mfar-data handling
+     // RL78 mfar-rom handling
+     // NOTE: if -mfar-data, the default AS is far => we don't need to change the AS
      if (!T->isFunctionType() && !T.hasAddressSpace() &&
-          (T.isConstQualified() && S.getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far ||
-           !T.isConstQualified() && S.getLangOpts().RenesasRL78DataModel &&
-               !D.getAttributes().hasAttribute(
-                   AttributeCommonInfo::Kind::AT_Saddr)))
+          (T.isConstQualified() && S.getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far))
         T = S.getASTContext().getAddrSpaceQualType(T, LangAS::__far_data);
 
      // RL78 mfar-code typedef handling
@@ -5361,14 +5359,13 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
           // when we have function pointer typedef, we can apply implicit __far
           FunctionTypedef = false;
           for (ParsedAttr &attr : DeclT.getAttrs()) {
-            if (attr.getKind() == ParsedAttr::AT_RL78Far) {
-              IsFar = true;
+            switch (auto kind = attr.getKind()) {
+            case ParsedAttr::AT_RL78Far:
+            case ParsedAttr::AT_RL78Near:
+              IsFar = kind == ParsedAttr::AT_RL78Far;
               IsDefault = false;
               lastAttr = &attr;
-            } else if (attr.getKind() == ParsedAttr::AT_RL78Near) {
-              IsFar = false;
-              IsDefault = false;
-              lastAttr = &attr;
+              break;
             }
           }
           if (!IsDefault)
@@ -5379,6 +5376,33 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         // qualifier.
         IsFar = T.getAddressSpace() == LangAS::__far_data;
         IsDefault = !T.hasAddressSpace();
+
+        // allow alternative position of the near/far attribute for functions
+        // e.g. void (__far f)(void);
+        if (chunkIndex >= 1 &&
+            D.getTypeObject(chunkIndex - 1).Kind == DeclaratorChunk::Paren &&
+            D.getTypeObject(chunkIndex).Kind == DeclaratorChunk::Function) {
+          DeclaratorChunk &DeclT = D.getTypeObject(chunkIndex - 1);
+          ParsedAttr *lastAttr = nullptr;
+          for (ParsedAttr &attr : DeclT.getAttrs()) {
+            switch (attr.getKind()) {
+            case ParsedAttr::AT_RL78Far:
+            case ParsedAttr::AT_RL78Near:
+              lastAttr = &attr;
+              break;
+            }
+          }
+          // ...but make it an error if both are specified (even if it's the
+          // same attr) e.g. void __far (__far f)(void);
+          if (!IsDefault && lastAttr)
+            S.Diag(D.getIdentifierLoc(), diag::error_rl78_storage_attribute)
+                << (IsFar ? "__far" : "__near");
+          if (lastAttr) {
+            IsFar = lastAttr->getKind() == ParsedAttr::AT_RL78Far;
+            IsDefault = false;
+            DeclT.getAttrs().remove(lastAttr);
+          }
+        }
       }
 
       // We need to make the function far if it was declared as __far or if

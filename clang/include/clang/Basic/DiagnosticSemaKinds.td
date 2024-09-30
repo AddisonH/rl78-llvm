@@ -322,9 +322,11 @@ def warn_riscv_repeated_interrupt_attribute : Warning<
   "repeated RISC-V 'interrupt' attribute">, InGroup<IgnoredAttributes>;
 def note_riscv_repeated_interrupt_attribute : Note<
   "repeated RISC-V 'interrupt' attribute is here">;
-def warn_rl78_interrupt_attribute : Warning<
+def warn_rl78_interrupt_attribute_parameters : Warning<
    "RL78 'interrupt' attribute only applies to functions that have no parameters">,
    InGroup<IgnoredAttributes>;
+def warn_rl78_interrupt_attribute_return_type : Warning<
+    "The return value of an interrupt handler should be declared as void">;
 def error_rl78_storage_attribute : Error<
    "Variable/function was already qualified with %0">;
 def error_rl78_callt_change : Error<

@@ -26,6 +26,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Assumptions.h"
@@ -2633,6 +2634,9 @@ void CodeGenFunction::EmitAsmStmt(const AsmStmt &S) {
       SawAsmBlock = true;
     }
   }
+
+  InEmitAsmStmt = true;
+  auto Cleanup = llvm::make_scope_exit([&]() { InEmitAsmStmt = false; } );
 
   for (unsigned i = 0, e = S.getNumInputs(); i != e; i++) {
     const Expr *InputExpr = S.getInputExpr(i);

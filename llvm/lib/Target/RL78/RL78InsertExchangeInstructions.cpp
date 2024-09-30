@@ -119,6 +119,7 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
                                 const TargetInstrInfo *TII, bool isAXLive) {
   // MBB.dump();
   // MI.dump();
+
   unsigned Reg = MI.getOperand(opIndex).getReg();
   // if dest is NOT A register we need to exchange the value to A and back
   if (Reg != RL78::RP0) {
@@ -168,15 +169,44 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
           BuildMI(MBB, std::next(MI.getIterator()), DL,
                   TII->get(RL78::MOVW_rp_AX), Reg)
               .addReg(RL78::RP0, RegState::Kill);
+
         // In case of stack operations we need to compensate for the stack
         // pointer change caused by PUSH(SP -= 2), but only when we arent
         // using the FP.
         bool isFpInUse = isFPUsed(&MBB);
-        if (MI.getOpcode() == RL78::STORE16_stack_slot_rp && !isFpInUse) {
-          MI.getOperand(1).setImm(MI.getOperand(1).getImm() + 2);
-        }
-        if (MI.getOpcode() == RL78::LOAD16_rp_stack_slot && !isFpInUse) {
-          MI.getOperand(2).setImm(MI.getOperand(2).getImm() + 2);
+
+        int opIdx = 0;
+        if (MI.getOpcode() == RL78::STORE16_stack_slot_rp && !isFpInUse)
+          opIdx = 1;
+        if (MI.getOpcode() == RL78::LOAD16_rp_stack_slot && !isFpInUse)
+          opIdx = 2;
+
+        if (opIdx) {
+          auto opImm = MI.getOperand(opIdx).getImm();
+          if (opImm < 254) {
+            MI.getOperand(opIdx).setImm(opImm + 2);
+          } else {
+            // An edge case: when the offset of LOAD16_rp_stack_slot/STORE16_stack_slot_rp is 254, simply
+            // bumping the offset by 2 would make it overflow, so we need to do the addressing using BC
+            auto II = MachineBasicBlock::iterator(MI);
+            BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+                .addReg(RL78::RP2, RegState::Kill);
+            BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP2)
+                .addReg(RL78::SPreg);
+            if (MI.getOpcode() == RL78::LOAD16_rp_stack_slot)
+              BuildMI(MBB, II, DL, TII->get(RL78::LOAD16_rp_rpi), RL78::RP0)
+                  .addReg(RL78::RP2)
+                  .addImm(opImm + 4);
+            else
+              BuildMI(MBB, II, DL, TII->get(RL78::STORE16_rpi_rp))
+                  .addReg(RL78::RP2)
+                  .addImm(opImm + 4)
+                  .addReg(RL78::RP0);
+            BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP2);
+            MI.eraseFromParent();
+            // As in this case we erase the original instruction, return here
+            return;
+          }
         }
       }
     }
@@ -415,10 +445,11 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               // Erase the MOVW instruction.
               MI.eraseFromParent();
             }
-            // The following optimizations reduce only code size (3 to 2 bytes)
-            // they increases cycles count from 1 to 2 so we don't do them when
-            // optimizing for speed.
-            else if (MF.getFunction().hasMinSize()) {
+            // The following optimizations reduce only code size and
+            // they increase cycles count so we don't do them when optimizing
+            // for speed.
+            else if (MF.getFunction().hasOptSize()) {
+              // 3 to 2 bytes, 1 cycle to 2
               // 1. MOVW AX, #0x100 can be replaced with ONEB A + CRLB X.
               // 2. MOVW AX, #0x101 can be replaced with ONEB A + ONEB X.
               if ((MI.getOperand(1).getImm() == 0x100) ||
@@ -436,6 +467,16 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                 BuildMI(MBB, MI, DL, TII->get(RL78::ONEB_r), RHi);
                 BuildMI(MBB, MI, DL, TII->get(opcode), RLo);
                 // Erase the MOVW instruction.
+                MI.eraseFromParent();
+              }
+              // 3. MOVW AX, #-1 (3 bytes, 2/1 clocks) can be replaced with CLRW
+              // AX (1 byte, 1 clock) + DECW AX(1 byte, 2/1 clocks)
+              if (MI.getOperand(1).getImm() == -1) {
+                BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp))
+                    .add(MI.getOperand(0));
+                BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
+                    .add(MI.getOperand(0))
+                    .add(MI.getOperand(0));
                 MI.eraseFromParent();
               }
             }
@@ -600,8 +641,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       case RL78::CMPW_rp_imm:
         assert(MI.getOperand(0).isReg());
         assert(MI.getOperand(1).isImm());
-        if (MI.getOperand(0).isKill() &&
-          MI.getOperand(1).getImm() == 0) {
+        if (MI.getOperand(1).getImm() == 0) {
           if (Next == MBB.end())
             break;
           MachineInstr &MI1 = *Next;
@@ -630,46 +670,93 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // register coalescer can cause such this to happen as well
         // see gcc.c_torture\scal-to-vec1.c.
         if (MI.getOperand(0).getReg() == MI.getOperand(1).getReg()) {
-          if (Next == MBB.end())
-              break;
           // Remove or replace branch with unconditional branch.
           // OBS. if next MI is not BRCC we don't know what this is
           // we can't have XOR1 instructions since this is not
           // caused by the DAGCombiner.
-          while (Next->isDebugInstr())
-              Next++;
-          MachineInstr &MI2 = *Next;
-          ++Next;
-          if (MI2.getOpcode() == RL78::BRCC) {
-              // If the condition is true.
-              if ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
-                  (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH) ||
-                  (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NC))
-              BuildMI(MBB, MI2, DL, TII->get(RL78::BR)).add(MI2.getOperand(0));
-              MI2.eraseFromParent();
-              MI.eraseFromParent();
-          } else {
+          while (Next != MBB.end() && Next->isDebugInstr())
+              ++Next;
+          // Save the position of the next instruction so that when looking
+          // after LowCMPW_rp_rp, we won't skip other instructions that need
+          // to be handled e.g. LOAD16_rp_stack_slot
+          auto OrgNext = Next;
+          auto handled = false;
+
+          if (Next != MBB.end()) {
+            MachineInstr &MI2 = *Next++;
+            if (MI2.getOpcode() == RL78::BRCC) {
+                // If the condition is true.
+                if ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
+                    (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH) ||
+                    (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NC))
+                BuildMI(MBB, MI2, DL, TII->get(RL78::BR)).add(MI2.getOperand(0));
+                MI2.eraseFromParent();
+                MI.eraseFromParent();
+                handled = true;
+            }
+          }
+
+          if (!handled) {
               bool foundLowCMP = false;
-              while (Next != MBB.end()) {
-              if (Next->getOpcode() == RL78::LowCMPW_rp_rp) {
-                foundLowCMP = true;
-                break;
+              // Later note: it seems it's not enough to look for the LowCMP insn
+              // in the current MBB, so extend the search to the single successors
+              // (by fallthrough or unconditional branch)
+              auto pMBB = &MBB;
+          next_MBB:
+              while (Next != pMBB->end()) {
+                if (Next->getOpcode() == RL78::LowCMPW_rp_rp) {
+                  foundLowCMP = true;
+                  break;
+                }
+                Next++;
               }
-              Next++;
+              if (!foundLowCMP) {
+                auto nextMBB = pMBB->getFallThrough();
+                if (!nextMBB && pMBB->getSingleSuccessor() && pMBB->getFirstInstrTerminator()->isUnconditionalBranch())
+                  nextMBB = pMBB->getSingleSuccessor();
+                if ((pMBB = nextMBB)) {
+                  Next = pMBB->SkipPHIsLabelsAndDebug(pMBB->begin());
+                  goto next_MBB;
+                }
               }
+
               // Since the high parts are equal (AX == AX) in a 32 bit compare
               // our result can be based on the low part compare alone.
               if (foundLowCMP) {
-              BuildMI(MBB, Next, DL, TII->get(RL78::CMPW_rp_rp))
-                  .add(Next->getOperand(0))
-                  .add(Next->getOperand(1));
-              MI.eraseFromParent();
+                // Check first if we didn't do this already coming from another predecessor
+                // (if so, nullify pMBB to indicate the condition)
+                if (Next != pMBB->begin()) {
+                  auto Prev = Next; --Prev;
+                  if (Prev->getOpcode() == RL78::CMPW_rp_rp &&
+                      Prev->getOperand(0).isIdenticalTo(Next->getOperand(0)) &&
+                      Prev->getOperand(1).isIdenticalTo(Next->getOperand(1)))
+                    pMBB = nullptr;
+                }
+                // If ok (first go)
+                if (pMBB) {
+                  BuildMI(*pMBB, Next, DL, TII->get(RL78::CMPW_rp_rp))
+                      .add(Next->getOperand(0))
+                      .add(Next->getOperand(1));
+                }
+                // Remove the cmpw ax, ax anyway
+                MI.eraseFromParent();
+                // Continue with the next original instruction
+                Next = OrgNext;
               } else {
-              report_fatal_error("cmpw ax, ax is not permitted");
+                report_fatal_error("cmpw ax, ax is not permitted");
               }
           }
         }
         break;
+      case RL78::XOR1_cy_r:
+      case RL78::XOR1_cy_A:
+        // Undo RP0 liveness hack
+        if (MI.getOperand(0).getReg() == RL78::RP0) {
+          BuildMI(MBB, MI, DL, TII->get(MI.getOpcode()))
+              .addReg(RL78::R1, MI.getOperand(0).isKill() ? RegState::Kill : 0)
+              .add(MI.getOperand(1));
+          MI.eraseFromParent();
+        }
       }
     }
   }

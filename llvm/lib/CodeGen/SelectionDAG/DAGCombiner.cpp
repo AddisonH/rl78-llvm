@@ -20519,6 +20519,10 @@ SDValue DAGCombiner::replaceStoreOfInsertLoad(StoreSDNode *ST) {
     return SDValue();
   EVT PtrVT = Ptr.getValueType();
 
+  // RL78: this happens when the ptr is 32-bit and the index 16-bit
+  if (Idx.getValueType().getSizeInBits() < PtrVT.getSizeInBits())
+    Idx = DAG.getNode(ISD::ZERO_EXTEND, DL, PtrVT, Idx);
+
   SDValue Offset =
       DAG.getNode(ISD::MUL, DL, PtrVT, Idx,
                   DAG.getConstant(EltVT.getSizeInBits() / 8, DL, PtrVT));
@@ -26352,7 +26356,11 @@ bool DAGCombiner::SimplifySelectOps(SDNode *TheSelect, SDValue LHS,
         LLD->getBasePtr().getOpcode() == ISD::TargetFrameIndex ||
         RLD->getBasePtr().getOpcode() == ISD::TargetFrameIndex ||
         !TLI.isOperationLegalOrCustom(TheSelect->getOpcode(),
-                                      LLD->getBasePtr().getValueType()))
+                                      LLD->getBasePtr().getValueType()) ||
+        // FIXME: RL78 far pointers are not handled properly in the target
+        // lowering code currently so prevent this optimization here
+        (DAG.getTarget().getTargetTriple().isRL78() &&
+         DAG.getDataLayout().getPointerSizeInBits() == 32))
       return false;
 
     // The loads must not depend on one another.

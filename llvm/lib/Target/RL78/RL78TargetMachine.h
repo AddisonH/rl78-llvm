@@ -61,6 +61,10 @@ public:
   bool useIPRA() const override { return true; }
 
   bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override {
+    // when -mfar-data the default AS is far, so the only outlier is the near AS
+    if (DL.getPointerSizeInBits(0) == 32)
+      return (SrcAS != RL78AS::Near) == (DestAS != RL78AS::Near);
+
     return SrcAS == DestAS ||
            (RL78AS::Near == SrcAS && RL78AS::Default == DestAS) ||
            (RL78AS::FarCode == SrcAS && RL78AS::FarData == DestAS) ||

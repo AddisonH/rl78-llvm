@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifdef __FAR_DATA__
+#define __COM_llshl __COM_llshl_nd
+#define __COM_llshr __COM_llshr_nd
+#endif
+
   .file   "REL_dtoll.S"
   .extern __REL_dtol
   .extern __COM_llshl

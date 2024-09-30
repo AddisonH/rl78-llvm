@@ -47,10 +47,13 @@ void AsmLexer::setBuffer(StringRef Buf, const char *ptr,
                          bool EndStatementAtEOF) {
   CurBuf = Buf;
 
-  if (ptr)
+  if (ptr) {
     CurPtr = ptr;
-  else
+    EndPtr = CurPtr + strlen(ptr);
+  } else {
     CurPtr = CurBuf.begin();
+    EndPtr = CurPtr + CurBuf.size();
+  }
 
   TokStart = nullptr;
   this->EndStatementAtEOF = EndStatementAtEOF;
@@ -194,7 +197,7 @@ AsmToken AsmLexer::LexIdentifier() {
 
       std::tie(Operator, OperatorLength) =
           StringSwitch<std::pair<AsmToken::TokenKind, unsigned>>(
-              StringRef(CurPtr-1))
+              StringRef(CurPtr - 1, (EndPtr - CurPtr) + 1))
               .StartsWithLower("high(", {AsmToken::High, 4})
               .StartsWithLower("low(", {AsmToken::Low, 3})
               .StartsWithLower("highw(", {AsmToken::HighW, 5})
@@ -950,7 +953,7 @@ AsmToken AsmLexer::LexToken() {
 
       std::tie(Operator, OperatorLength) =
           StringSwitch<std::pair<AsmToken::TokenKind, unsigned>>(
-              StringRef(CurPtr))
+              StringRef(CurPtr, EndPtr - CurPtr))
               .StartsWith("call16", {AsmToken::PercentCall16, 7})
               .StartsWith("call_hi", {AsmToken::PercentCall_Hi, 8})
               .StartsWith("call_lo", {AsmToken::PercentCall_Lo, 8})

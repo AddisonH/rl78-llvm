@@ -22,6 +22,10 @@ class InstRL78<dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinCla
   // to build the decode table.
   field bits<40> SoftFail = 0;
 
+  // OBS: this changes the conservative default (of 1) as most of the RL78 instructions don't have side effects,
+  // meaning that the instructions that do have side effects have to be marked with hasSideEffects = 1 explicitly
+  let hasSideEffects = 0;
+
   //let DecoderNamespace = "RL78";
   //pipeline see chapter 7 in software manual
   //let Itinerary = itin;

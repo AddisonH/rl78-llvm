@@ -231,7 +231,7 @@ public:
     MPI.Align = Target.getTypeAlign(PtrDiff);
     MPI.HasPadding = false;
     if (MPT->isMemberFunctionPointer())
-      if (Context.getLangOpts().RenesasRL78CodeModel)
+      if (Context.getLangOpts().RenesasRL78CodeModel || Context.getLangOpts().RenesasRL78DataModel)
         MPI.Width += 32; // a RL78 far ptr is 32-bits wide
       else
       MPI.Width *= 2;

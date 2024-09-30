@@ -74,8 +74,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
     if (MBB.empty())
       continue;
     //
-    MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
-    if (I == MBB.end())
+    if (MBB.getLastNonDebugInstr() == MBB.end())
       continue;
     // MBB.dump();
     for (MachineBasicBlock::reverse_iterator prevI = MBB.rbegin(),
@@ -160,6 +159,50 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
         break;
       }
     }
+    
+    SmallVector<MachineInstr*, 4> InstToKill;
+    for (MachineBasicBlock::reverse_iterator prevI = MBB.rbegin(),
+                                             e = MBB.rend();
+         prevI != e; ++prevI) {
+      if (prevI->getOpcode() == RL78::BRCC) {
+        MachineInstr &BRCC = *prevI;
+        RL78CC::CondCodes targetCC =
+            static_cast<RL78CC::CondCodes>(BRCC.getOperand(1).getImm());
+        if ((targetCC != RL78CC::RL78CC_NZ) && (targetCC != RL78CC::RL78CC_Z))
+          break;
+        do {
+          prevI++;
+        } while (prevI != MBB.rend() && prevI->isDebugInstr());
+
+        if (prevI == MBB.rend())
+          break;
+
+        // Optimize compare with 0xFF to INC
+        if (prevI != MBB.rend() && prevI->getOpcode() == RL78::CMP_r_imm &&
+            prevI->getOperand(1).getImm() == -1 &&
+            prevI->getOperand(0).isKill()) {
+            const TargetInstrInfo *TII = MBB.getParent()->getSubtarget<RL78Subtarget>().getInstrInfo();
+            BuildMI(MBB, prevI.getReverse(), prevI->getDebugLoc(),
+                  TII->get(RL78::INC_r))
+              .add(prevI->getOperand(0))
+              .add(prevI->getOperand(1));
+            BuildMI(MBB, BRCC, BRCC.getDebugLoc(),
+                  TII->get(RL78::BRCC))
+              .add(BRCC.getOperand(0))
+              .addImm(targetCC);
+            InstToKill.push_back(&*prevI);
+            InstToKill.push_back(&BRCC);
+        }
+      }
+    }
+
+    for (MachineInstr *Inst : InstToKill) {
+      LLVM_DEBUG(dbgs() << "erasing instruction: ");
+      LLVM_DEBUG(Inst->dump());
+      Inst->eraseFromParent();
+      Changed = true;
+    }
+
     // Eliminate instructions after the first unconditional branch.
     // See: tests\LLVM_RL78\LLVM_RL78\gcc_c_torture\Input\pr86714.c
     // We delete/merge/simplify conditional and unconditional branches in various places.
@@ -169,7 +212,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
     // Attempt to fix this here.
     LLVM_DEBUG(dbgs() << "Parsing " << MBB.getFullName()
                       << " for dead code after BR \n");
-    SmallVector<MachineInstr*, 4> InstToKill;
+    InstToKill.clear();
     bool killRemaining = false;
     // Treat BR BB1
     //       BR BB2

@@ -24,7 +24,10 @@ include "RL78Schedule.td"
 include "RL78InstrInfo.td"
 include "RL78CallingConv.td"
 
-def RL78InstrInfo : InstrInfo;
+def RL78InstrInfo : InstrInfo {
+  // this will be the default behavior in the future, so better to be prepared
+  let guessInstructionProperties = 0;
+}
 
 def RL78AsmParser : AsmParser {
   bit ShouldEmitMatchRegisterName = 0;

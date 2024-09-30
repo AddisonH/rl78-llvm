@@ -6608,6 +6608,7 @@ MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc,
   StringRef Body = StringRef(BodyStart, BodyEnd - BodyStart);
 
   std::string NewBody = Body.str();
+  auto EOL = Body.detectEOL();
   size_t Offset = 0;
   for (const EXITMLoc &Exit : ExitMList) {
 
@@ -6624,12 +6625,12 @@ MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc,
         EraseLength = EndToken.getLoc().getPointer() - Exit.EXITPointer;
         if (Exit.NestLevel > 0) {
           Start = Start + sizeof(".EXITMA") - 1;
-          EraseLength = EraseLength - sizeof(".EXITMA") - 1;
+          EraseLength = EraseLength - sizeof(".EXITMA") + 1;
         }
         NewBody = NewBody.erase(Start, EraseLength);
         // If we are not at nesting level 0, insert .ENDM
         for (size_t i = 0; i < Exit.NestLevel; i++)
-          NewBody = NewBody + ".ENDM\r\n";
+          NewBody = NewBody + EOL.str() + ".ENDM" + EOL.str();
 
         // After the first EXITMA, we don't care about any more exits
         break;

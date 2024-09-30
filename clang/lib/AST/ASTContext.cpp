@@ -3602,9 +3602,11 @@ QualType ASTContext::getConstantArrayType(QualType EltTy,
 
   // Convert the array size into a canonical width matching the pointer size for
   // the target.
+  // RL78: Keep array size == int size for -mfar-data
   llvm::APInt ArySize(ArySizeIn);
-  ArySize = ArySize.zextOrTrunc(Target->getMaxPointerWidth());
-
+  ArySize = ArySize.zextOrTrunc(getLangOpts().RenesasRL78DataModel
+                                    ? Target->getIntWidth()
+                                    : Target->getMaxPointerWidth());
   llvm::FoldingSetNodeID ID;
   ConstantArrayType::Profile(ID, *this, EltTy, ArySize, SizeExpr, ASM,
                              IndexTypeQuals);
@@ -8806,7 +8808,8 @@ ObjCInterfaceDecl *ASTContext::getObjCProtocolDecl() const {
 static TypedefDecl *CreateCharPtrNamedVaListDecl(const ASTContext *Context,
                                                  StringRef Name) {
   // typedef char* __builtin[_ms]_va_list;
-  QualType T = Context->getPointerType(Context->CharTy);
+  QualType T = Context->getPointerType(Context->getAddrSpaceQualType(Context->CharTy,
+    Context->getLangOpts().RenesasRL78DataModel ? LangAS::__near : LangAS::Default));
   return Context->buildImplicitTypedef(T, Name);
 }
 
@@ -8820,7 +8823,8 @@ static TypedefDecl *CreateCharPtrBuiltinVaListDecl(const ASTContext *Context) {
 
 static TypedefDecl *CreateVoidPtrBuiltinVaListDecl(const ASTContext *Context) {
   // typedef void* __builtin_va_list;
-  QualType T = Context->getPointerType(Context->VoidTy);
+  QualType T = Context->getPointerType(Context->getAddrSpaceQualType(Context->VoidTy,
+    Context->getLangOpts().RenesasRL78DataModel ? LangAS::__near : LangAS::Default));
   return Context->buildImplicitTypedef(T, "__builtin_va_list");
 }
 

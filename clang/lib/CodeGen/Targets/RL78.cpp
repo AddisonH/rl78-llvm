@@ -182,6 +182,9 @@ public:
         }
         Fn->addFnAttr("interrupt", Specs);
         Fn->addFnAttr("disable-tail-calls", "true");
+        // marking the interrupt handlers as used ensures that they aren't discarded by LTO
+        if (!D->hasAttr<UsedAttr>())
+          const_cast<Decl *>(D)->addAttr(UsedAttr::CreateImplicit(CGM.getContext()));
       }
 
       if (const auto *Attr = FD->getAttr<RL78BRKInterruptAttr>()) {
@@ -217,6 +220,10 @@ public:
 
     if (const auto *VD = dyn_cast_or_null<VarDecl>(D)) {
       auto *Var = cast<llvm::GlobalVariable>(GV);
+
+      // With -mfar-data, the default address space is far
+      if (GV->getAddressSpace() == Default && CGM.getLangOpts().RenesasRL78DataModel)
+        isFar = true;
       
       // Generate section name/prefix based on kind and attributes
       std::string prefix;
@@ -230,7 +237,7 @@ public:
         if (CGM.getLangOpts().RenesasExt)
           prefix = isFar ? ".constf" : ".const";
         else
-          prefix = isFar ? ".frodada" : ".rodata";
+          prefix = isFar ? ".frodata" : ".rodata";
       }
 
       // Add the _n, _f suffix to sections in case of custom section names or

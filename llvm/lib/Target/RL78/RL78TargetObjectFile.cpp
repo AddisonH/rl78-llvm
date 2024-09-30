@@ -28,8 +28,9 @@ std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
     if (GV) {
       useRenesasNaming = GV->getAttributes().hasAttribute("use-renesas-naming");
       isSaddr = GV->getAttributes().hasAttribute("saddr");
-      isFar = GV->getAddressSpace() == RL78AS::FarCode ||
-              GV->getAddressSpace() == RL78AS::FarData;
+      // this works also for the default AS which is far with -mfar-data
+      isFar = GV->getParent()->getDataLayout().getPointerSizeInBits(
+                  GV->getAddressSpace()) == 32;
     } else if (GF) {
       isFar = GF->getAddressSpace() == RL78AS::FarCode ||
               GF->getAddressSpace() == RL78AS::FarData;

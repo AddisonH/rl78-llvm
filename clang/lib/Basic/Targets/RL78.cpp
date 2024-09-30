@@ -80,6 +80,7 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
 
   has64BitDoubles = false;
   farCodeModel = false;
+  farDataModel = false;
   isMDADisabled = false;
   for (auto &I : Opts.FeaturesAsWritten) {
     if (I == "+64bit-doubles")
@@ -90,9 +91,14 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
       farCodeModel = true;
     if (I == "+near-code")
       farCodeModel = false;
+    if (I == "+far-data")
+      farDataModel = true;
+    if (I == "+near-data")
+      farDataModel = false;
   }
 
   std::string ABI{farCodeModel ? "fc" : "nc"};
+  ABI += (farDataModel ? "_fd" : "_nd");
   ABI += (has64BitDoubles ? "_d64" : "_d32");
   if (Opts.CPU == "RL78_S2")
     ABI += ((isMDADisabled ? "_nomda" : "_mda"));
@@ -121,47 +127,45 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
   FloatAlign = 16;
   DoubleAlign = 16;
   LongDoubleAlign = 16;
-  PointerWidth = 16;
+  PointerWidth = farDataModel ? 32 : 16;
   PointerAlign = 16;
   SuitableAlign = 16;
   SizeType = UnsignedInt;
   IntMaxType = SignedLongLong;
-  IntPtrType = SignedInt;
+  IntPtrType = farDataModel ? SignedLong : SignedInt;
   PtrDiffType = SignedInt;
   SigAtomicType = SignedLong;
+
   // TODO: see https://llvm.org/docs/LangRef.html#data-layout
-  if (farCodeModel) {
-    resetDataLayout(
-        "e"            // little endian
-        "-m:o"         // Mach-O mangling: Private symbols get L prefix. Other
-                       // symbols get a _ prefix.
-        "-p0:16:16:16" // default: 16 bit width, 16 bit aligned
-        "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
-        "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
-        "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
-        "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain
-        "-n8:8"                            // 8 bit native integer width
-        "-n16:16"                          // 16 bit native integer width
-        "-S16"                             // 16 bit natural stack alignment
-        "-P3",                             // Use far pointers for functions.
-        "_"            // To be consistent with Mach-O prefixing.
-    );
+  std::string DL;
+  llvm::raw_string_ostream SS(DL);
+
+  // NOTE: keep in sync with def from llvm/lib/Target/RL78/RL78TargetMachine.cpp
+  SS << "e"               // little endian
+        "-m:o";           // Mach-O mangling: Private symbols get L prefix.
+                          // Other symbols get a _ prefix.
+  if (farDataModel) {
+    SS << "-p0:32:16:16"  // default: 32 bit width, 16 bit aligned
+          "-A1";          // near allocas
   } else {
-    resetDataLayout(
-        "e"            // little endian
-        "-m:o"         // Mach-O mangling: Private symbols get L prefix. Other
-                       // symbols get a _ prefix.
-        "-p0:16:16:16" // default: 16 bit width, 16 bit aligned
-        "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
+    SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
+  }
+
+  SS << "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
         "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
         "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
         "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain
         "-n8:8"                            // 8 bit native integer width
         "-n16:16"                          // 16 bit native integer width
-        "-S16",                             // 16 bit natural stack alignment,
-        "_"            // To be consistent with Mach-O prefixing.
-    );
-  }
+        "-S16";                            // 16 bit natural stack alignment
+
+  if (farCodeModel)
+    SS << "-P3";                           // Use far pointers for functions.
+
+  SS.flush();
+
+  resetDataLayout(DL, "_"); // '_' is to be consistent with Mach-O prefixing.
+
   AddrSpaceMap = &RL78AddrSpaceMap;
 }
 

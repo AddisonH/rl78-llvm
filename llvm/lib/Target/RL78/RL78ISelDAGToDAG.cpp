@@ -58,11 +58,13 @@ public:
   bool SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2);
   bool SelectADDRSPi(SDValue Addr, SDValue &Base, SDValue &Offset);
 
-  template <int Max>
+  template <int Max, bool AllowWordBC = false>
   bool SelectADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
-    return SelectADDRri(Addr, Max, Base, Offset);
+    return SelectADDRri(Addr, Max, AllowWordBC, Base, Offset);
   }
-  bool SelectADDRri(SDValue Addr, unsigned Size, SDValue &Base,
+  bool SelectADDRri(SDValue Addr, unsigned Size, bool AllowWordBC, SDValue &Base,
+                    SDValue &Offset);
+  bool SelectADDRr8i16(SDValue Addr, SDValue &Base,
                     SDValue &Offset);
 
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
@@ -209,7 +211,9 @@ bool RL78DAGToDAGISel::SelectADDRSPi(SDValue Addr, SDValue &Base,
 }
 
 bool RL78DAGToDAGISel::SelectADDRr(SDValue Addr, SDValue &Base) {
-  if (Addr.getOpcode() == RL78ISD::LOW16)
+  if (Addr.getOpcode() == RL78ISD::LOW16 ||
+      (Addr.getOpcode() == ISD::ADD &&
+       Addr->getOperand(0).getOpcode() == RL78ISD::HI16))
     return false;
   if (Addr.getOpcode() == RL78ISD::HI16)
     return false;
@@ -227,7 +231,7 @@ bool RL78DAGToDAGISel::SelectADDRr(SDValue Addr, SDValue &Base) {
   return true;
 }
 
-bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, SDValue &Base,
+bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC, SDValue &Base,
                                     SDValue &Offset) {
   // Addr.dump(CurDAG);
   if (Addr.getOpcode() == RL78ISD::LOW16)
@@ -259,6 +263,10 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, SDValue &Base,
                                            MVT::i16);
         return true;
       }
+    } else if (AllowWordBC && Addr.getOperand(1).getOpcode() == RL78ISD::LOW16) {
+      Base =  Addr.getOperand(0);
+      Offset = Addr.getOperand(1).getOperand(0);
+      return true;
     }
     //
     else if (Addr.getOpcode() == ISD::ADD &&
@@ -269,6 +277,17 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, SDValue &Base,
   Base = Addr;
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
+}
+
+bool RL78DAGToDAGISel::SelectADDRr8i16(SDValue Addr, SDValue &Base,
+                                       SDValue &Offset) {
+  bool match = SelectADDRri(Addr, 0xFFFF, true, Base, Offset);
+  if (match && Base.getOpcode() == ISD::ZERO_EXTEND &&
+      Base.getOperand(0).getValueType() == MVT::i8) {
+    Base = Base.getOperand(0);
+    return true;
+  }
+  return false;
 }
 
 bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
@@ -653,7 +672,7 @@ bool RL78DAGToDAGISel::SelectInlineAsmMemoryOperand(
     return true;
     // TODO: specializations (m should allow all of them).
   case InlineAsm::Constraint_m: // Memory.
-    if (SelectADDRrr(Op, Op0, Op1) || SelectADDRri(Op, 256, Op0, Op1)) {
+    if (SelectADDRrr(Op, Op0, Op1) || SelectADDRri(Op, 256, false, Op0, Op1)) {
       OutOps.push_back(Op0);
       OutOps.push_back(Op1);
       return false;
@@ -665,6 +684,10 @@ bool RL78DAGToDAGISel::SelectInlineAsmMemoryOperand(
       return false;
     } else if (Op.getOpcode() == ISD::FrameIndex) {
       OutOps.push_back(Op);
+      return false;
+    } else if (CurDAG->getDataLayout().getPointerSizeInBits() == 32 &&
+               Op.getOpcode() == RL78ISD::HI16) { // for -mfar-data, still experimental
+      OutOps.push_back(Op->getOperand(0));
       return false;
     }
     break;

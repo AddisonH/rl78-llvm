@@ -354,8 +354,12 @@ CodeGenModule::CodeGenModule(ASTContext &C,
   PointerAlignInBytes =
       C.toCharUnitsFromBits(C.getTargetInfo().getPointerAlign(LangAS::Default))
           .getQuantity();
+  // RL78 -mfar-data: keep sizeof(size_t) == sizeof(int) == 2,
+  //       only sizeof(intptr_t) is 4
   SizeSizeInBytes =
-    C.toCharUnitsFromBits(C.getTargetInfo().getMaxPointerWidth()).getQuantity();
+    C.toCharUnitsFromBits(C.getLangOpts().RenesasRL78DataModel ?
+        C.getTargetInfo().getIntWidth() :
+        C.getTargetInfo().getMaxPointerWidth()).getQuantity();
   IntAlignInBytes =
     C.toCharUnitsFromBits(C.getTargetInfo().getIntAlign()).getQuantity();
   CharTy =
@@ -363,6 +367,7 @@ CodeGenModule::CodeGenModule(ASTContext &C,
   IntTy = llvm::IntegerType::get(LLVMContext, C.getTargetInfo().getIntWidth());
   IntPtrTy = llvm::IntegerType::get(LLVMContext,
     C.getTargetInfo().getMaxPointerWidth());
+  SizeTy = C.getLangOpts().RenesasRL78DataModel ? IntTy : IntPtrTy;
   Int8PtrTy = Int8Ty->getPointerTo(0);
   Int8PtrPtrTy = Int8PtrTy->getPointerTo(0);
   const llvm::DataLayout &DL = M.getDataLayout();

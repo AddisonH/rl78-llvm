@@ -582,28 +582,31 @@ void Parser::ParseRL78InterruptAttribute(IdentifierInfo &AttrName,
 
       Result |= 0x1;
 
-      const StringRef &bank = Tok.getIdentifierInfo()->getName();
-      if(bank.compare("RB0") == 0)
-        Result |= 0x0;
-      else if(bank.compare("RB1") == 0)
-        Result |= 0x1 << 1;
-      else if(bank.compare("RB2") == 0)
-        Result |= 0x2 << 1;
-      else if(bank.compare("RB3") == 0)
-        Result |= 0x3 << 1;
-      else {
-        Diag(Tok, diag::err_expected) << "one of RB0, RB1, RB2 or RB3";
-        SkipUntil(tok::r_paren, StopAtSemi);
-        return;
-      }
+      if (Tok.getIdentifierInfo() != NULL) {
+        const StringRef &bank = Tok.getIdentifierInfo()->getName();
+        if(bank.compare("RB0") == 0)
+          Result |= 0x0;
+        else if(bank.compare("RB1") == 0)
+          Result |= 0x1 << 1;
+        else if(bank.compare("RB2") == 0)
+          Result |= 0x2 << 1;
+        else if(bank.compare("RB3") == 0)
+          Result |= 0x3 << 1;
+        else {
+          Diag(Tok, diag::err_expected) << "one of RB0, RB1, RB2 or RB3";
+          SkipUntil(tok::r_paren, StopAtSemi);
+          return;
+        }
       PP.Lex(Tok);
+      }
     }
     else if(II->getName().compare("enable") == 0) {
 	  if (enabledSpecified == true) {
         PP.Diag(Tok, diag::err_expected) << "only one specification of enable";
         return;
 	  } else enabledSpecified = true;
-	  const StringRef &enable = Tok.getIdentifierInfo()->getName();
+    if (Tok.getIdentifierInfo() != NULL) {
+      const StringRef &enable = Tok.getIdentifierInfo()->getName();
       if(enable.compare("false") == 0)
         Result |= 0x0;
       else if(enable.compare("true") == 0)
@@ -614,6 +617,7 @@ void Parser::ParseRL78InterruptAttribute(IdentifierInfo &AttrName,
         return;
       }
       PP.Lex(Tok);
+    }
     }
     else {
        Diag(Tok.getLocation(), diag::err_pragma_invalid_keyword) << false << false;

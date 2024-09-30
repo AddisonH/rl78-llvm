@@ -545,6 +545,9 @@ public:
   /// potentially set the return value.
   bool SawAsmBlock = false;
 
+  /// True when emitting code for an inline asm statement.
+  bool InEmitAsmStmt = false;
+
   GlobalDecl CurSEHParent;
 
   /// True if the current function is an outlined SEH helper. This can be a

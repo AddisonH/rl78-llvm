@@ -90,6 +90,18 @@ StringRef rl78::getRL78CodeModel(const llvm::opt::ArgList &Args,
     return "mnear-code";
 }
 
+StringRef rl78::getRL78DataModel(const llvm::opt::ArgList &Args,
+                                 const llvm::Triple &Triple) {
+  assert(Triple.isRL78() && "Unexpected triple");
+
+  const Arg *mData =
+      Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
+  if (mData && mData->getOption().getID() == options::OPT_mfar_data)
+    return "mfar-data";
+  // Default is near-data.
+  return "mnear-data";
+}
+
 StringRef rl78::getRL78DoubleSize(const llvm::opt::ArgList &Args,
                                   const llvm::Triple &Triple) {
     assert(Triple.isRL78() && "Unexpected triple");

@@ -9198,8 +9198,14 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
 
   // Remember the HasSideEffect, AlignStack, AsmDialect, MayLoad and MayStore
   // bits as operand 3.
+  // RL78: use the frame index type instead of the plain ptr type to get
+  // a 16-bit constant also for -mfar-data
+  const auto RL78FarData = DAG.getSubtarget().getTargetTriple().isRL78() &&
+                           DAG.getDataLayout().getPointerSizeInBits() == 32;
+  const auto PointerTy = RL78FarData ? TLI.getFrameIndexTy(DAG.getDataLayout())
+                                     : TLI.getPointerTy(DAG.getDataLayout());
   AsmNodeOperands.push_back(DAG.getTargetConstant(
-      ExtraInfo.get(), getCurSDLoc(), TLI.getPointerTy(DAG.getDataLayout())));
+      ExtraInfo.get(), getCurSDLoc(), PointerTy));
 
   // Third pass: Loop over operands to prepare DAG-level operands.. As part of
   // this, assign virtual and physical registers for inputs and otput.
@@ -9381,8 +9387,12 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
         assert((OpInfo.isIndirect ||
                 OpInfo.ConstraintType != TargetLowering::C_Memory) &&
                "Operand must be indirect to be a mem!");
-        assert(InOperandVal.getValueType() ==
-                   TLI.getPointerTy(DAG.getDataLayout()) &&
+        // RL78: stack ptrs are near, even with -mfar-data
+        auto PtrType = TLI.getPointerTy(
+            DAG.getDataLayout(),
+            DAG.getSubtarget().getTargetTriple().isRL78() &&
+                    InOperandVal.getNode()->getOpcode() == ISD::FrameIndex);
+        assert(InOperandVal.getValueType() == PtrType &&
                "Memory operands expect pointer values");
 
         unsigned ConstraintID =
@@ -10124,8 +10134,19 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
                                               DL.getAllocaAddrSpace());
 
     DemoteStackSlot = CLI.DAG.getFrameIndex(DemoteStackIdx, getFrameIndexTy(DL));
+    SDValue DemoteStackSlotRL78;
+    // RL78: an addrspacecast is needed here if -mfar-data
+    // NOTE: we use another SDValue for the Entry.Node, as the original one will be used
+    // later (after the function is invoked); StackSlotPtrType is overwritten as its only
+    // use in the Entry.Ty assignment below
+    if (CLI.DAG.getTarget().getTargetTriple().isRL78() && DL.getPointerSizeInBits() == 32) {
+      SDLoc dl(DemoteStackSlot);
+      DemoteStackSlotRL78 = CLI.DAG.getAddrSpaceCast(dl, getPointerTy(DL),
+                                DemoteStackSlot, DL.getAllocaAddrSpace(), 0);
+      StackSlotPtrType = PointerType::get(CLI.RetTy, 0);
+    }
     ArgListEntry Entry;
-    Entry.Node = DemoteStackSlot;
+    Entry.Node = DemoteStackSlotRL78 ? DemoteStackSlotRL78 : DemoteStackSlot;
     Entry.Ty = StackSlotPtrType;
     Entry.IsSExt = false;
     Entry.IsZExt = false;

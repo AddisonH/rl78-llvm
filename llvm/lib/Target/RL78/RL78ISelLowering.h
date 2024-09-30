@@ -55,7 +55,8 @@ enum NodeType : unsigned {
   ORMEM,
   XORMEM,
   MACHU,
-  MACH
+  MACH,
+  INC
 };
 }
 
@@ -232,6 +233,10 @@ public:
     return ShiftLegalizationStrategy::LowerToLibcall;
   }
 
+  bool isDesirableToCommuteWithShift(const SDNode *N,
+                                             CombineLevel Level) const override;
+
+  MVT getVectorIdxTy(const DataLayout &DL) const override { return MVT::i16; }
 
 private:
   // CC-RL calling convention specific operand allocator functions
@@ -263,17 +268,20 @@ private:
   SDValue LowerIntrinsicWithoutChain(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerIntrinsicVoid(SDValue Op, SelectionDAG &DAG) const;
 
+  SDValue PerformBRCCCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformBRCONDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformMULCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformUDIVREMCombine(SDNode *N, DAGCombinerInfo &DCI,
                                 ISD::NodeType otherNodeType) const;
   SDValue PerformADDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformSUBCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformMULADDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformXORAddCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformTruncateCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformANDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformXORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformSHLCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   MachineBasicBlock *LowerEXTEND(bool sext, MachineInstr &MI,
                                  MachineBasicBlock *BB) const;

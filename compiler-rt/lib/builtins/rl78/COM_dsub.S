@@ -18,13 +18,21 @@
   .globl __COM_dsub
   .type  __COM_dsub,@function
 __COM_dsub:
+#ifdef __FAR_DATA__
+  mov   x, a
+#else
   movw  de,ax
+#endif
   mov a,[sp+19] ; ux - yv -> ux + (-y)v
   mov1  cy,a.7
   not1  cy
   mov1  a.7,cy
   mov [sp+19],a
+#ifdef __FAR_DATA__
+  mov   a, x
+#else
   movw  ax,de
+#endif
   br  !!__COM_dadd
 .Lfunc_end1:
   .size __COM_dsub, .Lfunc_end1-__COM_dsub
