@@ -30,6 +30,22 @@ class StringRef;
 class raw_pwrite_stream;
 class raw_ostream;
 
+/// SPII - This namespace holds all of the target specific flags that
+/// instruction info tracks.
+///
+namespace SPII {
+enum {
+  Pseudo = (1 << 0),
+  Load = (1 << 1),
+  Store = (1 << 2),
+  DelaySlot = (1 << 3)
+};
+
+///// Target Operand Flag enum.
+enum TOF { NONE, MO_OUTLINE_SP, MO_NO_OUTLINE_SP, TOF_LAST };
+
+} // end namespace SPII
+
 MCCodeEmitter *createRL78MCCodeEmitter(const MCInstrInfo &MCII,
                                        MCContext &Ctx);
 MCAsmBackend *createRL78AsmBackend(const Target &T, const MCSubtargetInfo &STI,

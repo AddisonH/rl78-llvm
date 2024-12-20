@@ -312,6 +312,10 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     if (isUInt<8>(Offset + offsetAdj)) {
       MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+      if (isUInt<8>(Offset + 4))
+        MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
+      else
+        MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
       // MI.getParent()->dump();
       return false;
     }
@@ -327,6 +331,10 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     if (isUInt<8>(Offset)) {
       MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+      if (isUInt<8>(Offset + 4))
+        MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
+      else
+        MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
       // MI.getParent()->dump();
       return false;
     } else if (isUInt<16>(Offset - 2)) {
@@ -368,6 +376,10 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
              (MI.getOpcode() == RL78::CALL_sym20_fp)) {
     MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
     MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+    if (isUInt<16>(Offset + 4))
+      MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
+    else
+      MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
     return false;
   }
   // MOVW_rp_stack_slot.

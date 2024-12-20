@@ -21,7 +21,8 @@ using namespace llvm;
 static MCOperand LowerSymbolOperand(const MachineInstr *MI,
                                     const MachineOperand &MO, AsmPrinter &AP) {
 
-  RL78MCExpr::VariantKind Kind = (RL78MCExpr::VariantKind)MO.getTargetFlags();
+  RL78MCExpr::VariantKind Kind =
+      RL78MCExpr::VariantKindFromTargetFlag(MO.getTargetFlags());
   const MCSymbol *Symbol = nullptr;
   // MO.dump();
   switch (MO.getType()) {

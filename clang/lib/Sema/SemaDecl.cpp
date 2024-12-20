@@ -8371,7 +8371,11 @@ NamedDecl *Sema::ActOnVariableDeclarator(
                    diag::err_rl78_saddr_not_applicable);
               break;
             }
-
+            // For -mfar-data, set the near AS internally; otherwise saddr var
+            // ptrs will be far.
+            if (getLangOpts().RenesasRL78DataModel)
+              NewVD->setType(Context.getAddrSpaceQualType(NewVD->getType(),
+                             LangAS::__near));
             // NewVD->dump();
             NewVD->addAttr(RL78SaddrAttr::CreateImplicit(Context));
             break;

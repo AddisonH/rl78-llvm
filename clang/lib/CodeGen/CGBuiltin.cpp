@@ -20606,40 +20606,45 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
     const Expr *Culprit;
     if (!E->getArg(0)->getType()->isPointerType() ||
         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-            LangAS::__far_data)
+            LangAS::__far_data ||
+        (getLangOpts().RenesasRL78DataModel &&
+         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
+             LangAS::Default))
       CGM.Error(E->getArg(0)->getExprLoc(), "argument is not a near pointer");
     if (!E->getArg(1)->isConstantInitializer(getContext(), false, &Culprit))
       CGM.Error(E->getArg(1)->getExprLoc(), "argument is not a compile-time constant");
     if (!E->getArg(3)->isConstantInitializer(getContext(), false, &Culprit))
       CGM.Error(E->getArg(3)->getExprLoc(), "argument is not a compile-time constant");
     
-    Value *ArgValue0;
     // If the pointer has an an explicit near qualifier, we discard it so we
     // don't get parameter type matching errors
-    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace()) {
-      Value *ArgValue0WithAddressSpace = EmitScalarExpr(E->getArg(0));
+    // Later edit: For -mfar-data, as the pointer in the default AS is far,
+    // don't remove the near address space
+    Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
+    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
+        !getLangOpts().RenesasRL78DataModel)
       ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-      ArgValue0WithAddressSpace, llvm::PointerType::getWithSamePointeeType(
-          cast<llvm::PointerType>(ArgValue0WithAddressSpace->getType()), /*AddrSpace=*/0));
-    } else {
-      ArgValue0 = EmitScalarExpr(E->getArg(0));
-    }
+          ArgValue0,
+          llvm::PointerType::getWithSamePointeeType(
+              cast<llvm::PointerType>(ArgValue0->getType()), /*AddrSpace=*/0));
 
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
     Value *ArgValue2 = EmitScalarExpr(E->getArg(2));
     Value *ArgValue3 = EmitScalarExpr(E->getArg(3));
+
+    auto PtrTy = ArgValue0->getType();
     switch (BuiltinID) {
     case RL78::BI__builtin_rl78_mov1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_mov1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_mov1, PtrTy),
                                 {ArgValue0, ArgValue1, ArgValue2, ArgValue3});
     case RL78::BI__builtin_rl78_and1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_and1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_and1, PtrTy),
                                 {ArgValue0, ArgValue1, ArgValue2, ArgValue3});
     case RL78::BI__builtin_rl78_or1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_or1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_or1, PtrTy),
                                 {ArgValue0, ArgValue1, ArgValue2, ArgValue3});
     case RL78::BI__builtin_rl78_xor1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_xor1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_xor1, PtrTy),
                                 {ArgValue0, ArgValue1, ArgValue2, ArgValue3});
     default:
       llvm_unreachable("unexpected builtin ID");
@@ -20659,34 +20664,39 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
             LangAS::__far_data ||
         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-            LangAS::__far_code)
+            LangAS::__far_code ||
+        (getLangOpts().RenesasRL78DataModel &&
+         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
+             LangAS::Default))
       CGM.Error(E->getArg(0)->getExprLoc(), "argument is not a near pointer");
 
-    Value *ArgValue0;
     // If the pointer has an an explicit near qualifier, we discard it so we
     // don't get parameter type matching errors
-    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace()) {
-      Value *ArgValue0WithAddressSpace = EmitScalarExpr(E->getArg(0));
+    // Later edit: For -mfar-data, as the pointer in the default AS is far,
+    // don't remove the near address space
+    Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
+    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
+        !getLangOpts().RenesasRL78DataModel)
       ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-      ArgValue0WithAddressSpace, llvm::PointerType::getWithSamePointeeType(
-          cast<llvm::PointerType>(ArgValue0WithAddressSpace->getType()), /*AddrSpace=*/0));
-    } else {
-      ArgValue0 = EmitScalarExpr(E->getArg(0));
-    }
+          ArgValue0,
+          llvm::PointerType::getWithSamePointeeType(
+              cast<llvm::PointerType>(ArgValue0->getType()), /*AddrSpace=*/0));
 
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
+
+    auto PtrTy = ArgValue0->getType();
     switch (BuiltinID) {
     case RL78::BI__builtin_rl78_set1:
     case RL78::BI__set1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_set1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_set1, PtrTy),
                                 {ArgValue0, ArgValue1});
     case RL78::BI__builtin_rl78_clr1:
     case RL78::BI__clr1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_clr1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_clr1, PtrTy),
                                 {ArgValue0, ArgValue1});
     case RL78::BI__builtin_rl78_not1:
     case RL78::BI__not1:
-      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_not1),
+      return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_not1, PtrTy),
                                 {ArgValue0, ArgValue1});
     default:
       llvm_unreachable("unexpected builtin ID");

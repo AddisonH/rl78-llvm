@@ -1060,9 +1060,8 @@ ExprResult Sema::DefaultVariadicArgumentPromotion(Expr *E, VariadicCallType CT,
   E = ExprRes.get();
 
   QualType ExprType = E->getType();
-  //TODO: Change to RenesasExt when cc-rl library is finished and remove this option.
   //TODO: RL78 see if we need to treat far_code 
-  if (getLangOpts().RenesasVaArgPromotion &&
+  if (getLangOpts().RenesasExt &&
       ExprType->isPointerType() &&
       cast<PointerType>(ExprType->getCanonicalTypeInternal())->getPointeeType().getAddressSpace() != LangAS::__far_data) {
     QualType ExprSubType = cast<PointerType>(ExprType->getCanonicalTypeInternal())->getPointeeType();

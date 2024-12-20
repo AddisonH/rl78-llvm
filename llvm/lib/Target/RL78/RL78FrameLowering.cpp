@@ -323,22 +323,25 @@ MachineBasicBlock::iterator RL78FrameLowering::eliminateCallFramePseudoInstr(
       *static_cast<const RL78InstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   int64_t Amount = I->getOperand(0).getImm();
-  if (!hasFP(MF) || Amount == 0)
-    return MBB.erase(I);
-
   const DebugLoc &DL = I->getDebugLoc();
+
   if (I->getOpcode() == TII.getCallFrameSetupOpcode()) {
+
+    BuildMI(MBB, I, DL, TII.get(RL78::CALL_STACK_SETUP)).addImm(Amount);
+
     // allocate stack for parameter passing
-    BuildMI(MBB, I, DL, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
-        .addReg(RL78::SPreg)
-        .addImm(Amount);
+    if (hasFP(MF) && Amount != 0)
+      BuildMI(MBB, I, DL, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(Amount);
   } else {
     // deallocate stack used for parameter passing
-    BuildMI(MBB, I, DL, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
-        .addReg(RL78::SPreg)
-        .addImm(Amount);
+    BuildMI(MBB, I, DL, TII.get(RL78::CALL_STACK_DESTROY)).addImm(Amount);
+    if (hasFP(MF) && Amount != 0)
+      BuildMI(MBB, I, DL, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(Amount);
   }
-
   return MBB.erase(I);
 }
 
@@ -471,9 +474,9 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
   }
 
   if (NumBytesAdjusted != 0) {
-    // TODO: we can use  POP  in some cases (depending on ret value)
-    // Emit ADDW SP, #N.
-    if (NumBytesAdjusted < 0x100)
+    if (NumBytesAdjusted == 2) 
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP6);
+    else if (NumBytesAdjusted < 0x100)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytesAdjusted);

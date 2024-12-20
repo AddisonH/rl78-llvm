@@ -8923,6 +8923,9 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
 		S.Diag(AL.getLoc(), diag::err_expected) << "only one keyword or attribute. Also found near or far keywords or attributes.";
         break;
       }
+      // For -mfar-data, set the near AS internally; otherwise saddr var ptrs will be far.
+      if (S.getLangOpts().RenesasRL78DataModel)
+        cast<VarDecl>(D)->setType(S.Context.getAddrSpaceQualType(cast<VarDecl>(D)->getType(), LangAS::__near));
       // Saddr address space is [0xFFE20, 0xFFF20)
       if(const auto *A = D->getAttr<RL78AddressAttr>()) {
         if((A->getAddress() < 0xFFE20) || (A->getAddress() >= 0xFFF20)) {

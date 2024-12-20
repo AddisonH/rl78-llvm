@@ -295,7 +295,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE8_memDEi_imm:
   case RL78::STORE8_memHLi_imm:
   case RL78::STORE8_ri_imm:
-  case RL78::STORE8_rbci_imm: {
+  case RL78::STORE8_memBorCi_imm: {
     unsigned int RegOp = MI.getOperand(0).getReg();
     RL78ReportError(RegOp == RL78::RP4 || RegOp == RL78::RP6 ||
                         RegOp == RL78::RP2 || RegOp == RL78::R2 ||
@@ -373,6 +373,8 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // MOV B, saddr      E8 saddr
     // MOV C, saddr      F8 saddr
     switch (MI.getOperand(0).getReg()) {
+    case RL78::R1:
+        break;
     case RL78::R0:
       Bits = 0xD800;
       break;
@@ -382,6 +384,8 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     case RL78::R2:
       Bits = 0xF800;
       break;
+    default:
+      RL78ReportError(false, "Instruction using illegal register.");
     }
     Bits |= getTargetOpValue(MI, 1, 1, Fixups, STI,
                                (MCFixupKind)RL78::fixup_RL78_DIR8U_SAD) &
@@ -406,7 +410,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::LOAD8_r_memHLi:
   case RL78::LOAD8_r_memDEi:
   case RL78::LOAD8_r_ri:
-  case RL78::LOAD8_r_rbci: {
+  case RL78::LOAD8_r_memBorCi: {
     // MOV A, [DE]       89.
     // MOV A, [HL]       8B.
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
@@ -457,7 +461,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE8_memDEi_r:
   case RL78::STORE8_memHLi_r:
   case RL78::STORE8_ri_r:
-  case RL78::STORE8_rbci_r: {
+  case RL78::STORE8_memBorCi_r: {
     // MOV [DE], A       99.
     // MOV [HL], A       9B.
     RL78ReportError(MI.getOperand(2).getReg() == RL78::R1,
@@ -582,8 +586,10 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     Bits |= (uaddr | laddr);
     break;
   }
-  case RL78::MOV_esaddr16_a: {
+  case RL78::MOV_esaddr16_r: {
     // MOV ES:!addr16, A ;11 9F adrl adrh.
+    RL78ReportError(MI.getOperand(2).getReg() == RL78::R1,
+                    "Instruction using illegal register.");
     unsigned int addressValue = getTargetOpValue(
         MI, 1, 2, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR20U_16);
     unsigned int laddr = (0x00FF & addressValue) << 8;
@@ -609,6 +615,8 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     case RL78::R3:
       Bits = 0x11E90000;
       break;
+    default:
+      RL78ReportError(false, "Instruction using illegal register.");
     }
     unsigned int addressValue = getTargetOpValue(
         MI, 2, 2, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR20U_16);
@@ -622,7 +630,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE8_esmemHL_a:
   case RL78::STORE8_esmemDEi_a:
   case RL78::STORE8_esmemHLi_a:
-  case RL78::STORE8_esrborci_r:
+  case RL78::STORE8_esmemBorCi_r:
   case RL78::STORE8_esrpi_r: {
 
     RL78ReportError(MI.getOperand(3).getReg() == RL78::R1,
@@ -676,7 +684,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::LOAD8_rp_esmemHL:
   case RL78::LOAD8_a_esmemDEi:
   case RL78::LOAD8_a_esmemHLi:
-  case RL78::LOAD8_a_esrborci:
+  case RL78::LOAD8_a_esmemBorCi:
   case RL78::LOAD8_r_esrpi: {
 
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
@@ -1096,7 +1104,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
       Bits = 0xFA00;
       break;
     default:
-      llvm_unreachable("Invalid register used in MOVW instruction!");
+      RL78ReportError(false, "Instruction using illegal register.");
     }
     unsigned int addr = getTargetOpValue(
         MI, 1, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR8UW_SAD);
@@ -1213,7 +1221,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::LOAD16_rp_esmemDEi:
   case RL78::LOAD16_rp_esmemHLi:
   case RL78::LOAD16_rp_esrpi:
-  case RL78::LOAD16_rp_esrbci: {
+  case RL78::LOAD16_rp_esmemBorCi: {
     // MOVW AX, es:[DE]       11 A9
     // MOVW AX, es:[DE+byte]  11 AA adr
     // MOVW AX, es:[HL]       11 AB
@@ -1279,7 +1287,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::LOAD16_rp_memDEi:
   case RL78::LOAD16_rp_memHLi:
   case RL78::LOAD16_rp_rpi:
-  case RL78::LOAD16_rp_rbci: {
+  case RL78::LOAD16_rp_memBorCi: {
 
     // MOVW AX, [DE]       A9
     // MOVW AX, [DE+byte]  AA adr
@@ -1345,7 +1353,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE16_memDEi_rp:
   case RL78::STORE16_memHLi_rp:
   case RL78::STORE16_rpi_rp:
-  case RL78::STORE16_rbci_rp: {
+  case RL78::STORE16_memBorCi_rp: {
     // MOVW [DE], AX         B9
     // MOVW [DE+byte], AX    BA adr
     // MOVW [HL], AX         BB
@@ -1410,7 +1418,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE16_esmemDEi_rp:
   case RL78::STORE16_esmemHLi_rp:
   case RL78::STORE16_esrpi_rp:
-  case RL78::STORE16_esrbci_rp:
+  case RL78::STORE16_esmemBorCi_rp:
     // MOVW es:[DE], AX         11 B9
     // MOVW es:[DE+byte], AX    11 BA adr
     // MOVW es:[HL], AX         11 BB
@@ -1497,7 +1505,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
       Bits = 0x11FB0000;
       break;
     default:
-      llvm_unreachable("Invalid register used in MOVW instruction!");
+      RL78ReportError(false, "Instruction using illegal register.");;
     }
     unsigned int addressValue = getTargetOpValue(
         MI, 2, 2, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16UW_RAM);
@@ -2669,9 +2677,9 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     break;
   case RL78::MOV1_cy_esmemr:
     // MOV1 CY, ES:[HL].0    ;11 71 84
-    RL78ReportError(MI.getOperand(2).getReg() == RL78::RP6,
+    RL78ReportError(MI.getOperand(1).getReg() == RL78::RP6,
                     "Instruction using illegal register.");
-    Bits += MI.getOperand(3).getImm() << 4;
+    Bits += MI.getOperand(2).getImm() << 4;
     break;
   case RL78::MOV1_esmemr_cy:
     // MOV1 ES:[HL].0, CY    ;11 71 81
@@ -2683,9 +2691,9 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::OR1_esmemr:
   case RL78::XOR1_esmemr:
     // AND1 CY, ES:[HL].0       ;11 71 85
-    RL78ReportError(MI.getOperand(2).getReg() == RL78::RP6,
+    RL78ReportError(MI.getOperand(1).getReg() == RL78::RP6,
                     "Instruction using illegal register.");
-    Bits += MI.getOperand(3).getImm() << 4;
+    Bits += MI.getOperand(2).getImm() << 4;
     break;
   case RL78::SET1_sfr:
   case RL78::CLR1_sfr: {

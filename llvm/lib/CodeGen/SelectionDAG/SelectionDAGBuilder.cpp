@@ -3954,6 +3954,27 @@ void SelectionDAGBuilder::visitExtractValue(const ExtractValueInst &I) {
                            DAG.getVTList(ValValueVTs), Values));
 }
 
+static SDValue getAddOffsetNode(SelectionDAG &DAG, SDValue &N, SDLoc &dl,
+                         SDValue &OffsVal, SDNodeFlags &Flags) {
+  if (DAG.getTarget().getTargetTriple().isRL78() &&
+      N.getValueType().getSizeInBits() == 32) {
+    // Since for RL78 data alocation is prohibited accross segments,
+    // offsets are
+    // added to the lower 16bytes only
+    OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, MVT::i16);
+    SDValue LowAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
+                                     DAG.getConstant(0, dl, MVT::i16));
+    SDValue HighAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
+                                      DAG.getConstant(1, dl, MVT::i16));
+    SDValue LowAddressAndOffset = DAG.getNode(
+        ISD::ADD, dl, LowAddress.getValueType(), LowAddress, OffsVal, Flags);
+    return DAG.getNode(ISD::BUILD_PAIR, dl, N.getValueType(),
+                       LowAddressAndOffset, HighAddress, Flags);
+  } else {
+    return DAG.getNode(ISD::ADD, dl, N.getValueType(), N, OffsVal, Flags);
+  }
+}
+
 void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   Value *Op0 = I.getOperand(0);
   // Note that the pointer operand may be a vector of pointers. Take the scalar
@@ -3992,8 +4013,8 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         if (int64_t(Offset) >= 0 && cast<GEPOperator>(I).isInBounds())
           Flags.setNoUnsignedWrap(true);
 
-        N = DAG.getNode(ISD::ADD, dl, N.getValueType(), N,
-                        DAG.getConstant(Offset, dl, N.getValueType()), Flags);
+        SDValue OffsVal = DAG.getConstant(Offset, dl, N.getValueType());
+        N = getAddOffsetNode(DAG, N, dl, OffsVal, Flags);
       }
     } else {
       // IdxSize is the width of the arithmetic according to IR semantics.
@@ -4033,26 +4054,8 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         if (Offs.isNonNegative() && cast<GEPOperator>(I).isInBounds())
           Flags.setNoUnsignedWrap(true);
 
-        if (DAG.getTarget().getTargetTriple().isRL78() &&
-            N.getValueType().getSizeInBits() == 32) {
-          // Since for RL78 data alocation is prohibited accross segments,
-          // offsets are
-          // added to the lower 16bytes only
-          OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, MVT::i16);
-          SDValue LowAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
-                                           N, DAG.getConstant(0, dl, MVT::i16));
-          SDValue HighAddress =
-              DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
-                          DAG.getConstant(1, dl, MVT::i16));
-          SDValue LowAddressAndOffset =
-              DAG.getNode(ISD::ADD, dl, LowAddress.getValueType(), LowAddress,
-                          OffsVal, Flags);
-          N = DAG.getNode(ISD::BUILD_PAIR, dl, N.getValueType(),
-                          LowAddressAndOffset, HighAddress, Flags);
-        } else {
-          OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, N.getValueType());
-          N = DAG.getNode(ISD::ADD, dl, N.getValueType(), N, OffsVal, Flags);
-        }
+        OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, N.getValueType());
+        N = getAddOffsetNode(DAG, N, dl, OffsVal, Flags);
         continue;
       }
 
@@ -4095,8 +4098,8 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         }
       }
 
-      N = DAG.getNode(ISD::ADD, dl,
-                      N.getValueType(), N, IdxN);
+      SDNodeFlags Flags;
+      N = getAddOffsetNode(DAG, N, dl, IdxN, Flags);
     }
   }
 

@@ -23,21 +23,6 @@ namespace llvm {
 
 class RL78Subtarget;
 
-/// SPII - This namespace holds all of the target specific flags that
-/// instruction info tracks.
-///
-namespace SPII {
-enum {
-  Pseudo = (1 << 0),
-  Load = (1 << 1),
-  Store = (1 << 2),
-  DelaySlot = (1 << 3)
-};
-
-/// Target Operand Flag enum. Assumes same order as RL78MCExpr::VariantKind
-enum TOF { MO_NO_FLAG, MO_LOW8, MO_LOW16, MO_HI16 };
-
-} // end namespace SPII
 
 class RL78InstrInfo : public RL78GenInstrInfo {
   const RL78RegisterInfo RI;

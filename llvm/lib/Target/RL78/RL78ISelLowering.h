@@ -359,7 +359,9 @@ private:
                                    MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerBSWAP32(MachineInstr &MI,
                                   MachineBasicBlock *BB) const;
-
+  MachineBasicBlock *LowerToHLByteOrWordBC(unsigned ImmPos, unsigned RegPos,
+                                           MachineInstr &MI,
+                                           MachineBasicBlock *BB) const;
   bool decomposeMulByConstant(LLVMContext &Context, EVT VT,
                               SDValue C) const override;
 };

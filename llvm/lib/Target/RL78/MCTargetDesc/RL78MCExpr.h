@@ -15,6 +15,7 @@
 #define LLVM_LIB_TARGET_RL78_MCTARGETDESC_RL78MCEXPR_H
 
 #include "RL78FixupKinds.h"
+#include "RL78MCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/MC/MCExpr.h"
 
@@ -24,8 +25,8 @@ class StringRef;
 class RL78MCExpr : public MCTargetExpr {
 public:
   enum VariantKind {
-    VK_RL78_None,
-    VK_RL78_SADW,
+    VK_RL78_None = 0,
+    VK_RL78_SADW = SPII::TOF_LAST,
     VK_RL78_HIGH,
     VK_RL78_LOW,
     VK_RL78_HIGHW,
@@ -42,6 +43,12 @@ public:
 
     VK_RL78_LAST
   };
+
+  static VariantKind VariantKindFromTargetFlag(unsigned int flag) {
+    if (flag >= VK_RL78_SADW && flag < VK_RL78_LAST || flag == VK_RL78_None)
+      return (VariantKind)flag;
+    llvm_unreachable("Unexpected target flag value");
+  }
 
 private:
   const VariantKind VKind;

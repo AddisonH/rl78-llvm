@@ -93,6 +93,8 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     break;
   case RL78::ADJCALLSTACKDOWN:
   case RL78::ADJCALLSTACKUP:
+  case RL78::CALL_STACK_SETUP:
+  case RL78::CALL_STACK_DESTROY:
     return;
   }
   

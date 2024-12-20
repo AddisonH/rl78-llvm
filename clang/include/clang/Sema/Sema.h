@@ -456,7 +456,8 @@ public:
 
   enum PragmaClangSectionAction {
     PCSA_Set     = 0,
-    PCSA_Clear   = 1
+    PCSA_Clear   = 1,
+    PCSA_GetName = 2
   };
 
   struct PragmaClangSection {
@@ -10736,7 +10737,8 @@ public:
   /// ActOnPragmaClangSection - Called on well formed \#pragma clang section
   void ActOnPragmaClangSection(SourceLocation PragmaLoc,
                                PragmaClangSectionAction Action,
-                               PragmaClangSectionKind SecKind, StringRef SecName);
+                               PragmaClangSectionKind SecKind, StringRef SecName,
+                               std::string *OutSecName = nullptr);
 
   /// ActOnPragmaOptionsAlign - Called on well formed \#pragma options align.
   void ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,

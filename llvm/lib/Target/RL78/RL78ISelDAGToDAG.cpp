@@ -63,17 +63,25 @@ public:
     return SelectADDRri(Addr, Max, AllowWordBC, Base, Offset);
   }
   bool SelectADDRri(SDValue Addr, unsigned Size, bool AllowWordBC, SDValue &Base,
-                    SDValue &Offset);
+                    SDValue &Offset, bool PermitFrameIndex = false);
   bool SelectADDRr8i16(SDValue Addr, SDValue &Base,
                     SDValue &Offset);
 
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
   bool SelectSaddr(SDValue Addr, SDValue &Base);
   bool SelectSFR(SDValue Addr, SDValue &Base);
-  bool SelectADDRESABS16(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
-  bool SelectADDRESri(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow,
-                      SDValue &Offset);
-  bool SelectADDRESr(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
+
+  bool SelectESADDRr(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
+  bool SelectESADDRrr(SDValue Addr,  SDValue &BaseHi, SDValue &R1, SDValue &R2);
+  template <int Max, bool AllowWordBC = false>
+  bool SelectESADDRri(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow, SDValue &Offset) {
+    return SelectESADDRri(Addr, Max, AllowWordBC, BaseHi, BaseLow, Offset);
+  }
+  bool SelectESADDRri(SDValue Addr, unsigned Size, bool AllowWordBC, SDValue &BaseHi, SDValue &BaseLow,
+                    SDValue &Offset);
+  bool SelectESADDRr8i16(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow,
+                    SDValue &Offset);
+  bool SelectESADDRABS16(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
@@ -232,7 +240,7 @@ bool RL78DAGToDAGISel::SelectADDRr(SDValue Addr, SDValue &Base) {
 }
 
 bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC, SDValue &Base,
-                                    SDValue &Offset) {
+                                    SDValue &Offset, bool PermitFrameIndex) {
   // Addr.dump(CurDAG);
   if (Addr.getOpcode() == RL78ISD::LOW16)
     return false;
@@ -240,7 +248,7 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
     return false;
   if (Addr.getOpcode() == RL78ISD::LOW8)
     return false;
-  if (Addr.getOpcode() == ISD::FrameIndex)
+  if (!PermitFrameIndex && Addr.getOpcode() == ISD::FrameIndex)
     return false;
   if (Addr.getOpcode() == ISD::Constant)
     return false;
@@ -253,10 +261,12 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
 
   if (Addr.getOpcode() == ISD::ADD || Addr.getOpcode() == ISD::OR) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
-      if (FrameIndexSDNode *FIN =
-              dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
+      if (!PermitFrameIndex &&
+          dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)) != nullptr) {
         return false;
       }
+      if(Addr.getOperand(0).getOpcode() ==  RL78ISD::LOW16)
+          return false;
       if ((CN->getSExtValue() > 0) && (CN->getSExtValue() <= Max)) {
         Base = Addr.getOperand(0);
         Offset = CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr),
@@ -268,26 +278,10 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
       Offset = Addr.getOperand(1).getOperand(0);
       return true;
     }
-    //
-    else if (Addr.getOpcode() == ISD::ADD &&
-             ((Addr.getOperand(1).getOpcode() == ISD::SIGN_EXTEND) ||
-              (Addr.getOperand(1).getOpcode() == ISD::ZERO_EXTEND)))
-      return false;
   }
   Base = Addr;
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
-}
-
-bool RL78DAGToDAGISel::SelectADDRr8i16(SDValue Addr, SDValue &Base,
-                                       SDValue &Offset) {
-  bool match = SelectADDRri(Addr, 0xFFFF, true, Base, Offset);
-  if (match && Base.getOpcode() == ISD::ZERO_EXTEND &&
-      Base.getOperand(0).getValueType() == MVT::i8) {
-    Base = Base.getOperand(0);
-    return true;
-  }
-  return false;
 }
 
 bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
@@ -307,8 +301,9 @@ bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
   if (Addr.getOpcode() == ISD::ADD) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
       return false;
-    //
-    if ((Addr.getOperand(1).getOpcode() != ISD::SIGN_EXTEND) &&
+    // the index must be zero-extended to i16 (full 16-bit index is not supported,
+    // also sign-extension won't work for negative values)
+    if ((Addr.getValueType() != MVT::i16) ||
         (Addr.getOperand(1).getOpcode() != ISD::ZERO_EXTEND))
       return false;
     R1 = Addr.getOperand(0);
@@ -379,78 +374,62 @@ bool RL78DAGToDAGISel::SelectADDRABS16(SDValue Addr, SDValue &Base) {
   return selectADDRABS16(Addr, Base, CurDAG, true);
 }
 
-bool RL78DAGToDAGISel::SelectADDRESABS16(SDValue Addr, SDValue &BaseHi,
-                                         SDValue &BaseLow) {
-  // Addr.dump(CurDAG);
+bool RL78DAGToDAGISel::SelectADDRr8i16(SDValue Addr, SDValue &Base,
+                                       SDValue &Offset) {
+  if (Addr.getOpcode() !=  ISD::ADD ||
+      Addr.getValueType() != MVT::i16)
+    return false;
+
+  if (selectADDRABS16(Addr.getOperand(0), Offset, CurDAG, false) &&
+      Addr.getOperand(1).getOpcode() == ISD::ZERO_EXTEND)
+    Base = Addr.getOperand(1).getOperand(0);
+  else if (selectADDRABS16(Addr.getOperand(1), Offset, CurDAG, false) &&
+           Addr.getOperand(0).getOpcode() == ISD::ZERO_EXTEND)
+    Base = Addr.getOperand(0).getOperand(0);
+  else
+    return false;
+  return Base.getValueType() == MVT::i8;
+}
+
+static bool SelectBaseHi(SDValue Addr, SDValue &BaseHi, SelectionDAG *CurDAG) {
   if (Addr.getOpcode() != RL78ISD::HI16)
-    return false;
-  if ((Addr.getOperand(0).getOpcode() != ISD::TargetGlobalAddress) &&
-      (Addr.getOperand(0).getOpcode() != ISD::Constant))
-    return false;
-  if (!selectADDRABS16(Addr.getOperand(1), BaseLow, CurDAG, false))
     return false;
   if (Addr.getOperand(0).getOpcode() == ISD::Constant)
     BaseHi = CurDAG->getTargetConstant(Addr.getConstantOperandVal(0),
                                        SDLoc(Addr), MVT::i16);
   else
-    BaseHi = Addr->getOperand(0);
-
+    BaseHi = Addr.getOperand(0);
   return true;
 }
 
-bool RL78DAGToDAGISel::SelectADDRESri(SDValue Addr, SDValue &BaseHi,
-                                      SDValue &BaseLow, SDValue &Offset) {
-  if (Addr.getOpcode() != RL78ISD::HI16 &&
-      (Addr.getOpcode() != ISD::ADD ||
-       Addr->getOperand(0).getOpcode() != RL78ISD::HI16))
-    return false;
-  if (Addr.getOpcode() == RL78ISD::LOW16)
-    return false;
-  if (Addr.getOpcode() == RL78ISD::LOW8)
-    return false;
-  if (Addr.getOpcode() == ISD::FrameIndex)
-    return false;
-  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
-      Addr.getOpcode() == ISD::TargetGlobalAddress ||
-      Addr.getOpcode() == ISD::TargetBlockAddress)
-    return false;
-  // Addr.dump();
-  if (Addr.getOpcode() == ISD::ADD) {
-    BaseHi = Addr->getOperand(0);
-    BaseLow = Addr->getOperand(0)->getOperand(1);
-    uint64_t op0Offset = 0;
-    if (Addr->getOperand(0)->getNumOperands() > 2)
-      op0Offset = Addr->getOperand(0)->getConstantOperandVal(2);
-    Offset = CurDAG->getTargetConstant(
-        Addr->getConstantOperandVal(1) + op0Offset, SDLoc(Addr), MVT::i16);
-    return true;
-  } else {
-    BaseHi = Addr;
-    BaseLow = Addr->getOperand(1);
-  }
-
-  if (Addr->getNumOperands() > 2)
-    Offset = CurDAG->getTargetConstant(Addr->getConstantOperandVal(2),
-                                       SDLoc(Addr), MVT::i16);
-  else
-    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
-  // Offset.dump();
-  return true;
-}
-
-bool RL78DAGToDAGISel::SelectADDRESr(SDValue Addr, SDValue &BaseHi,
+bool RL78DAGToDAGISel::SelectESADDRr(SDValue Addr, SDValue &BaseHi,
                                      SDValue &BaseLow) {
-  if (Addr.getOpcode() != RL78ISD::HI16)
-    return false;
-  if ((Addr.getOperand(0).getOpcode() == ISD::TargetGlobalAddress) ||
-      (Addr.getOperand(0).getOpcode() == ISD::Constant))
-    return false;
-  if (Addr->getNumOperands() > 2)
-    return false;
-  // Addr.dump();
-  BaseHi = Addr;
-  BaseLow = Addr->getOperand(1);
-  return true;
+  return SelectBaseHi(Addr, BaseHi, CurDAG) &&
+         SelectADDRr(Addr.getOperand(1), BaseLow);
+}
+
+bool RL78DAGToDAGISel::SelectESADDRrr(SDValue Addr, SDValue &BaseHi, SDValue &R1, SDValue &R2) {
+    return SelectBaseHi(Addr, BaseHi, CurDAG) &&
+         SelectADDRrr(Addr.getOperand(1), R1, R2);
+}
+
+bool RL78DAGToDAGISel::SelectESADDRri(SDValue Addr, unsigned Size,
+                                      bool AllowWordBC, SDValue &BaseHi,
+                                      SDValue &BaseLow, SDValue &Offset) {
+  return SelectBaseHi(Addr, BaseHi, CurDAG) &&
+         SelectADDRri(Addr.getOperand(1), Size, AllowWordBC, BaseLow, Offset, true);
+}
+
+bool RL78DAGToDAGISel::SelectESADDRr8i16(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow,
+                       SDValue &Offset) {
+    return SelectBaseHi(Addr, BaseHi, CurDAG) &&
+         SelectADDRr8i16(Addr.getOperand(1), BaseLow, Offset);
+}
+
+bool RL78DAGToDAGISel::SelectESADDRABS16(SDValue Addr, SDValue &BaseHi,
+                                         SDValue &BaseLow) {
+  return SelectBaseHi(Addr, BaseHi, CurDAG) &&
+         selectADDRABS16(Addr.getOperand(1), BaseLow, CurDAG, false);
 }
 
 bool RL78DAGToDAGISel::SelectSaddr(SDValue Addr, SDValue &Base) {
@@ -505,7 +484,7 @@ void RL78DAGToDAGISel::MatchSET1CLR1(SDNode *&N) {
     if (LN->isVolatile())
       return;
   }
-  
+
   // Check the chain uses for the load instruction:
   // the store is the only user either directly or through
   // a TokenFactor.
@@ -612,7 +591,7 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
     // In case of right shift + trunc we can remove the shift.
     if ((N->getOperand(0)->getValueType(0) == MVT::i16) &&
         ((N->getOperand(0).getOpcode() == ISD::SRL) ||
-        (N->getOperand(0).getOpcode() == ISD::SRA)) && 
+        (N->getOperand(0).getOpcode() == ISD::SRA)) &&
         dyn_cast<ConstantSDNode>(N->getOperand(0).getOperand(1)) &&
         N->getOperand(0).getConstantOperandVal(1) == 8) {
       SDValue SubRegHi = CurDAG->getTargetConstant(RL78::sub_hi, dl, MVT::i8);

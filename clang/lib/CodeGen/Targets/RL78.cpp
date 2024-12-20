@@ -109,7 +109,10 @@ Address RL78ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
 namespace {
 class RL78TargetCodeGenInfo : public TargetCodeGenInfo {
  
-  enum AddressSpaces { Default = 0, Near = 1, Far = 2 };
+  bool isFarAddressSpace(unsigned int AS, CodeGen::CodeGenModule &CGM) const {
+    return AS == CGM.getContext().getTargetAddressSpace(LangAS::__far_code) ||
+           AS == CGM.getContext().getTargetAddressSpace(LangAS::__far_data);
+  }
 
   bool isNullOrUndef(const llvm::Constant *C) const {
   // Check that the constant isn't all zeros or undefs.
@@ -124,37 +127,19 @@ class RL78TargetCodeGenInfo : public TargetCodeGenInfo {
   return true;
 }
 
-  std::string getAddressSection(const llvm::GlobalVariable *GV,
-                              const VarDecl *VD) const {
-  std::string sectionPrefix;
-  bool isFar = GV->getAddressSpace() == Far;
-  if (GV->isConstant())
-    sectionPrefix = isFar ? ".constf_AT" : ".const_AT";
-  else
-    sectionPrefix = isFar ? ".bssf_AT" : ".bss_AT";
-  std::string buf;
-  llvm::raw_string_ostream stream(buf);
-  stream << (llvm::format_hex_no_prefix(
-      VD->getAttr<RL78AddressAttr>()->getAddress(), 5));
-  return sectionPrefix + stream.str();
-}
-
-  std::string replaceSectionNamePlaceholder(std::string sectionName,
+// the section name placeholder is optional and consists of two characters,
+// the first being an '|'; it will be replaced with the section prefix
+// (default section name based on its type) only if not already prefixed
+// by a custom section name; otherwise, it is simply removed
+std::string replaceSectionNamePlaceholder(std::string sectionName,
                                           std::string sectionPrefix) const {
-  std::vector<std::string> placeholders = {
-      "...t...",
-      "...d...",
-      "...r...",
-      "...b...",
-  };
-  for (std::string &placeholder : placeholders)
-    if (sectionName.find(placeholder) != std::string::npos) {
-      sectionName.replace(0, placeholder.length(), sectionPrefix);
-      return sectionName;
-    }
-    return sectionName;
-  return sectionName;
+  if (auto pos = sectionName.find('|'); pos != std::string::npos) {
+    sectionName.erase(pos, 2);
+    if (!pos)
+      sectionName.insert(0, sectionPrefix);
   }
+  return sectionName;
+}
 
   bool isBss(const VarDecl *VD, const llvm::GlobalVariable *GV) const {
     return !VD->hasInit() && !GV->isConstant();
@@ -170,7 +155,7 @@ public:
 
   void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
                            CodeGen::CodeGenModule &CGM) const override {
-    bool isFar = GV->getAddressSpace() == Far;
+    bool isFar = isFarAddressSpace(GV->getAddressSpace(), CGM);
 
     if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D)) {
       auto *Fn = cast<llvm::Function>(GV);
@@ -210,20 +195,16 @@ public:
         section =
             replaceSectionNamePlaceholder(section, isFar ? ".textf" : ".text");
         Fn->addFnAttr("implicit-section-name", section + (isFar ? "_f" : "_n"));
-      } /*else if (!FD->hasAttr<SectionAttr>() &&
-                 !FD->hasAttr<PragmaClangTextSectionAttr>() &&
-                 !Fn->hasFnAttribute("implicit-section-name") &&
-                 !CGM.getCodeGenOpts().FunctionSections) {
-        Fn->addFnAttr("implicit-section-name", isFar ? ".textf" : ".text");
-      }*/
+      } 
     }
 
     if (const auto *VD = dyn_cast_or_null<VarDecl>(D)) {
       auto *Var = cast<llvm::GlobalVariable>(GV);
 
       // With -mfar-data, the default address space is far
-      if (GV->getAddressSpace() == Default && CGM.getLangOpts().RenesasRL78DataModel)
-        isFar = true;
+      if (CGM.getLangOpts().RenesasRL78DataModel && 
+          GV->getAddressSpace() == CGM.getContext().getTargetAddressSpace(LangAS::Default))
+          isFar = true; 
       
       // Generate section name/prefix based on kind and attributes
       std::string prefix;
@@ -273,12 +254,7 @@ public:
         AS = AS.removeAttribute(CGM.getLLVMContext(), "bss-section");
         AS = AS.addAttribute(CGM.getLLVMContext(), "bss-section",
                              section + suffix);
-      } /*else if (isBss(VD, Var) && !VD->hasAttr<SectionAttr>() &&
-                 !VD->hasAttr<PragmaClangBSSSectionAttr>() &&
-                 !AS.hasAttribute("bss-section") &&
-                 !CGM.getCodeGenOpts().DataSections) {
-        AS = AS.addAttribute(CGM.getLLVMContext(), "bss-section", prefix);
-      }*/
+      }
 
       if (CGM.getLangOpts().RenesasExt && AS.hasAttribute("data-section") &&
           VD->hasAttr<PragmaClangDataSectionAttr>()) {
@@ -288,13 +264,7 @@ public:
         AS = AS.removeAttribute(CGM.getLLVMContext(), "data-section");
         AS = AS.addAttribute(CGM.getLLVMContext(), "data-section",
                              section + suffix);
-      } /*else if (isData(VD, Var) &&
-                 !VD->hasAttr<PragmaClangDataSectionAttr>() &&
-                 !VD->hasAttr<SectionAttr>() &&
-                 !AS.hasAttribute("data-section") &&
-                 !CGM.getCodeGenOpts().DataSections) {
-        AS = AS.addAttribute(CGM.getLLVMContext(), "data-section", prefix);
-      }*/
+      }
 
       if (CGM.getLangOpts().RenesasExt && AS.hasAttribute("rodata-section") &&
           VD->hasAttr<PragmaClangRodataSectionAttr>()) {
@@ -304,13 +274,7 @@ public:
         AS = AS.removeAttribute(CGM.getLLVMContext(), "rodata-section");
         AS = AS.addAttribute(CGM.getLLVMContext(), "rodata-section",
                              section + suffix);
-      }/* else if (Var->isConstant() &&
-                 !VD->hasAttr<PragmaClangRodataSectionAttr>() &&
-                 !VD->hasAttr<SectionAttr>() &&
-                 !AS.hasAttribute("rodata-section") &&
-                 !CGM.getCodeGenOpts().DataSections) {
-        AS = AS.addAttribute(CGM.getLLVMContext(), "bss-section", prefix);
-      }*/
+      }
 
       Var->setAttributes(AS);
 

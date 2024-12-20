@@ -56,6 +56,8 @@ static bool isSingleInstructionBB(MachineBasicBlock &MBB) {
     switch (MI.getOpcode()) {
     case RL78::ADJCALLSTACKDOWN:
     case RL78::ADJCALLSTACKUP:
+    case RL78::CALL_STACK_SETUP:
+    case RL78::CALL_STACK_DESTROY:
       // Not real instructions.
       break;
     case RL78::BSWAP32_rp:

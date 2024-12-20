@@ -14,13 +14,15 @@ def int_rl78_getpsw : Intrinsic<[llvm_i8_ty], [], [IntrNoMem, IntrHasSideEffects
 def int_rl78_setpsw : Intrinsic<[], [llvm_i8_ty], [IntrNoMem, IntrHasSideEffects]>;
 
 // Bit manipulation.
-def int_rl78_mov1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
-def int_rl78_and1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
-def int_rl78_or1  : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
-def int_rl78_xor1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
-def int_rl78_set1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty]>;
-def int_rl78_clr1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty]>;
-def int_rl78_not1 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty]>;
+// NOTE: 'llvm_anyptr_ty' is used for these as in the case of -mfar-data 'llvm_ptr_ty'
+// is far and we need to use 'ptr addrspace(1)' to specify a near pointer
+def int_rl78_mov1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
+def int_rl78_and1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
+def int_rl78_or1  : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
+def int_rl78_xor1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty]>;
+def int_rl78_set1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty]>;
+def int_rl78_clr1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty]>;
+def int_rl78_not1 : Intrinsic<[], [llvm_anyptr_ty, llvm_i8_ty]>;
 def int_rl78_ror1 : Intrinsic<[llvm_i8_ty], [llvm_i8_ty], [IntrNoMem]>;
 def int_rl78_rol1 : Intrinsic<[llvm_i8_ty], [llvm_i8_ty], [IntrNoMem]>;
 def int_rl78_rolb : Intrinsic<[llvm_i8_ty], [llvm_i8_ty, llvm_i8_ty], [IntrNoMem]>;

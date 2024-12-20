@@ -447,21 +447,21 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // AND1 CY,saddr.7
     {0x71U, {RL78::AND1_cy_saddrx, {0x75U, SBP::saddr}, {OPT::saddr, OPT::imm7}}},
     // AND1 CY,ES:[HL].0
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0x85U}, {RL78::CY, OPT::ES_memHL,OPT::imm0}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0x85U}, {OPT::ES_memHL,OPT::imm0}}},
     // AND1 CY,ES:[HL].1
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0x95U}, {RL78::CY, OPT::ES_memHL,OPT::imm1}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0x95U}, {OPT::ES_memHL,OPT::imm1}}},
     // AND1 CY,ES:[HL].2
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xA5U}, {RL78::CY, OPT::ES_memHL,OPT::imm2}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xA5U}, {OPT::ES_memHL,OPT::imm2}}},
     // AND1 CY,ES:[HL].3
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xB5U}, {RL78::CY, OPT::ES_memHL,OPT::imm3}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xB5U}, {OPT::ES_memHL,OPT::imm3}}},
     // AND1 CY,ES:[HL].4
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xC5U}, {RL78::CY, OPT::ES_memHL,OPT::imm4}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xC5U}, {OPT::ES_memHL,OPT::imm4}}},
     // AND1 CY,ES:[HL].5
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xD5U}, {RL78::CY, OPT::ES_memHL,OPT::imm5}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xD5U}, {OPT::ES_memHL,OPT::imm5}}},
     // AND1 CY,ES:[HL].6
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xE5U}, {RL78::CY, OPT::ES_memHL,OPT::imm6}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xE5U}, {OPT::ES_memHL,OPT::imm6}}},
     // AND1 CY,ES:[HL].7
-    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xF5U}, {RL78::CY, OPT::ES_memHL,OPT::imm7}}},
+    {0x11U, {RL78::AND1_esmemr, {0x71U, 0xF5U}, {OPT::ES_memHL,OPT::imm7}}},
     // AND1 CY,PSW.0
     {0x71U, {RL78::AND1_cy_PSW, {0x0DU, 0xFAU}, {RL78::PSW, OPT::imm0}}},
     // AND1 CY,PSW.1
@@ -1295,11 +1295,11 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOV A,ES:[HL+C]
     {0x11U, {RL78::LOAD8_a_esmemRpr, {0x61U, 0xE9U}, {RL78::R1,OPT::ES_memHL_C}}},
     // MOV A,ES:word[B]
-    {0x11U, {RL78::LOAD8_a_esrborci, {0x9U, SBP::adrl, SBP::adrh}, {RL78::R1,OPT::ES_word_memB}}},
+    {0x11U, {RL78::LOAD8_a_esmemBorCi, {0x9U, SBP::adrl, SBP::adrh}, {RL78::R1,OPT::ES_word_memB}}},
     // MOV A,ES:word[BC]
     {0x11U, {RL78::LOAD8_r_esrpi, {0x49U, SBP::adrl, SBP::adrh}, {RL78::R1,OPT::ES_word_memBC}}},
     // MOV A,ES:word[C]
-    {0x11U, {RL78::LOAD8_a_esrborci, {0x29U, SBP::adrl, SBP::adrh}, {RL78::R1,OPT::ES_word_memC}}},
+    {0x11U, {RL78::LOAD8_a_esmemBorCi, {0x29U, SBP::adrl, SBP::adrh}, {RL78::R1,OPT::ES_word_memC}}},
     // MOV B,ES:!addr16
     {0x11U, {RL78::MOV_r_esaddr16, {0xE9U, SBP::adrl, SBP::adrh}, {RL78::R3,OPT::ES_I_addr16}}},
     // MOV C,ES:!addr16
@@ -1307,7 +1307,7 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOV ES:!addr16,#byte
     {0x11U, {RL78::MOV_esaddr16_imm, {0xCFU, SBP::adrl, SBP::adrh, SBP::data}, {OPT::ES_I_addr16,OPT::byte}}},
     // MOV ES:!addr16,A
-    {0x11U, {RL78::MOV_esaddr16_a, {0x9FU, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16,RL78::R1}}},
+    {0x11U, {RL78::MOV_esaddr16_r, {0x9FU, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16,RL78::R1}}},
     // MOV ES:[DE],A
     {0x11U, {RL78::STORE8_esmemDE_r, {0x99U}, {OPT::ES_memDE,RL78::R1}}},
     // MOV ES:[DE+byte],#byte
@@ -1327,7 +1327,7 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOV ES:word[B],#byte
     {0x11U, {RL78::STORE8_esmemBCi_imm, {0x19U, SBP::adrl, SBP::adrh, SBP::data}, {OPT::ES_word_memB,OPT::byte}}},
     // MOV ES:word[B],A
-    {0x11U, {RL78::STORE8_esrborci_r, {0x18U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memB,RL78::R1}}},
+    {0x11U, {RL78::STORE8_esmemBorCi_r, {0x18U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memB,RL78::R1}}},
     // MOV ES:word[BC],#byte
     {0x11U, {RL78::STORE8_esmemBCi_imm, {0x39U, SBP::adrl, SBP::adrh, SBP::data}, {OPT::ES_word_memBC,OPT::byte}}},
     // MOV ES:word[BC],A
@@ -1335,7 +1335,7 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOV ES:word[C],#byte
     {0x11U, {RL78::STORE8_esmemBorCi_imm, {0x38U, SBP::adrl, SBP::adrh, SBP::data}, {OPT::ES_word_memC,OPT::byte}}},
     // MOV ES:word[C],A
-    {0x11U, {RL78::STORE8_esrborci_r, {0x28U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memC,RL78::R1}}},
+    {0x11U, {RL78::STORE8_esmemBorCi_r, {0x28U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memC,RL78::R1}}},
     // MOV X,ES:!addr16
     {0x11U, {RL78::MOV_r_esaddr16, {0xD9U, SBP::adrl, SBP::adrh}, {RL78::R0,OPT::ES_I_addr16}}},
     // MOV word[B],A
@@ -1493,21 +1493,21 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOV1 saddr.7,CY
     {0x71U, {RL78::MOV1_saddr_cy, {0x71U, SBP::saddr}, {OPT::saddr,  OPT::imm7}}},
     // MOV1 CY,ES:[HL].0
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0x84U}, {RL78::CY, OPT::ES_memHL,OPT::imm0}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0x84U}, {OPT::ES_memHL,OPT::imm0}}},
     // MOV1 CY,ES:[HL].1
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0x94U}, {RL78::CY, OPT::ES_memHL,OPT::imm1}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0x94U}, {OPT::ES_memHL,OPT::imm1}}},
     // MOV1 CY,ES:[HL].2
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xA4U}, {RL78::CY, OPT::ES_memHL,OPT::imm2}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xA4U}, {OPT::ES_memHL,OPT::imm2}}},
     // MOV1 CY,ES:[HL].3
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xB4U}, {RL78::CY, OPT::ES_memHL,OPT::imm3}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xB4U}, {OPT::ES_memHL,OPT::imm3}}},
     // MOV1 CY,ES:[HL].4
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xC4U}, {RL78::CY, OPT::ES_memHL,OPT::imm4}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xC4U}, {OPT::ES_memHL,OPT::imm4}}},
     // MOV1 CY,ES:[HL].5
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xD4U}, {RL78::CY, OPT::ES_memHL,OPT::imm5}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xD4U}, {OPT::ES_memHL,OPT::imm5}}},
     // MOV1 CY,ES:[HL].6
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xE4U}, {RL78::CY, OPT::ES_memHL,OPT::imm6}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xE4U}, {OPT::ES_memHL,OPT::imm6}}},
     // MOV1 CY,ES:[HL].7
-    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xF4U}, {RL78::CY, OPT::ES_memHL,OPT::imm7}}},
+    {0x11U, {RL78::MOV1_cy_esmemr, {0x71U, 0xF4U}, {OPT::ES_memHL,OPT::imm7}}},
     // MOV1 ES:[HL].0,CY
     {0x11U, {RL78::MOV1_esmemr_cy, {0x71U, 0x81U}, {OPT::ES_memHL,OPT::imm0, RL78::CY}}},
     // MOV1 ES:[HL].1,CY
@@ -1653,9 +1653,9 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOVW AX,ES:[HL+byte]
     {0x11U, {RL78::LOAD16_rp_esmemHLi, {0xACU, SBP::adr}, {RL78::RP0,OPT::ES_memHL_byte}}},
     // MOVW AX,ES:word[B]
-    {0x11U, {RL78::LOAD16_rp_esrbci, {0x59U, SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::ES_word_memB}}},
+    {0x11U, {RL78::LOAD16_rp_esmemBorCi, {0x59U, SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::ES_word_memB}}},
     // MOVW AX,ES:word[C]
-    {0x11U, {RL78::LOAD16_rp_esrbci, {0x69U, SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::ES_word_memC}}},
+    {0x11U, {RL78::LOAD16_rp_esmemBorCi, {0x69U, SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::ES_word_memC}}},
     // MOVW BC,ES:!addr16
     {0x11U, {RL78::LOAD16_rp_esaddr16, {0xDBU, SBP::adrl, SBP::adrh}, {RL78::RP2,OPT::ES_I_addr16}}},
     // MOVW DE,ES:!addr16
@@ -1671,19 +1671,19 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // MOVW ES:[HL+byte],AX
     {0x11U, {RL78::STORE16_esmemHLi_rp, {0xBCU, SBP::adr}, {OPT::ES_memHL_byte,RL78::RP0}}},
     // MOVW ES:word[B],AX
-    {0x11U, {RL78::STORE16_esrbci_rp, {0x58U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memB,RL78::RP0}}},
+    {0x11U, {RL78::STORE16_esmemBorCi_rp, {0x58U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memB,RL78::RP0}}},
     // MOVW ES:word[C],AX
-    {0x11U, {RL78::STORE16_esrbci_rp, {0x68U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memC,RL78::RP0}}},
+    {0x11U, {RL78::STORE16_esmemBorCi_rp, {0x68U, SBP::adrl, SBP::adrh}, {OPT::ES_word_memC,RL78::RP0}}},
     // MOVW HL,ES:!addr16
     {0x11U, {RL78::LOAD16_rp_esaddr16, {0xFBU, SBP::adrl, SBP::adrh}, {RL78::RP6,OPT::ES_I_addr16}}},
     // MOVW word[B],AX
-    {0x58U, {RL78::STORE16_rbci_rp, {SBP::adrl, SBP::adrh}, {OPT::word_memB,RL78::RP0}}},
+    {0x58U, {RL78::STORE16_memBorCi_rp, {SBP::adrl, SBP::adrh}, {OPT::word_memB,RL78::RP0}}},
     // MOVW AX,word[B]
-    {0x59U, {RL78::LOAD16_rp_rbci, {SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::word_memB}}},
+    {0x59U, {RL78::LOAD16_rp_memBorCi, {SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::word_memB}}},
     // MOVW word[C],AX
-    {0x68U, {RL78::STORE16_rbci_rp, {SBP::adrl, SBP::adrh}, {OPT::word_memC,RL78::RP0}}},
+    {0x68U, {RL78::STORE16_memBorCi_rp, {SBP::adrl, SBP::adrh}, {OPT::word_memC,RL78::RP0}}},
     // MOVW AX,word[C]
-    {0x69U, {RL78::LOAD16_rp_rbci, {SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::word_memC}}},
+    {0x69U, {RL78::LOAD16_rp_memBorCi, {SBP::adrl, SBP::adrh}, {RL78::RP0,OPT::word_memC}}},
     // MOVW AX,sfrp
     {0xAEU, {RL78::LOAD16_rp_sfrp, {SBP::sfr}, {RL78::RP0,OPT::sfrp}}},
     // MOVW sfrp,AX
@@ -1819,21 +1819,21 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // OR1 CY,saddr.7
     {0x71U, {RL78::OR1_cy_saddrx, {0x76U, SBP::saddr}, {OPT::saddr, OPT::imm7}}},
     // OR1 CY,ES:[HL].0
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0x86U}, {RL78::CY, OPT::ES_memHL,OPT::imm0}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0x86U}, {OPT::ES_memHL,OPT::imm0}}},
     // OR1 CY,ES:[HL].1
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0x96U}, {RL78::CY, OPT::ES_memHL,OPT::imm1}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0x96U}, {OPT::ES_memHL,OPT::imm1}}},
     // OR1 CY,ES:[HL].2
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xA6U}, {RL78::CY, OPT::ES_memHL,OPT::imm2}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xA6U}, {OPT::ES_memHL,OPT::imm2}}},
     // OR1 CY,ES:[HL].3
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xB6U}, {RL78::CY, OPT::ES_memHL,OPT::imm3}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xB6U}, {OPT::ES_memHL,OPT::imm3}}},
     // OR1 CY,ES:[HL].4
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xC6U}, {RL78::CY, OPT::ES_memHL,OPT::imm4}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xC6U}, {OPT::ES_memHL,OPT::imm4}}},
     // OR1 CY,ES:[HL].5
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xD6U}, {RL78::CY, OPT::ES_memHL,OPT::imm5}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xD6U}, {OPT::ES_memHL,OPT::imm5}}},
     // OR1 CY,ES:[HL].6
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xE6U}, {RL78::CY, OPT::ES_memHL,OPT::imm6}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xE6U}, {OPT::ES_memHL,OPT::imm6}}},
     // OR1 CY,ES:[HL].7
-    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xF6U}, {RL78::CY, OPT::ES_memHL,OPT::imm7}}},
+    {0x11U, {RL78::OR1_esmemr, {0x71U, 0xF6U}, {OPT::ES_memHL,OPT::imm7}}},
     // OR1 CY,PSW.0
     {0x71U, {RL78::OR1_cy_PSW, {0x0EU, 0xFAU}, {RL78::PSW, OPT::imm0}}},
     // OR1 CY,PSW.1
@@ -2537,21 +2537,21 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // XOR1 CY,saddr.7
     {0x71U, {RL78::XOR1_cy_saddrx, {0x77U, SBP::saddr}, {OPT::saddr, OPT::imm7}}},
     // XOR1 CY,ES:[HL].0
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0x87U}, {RL78::CY, OPT::ES_memHL,OPT::imm0}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0x87U}, {OPT::ES_memHL,OPT::imm0}}},
     // XOR1 CY,ES:[HL].1
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0x97U}, {RL78::CY, OPT::ES_memHL,OPT::imm1}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0x97U}, {OPT::ES_memHL,OPT::imm1}}},
     // XOR1 CY,ES:[HL].2
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xA7U}, {RL78::CY, OPT::ES_memHL,OPT::imm2}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xA7U}, {OPT::ES_memHL,OPT::imm2}}},
     // XOR1 CY,ES:[HL].3
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xB7U}, {RL78::CY, OPT::ES_memHL,OPT::imm3}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xB7U}, {OPT::ES_memHL,OPT::imm3}}},
     // XOR1 CY,ES:[HL].4
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xC7U}, {RL78::CY, OPT::ES_memHL,OPT::imm4}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xC7U}, {OPT::ES_memHL,OPT::imm4}}},
     // XOR1 CY,ES:[HL].5
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xD7U}, {RL78::CY, OPT::ES_memHL,OPT::imm5}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xD7U}, {OPT::ES_memHL,OPT::imm5}}},
     // XOR1 CY,ES:[HL].6
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xE7U}, {RL78::CY, OPT::ES_memHL,OPT::imm6}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xE7U}, {OPT::ES_memHL,OPT::imm6}}},
     // XOR1 CY,ES:[HL].7
-    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xF7U}, {RL78::CY, OPT::ES_memHL,OPT::imm7}}},
+    {0x11U, {RL78::XOR1_esmemr, {0x71U, 0xF7U}, {OPT::ES_memHL,OPT::imm7}}},
     // XOR1 CY,PSW.0
     {0x71U, {RL78::XOR1_cy_PSW, {0x0FU, 0xFAU}, {RL78::PSW, OPT::imm0}}},
     // XOR1 CY,PSW.1

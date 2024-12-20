@@ -487,7 +487,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // Replace MOV R1, R0 + SHL R2/R3, #imm with SHL R2/R3, #imm.
         if ( MI.getOperand(0).getReg() == RL78::R1 &&
             (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
-            (MachineBasicBlock::iterator(MI) != MBB.end())) {
+            (MachineBasicBlock::iterator(MI) != MBB.end()) &&
+            (std::prev(MachineBasicBlock::iterator(MI)) != MBB.begin()) && 
+            (std::next(MachineBasicBlock::iterator(MI)) != MBB.end())) {
           MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
           MachineInstr &MI3 = *std::next(MachineBasicBlock::iterator(MI));
           if ((MI2.getOpcode() == RL78::MOV_A_r) &&
@@ -616,6 +618,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       // TODO: won't be better to just a custom inserter and remove the copies
       // here.
       case RL78::LOAD8_r_abs16:
+        if (!RL78::RL78Bank0LoRegClass.contains(MI.getOperand(0).getReg()))
+          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
+        break;
+      case RL78::MOV_r_esaddr16:
         if (!RL78::RL78Bank0LoRegClass.contains(MI.getOperand(0).getReg()))
           insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;

@@ -2671,30 +2671,30 @@ void PragmaSectionHandler::HandlePragma(Preprocessor &PP, PragmaIntroducer Intro
                         : Sema::PragmaClangSectionAction::PCSA_Clear),
         SecKind, SecName);
   } else {
-    // we rename all sections, we prefix it with ... placeholder,
-    // which will be replaced by the TargetInfo based on the actual variable
-    // types
-    std::vector<std::string> placeholders = {
-        "...t...",
-        "...d...",
-        "...r...",
-        "...b...",
+    // rename all sections as [specific-name]|<c><generic-name>
+    // the specific (per section kind) name is optional;
+    // the generic (for all section kinds) name can be reset
+    // by a subsequent pragma;
+    // a missing specific name will be replaced with a default one
+    // (based on the actual variable types) by the TargetInfo;
+    // also, TargetInfo will remove the '|' separator and the <c> character
+    // (the latter is added for making the section names distinct)
+    const auto RenameSection = [&](Sema::PragmaClangSectionKind SecKind) {
+      std::string NewSecName;
+      Actions.ActOnPragmaClangSection(
+          Tok.getLocation(), Sema::PragmaClangSectionAction::PCSA_GetName,
+          SecKind, "", &NewSecName);
+      if (auto pos = NewSecName.find('|'); pos != std::string::npos)
+        NewSecName.resize(pos);
+      NewSecName += '|' + (char('0' + SecKind) + SecName);
+      Actions.ActOnPragmaClangSection(Tok.getLocation(),
+                                      Sema::PragmaClangSectionAction::PCSA_Set,
+                                      SecKind, NewSecName);
     };
-    Actions.ActOnPragmaClangSection(
-        Tok.getLocation(), Sema::PragmaClangSectionAction::PCSA_Set,
-        Sema::PragmaClangSectionKind::PCSK_Text, placeholders[0] + SecName);
-
-    Actions.ActOnPragmaClangSection(
-        Tok.getLocation(), Sema::PragmaClangSectionAction::PCSA_Set,
-        Sema::PragmaClangSectionKind::PCSK_Data, placeholders[1] + SecName);
-
-    Actions.ActOnPragmaClangSection(
-        Tok.getLocation(), Sema::PragmaClangSectionAction::PCSA_Set,
-        Sema::PragmaClangSectionKind::PCSK_Rodata, placeholders[2] + SecName);
-
-    Actions.ActOnPragmaClangSection(
-        Tok.getLocation(), Sema::PragmaClangSectionAction::PCSA_Set,
-        Sema::PragmaClangSectionKind::PCSK_BSS, placeholders[3] + SecName);
+    RenameSection(Sema::PragmaClangSectionKind::PCSK_Text);
+    RenameSection(Sema::PragmaClangSectionKind::PCSK_Data);
+    RenameSection(Sema::PragmaClangSectionKind::PCSK_Rodata);
+    RenameSection(Sema::PragmaClangSectionKind::PCSK_BSS);
     return;
   }
 }

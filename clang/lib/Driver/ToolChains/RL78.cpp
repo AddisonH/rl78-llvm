@@ -349,6 +349,11 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     } else {
       CmdArgs.push_back("-lnosys");
     }
+    if (const Arg *ReneExt =
+            Args.getLastArg(options::OPT_frenesas_extensions)) {
+      CmdArgs.push_back("-lrenesas");
+    }
+
 	if (const Arg *Mnano = Args.getLastArg(options::OPT_fnewlib_nano)) {
 		CmdArgs.push_back("-lc_nano");
 	}

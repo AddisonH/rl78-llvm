@@ -142,11 +142,17 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
 
 bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
                                                   unsigned Type) const {
-  // switch (Type) {
-  // default:
-  return Type == ELF::R_RL78_SYM;
-  // TODO:
-  //}
+  switch (Type) {
+  default:
+    return false;
+  case ELF::R_RL78_SYM:
+    return true;
+  case ELF::R_RL78_DIR16U: {
+    auto &ElfSym = static_cast<const MCSymbolELF &>(Sym);
+    return ElfSym.getType() == ELF::STT_FUNC &&
+           ElfSym.getBinding() == ELF::STB_LOCAL;
+  }
+  }
 }
 
 std::unique_ptr<MCObjectTargetWriter>

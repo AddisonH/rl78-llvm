@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "RL78Subtarget.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 
@@ -18,6 +20,8 @@ using namespace llvm;
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "RL78GenInstrInfo.inc"
+
+#define DEBUG_TYPE "InstrInfo"
 
 // Pin the vtable to this file.
 void RL78InstrInfo::anchor() {}
@@ -346,7 +350,7 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case RL78::SUBE_rp_rp:
       return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp, RL78::SUBW_rp_rp);
   case RL78::MUL16_rp_rp_S1_S2:
-      return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
+    return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
   default:
     return false;
     break;
@@ -841,12 +845,78 @@ unsigned RL78InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
 ///
 enum MachineOutlinerClass { MachineOutlinerDefault, MachineOutlinerTailCall };
 
+static unsigned getCallFrameSize(MachineInstr &MI) {
+  if (!MI.isCall())
+    return 0;
+
+  if (MI.getNumExplicitOperands() > 1 &&
+      MI.getOperand(MI.getNumExplicitOperands() - 1).isImm())
+    return MI.getOperand(MI.getNumExplicitOperands() - 1).getImm();
+  else if (MI.getNumExplicitOperands() > 2 &&
+           MI.getOperand(MI.getNumExplicitOperands() - 2).isImm())
+    return MI.getOperand(MI.getNumExplicitOperands() - 2).getImm();
+}
+
 /// Returns a \p outliner::OutlinedFunction struct containing target-specific
 /// information for a set of outlining candidates.
-std::optional<outliner::OutlinedFunction> RL78InstrInfo::getOutliningCandidateInfo(
+std::optional<outliner::OutlinedFunction>
+RL78InstrInfo::getOutliningCandidateInfo(
     std::vector<outliner::Candidate> &RepeatedSequenceLocs) const {
-  
-  // TODO: are there cases where we don't want to outline?
+
+  auto illegalOutline = [=](outliner::Candidate &C) {
+    unsigned maxCallFrameSize = 0, callFrameSize;
+    unsigned maxSPOffset = 0;    
+    bool seenSetup = false;
+    bool seenCall = false;
+    
+    MachineBasicBlock::iterator MBBI = C.front();
+    for (;;) {
+      for (unsigned i = 0; i < MBBI->getNumOperands(); ++i)
+        if (MBBI->getOperand(i).getTargetFlags() == SPII::MO_OUTLINE_SP) {
+          if (maxSPOffset < MBBI->getOperand(i).getImm())
+            maxSPOffset = MBBI->getOperand(i).getImm();
+        }
+      callFrameSize = getCallFrameSize(*MBBI);
+      if (callFrameSize > maxCallFrameSize)
+        maxCallFrameSize = callFrameSize;
+      if (MBBI->getOpcode() == RL78::CALL_STACK_SETUP && MBBI->getOperand(0).getImm() != 0)
+      {
+          // Unmatched frameSetup
+          if(seenSetup || seenCall) 
+              return true;
+          seenSetup = true;
+          
+      }
+
+      if(MBBI->isCall()) {          
+          if(callFrameSize > 0 && (!seenSetup || seenCall))
+              return true;
+          seenCall = (callFrameSize > 0);
+      }
+
+       if(MBBI->getOpcode() == RL78::CALL_STACK_DESTROY && MBBI->getOperand(0).getImm() != 0) {
+          // Unmatched frameDestroy
+          if(!seenSetup || !seenCall) 
+              return true;
+          seenSetup = false;
+          seenCall = false;
+      }
+
+
+      if (MBBI == C.back())
+        break;
+      ++MBBI;
+    }
+    if ((maxCallFrameSize + maxSPOffset + 4) > 255)
+      return true;
+
+    return seenSetup || seenCall;
+  };
+  // Remove candidates that need big SP adjustment
+  llvm::erase_if(RepeatedSequenceLocs, illegalOutline);
+  // If the sequence doesn't have enough candidates left, then we're done.
+  if (RepeatedSequenceLocs.size() < 2)
+    return std::nullopt;
 
   unsigned SequenceSize =
       std::accumulate(RepeatedSequenceLocs[0].front(),
@@ -881,7 +951,9 @@ RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
                                 unsigned Flags) const {
   MachineInstr &MI = *MIT;
   // Don't allow debug values to impact outlining type.
-  if (MI.isDebugInstr() || MI.isIndirectDebugValue())
+  if (MI.isDebugInstr() || MI.isIndirectDebugValue() ||
+      MI.getOpcode() == RL78::CALL_STACK_SETUP ||
+      MI.getOpcode() == RL78::CALL_STACK_DESTROY)
     return outliner::InstrType::Invisible;
 
   // For now, disable outlining bundled instructions, since the outliner does not copy them 
@@ -889,8 +961,8 @@ RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
   // TODO: investigate why is this happening?
   // One possible reason is the usage of the simple iterator instead of the
   // instr_iterator when creating the outlined function instructions.
-  if(MI.isInsideBundle() || MI.getOpcode() == TargetOpcode::BUNDLE)
-      return outliner::InstrType::Illegal;
+  if (MI.isInsideBundle() || MI.getOpcode() == TargetOpcode::BUNDLE)
+    return outliner::InstrType::Illegal;
 
   // At this point, KILL instructions don't really tell us much so we can go
   // ahead and skip over them.
@@ -915,10 +987,58 @@ RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
   if (MI.isPosition())
     return outliner::InstrType::Illegal;
   // Make sure none of the operands of this instruction do anything tricky.
-  for (const MachineOperand &MOP : MI.operands())
+  for (const MachineOperand &MOP : MI.operands()) {
     if (MOP.isCPI() || MOP.isJTI() || MOP.isCFIIndex() || MOP.isFI() ||
-        MOP.isTargetIndex() || (MOP.isReg() && MOP.getReg() == RL78::SPreg))
+        MOP.isTargetIndex())
       return outliner::InstrType::Illegal;
+  }
+
+  MachineBasicBlock *MBB = MI.getParent();
+  const TargetRegisterInfo *TRI =
+      MBB->getParent()->getSubtarget().getRegisterInfo();
+
+  switch (MI.getOpcode()) {
+  case RL78::MOVW_sp_rp:
+  case RL78::MOVW_rp_sp:
+  case RL78::MOVW_AX_sp:
+  case RL78::MOVW_sp_imm:
+  case RL78::ADDW_sp_imm:
+  case RL78::SUBW_sp_imm:
+  case RL78::POP_rp:
+  case RL78::PUSH_rp:
+    return outliner::InstrType::Illegal;
+  default:
+    break;
+  }
+
+  // If the callframe is too big, don't outline, since we can't use subw/addw
+  // sp.
+  if ((getCallFrameSize(MI) + 4) > 255)
+    return outliner::InstrType::Illegal;
+
+  // Can't outline if we can't adjust the SP.
+  for (unsigned i = 0; i < MI.getNumOperands(); ++i)
+    if (MI.getOperand(i).getTargetFlags() == SPII::MO_NO_OUTLINE_SP)
+      return outliner::InstrType::Illegal;
+
+  // Don't outline calls to setjmp/longjmp
+  if(MI.isCall()) {
+    // Get the function associated with the call.  Look at each operand and find
+    // the one that represents the calle and get its name.
+    const Function *Callee = nullptr;
+    for (const MachineOperand &MOP : MI.operands()) {
+      if (MOP.isGlobal()) {
+        Callee = dyn_cast<Function>(MOP.getGlobal());
+        break;
+      }
+    }
+
+    // Dont't outline calls to setjmp/longjmp functions.
+    if (Callee &&
+        (Callee->getName() == "setjmp" || Callee->getName() == "longjmp")) {
+      return outliner::InstrType::Illegal;
+    }
+  }
 
   return outliner::InstrType::Legal;
 }
@@ -930,6 +1050,58 @@ void RL78InstrInfo::buildOutlinedFrame(
   // If we're a tail call, we already have a return, so don't do anything.
   if (OF.FrameConstructionID == MachineOutlinerTailCall)
     return;
+  // OF.FrameOverhead > 0  --- Use this to know how much to reserve for call
+  // params
+  //  what to do if call frame setup is not included in outline??
+  //  adjust SP+
+  unsigned maxCallFrameSize = 0, callFrameSize;
+  for (MachineBasicBlock &MBB : MF) {
+    if (MBB.empty())
+      continue;
+    //
+    for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end();
+         Next != E;) {
+      MachineInstr &MI = *Next;
+      ++Next;
+      callFrameSize = getCallFrameSize(MI);
+      if (callFrameSize > maxCallFrameSize)
+        maxCallFrameSize = callFrameSize;
+    }
+  }
+
+  if (maxCallFrameSize > 0) {
+
+    assert((maxCallFrameSize + 4) <= 255);
+    MachineInstr *reserveStack =
+        BuildMI(MF, DebugLoc(), get(RL78::SUBW_sp_imm), RL78::SPreg)
+            .addReg(RL78::SPreg)
+            .addImm(maxCallFrameSize);
+    MachineInstr *freeStack =
+        BuildMI(MF, DebugLoc(), get(RL78::ADDW_sp_imm), RL78::SPreg)
+            .addReg(RL78::SPreg)
+            .addImm(maxCallFrameSize);
+    MBB.insert(MBB.begin(), reserveStack);
+    MBB.insert(MBB.end(), freeStack);
+  }
+
+  for (MachineBasicBlock &MBB : MF) {
+    if (MBB.empty())
+      continue;
+    for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end();
+         Next != E;) {
+      MachineInstr &MI = *Next;
+      ++Next;
+      for (unsigned i = 0; i < MI.getNumOperands(); ++i) {
+        if (MI.getOperand(i).getTargetFlags() == SPII::MO_OUTLINE_SP &&
+            MI.getOperand(i).getImm() >= maxCallFrameSize) {
+            unsigned newOffset = MI.getOperand(i).getImm() + 4 +
+                                  maxCallFrameSize;
+          MI.getOperand(i).setImm(newOffset);
+        } 
+      }
+      // MI.dump();
+    }
+  }
 
   // We're a normal call, so our sequence doesn't have a return instruction.
   // Add it in.
@@ -984,9 +1156,8 @@ ArrayRef<std::pair<unsigned, const char *>>
 RL78InstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
 
   static const std::pair<unsigned, const char *> Flags[] = {
-      {SPII::MO_LOW8, "rl78_low8"},
-      {SPII::MO_LOW16, "rl78_low16"},
-      {SPII::MO_HI16, "rl78_hi16"}};
+      {SPII::MO_OUTLINE_SP, "rl78_outline_sp"},
+      {SPII::MO_NO_OUTLINE_SP, "rl78_no_outline_sp"}};
   return makeArrayRef(Flags);
 }
 
