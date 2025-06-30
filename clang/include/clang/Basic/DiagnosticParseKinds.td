@@ -1152,6 +1152,12 @@ def err_pragma_clang_section_expected_equal : Error<
 def warn_pragma_expected_section_name : Warning<
   "expected a string literal for the section name in '#pragma %0' - ignored">,
   InGroup<IgnoredPragmas>;
+def warn_pragma_invalid : Warning<
+  "Invalid pragma declaration">,
+  InGroup<IgnoredPragmas>;
+def warn_attribute_invalid : Warning<
+  "Invalid attribute declaration">,
+  InGroup<IgnoredPragmas>;
 // '#pragma section' related errors
 def err_pragma_expected_ccrl_section_name : Error<
   "invalid new section name used in '#pragma section'">;

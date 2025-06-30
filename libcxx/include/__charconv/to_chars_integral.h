@@ -249,8 +249,8 @@ _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI int __to_chars_integral_widt
   _LIBCPP_ASSERT_UNCATEGORIZED(__value >= 0, "The function requires a non-negative value.");
 
   unsigned __base_2 = __base * __base;
-  uint32_t __base_3 = (uint32_t)__base_2 * __base;   /* the base can be up to 36 inclusively => its 3rd and 4th */
-  uint32_t __base_4 = (uint32_t)__base_2 * __base_2; /* powers need a 32-bit integer to avoid an overflow */
+  uint32_t __base_3 = static_cast<uint32_t>(__base_2) * __base;   /* the base can be up to 36 inclusively => its 3rd and 4th */
+  uint32_t __base_4 = static_cast<uint32_t>(__base_2) * __base_2; /* powers need a 32-bit integer to avoid an overflow */
 
   int __r = 0;
   while (true) {

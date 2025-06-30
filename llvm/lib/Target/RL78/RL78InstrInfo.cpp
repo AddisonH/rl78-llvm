@@ -605,17 +605,16 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, get(RL78::MOV_r_A), DestReg)
           .addReg(SrcReg, getKillRegState(KillSrc));
     } else {
-      // FIXME: revisit this.
-      // last solution for 8 bit copy:
-      // using xch: 3 - 8 bytes and 3-5 clocks
-      // xch A, dst -> 1,2,3 bytes and clocks 1,2
-      // mov A, src -> 1,2 bytes and clocks 1
-      // xch A, dst -> 1,2,3 bytes and clocks 1,2
-      // or using push,pop: 4-6 bytes and 4 clocks
+      // Last solution for 8 bit copy:
+      // using xch: 3 - 5 bytes and 3 clocks
+      // xch A, dst -> 1,2 bytes and clocks 1
+      // mov A, src -> 1 bytes and clocks 1
+      // xch A, dst -> 1,2 bytes and clocks 1
+      // or using push,pop: 4 bytes and 4 clocks
       // push AX -> 1 byte and clocks 1
-      // mov A, src -> 1,2 bytes and clocks 1
-      // mov dst, A -> 1,2 bytes and clocks 1
-      // pop AX -> 1 byte and clocks 1
+      // mov A, src -> 1 bytes and clocks 1
+      // mov dst, A -> 1 bytes and clocks 1
+      // pop AX -> 1 byte and clocks 1.
       if (MBB.getParent()->getFunction().hasOptSize() &&
           (DestReg != RL78::R0)) {
         BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
@@ -1210,8 +1209,6 @@ public:
 
   /// atIssueLimit - Return true if no more instructions may be issued in this
   /// cycle.
-  ///
-  /// FIXME: remove this once MachineScheduler is the only client.
   bool atIssueLimit() const override { return Issue; }
 
   /// Reset - This callback is invoked when a new block of
@@ -1290,8 +1287,7 @@ public:
       return NoHazard;
     }
     case RL78::CALL_rp:
-    case RL78::CALL_cs_rp:
-    case RL78::CALL_rp_fp: {
+    case RL78::CALL_cs_rp: {
       BitVector Bank0(8, true);
       if (SelI || RegMask.anyCommon(Bank0) || RegMask.test(CS) ||
           RegMask.test(SP))

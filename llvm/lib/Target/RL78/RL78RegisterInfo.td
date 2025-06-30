@@ -119,3 +119,6 @@ def RL78SPReg : RegisterClass<"RL78", [i16], 16, (add SPreg)>;
 def RL78CCReg : RegisterClass<"RL78", [i8], 8, (add CCreg)>;
 
 def PCreg : RL78Register<"PC", 37>, DwarfRegNum<[37]>;
+
+//IPRA does a better job than having CSR register
+def CSR : CalleeSavedRegs<(add)>;

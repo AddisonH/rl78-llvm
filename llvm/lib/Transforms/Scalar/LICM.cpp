@@ -127,6 +127,9 @@ static cl::opt<uint32_t> MaxNumUsesTraversed(
     cl::desc("Max num uses visited for identifying load "
              "invariance in loop using invariant start (default = 8)"));
 
+static cl::opt<bool> DisableLICM("disable-licm", cl::init(false), cl::Hidden,
+                                 cl::desc("Disable loop size opt Pass"));
+
 // Experimental option to allow imprecision in LICM in pathological cases, in
 // exchange for faster compile. This is to be removed if MemorySSA starts to
 // address the same issue. LICM calls MemorySSAWalker's
@@ -228,7 +231,6 @@ struct LegacyLICMPass : public LoopPass {
   }
 
   bool runOnLoop(Loop *L, LPPassManager &LPM) override {
-    return false; //TODO: seb 
     if (skipLoop(L))
       return false;
 
@@ -402,7 +404,7 @@ bool LoopInvariantCodeMotion::runOnLoop(Loop *L, AAResults *AA, LoopInfo *LI,
 
   // If this loop has metadata indicating that LICM is not to be performed then
   // just exit.
-  if (hasDisableLICMTransformsHint(L)) {
+  if (hasDisableLICMTransformsHint(L)|| DisableLICM) {
     return false;
   }
 

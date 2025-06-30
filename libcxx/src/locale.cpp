@@ -2442,15 +2442,9 @@ utf8_to_ucs4(const uint8_t* frm, const uint8_t* frm_end, const uint8_t*& frm_nxt
             }
             if ((c3 & 0xC0) != 0x80)
                 return codecvt_base::error;
-#ifdef __RL78__
             uint32_t t = static_cast<uint32_t>(((c1 & 0x0FUL) << 12)
                                              | ((c2 & 0x3FUL) << 6)
                                              |  (c3 & 0x3FUL));
-#else
-            uint32_t t = static_cast<uint32_t>(((c1 & 0x0F) << 12)
-                                             | ((c2 & 0x3F) << 6)
-                                             |  (c3 & 0x3F));
-#endif
             if (t > Maxcode)
                 return codecvt_base::error;
             *to_nxt = t;
@@ -2480,17 +2474,10 @@ utf8_to_ucs4(const uint8_t* frm, const uint8_t* frm_end, const uint8_t*& frm_nxt
             }
             if ((c3 & 0xC0) != 0x80 || (c4 & 0xC0) != 0x80)
                 return codecvt_base::error;
-#ifdef __RL78__
             uint32_t t = static_cast<uint32_t>(((c1 & 0x07UL) << 18)
                                              | ((c2 & 0x3FUL) << 12)
                                              | ((c3 & 0x3FUL) << 6)
                                              |  (c4 & 0x3FUL));
-#else
-            uint32_t t = static_cast<uint32_t>(((c1 & 0x07) << 18)
-                                             | ((c2 & 0x3F) << 12)
-                                             | ((c3 & 0x3F) << 6)
-                                             |  (c4 & 0x3F));
-#endif
             if (t > Maxcode)
                 return codecvt_base::error;
             *to_nxt = t;
@@ -2589,13 +2576,8 @@ utf8_to_ucs4_length(const uint8_t* frm, const uint8_t* frm_end,
             }
             if ((c3 & 0xC0) != 0x80 || (c4 & 0xC0) != 0x80)
                 break;
-#ifdef __RL78__
             if ((((c1 & 0x07UL) << 18) | ((c2 & 0x3FUL) << 12) |
                  ((c3 & 0x3FUL) << 6)  |  (c4 & 0x3Fu)) > Maxcode)
-#else
-            if ((((c1 & 0x07u) << 18) | ((c2 & 0x3Fu) << 12) |
-                 ((c3 & 0x3Fu) << 6)  |  (c4 & 0x3Fu)) > Maxcode)
-#endif
                 break;
             frm_nxt += 4;
         }
@@ -2881,13 +2863,8 @@ utf16be_to_ucs4(const uint8_t* frm, const uint8_t* frm_end, const uint8_t*& frm_
             if ((c2 & 0xFC00) != 0xDC00)
                 return codecvt_base::error;
             uint32_t t = static_cast<uint32_t>(
-#ifdef __RL78__
                     ((((c1 & 0x03C0UL) >> 6) + 1) << 16)
                   |   ((c1 & 0x003FUL) << 10)
-#else
-                    ((((c1 & 0x03C0) >> 6) + 1) << 16)
-                  |   ((c1 & 0x003F) << 10)
-#endif
                   |    (c2 & 0x03FF));
             if (t > Maxcode)
                 return codecvt_base::error;
@@ -2929,13 +2906,8 @@ utf16be_to_ucs4_length(const uint8_t* frm, const uint8_t* frm_end,
             if ((c2 & 0xFC00) != 0xDC00)
                 break;
             uint32_t t = static_cast<uint32_t>(
-#ifdef __RL78__
                     ((((c1 & 0x03C0UL) >> 6) + 1) << 16)
                   |   ((c1 & 0x003FUL) << 10)
-#else
-                    ((((c1 & 0x03C0) >> 6) + 1) << 16)
-                  |   ((c1 & 0x003F) << 10)
-#endif
                   |    (c2 & 0x03FF));
             if (t > Maxcode)
                 break;
@@ -3023,13 +2995,8 @@ utf16le_to_ucs4(const uint8_t* frm, const uint8_t* frm_end, const uint8_t*& frm_
             if ((c2 & 0xFC00) != 0xDC00)
                 return codecvt_base::error;
             uint32_t t = static_cast<uint32_t>(
-#ifdef __RL78__
                     ((((c1 & 0x03C0UL) >> 6) + 1) << 16)
                   |   ((c1 & 0x003FUL) << 10)
-#else
-                    ((((c1 & 0x03C0) >> 6) + 1) << 16)
-                  |   ((c1 & 0x003F) << 10)
-#endif
                   |    (c2 & 0x03FF));
             if (t > Maxcode)
                 return codecvt_base::error;
@@ -3071,13 +3038,8 @@ utf16le_to_ucs4_length(const uint8_t* frm, const uint8_t* frm_end,
             if ((c2 & 0xFC00) != 0xDC00)
                 break;
             uint32_t t = static_cast<uint32_t>(
-#ifdef __RL78__
                     ((((c1 & 0x03C0UL) >> 6) + 1) << 16)
                   |   ((c1 & 0x003FUL) << 10)
-#else
-                    ((((c1 & 0x03C0) >> 6) + 1) << 16)
-                  |   ((c1 & 0x003F) << 10)
-#endif
                   |    (c2 & 0x03FF));
             if (t > Maxcode)
                 break;
@@ -3594,7 +3556,7 @@ __codecvt_utf8<wchar_t>::do_in(state_type&,
     const uint8_t* _frm = reinterpret_cast<const uint8_t*>(frm);
     const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
     const uint8_t* _frm_nxt = _frm;
-#if defined(_LIBCPP_SHORT_WCHAR) || defined(__RL78__) //TODO see if we should define _LIBCPP_SHORT_WCHAR instead
+#if defined(_LIBCPP_SHORT_WCHAR)
     uint16_t* _to = reinterpret_cast<uint16_t*>(to);
     uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
     uint16_t* _to_nxt = _to;

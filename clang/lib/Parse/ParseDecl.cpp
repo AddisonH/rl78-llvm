@@ -598,6 +598,10 @@ void Parser::ParseRL78InterruptAttribute(IdentifierInfo &AttrName,
           return;
         }
       PP.Lex(Tok);
+      } else {
+        Diag(Tok, diag::err_expected) << "one of RB0, RB1, RB2 or RB3";
+        SkipUntil(tok::r_paren, StopAtSemi);
+        return;
       }
     }
     else if(II->getName().compare("enable") == 0) {
@@ -617,6 +621,10 @@ void Parser::ParseRL78InterruptAttribute(IdentifierInfo &AttrName,
         return;
       }
       PP.Lex(Tok);
+    } else {
+      Diag(Tok, diag::err_expected) << "true or false";
+      SkipUntil(tok::r_paren, StopAtSemi);
+      return;
     }
     }
     else {
@@ -628,8 +636,7 @@ void Parser::ParseRL78InterruptAttribute(IdentifierInfo &AttrName,
     if(Tok.is(tok::r_paren))
       break;
     if(Tok.isNot(tok::comma)) {
-      //TODO: change error meesage
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol);
+      PP.Diag(Tok.getLocation(), diag::warn_attribute_invalid);
       SkipUntil(tok::r_paren, StopAtSemi);
       return;
     }
@@ -692,9 +699,12 @@ void Parser::ParseGNUAttributeArgs(
     ParseAttributeWithTypeArg(*AttrName, AttrNameLoc, Attrs, ScopeName,
                               ScopeLoc, Form);
     return;
-  } else if ((!Tok.is(tok::r_paren)) && 
+  // For the RL78 architecture, interrupts can be configured in detail with
+  // additional parameters
+  } else if ((!Tok.is(tok::r_paren)) && getTargetInfo().getTriple().isRL78() && 
       ((normalizeAttrName(AttrName->getName()) == "interrupt") || 
-      (normalizeAttrName(AttrName->getName()) == "brk_interrupt"))/*and triple*/) {
+      (normalizeAttrName(AttrName->getName()) ==
+                   "brk_interrupt")) ) {
     ParseRL78InterruptAttribute (*AttrName, AttrNameLoc, Attrs, EndLoc,
                                      ScopeName, ScopeLoc, Form);
     return;

@@ -26,6 +26,8 @@ class MachineModuleInfo;
 class MachineFunction;
 class MCContext;
 class MCExpr;
+class MCSectionWasm;
+class Mangler;
 class MCSection;
 class MCSymbol;
 class Module;
@@ -59,9 +61,6 @@ public:
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
                                    const Constant *C,
                                    Align &Alignment) const override;
-
-  virtual std::string getSectionPrefixForGlobal(SectionKind Kind,
-                            const GlobalObject *GO = nullptr) const;
 
   MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
                                       const TargetMachine &TM) const override;
@@ -223,6 +222,10 @@ public:
 
   bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
                                            const Function &F) const override;
+
+  MCSectionWasm *selectWasmSectionForGlobal(
+      MCContext &Ctx, const GlobalObject *GO, SectionKind Kind, Mangler &Mang,
+      const TargetMachine &TM, bool EmitUniqueSection, unsigned *NextUniqueID) const;
 
   void InitializeWasm();
   MCSection *getStaticCtorSection(unsigned Priority,

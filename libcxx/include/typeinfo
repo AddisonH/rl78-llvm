@@ -208,7 +208,7 @@ struct __type_info_implementations {
   struct __unique_impl : __string_impl_base {
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_ALWAYS_INLINE
     static size_t __hash(__type_name_t __v) _NOEXCEPT {
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
       // RL78: this is needed for far code/data pointers as they are larger than size_t;
       // based of the __hash() implementation from the struct __non_unique_impl below
       if _LIBCPP_CONSTEXPR_SINCE_CXX17 (sizeof(__v) > sizeof(size_t)) {

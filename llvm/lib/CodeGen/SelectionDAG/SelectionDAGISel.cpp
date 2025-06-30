@@ -2073,17 +2073,8 @@ void SelectionDAGISel::SelectInlineAsmMemoryOperands(std::vector<SDValue> &Ops,
   if (InOps[e-1].getValueType() == MVT::Glue)
     --e;  // Don't process a glue operand if it is here.
 
-  const auto GetAsFlags = [&](SDValue InOp) {
-    const auto RL78fd = CurDAG->getSubtarget().getTargetTriple().isRL78() &&
-                        CurDAG->getDataLayout().getPointerSizeInBits() == 32;
-    return RL78fd && InOp.getOpcode() == 466 /*RL78ISD::HI16*/ ? // FIXME: this is not ok...
-            ((cast<ConstantSDNode>(InOp.getOperand(0))->getZExtValue() << 16) |
-              cast<ConstantSDNode>(InOp.getOperand(1))->getZExtValue()) :
-                  cast<ConstantSDNode>(InOp)->getZExtValue();
-  };
-
   while (i != e) {
-    unsigned Flags = GetAsFlags(InOps[i]);
+    unsigned Flags = cast<ConstantSDNode>(InOps[i])->getZExtValue();
     if (!InlineAsm::isMemKind(Flags) && !InlineAsm::isFuncKind(Flags)) {
       // Just skip over this operand, copying the operands verbatim.
       Ops.insert(Ops.end(), InOps.begin()+i,
@@ -2097,10 +2088,10 @@ void SelectionDAGISel::SelectInlineAsmMemoryOperands(std::vector<SDValue> &Ops,
       if (InlineAsm::isUseOperandTiedToDef(Flags, TiedToOperand)) {
         // We need the constraint ID from the operand this is tied to.
         unsigned CurOp = InlineAsm::Op_FirstOperand;
-        Flags = GetAsFlags(InOps[CurOp]);
+        Flags = cast<ConstantSDNode>(InOps[CurOp])->getZExtValue();
         for (; TiedToOperand; --TiedToOperand) {
           CurOp += InlineAsm::getNumOperandRegisters(Flags)+1;
-          Flags = GetAsFlags(InOps[CurOp]);
+          Flags = cast<ConstantSDNode>(InOps[CurOp])->getZExtValue();
         }
       }
 

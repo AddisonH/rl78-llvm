@@ -45,7 +45,7 @@ class _LIBCPP_EXPORTED_FROM_ABI random_device
 
 public:
     // types
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
     typedef unsigned long result_type;
 #else
     typedef unsigned result_type;

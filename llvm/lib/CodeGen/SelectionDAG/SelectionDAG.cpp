@@ -110,14 +110,6 @@ static void NewSDValueDbgMsg(SDValue V, StringRef Msg, SelectionDAG *G) {
   LLVM_DEBUG(dbgs() << Msg; V.getNode()->dump(G););
 }
 
-// Useful for debugging: enable to see the line from where the func is called
-#if 0
-static void NewSDValueDbgMsg_(SDValue V, StringRef Msg, SelectionDAG *G, int line) {
-  NewSDValueDbgMsg(V, (std::to_string(line) + " - " + Msg).str(), G);
-}
-#define NewSDValueDbgMsg(V, Msg, G) NewSDValueDbgMsg_(V, Msg, G, __LINE__)
-#endif
-
 //===----------------------------------------------------------------------===//
 //                              ConstantFPSDNode Class
 //===----------------------------------------------------------------------===//

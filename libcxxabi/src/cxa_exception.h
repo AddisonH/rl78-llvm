@@ -27,6 +27,8 @@ _LIBCXXABI_HIDDEN uint64_t __getExceptionClass  (const _Unwind_Exception*);
 _LIBCXXABI_HIDDEN void     __setExceptionClass  (      _Unwind_Exception*, uint64_t);
 _LIBCXXABI_HIDDEN bool     __isOurExceptionClass(const _Unwind_Exception*);
 
+#ifndef _LIBCXXABI_NO_EXCEPTIONS
+
 struct _LIBCXXABI_HIDDEN __cxa_exception {
 #if defined(__LP64__) || defined(_WIN64) || defined(_LIBCXXABI_ARM_EHABI)
     // Now _Unwind_Exception is marked with __attribute__((aligned)),
@@ -135,8 +137,6 @@ static_assert(offsetof(__cxa_dependent_exception, adjustedPtr) +
                   sizeof(__cxa_dependent_exception),
               "adjustedPtr has wrong negative offset");
 #else
-//TODO:FIX
-/*
 static_assert(offsetof(__cxa_exception, referenceCount) +
                       sizeof(_Unwind_Exception) + sizeof(void*) ==
                   sizeof(__cxa_exception),
@@ -145,7 +145,13 @@ static_assert(offsetof(__cxa_dependent_exception, primaryException) +
                       sizeof(_Unwind_Exception) + sizeof(void*) ==
                   sizeof(__cxa_dependent_exception),
               "primaryException has wrong negative offset");
-*/
+#endif
+
+#else  // _LIBCXXABI_NO_EXCEPTIONS
+
+struct _LIBCXXABI_HIDDEN __cxa_exception;
+struct _LIBCXXABI_HIDDEN __cxa_dependent_exception;
+
 #endif
 
 struct _LIBCXXABI_HIDDEN __cxa_eh_globals {

@@ -1633,8 +1633,7 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
 
   // At O0 we want to fully disable inlining outside of cases marked with
   // 'alwaysinline' that are required for correctness.
-  //TODO: Seb we can use AddRL78TargetArgs to change this
-  if (Opts.OptimizationLevel < 3) {
+  if (Opts.OptimizationLevel == 0) {
     Opts.setInlining(CodeGenOptions::OnlyAlwaysInlining);
   } else if (const Arg *A = Args.getLastArg(options::OPT_finline_functions,
                                             options::OPT_finline_hint_functions,
@@ -1761,8 +1760,7 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
 
   Opts.PrepareForLTO = false;
   Opts.PrepareForThinLTO = false;
-  // TODO: RL78
-  /*if (Arg *A = Args.getLastArg(OPT_flto_EQ)) {
+  if (Arg *A = Args.getLastArg(OPT_flto_EQ)) {
     Opts.PrepareForLTO = true;
     StringRef S = A->getValue();
     if (S == "thin")
@@ -1778,7 +1776,7 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
           << A->getAsString(Args) << "-x ir";
     Opts.ThinLTOIndexFile =
         std::string(Args.getLastArgValue(OPT_fthinlto_index_EQ));
-  }*/
+  }
   if (Arg *A = Args.getLastArg(OPT_save_temps_EQ))
     Opts.SaveTempsFilePrefix =
         llvm::StringSwitch<std::string>(A->getValue())
@@ -3728,7 +3726,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   if (T.isRL78()) {
     Opts.RenesasRL78 = 1;
     Opts.RenesasExt = Args.hasArg(OPT_frenesas_extensions);
-    Opts.RenesasVaArgPromotion = Args.hasArg(OPT_frenesas_vaarg);
     Opts.RenesasRL78CodeModel = Args.hasArg(OPT_mfar_code) ? 1 : 0;
     Opts.RenesasRL78DataModel = Args.hasArg(OPT_mfar_data) ? 1 : 0;
 

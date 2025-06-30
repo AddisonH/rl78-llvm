@@ -10,16 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RL78.h"
 #include "RL78InstPrinter.h"
 #include "RL78MCAsmInfo.h"
 #include "RL78TargetStreamer.h"
 #include "TargetInfo/RL78TargetInfo.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCObjectWriter.h"
-#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 
 using namespace llvm;
@@ -33,6 +35,148 @@ using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
 #include "RL78GenRegisterInfo.inc"
+
+class RL78MCInstrAnalysis : public MCInstrAnalysis {
+public:
+  RL78MCInstrAnalysis(const MCInstrInfo *Info) : MCInstrAnalysis(Info) {}
+
+  bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
+                      uint64_t &Target) const override {
+    unsigned Opcode = Inst.getOpcode();
+    switch (Opcode) {
+    case RL78::BTCLR_saddr:
+    case RL78::BTCLR_memr:
+    case RL78::BTCLR_sfri_addr:
+    case RL78::BTCLR_PSWi_addr:
+    case RL78::BTCLR_esmemr:
+    case RL78::B_cc:
+    case RL78::BR_rel8:
+    case RL78::BR_rel16:
+    case RL78::BTBF_A:
+    case RL78::BTBF_saddr:
+    case RL78::BTBF_memr:
+    case RL78::BTBF_sfri_addr:
+    case RL78::BTBF_PSWi_addr:
+    case RL78::BTBF_esmemr:
+    case RL78::BR_addr16:
+    case RL78::BR_addr20:
+    case RL78::CALL_addr16rel:
+    case RL78::CALL_addr16:
+    case RL78::CALL_addr20:
+      Target = Inst.getOperand(0).getImm();
+      break;
+    case RL78::BTCLR_A:
+      Target = Inst.getOperand(1).getImm();
+      break;
+    default:
+      return false;
+    }
+    return true;
+  }
+
+  std::optional<uint64_t>
+  evaluateMemoryOperandAddress(const MCInst &Inst, const MCSubtargetInfo *STI,
+                               uint64_t Addr, uint64_t Size) const override {
+    unsigned Opcode = Inst.getOpcode();
+    switch (Opcode) {
+    case RL78::CMP0_abs16:
+    case RL78::CLRB_abs16:
+    case RL78::DECW_abs16:
+    case RL78::INCW_abs16:
+    case RL78::DEC_abs16:
+    case RL78::INC_abs16:
+      return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;
+    case RL78::SUBW_rp_saddr:
+    case RL78::ADDW_rp_saddr:
+    case RL78::XOR_r_saddr:
+    case RL78::OR_r_saddr:
+    case RL78::AND_r_saddr:
+    case RL78::SUBC_r_saddr:
+    case RL78::SUB_r_saddr:
+    case RL78::ADDC_r_saddrabs:
+    case RL78::ADD_r_saddr:
+    case RL78::XCH_A_saddrabs:
+      return (Inst.getOperand(2).getImm() & 0xFF) + 0xFFE00;
+    case RL78::MOVW_saddrp_imm:
+    case RL78::CLR1_saddr:
+    case RL78::SET1_saddr:
+    case RL78::XOR1_cy_saddrx:
+    case RL78::AND1_cy_saddrx:
+    case RL78::OR1_cy_saddrx:
+    case RL78::MOV1_saddr_cy:
+    case RL78::MOV1_cy_saddr:
+    case RL78::STORE8_saddr_A:
+    case RL78::CMP_saddr_imm:
+    case RL78::XOR_saddr_imm:
+    case RL78::OR_saddr_imm:
+    case RL78::AND_saddr_imm:
+    case RL78::SUBC_saddr_imm:
+    case RL78::SUB_saddr_imm:
+    case RL78::ADDC_saddrabs_imm:
+    case RL78::ADD_saddr_imm:
+    case RL78::STORE8_saddr_imm:
+    case RL78::DECW_saddr:
+    case RL78::INCW_saddr:
+    case RL78::DEC_saddr:
+    case RL78::INC_saddr:
+    case RL78::CMP0_saddr:
+    case RL78::STORE16_saddrp_rp:
+    case RL78::CLRB_saddr:
+    case RL78::ONEB_saddr:
+      return (Inst.getOperand(0).getImm() & 0xFF) + 0xFFE00;
+    case RL78::CMPW_rp_saddr:
+    case RL78::CMP_r_saddr:
+    case RL78::MOV_es_saddr:
+    case RL78::LOAD8_rlo_saddr:
+    case RL78::LOAD16_rp_saddrp:
+      return (Inst.getOperand(1).getImm() & 0xFF) + 0xFFE00;
+    case RL78::LOAD8_r_abs16:
+    case RL78::CMP_r_abs16:
+      return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
+    case RL78::ADDC_r_abs16:
+    case RL78::ADD_r_abs16:
+    case RL78::XCH_A_abs16:
+    case RL78::XOR_r_abs16:
+    case RL78::OR_r_abs16:
+    case RL78::AND_r_abs16:
+    case RL78::SUBC_r_abs16:
+    case RL78::SUBW_rp_abs16:
+    case RL78::ADDW_rp_abs16:
+    case RL78::SUB_r_abs16:
+      return (Inst.getOperand(2).getImm() & 0xFFFF) + 0xF0000;
+    case RL78::CMP_abs16_imm:
+    case RL78::STORE8_abs16_imm:
+    case RL78::ONEB_abs16:
+    case RL78::STORE16_abs16_rp:
+    case RL78::STORE8_abs16_r:
+      return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;
+    case RL78::LOAD16_rp_rpi:
+    case RL78::LOAD8_r_ri:
+    case RL78::LOAD16_rp_memBorCi:
+      if (Inst.getOperand(1).getReg() == RL78::RP2 ||
+          Inst.getOperand(1).getReg() == RL78::R2 ||
+          Inst.getOperand(1).getReg() == RL78::R3)
+        return (Inst.getOperand(2).getImm() & 0xFFFF) + 0xF0000;
+      else
+        return std::nullopt;
+    case RL78::STORE8_ri_r:
+    case RL78::STORE16_rpi_rp:
+    case RL78::STORE16_memBorCi_rp:
+      if (Inst.getOperand(0).getReg() == RL78::RP2 ||
+          Inst.getOperand(0).getReg() == RL78::R2 ||
+          Inst.getOperand(0).getReg() == RL78::R3)
+        return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
+      else
+        return std::nullopt;
+    case RL78::CMPW_rp_abs16:
+    case RL78::STORE8_ri_imm:
+    case RL78::LOAD16_rp_abs16:
+      return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
+    default:
+      return std::nullopt;
+    }
+  }
+};
 
 static MCAsmInfo *createRL78MCAsmInfo(const MCRegisterInfo &MRI,
                                       const Triple &TT,
@@ -97,6 +241,9 @@ static MCInstPrinter *createRL78MCInstPrinter(const Triple &T,
                                               const MCRegisterInfo &MRI) {
   return new RL78InstPrinter(MAI, MII, MRI);
 }
+static MCInstrAnalysis *createRL78MCInstrAnalysis(const MCInstrInfo *Info) {
+  return new RL78MCInstrAnalysis(Info);
+}
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetMC() {
   // Register the MC asm info.
@@ -124,6 +271,9 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetMC() {
 
     // Register the object target streamer.
     TargetRegistry::RegisterELFStreamer(*T, createELFStreamer);
+
+    // Register the InstrAnalysis.
+    TargetRegistry::RegisterMCInstrAnalysis(*T, createRL78MCInstrAnalysis);
 
     // Register the asm streamer.
     TargetRegistry::RegisterAsmTargetStreamer(*T, createTargetAsmStreamer);

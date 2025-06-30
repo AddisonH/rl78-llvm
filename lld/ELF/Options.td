@@ -774,4 +774,5 @@ defm android_memtag_mode: EEq<"android-memtag-mode",
     "Instruct the dynamic loader to start under MTE mode {async, sync, none}">;
 
 // RL78 option used to disable plt usage
-def mfar_code: F<"mfar-code">, HelpText<"Use far code model, disables PLT usage.">;
+def mfar_code: F<"mfar-code">,
+  HelpText<"(RL78) Use far code model, disables PLT usage.">;

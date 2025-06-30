@@ -53,7 +53,11 @@ struct _LIBCPP_TEMPLATE_VIS hash<monostate> {
   using result_type = size_t;
 
   inline _LIBCPP_HIDE_FROM_ABI result_type operator()(const argument_type&) const _NOEXCEPT {
-    return 66740831; // return a fundamentally attractive random value.
+    #if SIZE_MAX >= 66740831ULL
+        return 66740831ULL; // Use full value if it fits,
+    #else
+        return static_cast<result_type>(66740831ULL); // truncate otherwise.
+    #endif
   }
 };
 

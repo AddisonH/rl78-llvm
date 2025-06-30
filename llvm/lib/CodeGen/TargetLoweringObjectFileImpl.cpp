@@ -934,9 +934,9 @@ static MCSection *selectELFSectionForGlobal(
   return Section;
 }
 
-std::string TargetLoweringObjectFileELF::getSectionPrefixForGlobal(
+std::string TargetLoweringObjectFile::getSectionPrefixForGlobal(
     SectionKind Kind, const GlobalObject *GO) const {
-  return getSectionPrefixForGlobal(Kind);
+  return std::string(::getSectionPrefixForGlobal(Kind, false));
 }
 
 MCSection *TargetLoweringObjectFileELF::SelectSectionForGlobal(
@@ -2203,16 +2203,17 @@ MCSection *TargetLoweringObjectFileWasm::getExplicitSectionGlobal(
   return Section;
 }
 
-static MCSectionWasm *selectWasmSectionForGlobal(
+MCSectionWasm *TargetLoweringObjectFileWasm::selectWasmSectionForGlobal(
     MCContext &Ctx, const GlobalObject *GO, SectionKind Kind, Mangler &Mang,
-    const TargetMachine &TM, bool EmitUniqueSection, unsigned *NextUniqueID) {
+    const TargetMachine &TM, bool EmitUniqueSection, unsigned *NextUniqueID) const {
   StringRef Group = "";
   if (const Comdat *C = getWasmComdat(GO)) {
     Group = C->getName();
   }
 
   bool UniqueSectionNames = TM.getUniqueSectionNames();
-  SmallString<128> Name = getSectionPrefixForGlobal(Kind, /*IsLarge=*/false);
+  SmallString<128> Name = static_cast<SmallString<128>>(
+      getSectionPrefixForGlobal(Kind, /*IsLarge=*/GO));
 
   if (const auto *F = dyn_cast<Function>(GO)) {
     const auto &OptionalPrefix = F->getSectionPrefix();

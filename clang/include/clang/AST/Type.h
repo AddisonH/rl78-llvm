@@ -775,13 +775,16 @@ public:
   unsigned getLocalFastQualifiers() const { return Value.getInt(); }
   void setLocalFastQualifiers(unsigned Quals) { Value.setInt(Quals); }
 
-// TODO: find different implementation.
 private:
-  unsigned int mask;
+  TypeSpecifierSign TypeSpecSign;
 
 public:
-  unsigned getTypeSpecSign() const { return mask & 0x3; }
-  void setTypeSpecSign(unsigned sign) { mask = sign & 0x3; }
+  unsigned getTypeSpecSign() const {
+    return static_cast<unsigned>(TypeSpecSign);
+  }
+  void setTypeSpecSign(unsigned sign) {
+    TypeSpecSign = static_cast<TypeSpecifierSign>(sign);
+  }
 
   bool UseExcessPrecision(const ASTContext &Ctx);
 

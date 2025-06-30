@@ -656,9 +656,25 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
   // Apply the adjustment and cast back to the original struct type
   // for consistency.
   llvm::Value *This = ThisAddr.getPointer();
-  llvm::Value *Ptr = Builder.CreateBitCast(This, Builder.getInt8PtrTy());
-  Ptr = Builder.CreateInBoundsGEP(Builder.getInt8Ty(), Ptr, Adj);
-  This = Builder.CreateBitCast(Ptr, This->getType(), "this.adjusted");
+  auto SrcTy = This->getType();
+  llvm::Value *Ptr = nullptr;
+  // RL78: When using -mfar-data, pointers will have different address spaces, 
+  // which will result in assertion failures when performing a bitcast operation.
+  // Thus, __near address space pointers must be cast to Default to ensure compatibility.
+  if (langOpts.RenesasRL78DataModel && SrcTy->isPointerTy() && Builder.getInt8PtrTy()->isPointerTy() &&
+      SrcTy->getPointerAddressSpace() == getContext().getTargetAddressSpace(LangAS::__near) &&
+      Builder.getInt8PtrTy()->getAddressSpace() == getContext().getTargetAddressSpace(LangAS::Default)) {
+    Ptr = Builder.CreateAddrSpaceCast(This, Builder.getInt8PtrTy());
+    Ptr = Builder.CreateBitCast(Ptr, Builder.getInt8PtrTy());
+    Ptr = Builder.CreateInBoundsGEP(Builder.getInt8Ty(), Ptr, Adj);
+    This = Builder.CreateAddrSpaceCast(Ptr, This->getType(), "this.adjusted");
+    This = Builder.CreateBitCast(This, This->getType(), "this.adjusted");
+  }
+  else {
+    Ptr = Builder.CreateBitCast(This, Builder.getInt8PtrTy());
+    Ptr = Builder.CreateInBoundsGEP(Builder.getInt8Ty(), Ptr, Adj);
+    This = Builder.CreateBitCast(Ptr, This->getType(), "this.adjusted");
+  }
   ThisPtrForCall = This;
 
   // Load the function pointer.

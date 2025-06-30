@@ -6721,11 +6721,14 @@ Sema::ActOnTypedefDeclarator(Scope* S, Declarator& D, DeclContext* DC,
 
     for (const auto &entry : RenesasCCRLPragmaEntries)
       if (entry.Identifier.compare(D.getName().Identifier->getName()) == 0) {
-        // TODO: free memory
-        // TODO: check that we don't have conflicting attributes
         switch (entry.PragmaType) {
         case Sema::RenesasCCRLPragmaType::CCRLSaddr: {
           Diag(D.getName().StartLocation, diag::err_rl78_saddr_not_applicable);
+          break;
+        }
+        case Sema::RenesasCCRLPragmaType::CCRLAddress: {
+          Diag(D.getName().StartLocation, diag::err_rl78_address_not_applicable);
+          break;
         }
         };
       }
@@ -7047,28 +7050,36 @@ void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
       // If -mfar-rom is specified make all global constants __far except the
       // ones explictly marked as __near.
       // NOTE: for -mfar-data the default AS is far => we don't need to change the AS
-      if ((getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far &&
-               NewVarType.getQualifiers().hasConst()) &&
+      if ((NewVarType.getQualifiers().hasConst()) &&
           NewVarType.getQualifiers().getAddressSpace() == LangAS::Default) {
-
           if (!Var->hasLocalStorage()) {
-
           if (NewVarType->isArrayType()) {
             // If it's an array type, set the element type to far then recreate
             // the array.
             QualType NewElementType =
                 NewVarType->getAsArrayTypeUnsafe()->getElementType();
-            if (!NewElementType->isPointerType() || NewElementType->isPointerType() && !NewElementType->getPointeeType()->isFunctionType()) {
+            if (!NewElementType->isPointerType() ||
+                NewElementType->isPointerType() &&
+                    !NewElementType->getPointeeType()->isFunctionType()) {
+              if (getLangOpts().getRenesasRL78RomModel() ==
+                    LangOptions::RL78RomModelKind::Far)
               NewElementType =
-                  Context.getAddrSpaceQualType(NewElementType, LangAS::__far_data);
+                  Context.getAddrSpaceQualType(NewElementType,
+                                               LangAS::__far_data);
               NewVarType = rebuildArrayWithNewElementType(Context, NewVarType,
                                                           NewElementType);
             }
           } else {
             // Assume it's a simple global variable and set the address space
             // directly.
-            NewVarType =
-                Context.getAddrSpaceQualType(NewVarType, LangAS::__far_data);
+            if (getLangOpts().getRenesasRL78RomModel() ==
+                LangOptions::RL78RomModelKind::Far)
+              NewVarType =
+                  Context.getAddrSpaceQualType(NewVarType, LangAS::__far_data);
+            else if (getLangOpts().RenesasExt && !getLangOpts()
+                         .RenesasRL78DataModel)
+              NewVarType =
+                  Context.getAddrSpaceQualType(NewVarType, LangAS::__near);
           }
         }
       }
@@ -8278,11 +8289,8 @@ NamedDecl *Sema::ActOnVariableDeclarator(
     if (getLangOpts().RenesasExt)
       for (const auto &entry : RenesasCCRLPragmaEntries)
         if (entry.Identifier.compare(NewVD->getNameAsString()) == 0) {
-          // TODO: free memory
-          // TODO: check that we don't have conflicting attributes
           switch (entry.PragmaType) {
           case Sema::RenesasCCRLPragmaType::CCRLAddress: {
-            // TODO: alignment
             // CCRL specification:
             // When #pragma address is declared for a variable that is not a
             // const-qualified variable and is explicitly or implicitly
@@ -8383,7 +8391,6 @@ NamedDecl *Sema::ActOnVariableDeclarator(
           default:
             break;
           }
-          // RenesasCCRLPragmaEntries.erase(&entry);
           break;
         }
   }
@@ -9914,12 +9921,23 @@ static bool isStdBuiltin(ASTContext &Ctx, FunctionDecl *FD,
 
 static void dropFarFromFunctionDecl(ASTContext &Context, FunctionDecl *NewFD) {
   if (getAddressSpace(NewFD->getType(), Context) == LangAS::__far_code) {
-    const FunctionProtoType *FPT =
-        NewFD->getType()->castAs<FunctionProtoType>();
-    FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-    EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-    NewFD->setType(Context.getFunctionType(FPT->getReturnType(),
-                                           FPT->getParamTypes(), EPI));
+    if (const FunctionNoProtoType *FPT =
+            dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
+      if (FPT->getFar()) {
+        FunctionType::ExtInfo EPI = FPT->getExtInfo();
+        EPI = EPI.withFar(false);
+        NewFD->setType(
+            Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
+      }
+    } else if (const FunctionProtoType *FPT =
+                   dyn_cast<FunctionProtoType>(NewFD->getType())) {
+      if (FPT->getFar()) {
+        FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
+        EPI.ExtInfo = EPI.ExtInfo.withFar(false);
+        NewFD->setType(Context.getFunctionType(FPT->getReturnType(),
+                                               FPT->getParamTypes(), EPI));
+      }
+    }
   }
 }
 
@@ -11101,9 +11119,6 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
     if (getLangOpts().RenesasExt) {
       for (const auto &entry : RenesasCCRLPragmaEntries)
         if (entry.Identifier.compare(NewFD->getNameAsString()) == 0) {
-          // TODO: free memory
-          // TODO: check params, return type etc.
-          // TODO: check that we don't have conflicting attributes
           switch (entry.PragmaType) {
           case Sema::RenesasCCRLPragmaType::CCRLInterrupt:
             if (!NewFD->getDeclaredReturnType().getTypePtr()->isVoidType())
@@ -11115,12 +11130,24 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
                 dropFarFromFunctionDecl(Context, NewFD);
             NewFD->addAttr(
                 RL78InterruptAttr::CreateImplicit(Context, entry.ExtraData, (unsigned *)entry.ExtraDataVects.begin(), (unsigned)entry.ExtraDataVects.size()));
+            // Retain interrupt function declared with "static".
+            if (NewFD->getStorageClass() == SC_Static)
+              NewFD->addAttr(UsedAttr::CreateImplicit(Context));
             break;
           case Sema::RenesasCCRLPragmaType::CCRLBrkInterrupt:
+            if (!NewFD->getDeclaredReturnType().getTypePtr()->isVoidType())
+              Diag(NewFD->getLocation(),
+                   diag::warn_rl78_interrupt_attribute_return_type);
+            if (!NewFD->param_empty())
+              Diag(NewFD->getLocation(),
+                   diag::warn_rl78_interrupt_attribute_parameters);
             // Silently drop __far or #pragma __far
             dropFarFromFunctionDecl(Context, NewFD);
             NewFD->addAttr(
                 RL78BRKInterruptAttr::CreateImplicit(Context, entry.ExtraData));
+            // Retain interrupt function declared with "static".
+            if (NewFD->getStorageClass() == SC_Static)
+              NewFD->addAttr(UsedAttr::CreateImplicit(Context));
             break;
           case Sema::RenesasCCRLPragmaType::CCRLInline:
             NewFD->addAttr(AlwaysInlineAttr::CreateImplicit(Context));
@@ -11164,6 +11191,12 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
             if (NewFD->hasAttr<RL78CalltAttr>()) {
               NewFD->dropAttr<RL78CalltAttr>();
             }
+            if (NewFD->isInlineSpecified())
+              Diag(NewFD->getLocation(),
+                   diag::err_attributes_are_not_compatible)
+                  << "near"
+                  << "inline"
+                  << true;
             NewFD->addAttr(RL78NearAttr::CreateImplicit(Context));
             break;
           }
@@ -11185,10 +11218,14 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
                     Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
               }
             }
+            if (NewFD->isInlineSpecified())
+              Diag(NewFD->getLocation(),
+                   diag::err_attributes_are_not_compatible)
+                  << "far"
+                  << "inline" << true;
             break;
           case Sema::RenesasCCRLPragmaType::CCRLAddress:
-                 Diag(NewFD->getLocation(), diag::err_attribute_wrong_decl_type_str)
-                  << "address" << "global variables";
+                 Diag(NewFD->getLocation(), diag::err_rl78_address_not_applicable);
             break;
           case Sema::RenesasCCRLPragmaType::CCRLSaddr:
             // If __saddr is specified for a function, a compilation error will
@@ -11198,7 +11235,6 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
           default:
             break;
           }
-          RenesasCCRLPragmaEntries.erase(&entry);
           break;
         }
     }

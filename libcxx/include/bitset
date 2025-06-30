@@ -284,7 +284,7 @@ __bitset<_N_words, _Size>::__bitset(unsigned long long __v) _NOEXCEPT
     : __first_{static_cast<__storage_type>(__v),
                 _Size >= 2 * __bits_per_word ? static_cast<__storage_type>(__v >> __bits_per_word)
                 : static_cast<__storage_type>((__v >> __bits_per_word) & (__storage_type(1) << (_Size - __bits_per_word)) - 1)}
-#elif __SIZEOF_SIZE_T__ == 2 && defined(__RL78__)
+#elif __SIZEOF_SIZE_T__ == 2 && __SIZEOF_INT__ == 2
     : __first_{static_cast<__storage_type>(__v),
                 _Size >= 2 * __bits_per_word ? static_cast<__storage_type>(__v >> __bits_per_word)
                 : static_cast<__storage_type>((__v >> __bits_per_word) & (__storage_type(1) << (_Size - __bits_per_word)) - 1),
@@ -402,7 +402,7 @@ __bitset<_N_words, _Size>::to_ullong(true_type, true_type) const
 {
     unsigned long long __r = __first_[0];
     for (size_t __i = 1; __i < sizeof(unsigned long long) / sizeof(__storage_type); ++__i)
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
         __r |= static_cast<unsigned long long>(__first_[__i]) << (sizeof(__storage_type) * CHAR_BIT * __i);
 #else
         __r |= static_cast<unsigned long long>(__first_[__i]) << (sizeof(__storage_type) * CHAR_BIT);
@@ -620,7 +620,7 @@ __bitset<1, _Size>::__hash_code() const _NOEXCEPT
     return __first_;
 }
 
-#ifdef __RL78__
+#if  __SIZEOF_INT__ == 2
 
 template <size_t _Size>
 class __bitset<2, _Size>

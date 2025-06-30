@@ -49,6 +49,7 @@ public:
 private:
   // Returns true if MF is a leaf procedure.
   bool isLeafProc(MachineFunction &MF) const;
+  uint32_t calculateCSRegisterMask(MachineFunction &MF) const;
 };
 
 } // end namespace llvm

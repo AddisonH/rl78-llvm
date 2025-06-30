@@ -252,7 +252,6 @@ struct Config {
   bool nmagic;
   bool noDynamicLinker = false;
   bool noinhibitExec;
-  bool noinhibitAssert;
   bool nostdlib;
   bool oFormatBinary;
   bool omagic;
@@ -270,7 +269,8 @@ struct Config {
   bool relocatable;
   bool relrGlibc = false;
   bool relrPackDynRelocs = false;
-  bool RL78FarCode;
+  bool rl78FarCode = false;
+  bool rl78InhibitAssert = false;
   llvm::DenseSet<llvm::StringRef> saveTempsArgs;
   llvm::SmallVector<std::pair<llvm::GlobPattern, uint32_t>, 0> shuffleSections;
   bool singleRoRx;

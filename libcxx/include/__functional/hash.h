@@ -50,7 +50,7 @@ __loadword(const void* __p)
 template <class _Size, size_t = sizeof(_Size)*__CHAR_BIT__>
 struct __murmur2_or_cityhash;
 
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
 template <class _Size>
 struct __murmur2_or_cityhash<_Size, 16>
 {
@@ -685,7 +685,11 @@ struct _LIBCPP_TEMPLATE_VIS hash<nullptr_t>
 {
     _LIBCPP_HIDE_FROM_ABI
     size_t operator()(nullptr_t) const _NOEXCEPT {
-        return 662607004ull;
+        #if SIZE_MAX >= 662607004ULL
+            return 662607004ULL; // Full value if size_t can hold it
+        #else
+            return static_cast<size_t>(662607004ULL); // Otherwise, truncate
+        #endif
     }
 };
 #endif

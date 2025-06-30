@@ -27,12 +27,7 @@ using namespace llvm;
 TTI::MemCmpExpansionOptions
 RL78TTIImpl::enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const {
   // Not sure if this expansion ever pays off when opt for size and -mfar-data...
-  // FIXME: also, it seems to trigger a bug (missing initialization of the segment
-  // register in the second call to foo()) for gcc_c_torture\Input\20050502-1.c
-  // Anyway, just disable this combination for now
-  if (OptSize && ST->HasFarDataModel())
-    return {};
-
+  
   TTI::MemCmpExpansionOptions Options;
   Options.LoadSizes = { 2, 1 };
   Options.MaxNumLoads = TLI->getMaxExpandSizeMemcmp(OptSize);

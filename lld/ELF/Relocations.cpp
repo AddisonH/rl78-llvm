@@ -1054,13 +1054,11 @@ void RelocationScanner::processAux(RelExpr expr, RelType type, uint64_t offset,
 
   // In case of RL78 we need a PLT for every function above the 64KB limit.
   // We add here entries for all of them and remove the ones below 64KB limit later.
-  //dbgs() << "Checking:" << sym.getName() << "\n";
-  if ((!config->RL78FarCode) && (config->emachine == EM_RL78) &&
+  if ((config->emachine == EM_RL78) && (!config->rl78FarCode) &&
       (sym.hasNoType() || sym.isFunc() || sym.isSection()) &&
       (sym.getOutputSection() &&
        sym.getOutputSection()->flags & SHF_EXECINSTR) &&
       !sym.isInPlt() && (type == R_RL78_DIR16U)) {
-    // dbgs() << sym.getName() << "\n";
     sym.allocateAux();
     in.plt->addEntry(sym);
   }
@@ -1747,7 +1745,7 @@ void elf::postScanRelocations() {
   }
 
   // RL78 uses PLT to bypass near memory limitations for code,
-  // but it doesn't need GOT entries. 
+  // but it doesn't need GOT entries.
   // This means we already called allocateAux and this assert would fail.
   if(config->emachine != EM_RL78)
     assert(symAux.size() == 1);

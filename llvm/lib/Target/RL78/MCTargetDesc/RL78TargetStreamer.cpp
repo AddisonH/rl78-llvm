@@ -85,7 +85,7 @@ RL78TargetELFStreamer::RL78TargetELFStreamer(MCStreamer &S,
 
   if (Features[RL78::FeatureCommonRom])
     EFlags |= 0;
-  else if (Features[RL78::FeatureFarRom])
+  else if (Features[RL78::FeatureFarRom] || Features[RL78::FeatureFarData])
     EFlags |= ELF::EF_RL78_RODATA_FAR;
   else
     EFlags |= ELF::EF_RL78_RODATA_NEAR;

@@ -99,6 +99,10 @@ public:
                                            SectionKind Kind, const Constant *C,
                                            Align &Alignment) const;
 
+  virtual std::string
+  getSectionPrefixForGlobal(SectionKind Kind,
+                            const GlobalObject *GO = nullptr) const;
+
   virtual MCSection *
   getSectionForMachineBasicBlock(const Function &F,
                                  const MachineBasicBlock &MBB,

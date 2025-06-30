@@ -32,9 +32,6 @@ void abort_message(const char* format, ...)
     // variable-size buffer so that we still get some information if
     // formatting into the variable-sized buffer fails.
 #if !defined(NDEBUG) || !defined(LIBCXXABI_BAREMETAL)
-#if defined(__RL78__)
-    abort();
-#else
     {
         fprintf(stderr, "libc++abi: ");
         va_list list;
@@ -43,7 +40,6 @@ void abort_message(const char* format, ...)
         va_end(list);
         fprintf(stderr, "\n");
     }
-#endif
 #endif
 
     // Format the arguments into an allocated buffer. We leak the buffer on

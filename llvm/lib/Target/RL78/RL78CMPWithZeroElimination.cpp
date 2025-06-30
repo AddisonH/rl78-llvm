@@ -65,8 +65,6 @@ static void updateCCRegFlag(MachineInstr &MI) {
 }
 
 // TODO: split this function into 2 functions
-// FIXME: MOV A, X + MOV [HL+byte(!=0)], A + CMP0 A (isKill) -> MOVS [HL+byte],
-// X
 bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   //

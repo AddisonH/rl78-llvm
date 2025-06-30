@@ -48,12 +48,6 @@ BitVector RL78RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   Reserved.set(RL78::SPreg);
   Reserved.set(RL78::ES);
-  // Frame pointer.
-  if (getFrameLowering(MF)->hasFP(MF)) {
-    Reserved.set(RL78::RP6);
-    Reserved.set(RL78::R7);
-    Reserved.set(RL78::R6);
-  }
 
   return Reserved;
 }
@@ -319,7 +313,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       // MI.getParent()->dump();
       return false;
     }
-    // FIXME: look for a different solution without using PUSH/POP
     else if (isUInt<16>(Offset - 2 + offsetAdj)) {
       build16bitAccess(MBB, MF, MI, TFI, II, DL, TII, FrameReg, Offset);
       return true;
@@ -338,30 +331,20 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       // MI.getParent()->dump();
       return false;
     } else if (isUInt<16>(Offset - 2)) {
-      if (TFI->hasFP(MF)) {
-        BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp))
-            .addReg(RL78::RP0, RegState::Kill);
-      }
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp))
           .addReg(RL78::RP2, RegState::Kill);
-      if (TFI->hasFP(MF)) {
-        BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-            .addReg(RL78::RP6);
-        BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP2)
-            .addReg(RL78::RP0);
-      } else {
-        BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP2)
-            .addReg(RL78::SPreg);
-        Offset += 2;
-      }
+
+      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP2)
+          .addReg(RL78::SPreg);
+      Offset += 2;
+
       // Store using word[BC].
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::STORE8_ri_imm))
           .addReg(RL78::RP2)
           .addImm(Offset)
           .add(MI.getOperand(2));
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::POP_rp), RL78::RP2);
-      if (TFI->hasFP(MF))
-        BuildMI(*MI.getParent(), II, DL, TII->get(RL78::POP_rp), RL78::RP0);
+
       // MI.getParent()->dump();
       MI.eraseFromParent();
       return true;
@@ -369,18 +352,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // This is a 16 bit machine, we shouldn't have a stack offset which is 32
     // bit.
     llvm_unreachable("Invalid stack offset!");
-  } else if ((MI.getOpcode() == RL78::CALL_rp_fp) ||
-             (MI.getOpcode() == RL78::CALL_addr16_fp) ||
-             (MI.getOpcode() == RL78::CALL_sym16_fp) ||
-             (MI.getOpcode() == RL78::CALL_addr20_fp) ||
-             (MI.getOpcode() == RL78::CALL_sym20_fp)) {
-    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
-    if (isUInt<16>(Offset + 4))
-      MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
-    else
-      MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
-    return false;
   }
   // MOVW_rp_stack_slot.
   else {
@@ -390,9 +361,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     if (FrameReg == RL78::RP4)
       // It means we want to reference something with the old, unaligned SP.
       loadUnalignedSP(MBB, II, DL, TII, actualFrameReg, stackSize - 2);
-    else if (TFI->hasFP(MF))
-      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6);
     else
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP0)
           .addReg(RL78::SPreg);
@@ -408,5 +376,5 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
 Register RL78RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const RL78FrameLowering *TFI = getFrameLowering(MF);
-  return TFI->hasFP(MF) ? RL78::RP6 : RL78::SPreg;
+  return RL78::SPreg;
 }

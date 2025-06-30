@@ -326,9 +326,9 @@ static bool addExceptionArgs(const ArgList &Args, types::ID InputType,
                              ArgStringList &CmdArgs) {
   const llvm::Triple &Triple = TC.getTriple();
 
-  if (KernelOrKext) {
-    // -mkernel and -fapple-kext imply no exceptions, so claim exception related
-    // arguments now to avoid warnings about unused arguments.
+  if (KernelOrKext || Triple.isRL78()) {
+    // RL78 targets or -mkernel and -fapple-kext imply no exceptions, so claim
+    // exception related arguments now to avoid warnings about unused arguments.
     Args.ClaimAllArgs(options::OPT_fexceptions);
     Args.ClaimAllArgs(options::OPT_fno_exceptions);
     Args.ClaimAllArgs(options::OPT_fobjc_exceptions);
@@ -362,7 +362,7 @@ static bool addExceptionArgs(const ArgList &Args, types::ID InputType,
   }
 
   if (types::isCXX(InputType)) {
-    // Disable C++ EH by default on XCore and PS4/PS5.
+    // Disable C++ EH by default on XCore, PS4/PS5.
     bool CXXExceptionsEnabled = Triple.getArch() != llvm::Triple::xcore &&
                                 !Triple.isPS() && !Triple.isDriverKit();
     Arg *ExceptionArg = Args.getLastArg(
@@ -2239,10 +2239,29 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-join-splitedges");
 
+  //  Enables conversions between different address spaces at compile time.
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-addrspacecast-simplification");
+
   // Since the optimizer is getting smarter in figuring out undefined behavior/poison
   // cases, lets trap instead of eliminating everything (including the return statement).
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("--trap-unreachable=true");
+
+  // Check if -minsert-nop-with-label= is passed through -mllvm
+  // debug option also becomes valid
+  for (Arg *A : Args.filtered(options::OPT_mllvm)) {
+    StringRef ArgValue(A->getValue());
+    if (ArgValue.startswith("-minsert-nop-with-label=")) {
+      if (!Args.hasArg(options::OPT_g_Flag)) {
+        const unsigned DwarfVersion = getDwarfVersion(getToolChain(), Args);
+        RenderDebugEnablingArgs(Args, CmdArgs,
+                                llvm::codegenoptions::DebugInfoConstructor,
+                                DwarfVersion, llvm::DebuggerKind::Default);
+      }
+      break;
+    }
+  }
 
   Arg *OptArg = Args.getLastArg(options::OPT_O_Group);
   char OptLevel = (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
@@ -2266,10 +2285,18 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
 
     CmdArgs.push_back("-mllvm");
     CmdArgs.push_back("-unroll-runtime-epilog");
+  } else if (OptLevel != 0) {
+    const Arg *A = Args.getLastArg(
+        options::OPT_finline_functions, options::OPT_finline_hint_functions,
+        options::OPT_fno_inline_functions, options::OPT_fno_inline);
+    if (A == nullptr)
+      CmdArgs.push_back("-fno-inline");
   }
-
   if (OptLevel != 's' && OptLevel != 'z')
     return;
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-licm");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-split-spill-mode=size");
@@ -2309,16 +2336,10 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   CmdArgs.push_back("-disable-sched-height=true");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-enable-global-merge=false");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-extra-vectorizer-passes=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-force-split-store=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-global-merge-on-const=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-keep-loops=false");
@@ -6861,9 +6882,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_frenesas_extensions, options::OPT_fno_renesas_extensions, false))
     CmdArgs.push_back("-frenesas-extensions");
 
-  if (Args.getLastArg(options::OPT_frenesas_vaarg))
-    CmdArgs.push_back("-frenesas-vaarg");
-
   Arg *mirrorSource = Args.getLastArg(options::OPT_mirror_source_EQ);
   if (mirrorSource) {
     if (mirrorSource->containsValue("0")) {
@@ -6892,17 +6910,19 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   const Arg *mData =
       Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
+  bool mFarData = false;
   if (mData != nullptr &&
       mData->getOption().getID() == options::OPT_mfar_data) {
     CmdArgs.push_back("-mfar-data");
+    mFarData = true;
   }
 
-  const Arg *mRom = 
+  const Arg *mRom =
     Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom, options::OPT_mfar_rom);
   if (mRom != nullptr) {
-     if(mRom->getOption().getID() == options::OPT_mfar_rom) 
+    if (mRom->getOption().getID() == options::OPT_mfar_rom && !mFarData) // -mfar-data includes -mfar-rom
       CmdArgs.push_back("-mfar-rom");
-     else if(mRom->getOption().getID() == options::OPT_mcommon_rom) 
+     else if(mRom->getOption().getID() == options::OPT_mcommon_rom)
       CmdArgs.push_back("-mcommon-rom");
   }
 
@@ -7064,40 +7084,39 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fapplication-extension");
 
   // Handle GCC-style exception args.
-  //TODO: look for a more elegant solution for this for RL78 (maybe when constructing compiler job).
   bool EH = false;
-  //if (!C.getDriver().IsCLMode())
-  //  EH = addExceptionArgs(Args, InputType, TC, KernelOrKext, Runtime, CmdArgs);
+  if (!C.getDriver().IsCLMode())
+    EH = addExceptionArgs(Args, InputType, TC, KernelOrKext, Runtime, CmdArgs);
 
-  // Handle exception personalities
-  //Arg *A = Args.getLastArg(
-  //    options::OPT_fsjlj_exceptions, options::OPT_fseh_exceptions,
-  //    options::OPT_fdwarf_exceptions, options::OPT_fwasm_exceptions);
-  //if (A) {
-  //  const Option &Opt = A->getOption();
-  //  if (Opt.matches(options::OPT_fsjlj_exceptions))
-  //    CmdArgs.push_back("-exception-model=sjlj");
-  //  if (Opt.matches(options::OPT_fseh_exceptions))
-  //    CmdArgs.push_back("-exception-model=seh");
-  //  if (Opt.matches(options::OPT_fdwarf_exceptions))
-  //    CmdArgs.push_back("-exception-model=dwarf");
-  //  if (Opt.matches(options::OPT_fwasm_exceptions))
-  //    CmdArgs.push_back("-exception-model=wasm");
-  //} else {
-  //  switch (TC.GetExceptionModel(Args)) {
-  //  default:
-  //    break;
-  //  case llvm::ExceptionHandling::DwarfCFI:
-  //    CmdArgs.push_back("-exception-model=dwarf");
-  //    break;
-  //  case llvm::ExceptionHandling::SjLj:
-  //    CmdArgs.push_back("-exception-model=sjlj");
-  //    break;
-  //  case llvm::ExceptionHandling::WinEH:
-  //    CmdArgs.push_back("-exception-model=seh");
-  //    break;
-  //  }
-  //}
+  // Handle exception personalities.
+  Arg *A = Args.getLastArg(
+      options::OPT_fsjlj_exceptions, options::OPT_fseh_exceptions,
+      options::OPT_fdwarf_exceptions, options::OPT_fwasm_exceptions);
+  if (A) {
+    const Option &Opt = A->getOption();
+    if (Opt.matches(options::OPT_fsjlj_exceptions))
+      CmdArgs.push_back("-exception-model=sjlj");
+    if (Opt.matches(options::OPT_fseh_exceptions))
+      CmdArgs.push_back("-exception-model=seh");
+    if (Opt.matches(options::OPT_fdwarf_exceptions))
+      CmdArgs.push_back("-exception-model=dwarf");
+    if (Opt.matches(options::OPT_fwasm_exceptions))
+      CmdArgs.push_back("-exception-model=wasm");
+  } else {
+    switch (TC.GetExceptionModel(Args)) {
+    default:
+      break;
+    case llvm::ExceptionHandling::DwarfCFI:
+      CmdArgs.push_back("-exception-model=dwarf");
+      break;
+    case llvm::ExceptionHandling::SjLj:
+      CmdArgs.push_back("-exception-model=sjlj");
+      break;
+    case llvm::ExceptionHandling::WinEH:
+      CmdArgs.push_back("-exception-model=seh");
+      break;
+    }
+  }
 
   // C++ "sane" operator new.
   Args.addOptOutFlag(CmdArgs, options::OPT_fassume_sane_operator_new,

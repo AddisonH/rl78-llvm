@@ -621,14 +621,13 @@ __COM_dmul:
   MOVW AX, [HL+14]
   XCHW AX, BC
   CALL !!__COM_mulul
-  addw SP, #4
   MOVW DE, SP
-  MOVW AX, [DE+34+4]
+  MOVW AX, [DE+38+4]
   MOVW BC, AX
-  MOVW AX, [DE+34+6]
+  MOVW AX, [DE+38+6]
   
   XCHW AX, DE
-  SUBW SP, #4
+  ADDW	AX, #4
   CALL !!__COM_mulul
   ADDW SP, #4
   MOVW HL, SP
@@ -661,40 +660,39 @@ __COM_dmul:
   MOVW AX, [DE+34+2]
   XCHW AX, DE
   CALL !!__COM_mulul
-  ADDW SP, #4
   MOVW HL, SP
-  MOVW AX, [HL+16]
+  MOVW AX, [HL+20]
   MOVW DE, AX
-  MOVW AX, [HL]
-  ADDW AX, [HL+8+4]
-  MOVW [HL+8+4], AX
-  MOVW AX, [HL+2]
+  MOVW AX, [HL+4]
+  ADDW AX, [HL+12+4]
+  MOVW [HL+12+4], AX
+  MOVW AX, [HL+6]
   XCH A, X
-  ADDC A, [HL+8+6]
+  ADDC A, [HL+12+6]
   XCH A, X
-  ADDC A, [HL+8+7]
-  MOVW [HL+8+6], AX
+  ADDC A, [HL+12+7]
+  MOVW [HL+12+6], AX
   MOVW AX, [DE]
   XCH A, X
-  ADDC A, [HL+4]
+  ADDC A, [HL+8]
   XCH A, X
-  ADDC A, [HL+5]
+  ADDC A, [HL+9]
   MOVW [DE], AX
   MOVW AX, [DE+2]
   XCH A, X
-  ADDC A, [HL+6]
+  ADDC A, [HL+10]
   XCH A, X
-  ADDC A, [HL+7]
+  ADDC A, [HL+11]
   MOVW [DE+2], AX
   CLRW AX
   ROLWC AX, 1
   MOVW [DE+4], AX
-  MOVW DE, SP
-  subw SP, #4
-  MOVW AX, [DE+34+4]
+  MOVW AX, [HL+38+4]
   MOVW BC, AX
-  MOVW AX, [DE+34+6]
-  XCHW AX, DE
+  MOVW AX, [HL+38+6]
+  MOVW DE, AX
+  MOVW AX, HL
+  ADDW AX, #4
   CALL !!__COM_mulul
   ADDW SP, #4
   MOVW AX, [SP+16]

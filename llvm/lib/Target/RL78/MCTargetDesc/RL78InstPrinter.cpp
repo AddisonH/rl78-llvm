@@ -157,7 +157,6 @@ void RL78InstPrinter::printShiftOperand(const MCInst *MI, int opNum,
 void RL78InstPrinter::printABS8Operand(const MCInst *MI, int opNum,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
-  // TODO: assert for symbolref only, for the rest below as well.
   const MCOperand &MO = MI->getOperand(opNum);
   if (MO.isImm())
     O << "0xffe" << format_hex_no_prefix(MO.getImm(), 2);
@@ -170,7 +169,6 @@ void RL78InstPrinter::printABS8Operand(const MCInst *MI, int opNum,
 void RL78InstPrinter::printSfrOperand(const MCInst *MI, int opNum,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O) {
-  // TODO: assert for symbolref only, for the rest below as well.
   const MCOperand &MO = MI->getOperand(opNum);
   if (MO.isImm())
     O << "0xfff" << format_hex_no_prefix(0xFF & MO.getImm(), 2);

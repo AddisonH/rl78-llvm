@@ -479,10 +479,12 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
         Tok.clearFlag(Token::LeadingSpace);
         AsmToks.push_back(Tok);
       }
-      BraceNesting--;
-      if(TheTriple.isRL78())
+      if (TheTriple.isRL78()) {
+        BraceNesting--;
         break;
+      }
       EndLoc = ConsumeBrace();
+      BraceNesting--;
       // Finish if all of the opened braces in the inline asm section were
       // consumed.
       if (BraceNesting == 0 && !SingleLineMode)

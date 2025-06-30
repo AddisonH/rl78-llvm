@@ -288,7 +288,13 @@ struct __code_point<wchar_t> {
 /// kept stable.
 template <class _CharT>
 struct __parsed_specifications {
+   // Use a 4-byte alignment for targets with lower default alignments
+   // so that the size of the structure would be 16 bytes, as expected.
+#if (__BIGGEST_ALIGNMENT__ < 4)
+  union alignas(4) {
+#else
   union {
+#endif
     // The field __alignment_ is the first element in __std_ and __chrono_.
     // This allows the code to always inspect this value regards which member
     // of the union is the active member [class.union.general]/2.
@@ -321,15 +327,10 @@ struct __parsed_specifications {
 
 // Validate the struct is small and cheap to copy since the struct is passed by
 // value in formatting functions.
-#ifndef __RL78__
-// TODO: revisit these asserts.
 static_assert(sizeof(__parsed_specifications<char>) == 16);
-#endif
 static_assert(is_trivially_copyable_v<__parsed_specifications<char>>);
 #  ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-#ifndef __RL78__
 static_assert(sizeof(__parsed_specifications<wchar_t>) == 16);
-#endif
 static_assert(is_trivially_copyable_v<__parsed_specifications<wchar_t>>);
 #  endif
 
@@ -881,13 +882,10 @@ private:
 };
 
 // Validates whether the reserved bitfields don't change the size.
-#ifndef __RL78__
-// TODO: revisit these asserts.
 static_assert(sizeof(__parser<char>) == 16);
 #  ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 static_assert(sizeof(__parser<wchar_t>) == 16);
 #  endif
-#endif
 
 _LIBCPP_HIDE_FROM_ABI constexpr void __process_display_type_string(__format_spec::__type __type) {
   switch (__type) {

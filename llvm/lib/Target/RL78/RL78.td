@@ -22,7 +22,6 @@ include "llvm/Target/Target.td"
 
 include "RL78Schedule.td"
 include "RL78InstrInfo.td"
-include "RL78CallingConv.td"
 
 def RL78InstrInfo : InstrInfo {
   // this will be the default behavior in the future, so better to be prepared
@@ -64,10 +63,6 @@ def FeatureCommonRom : SubtargetFeature<"common-rom", "romModel", "2",
 
 def FeatureDisableMDA : SubtargetFeature<"disable-mda", "disableMDA", "true",
                                       "Disable usage of Mul/Div/Mac accelerator (S2 only).">;
-
-//def FeatureCallingConvention : CCRL, LLVM, IAR?
-
-
 
 //===----------------------------------------------------------------------===//
 // RL78 processors supported.

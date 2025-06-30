@@ -36,6 +36,8 @@ public:
   const RL78Subtarget *getSubtargetImpl() const = delete;
   const RL78Subtarget *getSubtargetImpl(const Function &) const override;
 
+  void registerPassBuilderCallbacks(PassBuilder &) override;
+
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
   TargetTransformInfo getTargetTransformInfo(const Function &F) const override;
@@ -47,16 +49,6 @@ public:
   }
 
   bool isMachineVerifierClean() const override { return false; }
-
-  // FIXME: currently we are using substitutePass(&PostRASchedulerID,
-  // &PostMachineSchedulerID)
-  // we might come back to this at some point maybe on -O3.
-  // Temporary option to allow experimenting with MachineScheduler as a post-RA
-  // scheduler. Targets can "properly" enable this with
-  // substitutePass(&PostRASchedulerID, &PostMachineSchedulerID).
-  // Targets can return true in targetSchedulesPostRAScheduling() and
-  // insert a PostRA scheduling pass wherever it wants.
-  bool targetSchedulesPostRAScheduling() const override { return false; }
 
   bool useIPRA() const override { return true; }
 
@@ -72,16 +64,6 @@ public:
   }
 
 };
-
-static unsigned int tryGetRP6(MachineBasicBlock *BB) {
-  const TargetRegisterInfo *TRI = BB->getParent()->getSubtarget().getRegisterInfo();
-  return TRI->getReservedRegs(*BB->getParent()).test(RL78::RP6) ? RL78::RP4
-                                                             : RL78::RP6;
-}
-
-static bool isFPUsed(MachineBasicBlock *BB) {
-    return tryGetRP6(BB) != RL78::RP6;
-}
 
 } // end namespace llvm
 

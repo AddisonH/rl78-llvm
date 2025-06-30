@@ -120,17 +120,14 @@ public:
   }
 
   bool setABI(const std::string &Name) override {
+    SmallVector<StringRef, 4> parts;
+    StringRef(Name).split(parts, '_');
     const auto validABI =
-        llvm::StringSwitch<bool>(Name)
-            .Cases("nc_nd_d32", "nc_nd_d32_mda", "nc_nd_d32_nomda", "nc_nd_d64",
-                   "nc_nd_d64_mda", "nc_nd_d64_nomda", true)
-            .Cases("nc_fd_d32", "nc_fd_d32_mda", "nc_fd_d32_nomda", "nc_fd_d64",
-                   "nc_fd_d64_mda", "nc_fd_d64_nomda", true)
-            .Cases("fc_nd_d32", "fc_nd_d32_mda", "fc_nd_d32_nomda", "fc_nd_d64",
-                   "fc_nd_d64_mda", "fc_nd_d64_nomda", true)
-            .Cases("fc_fd_d32", "fc_fd_d32_mda", "fc_fd_d32_nomda", "fc_fd_d64",
-                   "fc_fd_d64_mda", "fc_fd_d64_nomda", true)
-            .Default(false);
+        llvm::is_contained({"nc", "fc"}, parts[0]) &&
+        llvm::is_contained({"nd", "fd"}, parts[1]) &&
+        llvm::is_contained({"d32", "d64"}, parts[2]) &&
+        (parts.size() == 3 ||
+         parts.size() == 4 && llvm::is_contained({"mda", "nomda"}, parts[3]));
     assert(validABI);
     if (validABI)
       ABI = Name;

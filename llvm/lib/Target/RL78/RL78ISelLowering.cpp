@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/IntrinsicsRL78.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
@@ -27,18 +28,8 @@ using namespace llvm;
 
 #include "RL78GenRegisterInfo.inc"
 
-//===----------------------------------------------------------------------===//
-// Calling Convention Implementation
-//===----------------------------------------------------------------------===//
-
-#include "RL78GenCallingConv.inc"
-
 /// Return the type that should be used to zero or sign extend a
-/// zeroext/signext integer return value.  FIXME: Some C calling conventions
-/// require the return type to be promoted, but this is not true all the time,
-/// e.g. i1/i8/i16 on x86/x86_64. It is also not necessary for non-C calling
-/// conventions. The frontend should handle this and include all of the
-/// necessary information.
+/// zeroext/signext integer return value.
 EVT RL78TargetLowering::getTypeForExtReturn(LLVMContext &Context, EVT VT,
                                             ISD::NodeType ExtendKind) const {
   MVT ReturnMVT = MVT::i16;
@@ -66,10 +57,7 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   // CCState - Info about the registers and stack slot.
   CCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(), RVLocs,
                  *DAG.getContext());
-  if (MF.getSubtarget<RL78Subtarget>().HasCCRLCallingConvention())
-    AnalyzeCCRLReturnOperands(CCInfo, Outs);
-  else
-    CCInfo.AnalyzeReturn(Outs, RetCC_RL78_LLVM);
+  AnalyzeCCRLReturnOperands(CCInfo, Outs);
 
   // Chain.dump();
   // Copy the result values into the output registers.
@@ -121,9 +109,6 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       if (!SReg)
         llvm_unreachable("sret virtual segment register not created in the entry block");
 
-      // TODO: other calling convention(s)?
-      assert(MF.getSubtarget<RL78Subtarget>().HasCCRLCallingConvention() && "ccrl only so far");
-
       SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, MVT::i16);
       auto Chain1 = DAG.getCopyToReg(Chain, DL, RL78::RP4, Val, Flag);
       Flag = Chain1.getValue(1);
@@ -152,7 +137,6 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 bool RL78TargetLowering::CanLowerReturn(
     CallingConv::ID CallConv, MachineFunction &MF, bool isVarArg,
     const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
-  // TODO for CCRL callconv only.
   uint64_t size = 0;
   for (auto arg : Outs)
     size += arg.VT.getSizeInBits();
@@ -175,10 +159,7 @@ SDValue RL78TargetLowering::LowerFormalArguments(
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
-  if (MF.getSubtarget<RL78Subtarget>().HasCCRLCallingConvention())
-    AnalyzeCCRLFormalOperands(CCInfo, Ins);
-  else
-    CCInfo.AnalyzeFormalArguments(Ins, CC_RL78_LLVM);
+  AnalyzeCCRLFormalOperands(CCInfo, Ins);
 
   unsigned InIdx = 0;
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i, ++InIdx) {
@@ -401,22 +382,13 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), ArgLocs,
                  *DAG.getContext());
-  if (MF.getSubtarget<RL78Subtarget>().HasCCRLCallingConvention())
-    AnalyzeCCRLCallOperands(CCInfo, Outs);
-  else
-    CCInfo.AnalyzeCallOperands(Outs, CC_RL78_LLVM);
-
-  bool hasFP = MF.getSubtarget<RL78Subtarget>().getFrameLowering()->hasFP(MF);
+  AnalyzeCCRLCallOperands(CCInfo, Outs);
 
   // Get the size of the outgoing arguments stack space requirement.
   unsigned ArgsSize = CCInfo.getStackSize();
 
   if (ArgsSize & 1)
     ArgsSize++;
-
-  // Consider the saved FP as the last argument.
-  if (hasFP)
-    ArgsSize += 2;
 
   // Keep stack frames 2-byte aligned.
   // ArgsSize = (ArgsSize + 7) & ~3;
@@ -458,48 +430,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       ByValArgs.push_back(nullVal);
     }
   }
-
-  // Increments depending on the number of registers from the calling conv
-  // we will increment with 1 for i8 register and with 2 for an i16 register.
-  int noImplicitNotDeadRegs = 0;
-
-  // We want to keep track if we are using ax or a and x separatelly
-  // if noImplicitNotDeadRegs >=5 is safe to assume that both r0 and r1 are in
-  // use We choose to save R0/R1 instead of always using RP0 (also using RP0
-  // when an 8 bit value is present) because saving R0/R1 will cost 1 execution
-  // cycle less 0 if none of the registers R0, R1 or RP0 are used 1 if R0 is
-  // used and not R1 2 if R1 is used and not R0 3 if R0 and R1 are used 4 if RP0
-  // is used.
-  unsigned int usesR0andorR1 = 0;
-
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    CCValAssign &VA = ArgLocs[i];
-    if (VA.isRegLoc()) {
-      unsigned Reg = VA.getLocReg();
-      if (Reg == RL78::R0 || Reg == RL78::R1 || Reg == RL78::R2 ||
-          Reg == RL78::R3 || Reg == RL78::R4 || Reg == RL78::R5) {
-        noImplicitNotDeadRegs = noImplicitNotDeadRegs + 1;
-        if (Reg == RL78::R0)
-          usesR0andorR1 = usesR0andorR1 + 1; // 1 if R0 is used and not R1.
-        if (Reg == RL78::R1)
-          usesR0andorR1 = usesR0andorR1 + 2; // 2 if R1 is used and not R0.
-        // usesR0andorR1 is 3 if R0 and R1 are used.
-      } else if (Reg == RL78::RP0 || Reg == RL78::RP2 || Reg == RL78::RP4) {
-        noImplicitNotDeadRegs = noImplicitNotDeadRegs + 2;
-        if (Reg == RL78::RP0)
-          usesR0andorR1 = 4; // 4 if RP0 is used.
-      }
-    }
-  }
-
-  // Checking if we will run out of registers in case of call_rp and no register
-  // left for the call.
-  bool willRunOutOfRegs = !dyn_cast<ExternalSymbolSDNode>(Callee) &&
-                          !dyn_cast<GlobalAddressSDNode>(Callee) && hasFP &&
-                          noImplicitNotDeadRegs >= 5;
-
-  if (willRunOutOfRegs)
-    ArgsSize += 4;
 
   Chain = DAG.getCALLSEQ_START(Chain, ArgsSize, 0, dl);
 
@@ -583,43 +513,11 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
         MemOpChains.push_back(
             DAG.getStore(Chain, dl, Arg, FIPtr, MachinePointerInfo(StackAS)));
       }
-
-      //// TODO if renesas extensions, promote near pointer to varg if it a
-      /// va_arg
-      // if (Flags.isPointer() && Flags.getPointerAddrSpace() == 0 &&
-      //! Outs[i].IsFixed) {
-      //  // Fill the stack slot with 0x000F for the promoted near pointer
-      //  FI = MF.getFrameInfo().CreateFixedObject(2,  Offset + 2, true);
-      //  SDValue FIPtr =
-      //      DAG.getFrameIndex(FI, FIPtrTy);
-      //  SDValue NearSegment =
-      //      DAG.getConstant(0x000F, dl, MVT::i16);
-      //  MemOpChains.push_back(
-      //      DAG.getStore(Chain, dl, NearSegment, FIPtr,
-      //      MachinePointerInfo()));
-      //}
     }
   }
 
   if (!dyn_cast<GlobalAddressSDNode>(Callee) || isMemLoc)
     isTailCall = false;
-
-  SDValue SavedFPFIPtr;
-  SDValue SavedFP;
-  // Save the FP, will be restored by CALL_FP.
-  if (hasFP) {
-    int FI;
-    if (willRunOutOfRegs) {
-      FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset + 4, true);
-    } else {
-      FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset, true);
-    }
-    SavedFPFIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-    SavedFP = SavedFPFIPtr;
-    MemOpChains.push_back(DAG.getStore(Chain, dl,
-                                       DAG.getRegister(RL78::RP6, MVT::i16),
-                                       SavedFPFIPtr, MachinePointerInfo(StackAS)));
-  }
 
   if (!MemOpChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
@@ -628,35 +526,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // flag operands which copy the outgoing args into registers.  The InFlag in
   // necessary since all emitted instructions must be stuck together.
   SDValue InFlag;
-
-  // We need these variables in case willRunOutOfRegs is true.
-  SDValue AxReg = DAG.getRegister(RL78::RP0, MVT::i16);
-  SDValue AReg = DAG.getRegister(RL78::R1, MVT::i8);
-  SDValue CSReg = DAG.getRegister(RL78::CS, MVT::i8);
-  SDValue HlReg = DAG.getRegister(RL78::RP6, MVT::i16);
-  SDValue SavedAxFIPtr;
-
-  if (willRunOutOfRegs) {
-    if (Callee.getValueType() == MVT::i32) {
-      SDValue Low = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Callee,
-                                DAG.getConstant(0, dl, MVT::i16));
-      SDValue High = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Callee,
-                                 DAG.getConstant(1, dl, MVT::i16));
-      SDValue Segment = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i8, High,
-                                    DAG.getConstant(0, dl, MVT::i8));
-      Chain = DAG.getCopyToReg(Chain, dl, AReg, Segment, InFlag);
-      Chain = DAG.getCopyToReg(Chain, dl, CSReg, AReg, InFlag);
-      Chain = DAG.getCopyToReg(Chain, dl, AxReg, Low, InFlag);
-    } else {
-      Chain = DAG.getCopyToReg(Chain, dl, AxReg, Callee, InFlag);
-    }
-
-    // Put ax on stack.
-    int FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset, true);
-    SavedFPFIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-    Chain = DAG.getStore(Chain, dl, AxReg, SavedFPFIPtr,
-                         MachinePointerInfo(StackAS));
-  }
 
   // We do this backwards because R1/RP0 it's more optimal.
   for (int i = RegsToPass.size() - 1; i >= 0; --i) {
@@ -684,36 +553,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
   }
 
-  if (willRunOutOfRegs) {
-
-    switch (usesR0andorR1) {
-    case 3:
-    case 4: {
-      int FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset + 2, true);
-      SavedAxFIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-      Chain = DAG.getStore(Chain, dl, AxReg, SavedAxFIPtr,
-                           MachinePointerInfo(StackAS));
-      break;
-    }
-    case 1: {
-      int FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset + 2, true);
-      SavedAxFIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-      Chain = DAG.getStore(Chain, dl, DAG.getRegister(RL78::R0, MVT::i8),
-                           SavedAxFIPtr, MachinePointerInfo(StackAS));
-    }
-    case 2: {
-      int FI = MF.getFrameInfo().CreateFixedObject(2, fpOffset + 2, true);
-      SavedAxFIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-      Chain = DAG.getStore(Chain, dl, DAG.getRegister(RL78::R1, MVT::i8),
-                           SavedAxFIPtr, MachinePointerInfo(StackAS));
-      break;
-    }
-    default:
-      llvm_unreachable("R0 or R1 are not used.");
-      break;
-    }
-  }
-
   bool IsCallt = false;
   bool IsFarFunction = false;
   // If the callee is a GlobalAddress node (quite common, every direct call is)
@@ -732,68 +571,20 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
           DAG.getTargetGlobalAddress(G->getGlobal(), SDLoc(G), MVT::i16,
                                      G->getOffset(), RL78MCExpr::VK_RL78_None);
   }
-  // else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
-  //    Callee = DAG.getTargetExternalSymbol(E->getSymbol(), MVT::i16);
+  else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+    Callee = LowerExternalSymbol(Callee, DAG);
+  }
 
   // Callee.dump();
   // if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
   //  G->getGlobal()->getAlignment();
   //}
 
-  if (willRunOutOfRegs) {
-
-    Chain = DAG.getLoad(MVT::i16, dl, Chain.getValue(0), SavedFPFIPtr,
-                        MachinePointerInfo());
-    InFlag = Chain.getValue(1);
-    Chain = DAG.getCopyToReg(Chain, dl, HlReg, Chain.getValue(0), InFlag);
-    InFlag = Chain.getValue(1);
-
-    switch (usesR0andorR1) {
-    case 3:
-    case 4: {
-      Chain =
-          DAG.getLoad(MVT::i16, dl, Chain, SavedAxFIPtr, MachinePointerInfo());
-      InFlag = Chain.getValue(1);
-
-      Chain = DAG.getCopyToReg(Chain, dl, AxReg, Chain.getValue(0), InFlag);
-      InFlag = Chain.getValue(1);
-      break;
-    }
-    case 1: {
-      Chain =
-          DAG.getLoad(MVT::i8, dl, Chain, SavedAxFIPtr, MachinePointerInfo());
-      InFlag = Chain.getValue(1);
-
-      Chain = DAG.getCopyToReg(Chain, dl, DAG.getRegister(RL78::R0, MVT::i8),
-                               Chain.getValue(0), InFlag);
-      InFlag = Chain.getValue(1);
-      break;
-    }
-    case 2: {
-      Chain =
-          DAG.getLoad(MVT::i8, dl, Chain, SavedAxFIPtr, MachinePointerInfo());
-      InFlag = Chain.getValue(1);
-
-      Chain = DAG.getCopyToReg(Chain, dl, DAG.getRegister(RL78::R1, MVT::i8),
-                               Chain.getValue(0), InFlag);
-      InFlag = Chain.getValue(1);
-      break;
-    }
-    default:
-      llvm_unreachable("R0 or R1 are not used.");
-      break;
-    }
-
-    Callee = HlReg.getValue(0);
-  }
-
   // Returns a chain & a flag for retval copy to use.
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
   SmallVector<SDValue, 20> Ops;
   Ops.push_back(Chain);
   Ops.push_back(Callee);
-  if (hasFP)
-    Ops.push_back(SavedFP);
 
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
@@ -811,10 +602,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   if (IsCallt)
     Chain = DAG.getNode(RL78ISD::CALLT, dl, NodeTys, Ops);
-  // After the call the FP is invalid and the reg alloc can insert a load from
-  // stack, see: SingleSource\BenchMarks\BenchMarkGame\spectral-norm.c.
-  else if (hasFP)
-    Chain = DAG.getNode(RL78ISD::CALL_FP, dl, NodeTys, Ops);
   else if (isTailCall)
     Chain = DAG.getNode(RL78ISD::TAIL_CALL, dl, NodeTys, Ops);
   else
@@ -830,12 +617,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<CCValAssign, 16> RVLocs;
   CCState RVInfo(CallConv, isVarArg, DAG.getMachineFunction(), RVLocs,
                  *DAG.getContext());
-
-  if (MF.getSubtarget<RL78Subtarget>().HasCCRLCallingConvention()) {
-    AnalyzeCCRLReturnOperands(RVInfo, Ins);
-  } else {
-    RVInfo.AnalyzeCallResult(Ins, RetCC_RL78_LLVM);
-  }
+  AnalyzeCCRLReturnOperands(RVInfo, Ins);
 
   if (!isTailCall) {
     // Copy all of the result registers out of their specified physreg.
@@ -974,16 +756,6 @@ static void AllocateMultiPartArgument(unsigned ValNo, MVT ValVT, MVT LocVT,
     AllocateFarPointer(ValNo, ValVT, State, partCount, false, isVarArg);
     return;
   }
-
-  //// TODO if renesas extensions, promote near pointer to varg if it a va_arg
-  //// promote near pointer when using varg
-  // if (ArgFlags.isPointer() && ArgFlags.getPointerAddrSpace() == 0 &&
-  // isVarArg) {
-  //  unsigned Offset = State.AllocateStack(2, 2);
-  //  State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
-  //  Offset = State.AllocateStack(2, 2); // reserve space for 0x000F
-  //  return;
-  //}
 
   // R0-X, R1=A, R2=C, R3=B, R4=E, R5=D
   if (LocVT == MVT::i8 && !isVarArg) {
@@ -1242,8 +1014,6 @@ void RL78TargetLowering::AnalyzeCCRLReturnOperands(
                           ArgFlags, State, ret.size());
 }
 
-// FIXME? Maybe this could be a TableGen attribute on some registers and
-// this table could be generated automatically from RegInfo.
 Register
 RL78TargetLowering::getRegisterByName(const char *RegName, LLT VT,
                                       const MachineFunction &MF) const {
@@ -1379,8 +1149,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   // Expand var-args ops.
   setOperationAction(ISD::VASTART, MVT::Other, Custom);
   setOperationAction(ISD::VAARG, MVT::Other, Custom);
-  // setOperationAction(ISD::VAARG, MVT::Other, Expand);
-  // FIXME: ckeck if we can do better with a custom implementation.
   setOperationAction(ISD::VAEND, MVT::Other, Expand);
   setOperationAction(ISD::VACOPY, MVT::Other, Custom);
 
@@ -1400,7 +1168,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
 
-  // FIXME: ckeck if we can do better with a custom implementation.
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1, Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
@@ -1409,7 +1176,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::i32, Custom);
   setOperationAction(ISD::STORE, MVT::i16, Custom);
   setOperationAction(ISD::STORE, MVT::i32, Custom);
-  // FIXME: ckeck if we can do better with a custom implementation.
   for (MVT VT : MVT::integer_valuetypes()) {
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
@@ -1431,10 +1197,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SUBC, MVT::i16, Legal);
   setOperationAction(ISD::SUBE, MVT::i16, Legal);
 
-  setOperationAction(ISD::SELECT, MVT::i32, Custom);
-
-  // FIXME: set ABS to custom and emit libcall.
-
   // Expand to UMUL_LOHI.
   setOperationAction(ISD::MULHU, MVT::i8, Expand);
   setOperationAction(ISD::MULHU, MVT::i16, Expand);
@@ -1454,14 +1216,10 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SELECT_CC, MVT::i8, Custom);
   setOperationAction(ISD::SELECT_CC, MVT::i16, Custom);
 
-  // TODO: custom implementation and i32, i64 ...
   setOperationAction(ISD::SELECT, MVT::i8, Expand);
   setOperationAction(ISD::SELECT, MVT::i16, Expand);
   setOperationAction(ISD::SETCC, MVT::i8, Expand);
   setOperationAction(ISD::SETCC, MVT::i16, Expand);
-  // setOperationAction(ISD::SETCC, MVT::i32, Custom);
-  // setOperationAction(ISD::SETCC, MVT::i64, Custom);
-  // FIXME: ckeck if we can do better with a custom implementation.
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
 
   // Custom legalize GlobalAddress.
@@ -1518,10 +1276,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SDIV, MVT::i16, LibCall);
   setOperationAction(ISD::SREM, MVT::i16, LibCall);
   setOperationAction(ISD::SDIVREM, MVT::i16, Expand);
-
-  // Custom lower floating point rounding ops.
-  setOperationAction(ISD::LRINT, MVT::i32, Custom);
-  setOperationAction(ISD::LROUND, MVT::i32, Custom);
 
   setOperationAction(ISD::AND, MVT::i16, Custom);
   setOperationAction(ISD::OR, MVT::i16, Custom);
@@ -1684,7 +1438,6 @@ bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     const Module &M = *I.getParent()->getParent()->getParent();
     PointerType *PtrTy = cast<PointerType>(I.getArgOperand(0)->getType());
     Info.opc = ISD::INTRINSIC_W_CHAIN;
-    // TODO double check type
     Info.memVT = MVT::i8;
     Info.ptrVal = I.getArgOperand(0);
     Info.offset = 0;
@@ -1708,8 +1461,6 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     return "RL78ISD::LOWCMP";
   case RL78ISD::CALL:
     return "RL78ISD::CALL";
-  case RL78ISD::CALL_FP:
-    return "RL78ISD::CALL_FP";
   case RL78ISD::TAIL_CALL:
     return "RL78ISD::TAIL_CALL";
   case RL78ISD::RET:
@@ -1722,6 +1473,8 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     return "RL78ISD::BRCC";
   case RL78ISD::SELECTCC:
     return "RL78ISD::SELECTCC";
+  case RL78ISD::SELECTCCBTBF:
+    return "RL78ISD::SELECTCCBTBF";
   case RL78ISD::BTBF:
     return "RL78ISD::BTBF";
   case RL78ISD::SET1:
@@ -1900,9 +1653,17 @@ SDValue RL78TargetLowering::LowerExternalSymbol(SDValue Op,
                                                 SelectionDAG &DAG) const {
   ExternalSymbolSDNode *S = cast<ExternalSymbolSDNode>(Op);
   EVT VT = getPointerTy(DAG.getDataLayout(), RL78AS::Near); // i16 also with -mfar-data
-  SDValue Result =
-      DAG.getTargetExternalSymbol(S->getSymbol(), Op.getValueType());
-  return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
+  if (Op.getValueType() == MVT::i16) {
+    SDValue Result = DAG.getTargetExternalSymbol(S->getSymbol(), VT);
+    return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
+  } else if (Op.getValueType() == MVT::i32) {
+    SDValue Lo = DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT,
+                             DAG.getTargetExternalSymbol(S->getSymbol(), VT));
+    SDValue Hi = DAG.getTargetExternalSymbol(S->getSymbol(), VT);
+    return DAG.getNode(RL78ISD::HI16, SDLoc(Op), VT, Hi, Lo);
+  } else {
+    llvm_unreachable("unknown callee value type");
+  }
 }
 
 SDValue RL78TargetLowering::LowerGlobalAddress(SDValue Op,
@@ -1987,8 +1748,6 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
         // Byte offset (0 or 1).
         unsigned offset = (LHS.getConstantOperandVal(1) >= 0x100) ? 1 : 0;
         SDValue index = DAG.getConstant(offset, dl, HalfVT);
-        // FIXME: this can generate shrw ax, 8 bf r0.0 instead of bf r1.0,
-        // improve it.
         SDValue op0Half = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, HalfVT,
                                       LHS.getOperand(0), index);
         SDValue constVal = DAG.getConstant(
@@ -2062,10 +1821,62 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
   SDValue TargetCC = DAG.getConstant(cc, dl, MVT::i8);
   unsigned cmpSign = IntCondCCodeSign(CC);
   SDValue CCSign = DAG.getConstant(cmpSign, dl, MVT::i8);
-  // Create the CMP node.
+  
+  // If " == 0" or " != 0".
+  if (((CC == ISD::SETEQ) || (CC == ISD::SETNE)) && isa<ConstantSDNode>(RHS) &&
+      (cast<ConstantSDNode>(RHS)->getZExtValue() == 0)) {
+    // If AND with power of 2.
+    if ((LHS.getOpcode() == ISD::AND) &&
+        isa<ConstantSDNode>(LHS.getOperand(1)) &&
+        isPowerOf2_64(LHS.getConstantOperandVal(1))) {
+      // Checking that a bit and equals to 0 tranlates to BF Not BT so
+      // we need to reverse the condition.
+      cc = (cc == RL78CC::RL78CC_Z) ? RL78CC::RL78CC_NZ : RL78CC::RL78CC_Z;
+      if (LHS.getValueType() == MVT::i8) {
+        TargetCC = DAG.getConstant(cc, dl, MVT::i8);
+        SDValue constVal = DAG.getConstant(
+            Log2_64(LHS.getConstantOperandVal(1)), dl, LHS.getValueType());
+        return DAG.getNode(RL78ISD::SELECTCCBTBF, dl, Op.getValueType(), TVal,
+                           FVal, TargetCC, LHS.getOperand(0), constVal);
+      } else if (LHS.getValueType() == MVT::i16) {
+        TargetCC = DAG.getConstant(cc, dl, MVT::i8);
+        EVT HalfVT = MVT::i8;
+        // Byte offset (0 or 1).
+        unsigned offset = (LHS.getConstantOperandVal(1) >= 0x100) ? 1 : 0;
+        SDValue index = DAG.getConstant(offset, dl, HalfVT);
+        SDValue op0Half = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, HalfVT,
+                                      LHS.getOperand(0), index);
+        SDValue constVal = DAG.getConstant(
+            Log2_64(LHS.getConstantOperandVal(1) >> (offset * 8)), dl, HalfVT);
+        return DAG.getNode(RL78ISD::SELECTCCBTBF, dl, Op.getValueType(), TVal,
+                           FVal, TargetCC, op0Half, constVal);
+      }
+    }
+  }
+
+    // If signed comparison with 0 we can use BT/BF.
+  if (cmpSign && isa<ConstantSDNode>(RHS) &&
+      LHS.getValueType().bitsGE(MVT::i8) &&
+      ((cast<ConstantSDNode>(RHS)->getZExtValue() == 0 && CC == ISD::SETLT) ||
+       (cast<ConstantSDNode>(RHS)->getSExtValue() == -1 && CC == ISD::SETGT))) {
+
+    SDValue constVal = DAG.getConstant(7, dl, MVT::i8);
+    SDValue topHalf = LHS;
+    while (topHalf.getValueType().bitsGT(MVT::i8)) {
+
+      MVT halfVT = topHalf.getValueType()
+                       .getHalfSizedIntegerVT(*DAG.getContext())
+                       .getSimpleVT();
+      SDValue hiIndex = DAG.getConstant(1, dl, halfVT);
+      topHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, halfVT, topHalf, hiIndex);
+    }
+    TargetCC = DAG.getConstant(
+        CC == ISD::SETLT ? RL78CC::RL78CC_Z : RL78CC::RL78CC_NZ, dl, MVT::i8);
+    return DAG.getNode(RL78ISD::SELECTCCBTBF, dl, Op.getValueType(), TVal, FVal,
+                       TargetCC, topHalf, constVal);
+  }
+
   SDValue Cmp = SwitchCMPOperands(dl, cc, CCSign, LHS, RHS, DAG, TargetCC);
-  // DAG.dump();
-  //
   return DAG.getNode(RL78ISD::SELECTCC, dl, Op.getValueType(), TVal, FVal,
                      TargetCC, Cmp);
 }
@@ -2631,7 +2442,7 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
     }
     return DAG.getNode((IntNo == Intrinsic::rl78_set1) ? RL78ISD::SET1
                                                        : RL78ISD::CLR1,
-                       DL, MVT::i8, Op.getOperand(0), bitOp, addrOp);
+                       DL, MVT::Other, Op.getOperand(0), bitOp, addrOp);
   }
   case Intrinsic::rl78_not1: {
     SDValue addrOp = Op.getOperand(2);
@@ -2777,7 +2588,6 @@ RL78TargetLowering::LowerIntrinsicWithoutChain(SDValue Op,
       return DAG.getNode(ISD::EXTRACT_ELEMENT, DL, MVT::i16, Op.getOperand(1),
                          DAG.getConstant(0, DL, MVT::i16));
     }
-    // TODO: optimize for S3 and S1/S2 compiler-rt.
     return LowerLibCall(Op, DAG, "_COM_remul", false,
                         {Op.getOperand(1), Op.getOperand(2)});
   }
@@ -2914,7 +2724,6 @@ static SDValue LowerLOW16(SDValue Op, SelectionDAG &DAG) {
 
 SDValue RL78TargetLowering::PerformBRCCCombine(SDNode *N,
                                                DAGCombinerInfo &DCI) const {
-  // TODO: revisit this in GCC-1920
   // Convert a ? (0-b) back to a + b ? 0
   if (N->getOpcode() == ISD::BR_CC &&
       (N->getOperand(2)->getOpcode() == ISD::SUB &&
@@ -2948,7 +2757,6 @@ SDValue RL78TargetLowering::PerformBRCCCombine(SDNode *N,
 }
 
 SDValue RL78TargetLowering::PerformBRCONDCombine(SDNode *N, DAGCombinerInfo &DCI) const {
-  // TODO: revisit this in GCC-1920
   if (N->getOpcode() == ISD::BRCOND &&
       N->getOperand(1)->getOpcode() == ISD::SETCC &&
       N->getOperand(1)->getOperand(0).getValueType() == MVT::i32) {
@@ -3554,41 +3362,13 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
 
 SDValue RL78TargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
                                               SelectionDAG &DAG) const {
-  Register SPReg = getStackPointerRegisterToSaveRestore();
-  assert(SPReg && "Target cannot require DYNAMIC_STACKALLOC expansion and"
-          " not tell us which reg is the stack pointer!");
-  SDLoc dl(Op);
-  SDNode *Node = Op.getNode();
-  EVT VT = Node->getValueType(0);
-  SDValue Tmp1 = SDValue(Node, 0);
-  SDValue Tmp2 = SDValue(Node, 1);
-  SDValue Tmp3 = Node->getOperand(2);
-  SDValue Chain = Tmp1.getOperand(0);
+  const Function &Fn = DAG.getMachineFunction().getFunction();
 
-  // Chain the dynamic stack allocation so that it doesn't modify the stack
-  // pointer when other instructions are using the stack.
-  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, dl);
-
-  SDValue Size  = Tmp2.getOperand(1);
-  SDValue SP = DAG.getCopyFromReg(Chain, dl, SPReg, VT);
-  Chain = SP.getValue(1);
-  Align Alignment = cast<ConstantSDNode>(Tmp3)->getAlignValue();
-  const TargetFrameLowering *TFL = DAG.getSubtarget().getFrameLowering();
-  // TODO: RL78 once we set the stack growth direction back to StackGrowsDown, we
-  // will no longer need to treat this as Custom.
-  unsigned Opc = ISD::SUB;
-
-  Align StackAlign = TFL->getStackAlign();
-  Tmp1 = DAG.getNode(Opc, dl, VT, SP, Size);       // Value
-  if (Alignment > StackAlign)
-    Tmp1 = DAG.getNode(ISD::AND, dl, VT, Tmp1,
-                       DAG.getConstant(-Alignment.value(), dl, VT));
-  Chain = DAG.getCopyToReg(Chain, dl, SPReg, Tmp1);     // Output chain
-
-  Tmp2 = DAG.getCALLSEQ_END(Chain, 0, 0, SDValue(), dl);
-
-  return DAG.getNode(ISD::MERGE_VALUES, dl, DAG.getVTList(VT, MVT::Other), Tmp1,
-                         Tmp2);
+  DiagnosticInfoUnsupported NoDynamicAlloca(Fn, "Unsupported dynamic stack allocation",
+                                            SDLoc(Op).getDebugLoc());
+  DAG.getContext()->diagnose(NoDynamicAlloca);
+  auto Ops = {DAG.getConstant(0, SDLoc(), Op.getValueType()), Op.getOperand(0)};
+  return DAG.getMergeValues(Ops, SDLoc());
 }
 
 SDValue RL78TargetLowering::LowerOperation(SDValue Op,
@@ -3676,7 +3456,7 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
   case ISD::INTRINSIC_VOID:
     return LowerIntrinsicVoid(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:
-      return LowerDYNAMIC_STACKALLOC(Op, DAG);
+    return LowerDYNAMIC_STACKALLOC(Op, DAG);
   }
 }
 
@@ -3944,13 +3724,6 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_memri(
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP6).add(MI.getOperand(2));
     MI.getOperand(2).ChangeToRegister(RL78::RP6, false);
 
-    if (isFPUsed(BB)) {
-      BuildMI(*BB, MI, DL, TII->get(RL78::PUSH_rp))
-          .addReg(RL78::RP6, RegState::Kill);
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::POP_rp), RL78::RP6);
-    }
-
     BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
         .addReg(RL78::R1, RegState::Kill)
         .addReg(RL78::RP6)
@@ -3991,6 +3764,7 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_abs16(
   unsigned Rs1 = MI.getOperand(1).getReg();
   const GlobalValue *global = MI.getOperand(2).getGlobal();
   unsigned offset = MI.getOperand(2).getOffset();
+  unsigned flags = MI.getOperand(2).getTargetFlags();
   unsigned Rd = MI.getOperand(0).getReg();
 
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
@@ -3998,7 +3772,7 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_abs16(
 
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset + 1);
+      .addGlobalAddress(global, offset + 1, flags);
 
   BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
       .addReg(RL78::R0, RegState::Define)
@@ -4007,7 +3781,7 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_abs16(
 
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset);
+      .addGlobalAddress(global, offset, flags);
 
   BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
       .addReg(RL78::R0, RegState::Define)
@@ -4125,16 +3899,6 @@ static void MakeComparisonSigned(Register R1orRP0, unsigned int copyOpcode, Mach
           TII->get(RL78::XOR1_cy_r))
       .addReg(RL78::R1, RegState::Kill)
       .addImm(7);
-}
-
-static void SaveRestoreFPIfUsed(MachineBasicBlock *BB, MachineInstr &MI,
-                                DebugLoc &DL, const TargetInstrInfo *TII) {
-  if (isFPUsed(BB)) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP6, RegState::Kill);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::POP_rp), RL78::RP6);
-  }
 }
 
 // Signed comparison: Insert 2 xor1 instructions to
@@ -4327,7 +4091,6 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     // Next: xor1_cy_A.
     // Next: mov_A_op1.
     // Next: xor1_cy_A.
-    SaveRestoreFPIfUsed(BB, MI, DL, TII);
 
     if (MI.getOperand(2).getImm() == 0) {
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
@@ -4350,7 +4113,6 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
         .addImm(7);
     break;
   case RL78::CMP_r_esmemHLi:
-    SaveRestoreFPIfUsed(BB, MI, DL, TII);
 
     if (MI.getOperand(3).getImm() == 0) {
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
@@ -4378,14 +4140,12 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     // Next: xor1_cy_A.
     // Next: MOV_A_op1.
     // Next: xor1_cy_A.
-    SaveRestoreFPIfUsed(BB, MI, DL, TII);
     MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_memrr, BB, MI, DL, TII, 1, 2);
     break;
   case RL78::CMP_r_esmemRpr:
     // Next: xor1_cy_A.
     // Next: MOV_A_op1.
     // Next: xor1_cy_A.
-    SaveRestoreFPIfUsed(BB, MI, DL, TII);
     MakeComparisonSigned(RL78::R1, RL78::LOAD8_a_esmemRpr, BB, MI, DL, TII, 1, 2, 3);
     break;
   }
@@ -4497,14 +4257,6 @@ RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
   // HL = COPY %1.
   // CMPW AX, [HL+byte].
 
-  bool fpUsed = isFPUsed(BB);
-  if (fpUsed) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP6, RegState::Kill);
-    // TODO: CFA.
-  }
-
-
   switch (MI.getOpcode()) {
   case RL78::CMPW_rp_esmemHLi:
     LowerESSrc(MI, BB, 1);
@@ -4547,13 +4299,6 @@ RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
     break;
   }
 
-  if (fpUsed) {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI), 2), DL,
-            TII->get(RL78::POP_rp), RL78::RP6);
-    // TODO: CFA.
-  }
-  //
-  // BB->dump();
   return BB;
 }
 
@@ -4848,6 +4593,7 @@ MachineBasicBlock *RL78TargetLowering::LowerADDE_SUBE_rp_abs16(
   unsigned Rs1 = MI.getOperand(1).getReg();
   const GlobalValue *global = MI.getOperand(2).getGlobal();
   unsigned offset = MI.getOperand(2).getOffset();
+  unsigned flags = MI.getOperand(2).getTargetFlags();
   unsigned Rd = MI.getOperand(0).getReg();
 
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
@@ -4859,14 +4605,14 @@ MachineBasicBlock *RL78TargetLowering::LowerADDE_SUBE_rp_abs16(
       .addReg(RL78::R0, RegState::Kill);
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset);
+      .addGlobalAddress(global, offset, flags);
   BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
       .addReg(RL78::R0, RegState::Define)
       .addReg(RL78::R1, RegState::Kill)
       .addReg(RL78::R0, RegState::Kill);
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset + 1);
+      .addGlobalAddress(global, offset + 1, flags);
 
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
       .addReg(RL78::RP0, RegState::Kill);
@@ -4928,13 +4674,86 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
   MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
-  //
-  // MI.dump();
+
   unsigned Rd = MI.getOperand(0).getReg();
   unsigned RPd = MRI.createVirtualRegister(isI8 ? &RL78::RL78RegRegClass
                                                 : &RL78::RL78RPRegsRegClass);
   unsigned RPd2 = MRI.createVirtualRegister(isI8 ? &RL78::RL78RegRegClass
                                                  : &RL78::RL78RPRegsRegClass);
+
+  unsigned selectCopyOp1, selectCopyOp2;
+  switch (MI.getOpcode()) {
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCCBTBF16_rp_imm:
+    selectCopyOp1 = RL78::COPY;
+    break;
+  case RL78::SELECTCC8_imm_r:
+    selectCopyOp1 = RL78::MOV_r_imm;
+    break;
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_imm:
+    selectCopyOp1 = RL78::MOVW_rp_imm;
+    break;
+  case RL78::SELECTCC8_esaddr_r:
+  case RL78::SELECTCC8_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
+    selectCopyOp1 = RL78::MOV_r_esaddr16;
+    break;
+  case RL78::SELECTCC16_esaddr_rp:
+  case RL78::SELECTCC16_esaddr_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+    selectCopyOp1 = RL78::LOAD16_rp_esaddr16;
+    break;
+  default:
+    llvm_unreachable("Unexpected opcode!");
+    break;
+  }
+
+  switch (MI.getOpcode()) {
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCC8_imm_r:
+  case RL78::SELECTCC8_esaddr_r:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCC16_esaddr_rp:
+    selectCopyOp2 = RL78::COPY;
+    break;
+  case RL78::SELECTCC8_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
+    selectCopyOp2 = RL78::MOV_r_imm;
+    break;
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_imm:
+  case RL78::SELECTCC16_esaddr_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+    selectCopyOp2 = RL78::MOVW_rp_imm;
+    break;
+  default:
+    llvm_unreachable("Unexpected opcode!");
+    break;
+  }
+
+  unsigned TrueOpIndex = 1;
+  unsigned FalseOpIndex = 2;
+  unsigned CondOpIndex = 3;
+
+  if (selectCopyOp1 == RL78::LOAD16_rp_esaddr16 || 
+      selectCopyOp1 == RL78::MOV_r_esaddr16) {
+    FalseOpIndex++;
+    CondOpIndex++;
+  }
+
   // thisMBB:
   //  ...
   //  %val = Tval
@@ -4955,21 +4774,60 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   // Add the true and fallthrough blocks as its successors.
   BB->addSuccessor(copy0MBB);
   BB->addSuccessor(sinkMBB);
-  //
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RPd).add(MI.getOperand(1));
+
+  if (selectCopyOp1 == RL78::LOAD16_rp_esaddr16) {
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_imm), RL78::ES)
+        .add(MI.getOperand(TrueOpIndex));
+    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RL78::RP0)
+        .addReg(RL78::ES, RegState::Kill)
+        .add(MI.getOperand(TrueOpIndex + 1));
+    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RPd)
+        .addReg(RL78::RP0, RegState::Kill);
+  } else if (selectCopyOp1 == RL78::MOV_r_esaddr16) {
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_imm), RL78::ES)
+        .add(MI.getOperand(TrueOpIndex));
+    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RL78::R1)
+        .addReg(RL78::ES, RegState::Kill)
+        .add(MI.getOperand(TrueOpIndex + 1));
+    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RPd)
+        .addReg(RL78::R1, RegState::Kill);
+  } else {
+    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RPd)
+        .add(MI.getOperand(TrueOpIndex));
+  }
   // Although it's only 1 COPY instruction it can be expanded to several
   // mov/movw or xch/xchw, the branch expand pass will insert a skip instruciton
   // if possible.
-  // BuildMI(*BB, MI, DL,
-  // TII->get(RL78::SK_cc)).addMBB(sinkMBB).add(MI.getOperand(3));
-  BuildMI(*BB, MI, DL, TII->get(RL78::BRCC))
-      .addMBB(sinkMBB)
-      .add(MI.getOperand(3));
-  // copy0MBB:
+
+  switch (MI.getOpcode()) {
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCCBTBF16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
+    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1)
+        .add(MI.getOperand(CondOpIndex + 1));
+    BuildMI(*BB, MI, DL, TII->get(RL78::BTBF))
+        .addMBB(sinkMBB)
+        .add(MI.getOperand(CondOpIndex))
+        .addReg(RL78::R1, RegState::Kill)
+        .add(MI.getOperand(CondOpIndex + 2));
+    break;
+  default:
+    BuildMI(*BB, MI, DL, TII->get(RL78::BRCC))
+        .addMBB(sinkMBB)
+        .add(MI.getOperand(CondOpIndex));
+    break;
+  }
+  
+  // copy0MBB:False
   //  %val2 = COPY Fval
   //  fallthrough --> sinkMBB
-  BuildMI(*copy0MBB, copy0MBB->begin(), DL, TII->get(RL78::COPY), RPd2)
-      .add(MI.getOperand(2));
+  BuildMI(*copy0MBB, copy0MBB->begin(), DL, TII->get(selectCopyOp2), RPd2)
+      .add(MI.getOperand(FalseOpIndex));
+
   // Update machine-CFG edges
   copy0MBB->addSuccessor(sinkMBB);
 
@@ -5607,16 +5465,7 @@ MachineBasicBlock *RL78TargetLowering::LowerDIVWU(MachineInstr &MI,
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
 
-  bool fpUsed = isFPUsed(BB);
-  if (fpUsed) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP6, RegState::Kill);
-    // TODO: CFA.
-  }
-  //
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(4));
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP2).add(MI.getOperand(5));
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP4).add(MI.getOperand(6));
@@ -5647,13 +5496,7 @@ MachineBasicBlock *RL78TargetLowering::LowerDIVWU(MachineInstr &MI,
   MI.getOperand(5).ChangeToRegister(RL78::RP2, false);
   MI.getOperand(6).ChangeToRegister(RL78::RP4, false);
   MI.getOperand(7).ChangeToRegister(RL78::RP6, false);
-  if (fpUsed) {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI), 2), DL,
-            TII->get(RL78::POP_rp), RL78::RP6);
-    // TODO: CFA.
-  }
-  //
-  // BB->dump();
+
   return BB;
 }
 
@@ -5686,7 +5529,7 @@ RL78TargetLowering::LowerToHLByteOrWordBC(unsigned RegPos, unsigned ImmPos,
   if (MO.isImm() && MO.getImm() > 255 || MO.isGlobal() || MO.isSymbol())
     return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP2);
   else
-    return Lower16bitAXSrc(MI, BB, RegPos, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP6);
 }
 
 MachineBasicBlock *
@@ -5804,9 +5647,24 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return LowerRotate16_rp_imm(MI, BB, true);
   case RL78::ROTR16_r_imm:
     return LowerRotate16_rp_imm(MI, BB, false);
-  case RL78::SELECTCC8:
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCC8_imm_r:
+  case RL78::SELECTCC8_esaddr_r:
+  case RL78::SELECTCC8_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
     return LowerSELECTCC(true, MI, BB);
-  case RL78::SELECTCC16:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_imm:
+  case RL78::SELECTCC16_esaddr_rp:
+  case RL78::SELECTCC16_esaddr_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+  case RL78::SELECTCCBTBF16_rp_rp:
     return LowerSELECTCC(false, MI, BB);
   case RL78::MUL16_rp_rp:
     return LowerMULDIV16(MI, BB, 1);
@@ -5873,9 +5731,9 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::AND_r_memrr:
   case RL78::OR_r_memrr:
   case RL78::XOR_r_memrr:
-    return Lower8BitOpAA(MI,
-                         Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 3, RL78::R2),
-                                         2, tryGetRP6(BB)));
+    return Lower8BitOpAA(
+        MI,
+        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 3, RL78::R2), 2, RL78::RP6));
   case RL78::ADD_r_esmemRpr:
   case RL78::SUB_r_esmemRpr:
   case RL78::AND_r_esmemRpr:
@@ -5884,19 +5742,19 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower8BitOpAA(
         MI, Lower16bitAXSrc(
                 MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 2), 4, RL78::R2), 3,
-                tryGetRP6(BB)));
+                RL78::RP6));
   case RL78::ADD_r_memri:
   case RL78::SUB_r_memri:
   case RL78::AND_r_memri:
   case RL78::OR_r_memri:
   case RL78::XOR_r_memri:
-    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, BB, 2, tryGetRP6(BB)));
+    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, BB, 2, RL78::RP6));
   case RL78::ADD_r_esmemHLi:
   case RL78::SUB_r_esmemHLi:
   case RL78::AND_r_esmemHLi:
   case RL78::OR_r_esmemHLi:
   case RL78::XOR_r_esmemHLi:
-    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, tryGetRP6(BB)));
+    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, RL78::RP6));
   case RL78::AND_r_imm:
   case RL78::OR_r_imm:
   case RL78::XOR_r_imm:
@@ -5931,43 +5789,43 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower8bitADst(MI, BB);
   case RL78::STORE8_ri_imm:
     // STORE [HL+byte] or STORE word[BC].
-    return LowerToHLByteOrWordBC(0, 1, MI, BB);
+    return BB;
   case RL78::STORE8_memBorCi_imm:
     return Lower8bitASrc(MI, BB, 0, RL78::R3);
   case RL78::STORE8_esmemBorCi_imm:
     return Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::R3);
   case RL78::LOAD8_r_ri:
     // A = LOAD [HL+byte] or A = LOAD word[BC].
-    return Lower8bitADst(MI, LowerToHLByteOrWordBC(1, 2, MI, BB));
+    return Lower8bitADst(MI, BB);
   case RL78::LOAD8_r_memBorCi:
        return Lower8bitADst(MI,  Lower8bitASrc(MI, BB, 1, RL78::R3));
   case RL78::LOAD8_a_esmemBorCi:
     return Lower8bitADst(MI,
                          Lower8bitASrc(MI, LowerESSrc(MI, BB, 1), 2, RL78::R3));
   case RL78::LOAD8_r_memrr:
-    return Lower8bitADst(MI,
-                         Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 2, RL78::R3),
-                                         1, tryGetRP6(BB)));
+    return Lower8bitADst(
+        MI,
+        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 2, RL78::R3), 1, RL78::RP6));
   case RL78::LOAD8_a_esmemRpr:
     return Lower8bitADst(
         MI, Lower16bitAXSrc(
                 MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 1), 3, RL78::R3), 2,
-                tryGetRP6(BB)));
+                RL78::RP6));
   case RL78::STORE8_ri_r:
     // STORE [HL+byte] or STORE word[BC].
-    return Lower8bitASrc(MI, LowerToHLByteOrWordBC(0, 1, MI, BB), 2);
+    return Lower8bitASrc(MI, BB, 2);
   case RL78::STORE8_memBorCi_r:
       return Lower8bitASrc(MI,  Lower8bitASrc(MI, BB, 0, RL78::R3), 2);
   case RL78::STORE8_esmemBorCi_r:
       return Lower8bitASrc(MI,  Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::R3), 3);
   case RL78::STORE8_memrr_r:
-    return Lower8bitASrc(MI,
-                         Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 1, RL78::R3),
-                                         0, tryGetRP6(BB)),
-                         2);
+    return Lower8bitASrc(
+        MI,
+        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 1, RL78::R3), 0, RL78::RP6),
+        2);
   case RL78::LOAD16_rp_rpi:
     // AX = LOAD [HL+byte] or AX = LOAD word[BC].
-    return Lower16bitAXDst(MI, LowerToHLByteOrWordBC(1, 2, MI, BB));
+    return Lower16bitAXDst(MI, BB);
   case RL78::LOAD16_rp_memBorCi:
        return Lower16bitAXDst(MI, Lower16bitAXSrc(MI, BB, 1, RL78::R3));
   case RL78::LOAD16_rp_esmemBorCi:
@@ -5979,7 +5837,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower16BitOpAXAX(MI, BB);
   case RL78::ADDW_rp_memri:
   case RL78::SUBW_rp_memri:
-    return Lower16BitOpAXAX(MI, Lower16bitAXSrc(MI, BB, 2, tryGetRP6(BB)));
+    return Lower16BitOpAXAX(MI, Lower16bitAXSrc(MI, BB, 2, RL78::RP6));
   case RL78::ADDW_rp_rp:
     if (MI.getOperand(1).getReg() == MI.getOperand(2).getReg())
       MI.getOperand(2).ChangeToRegister(RL78::RP0, false);
@@ -5998,10 +5856,10 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::ADDW_rp_esmemHLi:
   case RL78::SUBW_rp_esmemHLi:
     return Lower16BitOpAXAX(
-        MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, tryGetRP6(BB)));
+        MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, RL78::RP6));
   case RL78::STORE16_rpi_rp:
     // STORE [HL+byte] or STORE word[BC].
-    return Lower16bitAXSrc(MI, LowerToHLByteOrWordBC(0, 1, MI, BB), 2);
+    return Lower16bitAXSrc(MI, BB, 2);
   case RL78::STORE16_memBorCi_rp:
     return Lower16bitAXSrc(MI,  Lower8bitASrc(MI, BB, 0, RL78::R3), 2);
   case RL78::STORE16_esmemBorCi_rp:
@@ -6019,7 +5877,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::DEC_memri:
   case RL78::INCW_memri:
   case RL78::DECW_memri:
-    return Lower16bitAXSrc(MI, BB, 0, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, BB, 0, RL78::RP6);
   case RL78::INC_esaddr16:
   case RL78::DEC_esaddr16:
   case RL78::INCW_esaddr16:
@@ -6029,12 +5887,12 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::DEC_esmemHLi:
   case RL78::INCW_esmemHLi:
   case RL78::DECW_esmemHLi:
-    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::RP6);
   case RL78::STORE8_stack_slot_r:
     return Lower8bitASrc(MI, BB, 2);
   case RL78::SET1_esmemr:
   case RL78::CLR1_esmemr:
-    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::RP6);
   case RL78::SET1_esaddr16:
   case RL78::CLR1_esaddr16:
     return LowerESSrc(MI, BB, 0);
@@ -6067,12 +5925,12 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
         MI,
         Lower16bitAXSrc(MI,
                         Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 2, RL78::R3),
-                        1, tryGetRP6(BB)),
+                        1, RL78::RP6),
         3);
   case RL78::BTCLR_memr:
   case RL78::BTBF_memr:
   case RL78::BTBF_mem:
-    return Lower16bitAXSrc(MI, BB, 2, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, BB, 2, RL78::RP6);
   case RL78::BTBF:
     return Lower8bitASrc(MI, BB, 2);
   case RL78::CLR1_memr:
@@ -6082,7 +5940,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::AND1_cy_memr:
   case RL78::OR1_cy_memr:
   case RL78::XOR1_cy_memr:
-    return Lower16bitAXSrc(MI, BB, 0, tryGetRP6(BB));
+    return Lower16bitAXSrc(MI, BB, 0, RL78::RP6);
   case RL78::ONEB_r:
   case RL78::CLRB_r:
     return Lower8bitADst(MI, BB);
@@ -6178,12 +6036,13 @@ RL78TargetLowering::getConstraintType(StringRef Constraint) const {
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
     case 'r':
-    case 'R':
       return C_RegisterClass;
+    default:
+      return C_Unknown;
     }
   }
-
-  return TargetLowering::getConstraintType(Constraint);
+  else 
+    return TargetLowering::getConstraintType(Constraint);
 }
 
 TargetLowering::ConstraintWeight
@@ -6202,7 +6061,6 @@ RL78TargetLowering::getSingleConstraintMatchWeight(
     weight = TargetLowering::getSingleConstraintMatchWeight(info, constraint);
     break;
   case 'r':
-  case 'R':
     weight = CW_Register;
     break;
   }
@@ -6214,16 +6072,22 @@ RL78TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                  StringRef Constraint,
                                                  MVT VT) const {
   if (Constraint.size() == 1) {
-    switch (Constraint[0]) {
-    case 'r':
-      return std::pair<unsigned, const TargetRegisterClass *>(
-          0U, &RL78::RL78RPRegsRegClass);
-    case 'R':
-      return std::pair<unsigned, const TargetRegisterClass *>(
-          0U, &RL78::RL78RegRegClass);
+    // We only support 'r'.
+    if (Constraint[0] == 'r') {
+
+      if (VT == MVT::i16)
+        return std::pair<unsigned, const TargetRegisterClass *>(
+            0U, &RL78::RL78RPRegsRegClass);
+      if (VT == MVT::i8)
+        return std::pair<unsigned, const TargetRegisterClass *>(
+            0U, &RL78::RL78RegRegClass);
+
+    } else {
+      return std::make_pair(0u, static_cast<TargetRegisterClass *>(nullptr));
     }
+  } else {
+    return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
   }
-  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }
 
 static SDValue createBSWAPNodes(SDValue node, EVT VT, SelectionDAG &DAG,
@@ -6547,8 +6411,7 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
       }
       SDValue ZExt =
           DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, N->getOperand(2));
-      // TODO: CCRL may have a dedicated function (without the
-      // extension).
+
       if (Subtarget->isRL78S3CoreType())
         Results.push_back(
             DAG.getNode(ISD::UDIV, dl, MVT::i32, N->getOperand(1), ZExt));
@@ -6620,52 +6483,6 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     Results.push_back(Pair);
     return;
   }
-  case ISD::SELECT: {
-    // TODO: others? ABS?
-    // If the select is the only use of the setcc we can safely convert it.
-    // SDValue N0 = N->getOperand(0);
-    // if (N0->hasOneUse() &&
-    //    //(N0->getOperand(1).getValueType() ==
-    //    N->getOperand(1).getValueType())
-    //    ////&&
-    //    (N0->getOperand(0) == N->getOperand(1)) &&
-    //    (N0->getOperand(1) == N->getOperand(2))) {
-    //  ISD::CondCode CC = cast<CondCodeSDNode>(N0->getOperand(2))->get();
-    //  bool isSigned;
-    //  // OBS. We don't have a RTLIB Libcall for integer (u)min/(u)max.
-    //  const char *libCallName = nullptr;
-    //  switch (CC) {
-    //  case ISD::SETUGE:
-    //  case ISD::SETUGT:
-    //    libCallName = "__umax";
-    //    isSigned = false;
-    //    break;
-    //  case ISD::SETGE:
-    //  case ISD::SETGT:
-    //    libCallName = "__smax";
-    //    isSigned = true;
-    //    break;
-    //  case ISD::SETULE:
-    //  case ISD::SETULT:
-    //    libCallName = "__umin";
-    //    isSigned = false;
-    //    break;
-    //  case ISD::SETLE:
-    //  case ISD::SETLT:
-    //    libCallName = "__smin";
-    //    isSigned = true;
-    //    break;
-    //  default:
-    //    break;
-    //  }
-    //  // TODO: we should only do this for code size.
-    //  if (libCallName) {
-    //    Results.push_back(
-    //        LowerLibCall(SDValue(N, 0), DAG, libCallName, isSigned, 1));
-    //  }
-    //}
-    return;
-  }
   case ISD::BSWAP: {
     if (N->getSimpleValueType(0) == MVT::i64) {
       Results.push_back(
@@ -6702,17 +6519,6 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
         LowerLibCall(SDValue(N, 0), DAG, getLibcallName(RTLIB::MUL_I32),
                      N->getOperand(0)->getOpcode() == ISD::SIGN_EXTEND));
     return;
-  case ISD::LRINT:
-  case ISD::LROUND: {
-    if (N->getOperand(0).getValueType() == MVT::f64) {
-      Results.push_back(LowerLibCall(
-          SDValue(N, 0), DAG, getLibcallName(RTLIB::FPTOSINT_F64_I32), true));
-    } else {
-      Results.push_back(LowerLibCall(
-          SDValue(N, 0), DAG, getLibcallName(RTLIB::FPTOSINT_F32_I32), true));
-    }
-    return;
-  }
   }
 }
 
@@ -6728,35 +6534,6 @@ void RL78TargetLowering::LowerOperationWrapper(
     LLVM_DEBUG(N->dump());
     llvm_unreachable("Do not know how to custom type legalize this operation!");
     return;
-  case ISD::INLINEASM: {
-    // Don't bother if not -mfar-data
-    if (DAG.getDataLayout().getPointerSizeInBits() != 32)
-      return;
-
-    // Look for any 32-bit addresses and truncate them
-    // FIXME: properly support far addresses
-    SmallVector<SDValue, 8> Ops;
-    for (unsigned i = 0, e = N->getNumOperands(); i != e; ++i) {
-      auto Op = N->getOperand(i);
-      if (Op.getValueType().isSimple() && Op.getSimpleValueType() == MVT::i32) {
-        if (i > 3 && Op->getOpcode() == ISD::BUILD_PAIR &&
-            Op->getOperand(1)->getOpcode() == ISD::ZERO_EXTEND &&
-            Op->getOperand(1)->getOperand(0)->getOpcode() == ISD::CopyFromReg) {
-          Op = Op->getOperand(0); // just replace it with its lower part
-        } else {
-          ReplaceOperand(Op, Ops, DAG);
-          continue;
-        }
-      }
-      Ops.push_back(Op);
-    }
-
-    SDValue N2 = DAG.getNode(ISD::INLINEASM, SDLoc(N),
-                             DAG.getVTList(MVT::Other, MVT::Glue), Ops);
-    Results.push_back(N2.getValue(0)); // Chain
-    Results.push_back(N2.getValue(1)); // Flag
-    break;
-  }
   case ISD::INTRINSIC_WO_CHAIN: {
     switch (N->getConstantOperandVal(0)) {
     case Intrinsic::rl78_remul:
@@ -6863,7 +6640,6 @@ void RL78TargetLowering::LowerOperationWrapper(
     }
     return;
   }
-  case RL78ISD::CALL_FP:
   case RL78ISD::TAIL_CALL:
   case RL78ISD::CALL: {
     if (N->getOperand(1).getValueType() == MVT::i32) {

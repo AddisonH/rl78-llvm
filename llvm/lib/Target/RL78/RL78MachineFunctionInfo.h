@@ -32,6 +32,8 @@ private:
   /// IsLeafProc - True if the function is a leaf procedure.
   bool IsLeafProc;
 
+  std::optional<uint32_t> CSRegisterMask; 
+
 public:
   RL78MachineFunctionInfo()
       : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg{0},
@@ -58,6 +60,17 @@ public:
 
   void setLeafProc(bool rhs) { IsLeafProc = rhs; }
   bool isLeafProc() const { return IsLeafProc; }
+
+  unsigned getCSRegisterMask() const {
+    assert(CSRegisterMask.has_value() && "CSRegisterMask was not set");
+    return *CSRegisterMask;
+  }
+
+  void setCSRegisterMask(uint32_t mask) {
+    assert(!CSRegisterMask.has_value() && "CSRegisterMask was already set");
+    CSRegisterMask = mask;
+  }
+
 };
 } // end namespace llvm
 

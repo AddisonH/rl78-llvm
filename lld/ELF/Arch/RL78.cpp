@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "InputFiles.h"
+#include "SyntheticSections.h"
 #include "OutputSections.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
@@ -24,6 +25,43 @@ using namespace llvm::object;
 using namespace llvm::support::endian;
 using namespace lld;
 using namespace lld::elf;
+
+RL78PltSection::RL78PltSection() {
+  name = ".lowtext";
+  addralign = 2;
+}
+
+void RL78PltSection::initAllocSize() {
+  config->rl78InhibitAssert = true;
+  script->assignAddresses();
+}
+
+// Used by RL78 to remove entries which don't require a PLT entry,
+// i.e. are in the lower 64KB of ROM; this saves space.
+bool RL78PltSection::updateAllocSize() {
+  llvm::DenseSet<std::pair<uint64_t, StringRef>> Seen;
+  size_t NumSyms = 0;
+  for (auto sym : entries) {
+    // Ignore any possible duplicates.
+    if (!Seen.insert({sym->getVA(), sym->getName()}).second)
+      continue;
+    if (!(sym->getVA() >> 16)) {
+      symAux[sym->auxIdx].pltIdx = -1;
+      continue;
+    }
+    symAux[sym->auxIdx].pltIdx = NumSyms;
+    entries[NumSyms++] = sym;
+  }
+  if (NumSyms == entries.size())
+    return false;
+  entries.resize(NumSyms);
+  return true;
+}
+
+void RL78PltSection::finiAllocSize() {
+  config->rl78InhibitAssert = false;
+  script->assignAddresses();
+}
 
 namespace {
 class RL78 final : public TargetInfo {
@@ -76,7 +114,7 @@ uint32_t RL78::calcEFlags() const {
   uint32_t mergedFlags = getEFlags(ctx.objectFiles[0]);
   bool mergeSucceeded = true;
   // Verify that all input files have compatible flags
-  for (InputFile *f : makeArrayRef(ctx.objectFiles).slice(1)) {
+  for (InputFile *f : ArrayRef(ctx.objectFiles).slice(1)) {
     uint32_t newFlags = getEFlags(f);
     if (mergedFlags == newFlags)
       continue;
@@ -164,11 +202,11 @@ static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
   /*
   RL78-S1 core
     MAA = 0: Mirror data in addresses 00000H to 05EFFH to addresses F8000H to FDEFFH.
-    MAA = 1: Setting prohibited. 
-  RL78-S2 core 
-    MAA = 0: Mirror data in addresses 00000H to 0FFFFH to addresses F0000H to FFFFFH. 
-    MAA = 1: Mirror data in addresses 10000H to 1FFFFH to addresses F0000H to FFFFFH. 
-  RL78-S3 core 
+    MAA = 1: Setting prohibited.
+  RL78-S2 core
+    MAA = 0: Mirror data in addresses 00000H to 0FFFFH to addresses F0000H to FFFFFH.
+    MAA = 1: Mirror data in addresses 10000H to 1FFFFH to addresses F0000H to FFFFFH.
+  RL78-S3 core
     MAA = 0: Mirror data in addresses 00000H to 0FFFFH to addresses F0000H to FFFFFH.
     MAA = 1: Mirror data in addresses 10000H to 1FFFFH to addresses F0000H to FFFFFH.
   */

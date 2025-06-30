@@ -106,7 +106,7 @@ struct __lce_ta<__a, __c, 0, (unsigned long long)(~0), false>
     }
 };
 
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
 #define __rl78_long long
 #else
 #define __rl78_long 

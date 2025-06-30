@@ -124,12 +124,10 @@ void MCSectionELF::printSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
     if (Flags & ELF::SHF_HEX_GPREL)
       OS << 's';
   } 
-#ifdef USE_SHF_RENESAS_ABS
   else if (Arch == Triple::RL78) {
     if (Flags & ELF::SHF_RENESAS_ABS)
       OS << 'Y';
   }
-#endif
   OS << '"';
 
   OS << ',';

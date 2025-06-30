@@ -336,8 +336,11 @@ def err_rl78_pragma_address_conflict : Error<
 def err_rl78_pragma_address_boundary : Error<
    "Variable allocated on 64k boundary">;
 def err_rl78_saddr_not_applicable: Error<"saddr attribute only applies to non-constant, static storage duration variables">;
+def err_rl78_address_not_applicable: Error<"address attribute only applies to non-constant, static storage duration variables">;
+def err_rl78_vla_unsupported : Error<
+   "variable length arrays are not supported for the current target">;
 def err_ccrl_pragma_incompatibility: Error<"Incompatible pragma mixing">;
-def err_renesas_missing_paren : Error<"Expected a left parenthesis">;  
+def err_renesas_missing_paren : Error<"Expected a left parenthesis">;
 def warn_unused_parameter : Warning<"unused parameter %0">,
   InGroup<UnusedParameter>, DefaultIgnore;
 def warn_unused_but_set_parameter : Warning<"parameter %0 set but not used">,

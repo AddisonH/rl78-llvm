@@ -130,13 +130,13 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
   PointerWidth = farDataModel ? 32 : 16;
   PointerAlign = 16;
   SuitableAlign = 16;
+  DefaultAlignForAttributeAligned = 16;
   SizeType = UnsignedInt;
   IntMaxType = SignedLongLong;
   IntPtrType = farDataModel ? SignedLong : SignedInt;
   PtrDiffType = SignedInt;
   SigAtomicType = SignedLong;
 
-  // TODO: see https://llvm.org/docs/LangRef.html#data-layout
   std::string DL;
   llvm::raw_string_ostream SS(DL);
 
@@ -152,9 +152,9 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
   }
 
   SS << "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
-        "-p2:32:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
-        "-p3:32:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
-        "-i32:16-i64:16-f32:16-f64:16-a:8" // TODO: explain
+        "-p2:32:16:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
+        "-p3:32:16:16:16" // Far code pointers: 32 bit width, 16 bit aligned.
+        "-i32:16-i64:16-f32:16-f64:16-a:8" // integers of bit size 32 and 64, float and double types are 16 bit aligned. aggregate type objects are 8 bit aligned
         "-n8:8"                            // 8 bit native integer width
         "-n16:16"                          // 16 bit native integer width
         "-S16";                            // 16 bit natural stack alignment

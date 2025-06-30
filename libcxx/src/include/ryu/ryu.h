@@ -106,7 +106,11 @@ template <class _Floating>
 
     if (_Precision < 0) {
         _Precision = 6;
+#if __SIZEOF_INT__ == 2
+    } else if (_Precision < 16'000) { // Match ' to fix compilation with GCC in C++11 mode
+#else
     } else if (_Precision < 1'000'000'000) { // Match ' to fix compilation with GCC in C++11 mode
+#endif
         // _Precision is ok.
     } else {
         // Avoid integer overflow.
@@ -127,7 +131,11 @@ template <class _Floating>
 
     if (_Precision < 0) {
         _Precision = 6;
+#if __SIZEOF_INT__ == 2
+    } else if (_Precision < 16'000) { // Match ' to fix compilation with GCC in C++11 mode
+#else
     } else if (_Precision < 1'000'000'000) { // Match ' to fix compilation with GCC in C++11 mode
+#endif
         // _Precision is ok.
     } else {
         // Avoid integer overflow.

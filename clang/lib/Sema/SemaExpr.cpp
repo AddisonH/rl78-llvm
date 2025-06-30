@@ -9823,7 +9823,6 @@ checkPointerTypesForAssignment(Sema &S, QualType LHSType, QualType RHSType,
 
     // As an extension, we allow cast to/from void* to function pointer.
     assert(lhptee->isFunctionType());
-    // TODO: RL78 decide if we want to disallow these casts (CC-RL does not allow (_far *)() = void *).
     return Sema::FunctionVoidPointer;
   }
 
@@ -9899,6 +9898,22 @@ checkPointerTypesForAssignment(Sema &S, QualType LHSType, QualType RHSType,
     return Sema::IncompatibleFunctionPointer;
   if (IsInvalidCmseNSCallConversion(S, ltrans, rtrans))
     return Sema::IncompatibleFunctionPointer;
+
+  // RL78 specific pointer mismatch warning.
+  if (S.Context.getTargetInfo().getTriple().isRL78()) {
+    // Check multi-level pointer mismatches.
+    while (isa<PointerType>(lhptee) && isa<PointerType>(rhptee)) {
+      std::tie(lhptee, lhq) =
+          cast<PointerType>(lhptee)->getPointeeType().split().asPair();
+      std::tie(rhptee, rhq) =
+          cast<PointerType>(rhptee)->getPointeeType().split().asPair();
+
+      // This checks the mismatched address spaces of the inner pointer levels.
+      if (lhq.getAddressSpace() != rhq.getAddressSpace())
+        return Sema::IncompatiblePointer;
+    }
+  }
+
   return ConvTy;
 }
 

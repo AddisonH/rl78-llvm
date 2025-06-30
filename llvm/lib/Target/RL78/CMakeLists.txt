@@ -9,7 +9,6 @@ tablegen(LLVM RL78GenDisassemblerTables.inc -gen-disassembler)
 tablegen(LLVM RL78GenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM RL78GenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM RL78GenRegisterInfo.inc -gen-register-info)
-tablegen(LLVM RL78GenCallingConv.inc -gen-callingconv)
 tablegen(LLVM RL78GenSubtargetInfo.inc -gen-subtarget)
 
 add_public_tablegen_target(RL78CommonTableGen)
@@ -34,6 +33,10 @@ add_llvm_target(RL78CodeGen
   RL78ConstPropAndOpSwap.cpp
   RL78SelectionDAGTargetInfo.cpp
   RL78TargetTransformInfo.cpp
+  RL78InsertNOPWithLabel.cpp
+  RL78GenSet1Clr1Intrin.cpp
+  RL78AdjustMemRefsPass.cpp
+  RL78ESOptPass.cpp
 
   LINK_COMPONENTS
   Analysis

@@ -5,8 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-#ifndef __RL78_32BIT_DOUBLES__ // not supported on RL78 unless -m64bit-doubles is specified
+#if __SIZEOF_DOUBLE__ == 8 // implementation assumes 64 bit doubles
 
 #include <charconv>
 #include <string.h>
@@ -87,4 +86,4 @@ to_chars_result to_chars(char* __first, char* __last, long double __value, chars
 
 _LIBCPP_END_NAMESPACE_STD
 
-#endif // __RL78_32BIT_DOUBLES__
+#endif // __SIZEOF_DOUBLE__ == 8

@@ -759,13 +759,13 @@ private:
 
   bool NoWarn;
 
-  std::vector<std::string> CCRLMacroBodies;
   std::vector<StringRef> CCRLMacroNames;
 
-  MCAsmMacro *parseCCRLMacroLikeBody(SMLoc DirectiveLoc, int64_t *RepeatCount);
+  MCAsmMacro *parseCCRLMacroLikeBody(SMLoc DirectiveLoc);
   bool parseDirectiveCCRLRept(SMLoc DirectiveLoc, StringRef Dir);
   bool parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir);
-  bool parseDirectiveEndM(SMLoc DirectiveLoc);
+  bool parseDirectiveCCRLExitM(SMLoc DirectiveLoc, bool All);
+  bool parseDirectiveCCRLEndM(SMLoc DirectiveLoc);
   void instantiateCCRLMacroLikeBody(MCAsmMacro *M, SMLoc DirectiveLoc,
                                     raw_svector_ostream &OS);
   // "$IFDEF" or "$IFNDEF", depending on expect_defined
@@ -6490,6 +6490,8 @@ bool RL78AsmParser::parseStatement(ParseStatementInfo &Info,
          ID.getString().compare_insensitive(".BSEG") == 0 ||
          ID.getString().compare_insensitive(".REPT") == 0 ||
          ID.getString().compare_insensitive(".IRP") == 0 ||
+         ID.getString().compare_insensitive(".EXITM") == 0 ||
+         ID.getString().compare_insensitive(".EXITMA") == 0 ||
          ID.getString().compare_insensitive(".ENDM") == 0 ||
          NextTok.compare_insensitive(".SET") == 0 ||
          NextTok.compare_insensitive(".EQU") == 0 ||
@@ -6507,8 +6509,12 @@ bool RL78AsmParser::parseStatement(ParseStatementInfo &Info,
         return parseDirectiveCCRLRept(IDLoc, IDVal);
       if (ID.getString().compare_insensitive(".IRP") == 0)
         return parseDirectiveCCRLIrp(IDLoc, IDVal);
+      if (ID.getString().compare_insensitive(".EXITM") == 0)
+        return parseDirectiveCCRLExitM(IDLoc, false);
+      if (ID.getString().compare_insensitive(".EXITMA") == 0)
+        return parseDirectiveCCRLExitM(IDLoc, true);
       if (ID.getString().compare_insensitive(".ENDM") == 0)
-        return parseDirectiveEndM(IDLoc);
+        return parseDirectiveCCRLEndM(IDLoc);
       // defer parsing to RL78AsmParser
       return getTargetParser().ParseDirective(ID);
     }
@@ -6520,29 +6526,8 @@ bool RL78AsmParser::parseStatement(ParseStatementInfo &Info,
   return AsmParser::parseStatement(Info, nullptr);
 }
 
-struct EXITMLoc {
-  bool IsExitMA = false;
-  unsigned NestLevel = 0;
-  const char *EXITPointer = 0;
-  const char *ENDMPointer = 0;
-  AsmCond::ConditionalAssemblyType StartCond;
-  bool StartIgnore = false;
-  AsmCond::ConditionalAssemblyType EndCond;
-  bool EndIgnore = false;
-};
-
-static std::vector<struct EXITMLoc>::reverse_iterator
-findExitMAtLevel(std::vector<struct EXITMLoc> &ExitMList, unsigned NestLevel) {
-  return std::find_if(
-      ExitMList.rbegin(), ExitMList.rend(),
-      [&](struct EXITMLoc s) { return s.NestLevel == NestLevel; });
-}
-
-MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc,
-                                                  int64_t *RepeatCount) {
+MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc) {
   AsmToken EndToken, StartToken = getTok();
-
-  std::vector<struct EXITMLoc> ExitMList;
 
   unsigned NestLevel = 0;
   while (true) {
@@ -6558,34 +6543,8 @@ MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc,
       ++NestLevel;
     }
 
-    // TODO handle control instructions/same level rept blocks with exitm(a)
-    if (Lexer.is(AsmToken::Identifier) &&
-        (getTok().getIdentifier() == ".EXITM" ||
-         getTok().getIdentifier() == ".EXITMA")) {
-      struct EXITMLoc NewExit;
-      NewExit.EXITPointer = getTok().getLoc().getPointer();
-      NewExit.StartCond = TheCondState.TheCond;
-      NewExit.StartIgnore = TheCondState.Ignore;
-      NewExit.NestLevel = NestLevel;
-      if (NestLevel == 0 && getTok().getIdentifier() == ".EXITM") {
-        ExitMList.push_back(NewExit);
-      } else if (getTok().getIdentifier() == ".EXITMA") {
-        NewExit.IsExitMA = true;
-        ExitMList.push_back(NewExit);
-        *RepeatCount = 1;
-      }
-    }
-
-    // Otherwise, check whether we have reached the .endm.
+    // Otherwise, check whether we have reached the .ENDM.
     if (Lexer.is(AsmToken::Identifier) && getTok().getIdentifier() == ".ENDM") {
-
-      std::vector<struct EXITMLoc>::reverse_iterator MatchingExit =
-          findExitMAtLevel(ExitMList, NestLevel);
-      if (MatchingExit != ExitMList.rend()) {
-        MatchingExit->ENDMPointer = getTok().getLoc().getPointer();
-        MatchingExit->EndCond = TheCondState.TheCond;
-        MatchingExit->EndIgnore = TheCondState.Ignore;
-      }
       if (NestLevel == 0) {
         EndToken = getTok();
         Lex();
@@ -6606,53 +6565,6 @@ MCAsmMacro *RL78AsmParser::parseCCRLMacroLikeBody(SMLoc DirectiveLoc,
   const char *BodyStart = StartToken.getLoc().getPointer();
   const char *BodyEnd = EndToken.getLoc().getPointer();
   StringRef Body = StringRef(BodyStart, BodyEnd - BodyStart);
-
-  std::string NewBody = Body.str();
-  auto EOL = Body.detectEOL();
-  size_t Offset = 0;
-  for (const EXITMLoc &Exit : ExitMList) {
-
-    if (!Exit.StartIgnore && Exit.StartCond == Exit.EndCond &&
-        Exit.StartCond == AsmCond::NoCond) {
-      // No conditionals to consider
-      size_t Start =
-          Exit.EXITPointer - StartToken.getLoc().getPointer() - Offset;
-      size_t EraseLength = 0;
-      if (Exit.IsExitMA) {
-        // Delete everything till the .ENDM at nesting level 0, keep the EXITMA
-        // till nesting level 0, so it will keep setting the repeat count of the
-        // nest level 0 to 1
-        EraseLength = EndToken.getLoc().getPointer() - Exit.EXITPointer;
-        if (Exit.NestLevel > 0) {
-          Start = Start + sizeof(".EXITMA") - 1;
-          EraseLength = EraseLength - sizeof(".EXITMA") + 1;
-        }
-        NewBody = NewBody.erase(Start, EraseLength);
-        // If we are not at nesting level 0, insert .ENDM
-        for (size_t i = 0; i < Exit.NestLevel; i++)
-          NewBody = NewBody + EOL.str() + ".ENDM" + EOL.str();
-
-        // After the first EXITMA, we don't care about any more exits
-        break;
-      } else {
-        // Delete everything till the .ENDM
-        EraseLength = Exit.ENDMPointer - Exit.EXITPointer;
-        NewBody = NewBody.erase(Start, EraseLength);
-      }
-      Offset += EraseLength;
-      // Set current repeat to 1
-      *RepeatCount = 1;
-    } else {
-      printError(
-          StartToken.getLoc(),
-          "mixing control instructions with .EXITM/.EXITMA is not supported");
-    }
-  }
-
-  if (ExitMList.size()) {
-    CCRLMacroBodies.push_back(NewBody);
-    Body = CCRLMacroBodies[CCRLMacroBodies.size() - 1];
-  }
 
   // We Are Anonymous.
   MacroLikeBodies.emplace_back(StringRef(), Body, MCAsmMacroParameters());
@@ -6728,8 +6640,8 @@ bool RL78AsmParser::parseMacroArguments(const MCAsmMacro *M,
   return false;
 }
 
-/// parseDirectiveRept
-///   ::= .rep | .rept count
+/// parseDirectiveCCRLRept
+///   ::= .REPT count
 bool RL78AsmParser::parseDirectiveCCRLRept(SMLoc DirectiveLoc, StringRef Dir) {
   const MCExpr *CountExpr;
   SMLoc CountLoc = getTok().getLoc();
@@ -6747,7 +6659,7 @@ bool RL78AsmParser::parseDirectiveCCRLRept(SMLoc DirectiveLoc, StringRef Dir) {
     return true;
 
   // Lex the rept definition.
-  MCAsmMacro *M = parseCCRLMacroLikeBody(DirectiveLoc, &Count);
+  MCAsmMacro *M = parseCCRLMacroLikeBody(DirectiveLoc);
   if (!M)
     return true;
 
@@ -6765,8 +6677,8 @@ bool RL78AsmParser::parseDirectiveCCRLRept(SMLoc DirectiveLoc, StringRef Dir) {
   return false;
 }
 
-/// parseDirectiveRept
-///   ::= .rep | .rept count
+/// parseDirectiveCCRLIrp
+/// ::= .IRP symbol [values]
 bool RL78AsmParser::parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir) {
   MCAsmMacroParameter Parameter;
   MCAsmMacroArguments A;
@@ -6777,8 +6689,7 @@ bool RL78AsmParser::parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir) {
     return true;
 
   // Lex the irp definition.
-  int64_t Count = A.size();
-  MCAsmMacro *M = parseCCRLMacroLikeBody(DirectiveLoc, &Count);
+  MCAsmMacro *M = parseCCRLMacroLikeBody(DirectiveLoc);
   if (!M)
     return true;
 
@@ -6787,6 +6698,7 @@ bool RL78AsmParser::parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir) {
   SmallString<256> Buf;
   raw_svector_ostream OS(Buf);
 
+  // Prepend "\" to parameters, as expected by the gcc syntax
   std::string NewBody =
       std::regex_replace(M->Body.str(), std::regex(Parameter.Name.str()),
                          ("\\" + Parameter.Name).str());
@@ -6796,9 +6708,6 @@ bool RL78AsmParser::parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir) {
     // This is undocumented, but GAS seems to support it.
     if (expandMacro(OS, NewBody, Parameter, Arg, true, getTok().getLoc()))
       return true;
-    Count--;
-    if (Count == 0)
-      break;
   }
 
   instantiateCCRLMacroLikeBody(M, DirectiveLoc, OS);
@@ -6806,7 +6715,41 @@ bool RL78AsmParser::parseDirectiveCCRLIrp(SMLoc DirectiveLoc, StringRef Dir) {
   return false;
 }
 
-bool RL78AsmParser::parseDirectiveEndM(SMLoc DirectiveLoc) {
+bool RL78AsmParser::parseDirectiveCCRLExitM(SMLoc DirectiveLoc, bool All) {
+  if (parseEOL())
+    return true;
+
+  // In the CC-RL assembly syntax, .EXITM(A) can appear only
+  // in .REPT or .IRP body instantiations
+  const auto ReptIrpInstantiation = [&] {
+    if (ActiveMacros.empty())
+      return false;
+    auto DirStart = ActiveMacros.back()->InstantiationLoc.getPointer(),
+         DirEnd = DirStart + 1;
+    while (*DirEnd && !isspace(*DirEnd))
+      ++DirEnd;
+    StringRef Dir{DirStart, (size_t)(DirEnd - DirStart)};
+    return Dir.compare_insensitive(".REPT") == 0 ||
+           Dir.compare_insensitive(".IRP") == 0;
+  };
+
+  if (!ReptIrpInstantiation())
+    return TokError(Twine("unexpected '") + (All ? ".EXITMA" : ".EXITM") +
+                    "' directive");
+  do {
+    // Exit all conditionals that are active in the current macro.
+    while (TheCondStack.size() != ActiveMacros.back()->CondStackDepth) {
+      TheCondState = TheCondStack.back();
+      TheCondStack.pop_back();
+    }
+
+    handleMacroExit();
+  } while (All && ReptIrpInstantiation());
+
+  return false;
+}
+
+bool RL78AsmParser::parseDirectiveCCRLEndM(SMLoc DirectiveLoc) {
   if (ActiveMacros.empty())
     return TokError("unmatched '.ENDM' directive");
 

@@ -2099,7 +2099,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
       // so that a function pointer could be compared to ((void*)0) / NULL
       // LE: also automatically cast the near AS to the default AS when -mfar-data
       if ((CGF.getContext().getLangOpts().RenesasRL78CodeModel &&
-          cast<PointerType>(DestTy)->getPointeeType()->isFunctionType() &&
+          cast<PointerType>(DestTy.getDesugaredType(CGF.getContext()))->getPointeeType()->isFunctionType() &&
           Src == llvm::ConstantPointerNull::get(CGF.VoidPtrTy)) ||
           (CGF.getContext().getLangOpts().RenesasRL78DataModel &&
            SrcTy->getPointerAddressSpace() == CGF.getContext().getTargetAddressSpace(LangAS::__near) &&

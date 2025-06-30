@@ -2585,6 +2585,9 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
     // OpenCL v1.2 s6.9.d: variable length arrays are not supported.
     VLADiag = diag::err_opencl_vla;
     VLAIsError = true;
+  } else if (getLangOpts().RenesasRL78) {
+    VLADiag = diag::err_rl78_vla_unsupported;
+    VLAIsError = true;
   } else if (getLangOpts().C99) {
     VLADiag = diag::warn_vla_used;
     VLAIsError = false;

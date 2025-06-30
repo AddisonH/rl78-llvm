@@ -43,6 +43,8 @@ FunctionPass *createRL78CMPWithZeroElimPass();
 FunctionPass *createRL78AdjustMemRefsPass();
 FunctionPass *createRL78InstructionSpecializationPass();
 FunctionPass *createRL78ConstPropAndOpSwap();
+FunctionPass *createRL78InsertNOPWithLabelPass();
+FunctionPass *createRL78ESOptPass();
 
 void initializeRL78DAGToDAGISelPass(PassRegistry &);
 

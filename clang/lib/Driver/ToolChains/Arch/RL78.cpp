@@ -33,6 +33,12 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
   
   bool mdaDisabled = disableMDA;
 
+  if (!cpu.equals_insensitive("s1") &&
+      !cpu.equals_insensitive("s2") && !cpu.equals_insensitive("s3")){
+    D.Diag(diag::err_target_unknown_cpu) << cpu;
+    return;
+  }
+
   if (!isS2 && mdaDisabled) {
     D.Diag(diag::err_drv_cannot_mix_options) << cpu << "-mdisable-mda";
     return;
@@ -42,19 +48,29 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
   // which may override the defaults.
   handleTargetFeaturesGroup(D, Triple, Args, Features, options::OPT_m_rl78_Features_Group);
 
-  //if(!D.CCCIsCXX() && !mCode && !coreName.equals_lower("s1")) {
-  //    Features.push_back("+far-code");
-  //}
-
-  if(mCode && mCode->getOption().getID() == options::OPT_mnear_code) {
+  if (mCode && mCode->getOption().getID() == options::OPT_mnear_code) {
     Features.push_back("-far-code");
     Features.erase(std::remove(Features.begin(), Features.end(), "+near-code"), Features.end());
   }
+
   const Arg *mData = Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
-  if(mData && mData->getOption().getID() == options::OPT_mnear_data) {
+  if (mData) {
+    if (mData->getOption().getID() == options::OPT_mnear_data) {
       Features.push_back("-far-data");
-      Features.erase(std::remove(Features.begin(), Features.end(), "+near-data"), Features.end());
+      Features.erase(
+          std::remove(Features.begin(), Features.end(), "+near-data"),
+          Features.end());
+    } else { // -mfar-data includes and replaces -mfar-rom
+      const Arg *mRom =
+          Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
+                          options::OPT_mfar_rom);
+      if (mRom && mRom->getOption().getID() == options::OPT_mfar_rom) {
+        Features.erase(
+            std::remove(Features.begin(), Features.end(), "+far-rom"),
+            Features.end());
+      }
     }
+  }
 }
 
 StringRef rl78::getRL78Cpu(const llvm::opt::ArgList &Args,

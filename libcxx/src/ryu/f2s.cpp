@@ -36,7 +36,7 @@
 // ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#ifndef __RL78_32BIT_DOUBLES__ // not supported on RL78 unless -m64bit-doubles is specified
+#if __SIZEOF_DOUBLE__ == 8 // implementation assumes 64 bit doubles
 
 // Avoid formatting to keep the changes with the original code minimal.
 // clang-format off
@@ -723,4 +723,4 @@ _LIBCPP_END_NAMESPACE_STD
 
 // clang-format on
 
-#endif // __RL78_32BIT_DOUBLES__
+#endif // __SIZEOF_DOUBLE__ == 8

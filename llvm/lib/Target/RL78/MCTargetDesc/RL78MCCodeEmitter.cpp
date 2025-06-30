@@ -394,8 +394,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::STORE8_saddr_A:
     // MOV saddr, A      9D saddr
     if (MI.getOperand(1).getReg() != RL78::R1) {
-      // TODO: rewrite reporterror to use loc, like below
-      // Or transmit error to RL78AsmParser getStreamer().getAssemblerPtr()->getEmitter()
       Ctx.getSourceManager()->PrintMessage(
           errs(), MI.getLoc(), SourceMgr::DiagKind::DK_Error,
           "Instruction using illegal register.");
@@ -2749,13 +2747,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // CALL HL           61 FA
     Bits += (MI.getOperand(0).getReg() - RL78::RP0) << 4;
     break;
-  case RL78::CALL_rp_fp:
-    Bits += (unsigned long long)(MI.getOperand(0).getReg() - RL78::RP0) << 36;
-    Bits |= (getTargetOpValue(MI, 2, 4, Fixups, STI,
-                              (MCFixupKind)RL78::fixup_RL78_DIR8U) &
-             0xFF)
-            << 8;
-    break;
   case RL78::CALL_addr16:
   case RL78::CALL_sym16: {
     unsigned int addressValue = getTargetOpValue(
@@ -2763,19 +2754,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     unsigned int laddr = (0x00FF & addressValue) << 8;
     unsigned int uaddr = (0xFF00 & addressValue) >> 8;
     Bits |= (uaddr | laddr);
-    break;
-  }
-  case RL78::CALL_addr16_fp:
-  case RL78::CALL_sym16_fp: {
-    unsigned int addressValue = getTargetOpValue(
-        MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16U);
-    unsigned long long laddr = (0x00FF & addressValue) << 8;
-    unsigned long long uaddr = (0xFF00 & addressValue) >> 8;
-    Bits |= (uaddr | laddr) << 32;
-    Bits |= (getTargetOpValue(MI, 2, 5, Fixups, STI,
-                              (MCFixupKind)RL78::fixup_RL78_DIR8U) &
-             0xFF)
-            << 8;
     break;
   }
   case RL78::CALL_addr20:
@@ -2787,20 +2765,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     unsigned int uaddr = (0x00FF00 & addressValue);
     unsigned int saddr = (0xFF0000 & addressValue) >> 16;
     Bits |= (uaddr | laddr | saddr);
-    break;
-  }
-  case RL78::CALL_addr20_fp:
-  case RL78::CALL_sym20_fp: {
-    uint64_t addressValue = getTargetOpValue(
-        MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR20U);
-    uint64_t laddr = (0x0000FF & addressValue) << 16;
-    uint64_t uaddr = (0x00FF00 & addressValue);
-    uint64_t saddr = (0xFF0000 & addressValue) >> 16;
-    Bits |= (uaddr | laddr | saddr) << 32;
-    Bits |= (getTargetOpValue(MI, 2, 5, Fixups, STI,
-                              (MCFixupKind)RL78::fixup_RL78_DIR8U) &
-             0xFF)
-            << 8;
     break;
   }
   case RL78::CALL_addr16rel: {
@@ -3235,19 +3199,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case 5:
     support::endian::write<uint32_t>(OS, Bits >> 8, support::big);
     support::endian::write<uint8_t>(OS, Bits, support::big);
-    break;
-  case 6:
-    support::endian::write<uint16_t>(OS, Bits >> 32, support::big);
-    support::endian::write<uint32_t>(OS, Bits, support::big);
-    break;
-  case 7:
-    support::endian::write<uint16_t>(OS, Bits >> 40, support::big);
-    support::endian::write<uint8_t>(OS, Bits >> 32, support::big);
-    support::endian::write<uint32_t>(OS, Bits, support::big);
-    break;
-  case 8:
-    support::endian::write<uint32_t>(OS, Bits >> 32, support::big);
-    support::endian::write<uint32_t>(OS, Bits, support::big);
     break;
   default:
     llvm_unreachable("Invalid instruction size!");

@@ -697,7 +697,7 @@ __format_floating_point(_Tp __value, _FormatContext& __ctx, __format_spec::__par
       // Let P equal the precision if nonzero, 6 if the precision is not
       // specified, or 1 if the precision is 0. Then, if a conversion with
       // style E would have an exponent of X:
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
       int __p = _VSTD::max(1L, (__specs.__has_precision() ? __specs.__precision_ : 6));
 #else
       int __p = _VSTD::max(1, (__specs.__has_precision() ? __specs.__precision_ : 6));

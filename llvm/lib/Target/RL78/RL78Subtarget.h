@@ -31,10 +31,6 @@ public:
     RL78_S2,
     RL78_S3,
   };
-  enum RL78CallingConvention {
-    CCRL,
-    GCC,
-  };
   enum RL78MemoryModel {
     NEAR,
     FAR,
@@ -47,7 +43,6 @@ private:
   Triple TargetTriple;
   virtual void anchor();
   RL78Core coreType;
-  RL78CallingConvention callingConvention;
   bool has64BitDoubles;
   unsigned char mirrorSource;
   bool hasFarCodeModel;
@@ -96,7 +91,6 @@ public:
   bool isRL78S1CoreType() const { return coreType == RL78_S1; }
   bool isRL78S3CoreType() const { return coreType == RL78_S3; }
   bool isUseMDA() const { return (coreType == RL78_S2) && (!disableMDA); }
-  bool HasCCRLCallingConvention() const { return callingConvention == CCRL; }
 
   /// Enable tracking of subregister liveness in register allocator.
   bool enableSubRegLiveness() const override { return true; }

@@ -322,8 +322,11 @@ static __inline fp_t __compiler_rt_scalbnX(fp_t x, si_int y) {
     exp += normalize(&sig);
     sig &= ~implicitBit; // clear the implicit bit again
   }
-
+#if __SIZEOF_INT__ == 2
+  if (__builtin_saddl_overflow(exp, y, &exp)) {
+#else
   if (__builtin_sadd_overflow(exp, y, &exp)) {
+#endif
     // Saturate the exponent, which will guarantee an underflow/overflow below.
     exp = (y >= 0) ? INT_MAX : INT_MIN;
   }

@@ -4882,8 +4882,6 @@ foreach i = {0-7} in
 // RL78 options.
 def frenesas_extensions : Flag<["-"], "frenesas-extensions">, Group<f_Group>,
   Flags<[CC1Option]>, HelpText<"Use Renesas CC Extensions.">;
-def frenesas_vaarg : Flag<["-"], "frenesas-vaarg">, Group<f_Group>,
-  Flags<[CC1Option]>, HelpText<"Promote near variable arg pointers to far.">;
 def fnewlib_nano : Flag<["-"], "fnewlib-nano">, Group<f_Group>,
   Flags<[CC1Option]>, HelpText<"Uses newlib nano optimized libc_nano.a instead of libc.a.">;
 def fno_renesas_extensions : Flag<["-"], "fno-renesas-extensions">, Group<f_Group>,

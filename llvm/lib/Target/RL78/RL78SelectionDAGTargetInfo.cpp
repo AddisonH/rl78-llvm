@@ -30,12 +30,6 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
   if (AlwaysInline)
     return SDValue();
 
-  // FIXME: If the memcpy is volatile (isVol), lowering it to a plain libc
-  // memcpy is not guaranteed to be safe. libc memcpys aren't required to
-  // respect volatile, so they may do things like read or write memory
-  // beyond the given memory regions. But fixing this isn't easy, and most
-  // people don't care.
-
   // Emit a library call.
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;
@@ -82,7 +76,6 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
           ? FarLibCallName
           : DAG.getTargetLoweringInfo().getLibcallName((RTLIB::Libcall)LibCall);
 
-  // FIXME: pass in SDLoc
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
       .setChain(Chain)
@@ -163,7 +156,6 @@ SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemset(
           ? "_COM_memset_f"
           : DAG.getTargetLoweringInfo().getLibcallName(RTLIB::MEMSET);
 
-  // FIXME: pass in SDLoc
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
       .setChain(Chain)

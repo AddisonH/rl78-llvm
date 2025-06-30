@@ -973,8 +973,7 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     return;
 
 #ifndef NDEBUG
-  // TODO: uncomment and fix: it dies at far calls for example
-  /*for (unsigned i = 0, e = Node->getNumValues(); i != e; ++i)
+  for (unsigned i = 0, e = Node->getNumValues(); i != e; ++i)
     assert(TLI.getTypeAction(*DAG.getContext(), Node->getValueType(i)) ==
              TargetLowering::TypeLegal &&
            "Unexpected illegal type!");
@@ -985,7 +984,7 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
             Op.getOpcode() == ISD::TargetConstant ||
             Op.getOpcode() == ISD::Register) &&
             "Unexpected illegal type!");
-  }*/
+  }
 #endif
 
   // Figure out the correct action; the way to query this varies by opcode
@@ -1313,10 +1312,9 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
         if (Node->getNumValues() == 1) {
           // Verify the new types match the original. Glue is waived because
           // ISD::ADDC can be legalized by replacing Glue with an integer type.
-            // TODO: uncomment and fix
-          /*assert((Res.getValueType() == Node->getValueType(0) ||
+          assert((Res.getValueType() == Node->getValueType(0) ||
                   Node->getValueType(0) == MVT::Glue) &&
-                 "Type mismatch for custom legalized operation");*/
+                 "Type mismatch for custom legalized operation");
           LLVM_DEBUG(dbgs() << "Successfully custom legalized node\n");
           // We can just directly replace this node with the lowered value.
           ReplaceNode(SDValue(Node, 0), Res);

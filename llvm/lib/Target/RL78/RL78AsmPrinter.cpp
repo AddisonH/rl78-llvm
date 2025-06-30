@@ -113,6 +113,33 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     LowerRL78MachineInstrToMCInst(MI, TmpInst, *this);
     EmitToStreamer(*OutStreamer, TmpInst);
   }
+
+if (MF->getMMI().hasDebugInfo()) {
+    switch (MI->getOpcode()) {
+    default:
+      break;
+    case RL78::PUSH_rp:
+      OutStreamer->emitCFIAdjustCfaOffset(2);
+      break;
+    case RL78::POP_rp:
+      OutStreamer->emitCFIAdjustCfaOffset(-2);
+      break;
+    case RL78::SUBW_sp_imm:
+    case RL78::SUBW_rp_imm:
+      if (MI->getFlag(MachineInstr::FrameSetup) && MI->getNumOperands() >= 3 &&
+          MI->getOperand(2).isImm()) {
+        OutStreamer->emitCFIAdjustCfaOffset(MI->getOperand(2).getImm());
+      }
+      break;
+    case RL78::ADDW_sp_imm:
+    case RL78::ADDW_rp_imm:
+      if (MI->getFlag(MachineInstr::FrameDestroy) &&
+          MI->getNumOperands() >= 3 && MI->getOperand(2).isImm()) {
+        OutStreamer->emitCFIAdjustCfaOffset(-(int)MI->getOperand(2).getImm());
+      }
+      break;
+    }
+  }
 }
 
 void RL78AsmPrinter::emitStartOfAsmFile(Module &M) {

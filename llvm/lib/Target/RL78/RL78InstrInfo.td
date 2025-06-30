@@ -4167,9 +4167,6 @@ def SDTRL78Call : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;
 def call : SDNode<"RL78ISD::CALL", SDTRL78Call,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
-def call_fp : SDNode<"RL78ISD::CALL_FP", SDTRL78Call,
-                           [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
-                            SDNPVariadic]>;
 
 let usesCustomInserter = 1, isCall = 1, isCodeGenOnly = 1, Defs = [SPreg], Uses = [SPreg] in {
   def CALL_cs_rp: InstRL78_16bit<0x61CA,
@@ -4200,34 +4197,6 @@ let Uses = [CS] in {
         (outs), (ins ABS16:$addr16, variable_ops),
         "call $addr16",
         [(call (i16 (RL78Low16 texternalsym:$addr16)))]>;
-
-let isCodeGenOnly = 1 in {
-let Uses = [CS] in {
-  def CALL_rp_fp : InstRL78_48bit<0x61CA37A80037,
-        (outs), (ins RL78RPRegs:$rsrc, STACKSlot:$hladdr, variable_ops),
-        "call $rsrc\n\txchw ax, hl\n\tmovw ax, $hladdr\n\txchw ax, hl",
-        [(call_fp i16:$rsrc, ADDRSPi:$hladdr)]>;
-}
-  def CALL_addr16_fp : InstRL78_56bit<0xFD000037A80037,
-        (outs), (ins ABS16:$addr16, STACKSlot:$hladdr, variable_ops),
-        "call $addr16\n\txchw ax, hl\n\tmovw ax, $hladdr\n\txchw ax, hl",
-        [(call_fp (i16 tglobaladdr:$addr16), ADDRSPi:$hladdr)]>;
-
-  def CALL_sym16_fp : InstRL78_56bit<0xFD000037A80037,
-        (outs), (ins ABS16:$addr16, STACKSlot:$hladdr, variable_ops),
-        "call $addr16\n\txchw ax, hl\n\tmovw ax, $hladdr\n\txchw ax, hl",
-        [(call_fp (i16 (RL78Low16 texternalsym:$addr16)), ADDRSPi:$hladdr)]>;
-
-  def CALL_addr20_fp : InstRL78_64bit<0xFC00000037A80037,
-        (outs), (ins ABS20:$addr20, STACKSlot:$hladdr, variable_ops),
-        "call !!$addr20\n\txchw ax, hl\n\tmovw ax, $hladdr\n\txchw ax, hl",
-        [(call_fp (i16 (RL78Hi16 tglobaladdr:$addr20, (i16 (RL78Low16 tglobaladdr:$addr20)))), ADDRSPi:$hladdr)]>;
-
-  def CALL_sym20_fp : InstRL78_64bit<0xFC00000037A80037,
-        (outs), (ins ABS20:$addr20, STACKSlot:$hladdr, variable_ops),
-        "call !!$addr20\n\txchw ax, hl\n\tmovw ax, $hladdr\n\txchw ax, hl",
-        [(call_fp (i16 (RL78Hi16 texternalsym:$addr20, (i16 (RL78Low16 texternalsym:$addr20)))), ADDRSPi:$hladdr)]>;
-}
 
  def CALL_addr20 : InstRL78_32bit<0xFC000000,
         (outs), (ins ABS20:$addr20, variable_ops),
@@ -4374,22 +4343,111 @@ let isTerminator = 1, isBranch = 1, Uses = [CCreg] in {
 //===----------------------------------------------------------------------===//
 // SELECT_CC defines and pseudo
 //===----------------------------------------------------------------------===//
+def isOptForSize  : Predicate<"shouldOptForSize(MF)">;
+def isOptForSpeed : Predicate<"!shouldOptForSize(MF)">;
 
 def SDTRL78selectcc :
     SDTypeProfile<1, 3, [SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisVT<3, i8>]>;
+def SDTRL78selectccBTBF :
+    SDTypeProfile<1, 5, [SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisVT<3, i8>,  SDTCisVT<4, i8>,  SDTCisVT<5, i8>]>;
 
 def RL78selectcc: SDNode<"RL78ISD::SELECTCC", SDTRL78selectcc, [SDNPInGlue]>;
-//TODO: with imm and mem
-let usesCustomInserter = 1, isSelect = 1, Uses = [CCreg] in {
-  def SELECTCC8: Pseudo<
+def RL78selectccBTBF: SDNode<"RL78ISD::SELECTCCBTBF", SDTRL78selectccBTBF>;
+
+def enabled : Predicate<"false">;
+
+let usesCustomInserter = 1, isSelect = 1, mayStore = 0, Uses = [CCreg] in {
+
+  let Predicates = [isOptForSize] in {
+  def SELECTCC8_imm_r: Pseudo<
+          (outs RL78Reg:$rd), (ins i8imm:$imm1, RL78Reg:$rsrc2, CCOp:$cond),
+          ";select_cc $rd, $imm1, $rsrc2",
+          [(set i8:$rd, (RL78selectcc (i8 imm:$imm1), i8:$rsrc2, imm:$cond))]>;
+
+  }
+
+  let mayLoad = 1 in {
+
+    def SELECTCC8_esaddr_imm: Pseudo<
+              (outs RL78Reg:$rd), (ins EsAddr16:$addr1, i8imm:$imm2, CCOp:$cond),
+              ";select_cc $rd, $addr1, $imm2",
+              [(set i8:$rd, (RL78selectcc (load ESADDRABS16:$addr1), (i8 imm:$imm2), imm:$cond))]>;
+    def SELECTCBTBFC8_esaddr_imm: Pseudo<
+              (outs RL78Reg:$rd), (ins EsAddr16:$addr1, i8imm:$imm2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+              ";select_cc_btbf $rd, $addr1, $imm2, $rcmp, $bit",
+              [(set i8:$rd, (RL78selectccBTBF (load ESADDRABS16:$addr1), (i8 imm:$imm2), imm:$cond, i8:$rcmp, imm:$bit))]>;
+    def SELECTCC8_esaddr_r: Pseudo<
+              (outs RL78Reg:$rd), (ins EsAddr16:$addr1, RL78Reg:$rsrc2, CCOp:$cond),
+              ";select_cc $rd, $addr1, $rsrc2",
+              [(set i8:$rd, (RL78selectcc (load ESADDRABS16:$addr1), i8:$rsrc2, imm:$cond))]>;
+  } // mayLoad = 1
+  def SELECTCC8_r_r: Pseudo<
           (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2, CCOp:$cond),
           ";select_cc $rd, $rsrc, $rsrc2",
           [(set i8:$rd, (RL78selectcc i8:$rsrc, i8:$rsrc2, imm:$cond))]>;
 
-  def SELECTCC16: Pseudo<
+  def SELECTCCBTBF8_r_r: Pseudo<
+          (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+          ";select_cc_btbf $rd, $rsrc, $rsrc2, $rcmp, $bit",
+          [(set i8:$rd, (RL78selectccBTBF i8:$rsrc, i8:$rsrc2, imm:$cond, i8:$rcmp, imm:$bit))]>;
+
+  let Predicates = [isOptForSize] in {
+  def SELECTCC16_imm_imm: Pseudo<
+          (outs RL78RPRegs:$rd), (ins i16imm:$imm1, i16imm:$imm2, CCOp:$cond),
+          ";select_cc $rd, $imm1, $imm2",
+          [(set i16:$rd, (RL78selectcc (i16 imm:$imm1), (i16 imm:$imm2), imm:$cond))]>;
+  }
+  let Predicates = [isOptForSpeed] in {
+    def SELECTCCBTBF16_imm_imm: Pseudo<
+          (outs RL78RPRegs:$rd), (ins i16imm:$imm1, i16imm:$imm2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+          ";select_cc_btbf $rd, $imm1, $imm2, $rcmp, $bit",
+          [(set i16:$rd, (RL78selectccBTBF (i16 imm:$imm1), (i16 imm:$imm2), imm:$cond, i8:$rcmp, imm:$bit))]>;
+  }
+  let Predicates = [isOptForSize] in {
+  def SELECTCC16_imm_rp: Pseudo<
+          (outs RL78RPRegs:$rd), (ins i16imm:$imm1, RL78RPRegs:$rsrc2, CCOp:$cond),
+          ";select_cc $rd, $imm1, $rsrc2",
+          [(set i16:$rd, (RL78selectcc (i16 imm:$imm1), i16:$rsrc2, imm:$cond))]>;
+  }
+  def SELECTCCBTBF16_imm_rp: Pseudo<
+        (outs RL78RPRegs:$rd), (ins i16imm:$imm1, RL78RPRegs:$rsrc2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+        ";select_cc_btbf $rd, $imm1, $rsrc2, $rcmp, $bit",
+        [(set i16:$rd, (RL78selectccBTBF (i16 imm:$imm1), i16:$rsrc2, imm:$cond, i8:$rcmp, imm:$bit))]>;
+  let mayLoad = 1 in {
+      def SELECTCC16_esaddr_imm: Pseudo<
+              (outs RL78RPRegs:$rd), (ins EsAddr16:$addr1, i16imm:$imm2, CCOp:$cond),
+              ";select_cc $rd, $addr1, $imm2",
+              [(set i16:$rd, (RL78selectcc (load ESADDRABS16:$addr1), (i16 imm:$imm2), imm:$cond))]>;
+          def SELECTCCBTBF116_esaddr_imm: Pseudo<
+              (outs RL78RPRegs:$rd), (ins EsAddr16:$addr1, i16imm:$imm2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+              ";select_cc_btbf $rd, $addr1, $imm2, $rcmp, $bit",
+              [(set i16:$rd, (RL78selectccBTBF (load ESADDRABS16:$addr1), (i16 imm:$imm2), imm:$cond, i8:$rcmp, imm:$bit))]>;
+      def SELECTCC16_esaddr_rp: Pseudo<
+              (outs RL78RPRegs:$rd), (ins EsAddr16:$addr1, RL78RPRegs:$rsrc2, CCOp:$cond),
+              ";select_cc $rd, $addr1, $rsrc2",
+              [(set i16:$rd, (RL78selectcc (load ESADDRABS16:$addr1), i16:$rsrc2, imm:$cond))]>;
+    } // mayLoad = 1
+
+  let Predicates = [isOptForSize] in {
+  def SELECTCC16_rp_imm: Pseudo<
+         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm2, CCOp:$cond),
+         ";select_cc $rd, $rsrc, $imm2",
+         [(set i16:$rd, (RL78selectcc i16:$rsrc, (i16 imm:$imm2), imm:$cond))]>;
+  }
+  def SELECTCCBTBF16_rp_imm: Pseudo<
+         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+         ";select_cc_btbf $rd, $rsrc, $imm2, $rcmp, $bit",
+         [(set i16:$rd, (RL78selectccBTBF i16:$rsrc, (i16 imm:$imm2), imm:$cond, i8:$rcmp, imm:$bit))]>;
+
+  def SELECTCC16_rp_rp: Pseudo<
           (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2, CCOp:$cond),
           ";select_cc $rd, $rsrc, $rsrc2",
           [(set i16:$rd, (RL78selectcc i16:$rsrc, i16:$rsrc2, imm:$cond))]>;
+
+  def SELECTCCBTBF16_rp_rp: Pseudo<
+          (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2, CCOp:$cond, RL78Reg:$rcmp, bitimm:$bit),
+          ";select_cc_btbf $rd, $rsrc, $rsrc2, $rcmp, $bit",
+          [(set i16:$rd, (RL78selectccBTBF i16:$rsrc, i16:$rsrc2, imm:$cond, i8:$rcmp, imm:$bit))]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4640,21 +4698,21 @@ let hasSideEffects = 1 in {
 //BT sfr.0, $addr20 ;31 82 sfr adr
  def BTBF_sfri_addr : InstRL78_32bit<0x31820000,
         (outs), (ins brtargetRel8:$target,CCOp:$cond, Sfr:$addr, bitimm:$imm),
-        "b$cond $addr$imm $target",
+        "b$cond $addr$imm, $target",
         []>;
 
 //BF sfr.0, $addr20 ;31 84 sfr adr
 //BT sfr.0, $addr20 ;31 82 sfr adr
  def BTBF_sfrRegi_addr : InstRL78_32bit<0x31820000,
         (outs), (ins brtargetRel8:$target,CCOp:$cond, RL78SfrReg:$addr, bitimm:$imm),
-        "b$cond $addr$imm $target",
+        "b$cond $addr$imm, $target",
         []>;
 
 //BF PSW.0, $addr20 ;31 84 FA adr
 //BT PSW.0, $addr20 ;31 82 FA adr
  def BTBF_PSWi_addr : InstRL78_32bit<0x3182FA00,
         (outs), (ins brtargetRel8:$target,CCOp:$cond, RL78RegPSW:$rsrc, bitimm:$imm),
-        "b$cond $rsrc$imm $target",
+        "b$cond $rsrc$imm, $target",
         []>;
 
 } // hasSideEffects = 1
@@ -4707,20 +4765,20 @@ def BTCLR_memr : InstRL78_24bit<0x318100,
 //BTCLR sfr.0, $addr20 ;31 80 sfr adr
  def BTCLR_sfri_addr : InstRL78_32bit<0x31800000,
         (outs), (ins brtargetRel8:$target, Sfr:$addr, bitimm:$imm),
-        "btclr $addr$imm $target",
+        "btclr $addr$imm, $target",
         []>;
 
 
 //BTCLR sfr.0, $addr20 ;31 80 sfr adr
  def BTCLR_sfrRegi_addr : InstRL78_32bit<0x31800000,
         (outs), (ins brtargetRel8:$target, RL78SfrReg:$addr, bitimm:$imm),
-        "btclr $addr$imm $target",
+        "btclr $addr$imm, $target",
         []>;
 
 //BTCLR PSW.0, $addr20 ;31 80 FA adr
  def BTCLR_PSWi_addr : InstRL78_32bit<0x3180FA00,
         (outs), (ins brtargetRel8:$target, RL78RegPSW:$rsrc, bitimm:$imm),
-        "btclr $rsrc$imm $target",
+        "btclr $rsrc$imm, $target",
         []>;
 
 

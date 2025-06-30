@@ -45,7 +45,7 @@ class _LIBCPP_AVAILABILITY_PMR _LIBCPP_EXPORTED_FROM_ABI unsynchronized_pool_res
 
   static const size_t __min_blocks_per_chunk = 16;
   static const size_t __min_bytes_per_chunk  = 1024;
-#if defined(__RL78__)
+#if __SIZEOF_INT__ == 2
   static const size_t __max_blocks_per_chunk = (size_t(1) << 8);
   static const size_t __max_bytes_per_chunk  = (size_t(1) << 14);
 #else
@@ -55,7 +55,7 @@ class _LIBCPP_AVAILABILITY_PMR _LIBCPP_EXPORTED_FROM_ABI unsynchronized_pool_res
 
   static const int __log2_smallest_block_size      = 3;
   static const size_t __smallest_block_size        = 8;
-#if defined(__RL78__)
+#if __SIZEOF_INT__ == 2
   static const size_t __default_largest_block_size = (size_t(1) << 8);
   static const size_t __max_largest_block_size     = (size_t(1) << 14);
 #else

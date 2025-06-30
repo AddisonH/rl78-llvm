@@ -66,27 +66,6 @@ class InstRL78_40bit<field bits<40> inst, dag outs, dag ins, string asmstr, list
   let Size = 5;
 }
 
-class InstRL78_48bit<field bits<48> inst, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary> 
-  : InstRL78<outs, ins, asmstr, pattern, itin>
-{
-  field bits<48> Inst = inst;
-  let Size = 6;
-}
-
-class InstRL78_56bit<field bits<56> inst, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary> 
-  : InstRL78<outs, ins, asmstr, pattern, itin>
-{
-  field bits<56> Inst = inst;
-  let Size = 7;
-}
-
-class InstRL78_64bit<field bits<64> inst, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary> 
-  : InstRL78<outs, ins, asmstr, pattern, itin>
-{
-  field bits<64> Inst = inst;
-  let Size = 8;
-}
-
 // Pseudo instructions.
 class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
    : InstRL78<outs, ins, asmstr, pattern> {

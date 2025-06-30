@@ -196,7 +196,8 @@ std::string RL78ToolChain::computeSysRoot() const {
    llvm::sys::path::append(SysRootDir, getDriver().Dir, "../lib/clang-runtimes",
                            "rl78-unknown-elf");
 
-   SysRootDir += SelectedMultilibs[SelectedMultilibs.size()-1].osSuffix();
+   if (SelectedMultilibs.size())
+     SysRootDir += SelectedMultilibs[SelectedMultilibs.size() - 1].osSuffix();
    return std::string(SysRootDir);
 }
 
@@ -246,7 +247,7 @@ void RL78ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 void RL78ToolChain::AddLinkRuntimeLib(const ArgList &Args,
                                       ArgStringList &CmdArgs) const {
   CmdArgs.push_back(
-      Args.MakeArgString("-lclang_rt.builtins-" + getTriple().getArchName()));
+      Args.MakeArgString("-lclang_rt.builtins"));
 }
 
 auto RL78ToolChain::buildLinker() const -> Tool * {
@@ -279,6 +280,22 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   std::vector<llvm::StringRef> Features;
   handleTargetFeaturesGroup(TC.getDriver(), TC.getTriple(), Args, Features,
                             options::OPT_m_rl78_Features_Group);
+
+  // -mfar-data includes and replaces -mfar-rom
+  const Arg *mData =
+      Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
+  if (mData) {
+    if (mData->getOption().getID() == options::OPT_mfar_data) {
+      const Arg *mRom =
+          Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
+                          options::OPT_mfar_rom);
+      if (mRom && mRom->getOption().getID() == options::OPT_mfar_rom) {
+        Features.erase(
+            std::remove(Features.begin(), Features.end(), "+far-rom"),
+            Features.end());
+      }
+    }
+  }
 
   // Add features to mattr
   std::string MAttrString = "-plugin-opt=-mattr=";
@@ -327,7 +344,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Do not add if nostdlib or nostartfiles options present
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
     CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "crt0.o")));
-    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtbegin-rl78.o")));
+    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtbegin.o")));
   }
 
   // Do not add if nostdlib or nodefaultlibs options present
@@ -370,7 +387,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Do not add if nostdlib or nostartfiles options present
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
-    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtend-rl78.o")));
+    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtend.o")));
     CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "crtn.o")));
   }
 

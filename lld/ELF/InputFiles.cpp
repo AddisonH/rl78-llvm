@@ -742,7 +742,16 @@ void ObjFile<ELFT>::initializeSections(bool ignoreComdats,
     // SHF_EXCLUDE'ed sections are discarded by the linker. However,
     // if -r is given, we'll let the final link discard such sections.
     // This is compatible with GNU.
-    if ((sec.sh_flags & SHF_EXCLUDE) && !config->relocatable) {
+    bool rl78ATSection = false;
+    if (config->emachine == EM_RL78 && (sec.sh_flags & SHF_RENESAS_ABS)) {
+      if (Expected<StringRef> e = obj.getSectionName(sec, shstrtab)) {
+        StringRef sectionName = *e;
+        if (auto pos = sectionName.rfind("_AT"); pos != StringRef::npos) {
+          rl78ATSection = true;
+        }
+      }
+    }
+    if ((sec.sh_flags & SHF_EXCLUDE) && (!config->relocatable) && !rl78ATSection) {
       if (sec.sh_type == SHT_LLVM_CALL_GRAPH_PROFILE)
         cgProfileSectionIndex = i;
       if (sec.sh_type == SHT_LLVM_ADDRSIG) {

@@ -7880,6 +7880,10 @@ static void handleRL78InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL,
   } else {
     D->addAttr(::new (S.Context) RL78InterruptAttr(S.Context, AL, Specs, (unsigned *)ExtraDataVects.begin(), (unsigned)ExtraDataVects.size()));
   }
+
+  // Retain interrupt attribute declared with "static".
+  if (FD->getStorageClass() == SC_Static)
+    FD->addAttr(UsedAttr::CreateImplicit(S.Context));
 }
 
 static void handleInterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
@@ -8940,14 +8944,14 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
         getAddressSpace(cast<FunctionDecl>(D)->getType(), S.Context) == LangAS::__far_code) {
       if (D->hasAttr<RL78CalltAttr>()) {
         S.Diag(AL.getLoc(), diag::err_attributes_are_not_compatible)
-            << AL << "'__callt'";
+            << AL << "'__callt'" <<true;
         AL.setInvalid();
       }
     }
     break;
   case ParsedAttr::AT_RL78Callt:
     if(cast<FunctionDecl>(D)->isInlined()) {
-      S.Diag(AL.getLoc(), diag::err_attributes_are_not_compatible) << "callt" << "inline";
+      S.Diag(AL.getLoc(), diag::err_attributes_are_not_compatible) << "callt" << "inline" <<true;
       AL.setInvalid();
     }
     else
@@ -9782,7 +9786,7 @@ void Sema::ProcessDeclAttributeList(
         if (AL.getKind() == ParsedAttr::AT_RL78Far) {
           HasExplicitFar = true;
           Diag(AL.getLoc(), diag::err_attributes_are_not_compatible)
-              << AL << "'__callt'";
+              << AL << "'__callt'" <<true;
           AL.setInvalid();
         }
       }

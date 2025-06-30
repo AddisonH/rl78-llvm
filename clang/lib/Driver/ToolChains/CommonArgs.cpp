@@ -596,9 +596,7 @@ void tools::getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
 
 llvm::StringRef tools::getLTOParallelism(const ArgList &Args, const Driver &D) {
   Arg *LtoJobsArg = Args.getLastArg(options::OPT_flto_jobs_EQ);
-  llvm::Triple Triple(D.getTargetTriple());
-  // TODO: see if this indeed disabled parallelism for RL78
-  if (!LtoJobsArg || Triple.getArch() == llvm::Triple::RL78)
+  if (!LtoJobsArg)
     return {};
   if (!llvm::get_threadpool_strategy(LtoJobsArg->getValue()))
     D.Diag(diag::err_drv_invalid_int_value)

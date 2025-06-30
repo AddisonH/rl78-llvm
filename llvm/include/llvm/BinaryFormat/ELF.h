@@ -1149,16 +1149,9 @@ enum : unsigned {
 
   // This section should not be garbage collected by the linker.
   SHF_GNU_RETAIN = 0x200000,
-  
-  // For the sake of compatibility with CC-RL, we need to resolve the conflict
-  // by changing the SHF_EXCLUDE flag.
-#ifdef USE_SHF_RENESAS_ABS
-  SHF_RENESAS_ABS = 0x80000000U,
-  SHF_EXCLUDE = 0x40000000U,
-#else
+
   // This section is excluded from the final executable or shared library.
   SHF_EXCLUDE = 0x80000000U,
-#endif
 
   // Start of target-specific flags.
 
@@ -1219,7 +1212,10 @@ enum : unsigned {
   SHF_MIPS_STRING = 0x80000000,
 
   // Make code section unreadable when in execute-only mode
-  SHF_ARM_PURECODE = 0x20000000
+  SHF_ARM_PURECODE = 0x20000000,
+
+  // RL78 Specific Section flags.
+  SHF_RENESAS_ABS = 0x80000000U
 };
 
 // Section Group Flags

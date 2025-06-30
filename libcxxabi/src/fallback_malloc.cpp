@@ -58,8 +58,15 @@ private:
 #endif
 };
 
+// Accommodate small targets whose biggest alignment is smaller than "sizeof(heap_node)"
+#if (__BIGGEST_ALIGNMENT__ < 4)
+#  define _FALLBACK_MALLOC_ATTR_ALIGNED __attribute__((aligned(4)))
+#else
+#  define _FALLBACK_MALLOC_ATTR_ALIGNED __attribute__((aligned))
+#endif
+
 static const size_t HEAP_SIZE = 512;
-char heap[HEAP_SIZE] __attribute__((aligned));
+char heap[HEAP_SIZE] _FALLBACK_MALLOC_ATTR_ALIGNED;
 
 typedef unsigned short heap_offset;
 typedef unsigned short heap_size;
@@ -76,7 +83,7 @@ struct heap_node {
 // as RequiredAligned. Note that RequiredAlignment can be greater than
 // alignof(std::max_align_t) on 64 bit systems compiling 32 bit code.
 struct FallbackMaxAlignType {
-} __attribute__((aligned));
+} _FALLBACK_MALLOC_ATTR_ALIGNED;
 const size_t RequiredAlignment = alignof(FallbackMaxAlignType);
 
 static_assert(alignof(FallbackMaxAlignType) % sizeof(heap_node) == 0,

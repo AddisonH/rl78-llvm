@@ -868,6 +868,16 @@ to_chars_result _Floating_to_chars_general_precision(
         _Precision = 6;
     } else if (_Precision == 0) {
         _Precision = 1;
+#if __SIZEOF_INT__ == 2
+    } else if (_Precision < 16'000) {
+        // _Precision is ok.
+    } else {
+        // Avoid integer overflow.
+        // Due to general notation's zero-trimming behavior, we can simply clamp _Precision.
+        // This is further clamped below.
+        _Precision = 16'000;
+    }
+#else
     } else if (_Precision < 1'000'000) {
         // _Precision is ok.
     } else {
@@ -876,6 +886,7 @@ to_chars_result _Floating_to_chars_general_precision(
         // This is further clamped below.
         _Precision = 1'000'000;
     }
+#endif
 
     // _Precision is now the Standard's P.
 

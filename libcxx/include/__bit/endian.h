@@ -19,7 +19,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
 enum class endian  : long {
 #else
 enum class endian {

@@ -808,9 +808,8 @@ Expr ScriptParser::readAssert() {
   expect(")");
 
   return [=] {
-    if (config->noinhibitAssert)
-      if (!e().getValue())
-        errorOrWarn(msg);
+    if (!(config->rl78InhibitAssert || e().getValue()))
+      errorOrWarn(msg);
 
     return script->getDot();
   };
@@ -1235,10 +1234,15 @@ Expr ScriptParser::readConstant() {
   if (s == "MAXPAGESIZE")
     return [] { return config->maxPageSize; };
   if (s == "MIRRORAREASTART")
-    return [] {
-      if ((config->eflags & ELF::EF_RL78_MAA_1) == ELF::EF_RL78_MAA_1) {
-        return 0x10000;
+    return [s, this] {
+      if (config->emachine == EM_RL78) {
+        if ((config->eflags & ELF::EF_RL78_MAA_1) == ELF::EF_RL78_MAA_1) {
+          return 0x10000;
+        } else {
+          return 0;
+        }
       } else {
+        setError("unknown constant: " + s);
         return 0;
       }
     };

@@ -146,7 +146,7 @@ const unsigned indices[] =
 // are fewer potential primes to search, and fewer potential primes to divide
 // against.
 
-#ifdef __RL78__
+#if __SIZEOF_INT__ == 2
 template <size_t _Sz = sizeof(size_t)>
 inline _LIBCPP_INLINE_VISIBILITY
 typename enable_if<_Sz == 2, void>::type

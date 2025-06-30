@@ -1203,21 +1203,20 @@ static void collectLocalBranchTargets(
 }
 
 // Create an MCSymbolizer for the target and add it to the MCDisassembler.
-// This is currently used on AMDGPU and RL78, and assumes the format of the
+// This is currently only used on AMDGPU, and assumes the format of the
 // void * argument passed to AMDGPU's createMCSymbolizer.
 static void addSymbolizer(
     MCContext &Ctx, const Target *Target, StringRef TripleName,
     MCDisassembler *DisAsm, uint64_t SectionAddr, ArrayRef<uint8_t> Bytes,
-    SectionSymbolsTy &Symbols, std::map<SectionRef, SectionSymbolsTy> &AllSymbols,
-    std::vector<std::unique_ptr<std::string>> &SynthesizedLabelNames, Triple::ArchType triple) {
+    SectionSymbolsTy &Symbols,
+    std::vector<std::unique_ptr<std::string>> &SynthesizedLabelNames) {
 
   std::unique_ptr<MCRelocationInfo> RelInfo(
       Target->createMCRelocationInfo(TripleName, Ctx));
   if (!RelInfo)
     return;
-  void * DisInfo = triple == Triple::amdgcn ? (void *)&Symbols : (void *)&AllSymbols;
   std::unique_ptr<MCSymbolizer> Symbolizer(Target->createMCSymbolizer(
-      TripleName, nullptr, nullptr, DisInfo, &Ctx, std::move(RelInfo)));
+      TripleName, nullptr, nullptr, &Symbols, &Ctx, std::move(RelInfo)));
   MCSymbolizer *SymbolizerPtr = &*Symbolizer;
   DisAsm->setSymbolizer(std::move(Symbolizer));
 
@@ -1521,12 +1520,10 @@ static void disassembleObject(const Target *TheTarget, ObjectFile &Obj,
         unwrapOrError(Section.getContents(), Obj.getFileName()));
 
     std::vector<std::unique_ptr<std::string>> SynthesizedLabelNames;
-    if (Obj.isELF() &&
-        (Obj.getArch() == Triple::amdgcn ||
-         (Obj.getArch() == Triple::RL78 && !Obj.isRelocatableObject()))) {
-      // AMDGPU/RL78 disassembler uses symbolizer for printing labels
+    if (Obj.isELF() && Obj.getArch() == Triple::amdgcn) {
+      // AMDGPU disassembler uses symbolizer for printing labels
       addSymbolizer(Ctx, TheTarget, TripleName, DisAsm, SectionAddr, Bytes,
-                    Symbols, AllSymbols, SynthesizedLabelNames, Obj.getArch());
+                    Symbols, SynthesizedLabelNames);
     }
 
     StringRef SegmentName = getSegmentName(MachO, Section);

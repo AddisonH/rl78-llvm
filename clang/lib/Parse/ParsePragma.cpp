@@ -2420,6 +2420,9 @@ static RenesasCCRLInterruptPragmaExtra ParseInterruptSpec(Preprocessor &PP, Toke
           return extraInfoInterrupt;
         }
         PP.Lex(Tok);
+      } else {
+        PP.Diag(Tok, diag::err_expected) << "one of RB0, RB1, RB2 or RB3";
+        return extraInfoInterrupt;
       }
     }
     else if(II->getName().compare("enable") == 0) {
@@ -2438,6 +2441,9 @@ static RenesasCCRLInterruptPragmaExtra ParseInterruptSpec(Preprocessor &PP, Toke
           return extraInfoInterrupt;
         }
         PP.Lex(Tok);
+      } else {
+        PP.Diag(Tok, diag::err_expected) << "true or false";
+        return extraInfoInterrupt;
       }
     }
     else {
@@ -2448,8 +2454,7 @@ static RenesasCCRLInterruptPragmaExtra ParseInterruptSpec(Preprocessor &PP, Toke
     if(Tok.is(tok::r_paren))
       break;
     if(Tok.isNot(tok::comma)) {
-      //TODO: change error meesage
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol);
+      PP.Diag(Tok.getLocation(), diag::warn_pragma_invalid);
       return extraInfoInterrupt;
     }
   } while (1);

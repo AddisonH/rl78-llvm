@@ -497,6 +497,8 @@ template <class ELFT> void elf::createSyntheticSections() {
 
   if (config->emachine == EM_PPC)
     in.plt = std::make_unique<PPC32GlinkSection>();
+  else if (config->emachine == EM_RL78)
+    in.plt = std::make_unique<RL78PltSection>();
   else
     in.plt = std::make_unique<PltSection>();
   add(*in.plt);
@@ -838,11 +840,10 @@ static bool isRelroSection(const OutputSection *sec) {
 // * It is easy to check if a give branch was taken.
 // * It is easy two see how similar two ranks are (see getRankProximity).
 enum RankFlags {
-  RF_NOT_ADDR_SET = 1 << 28,
-  RF_NOT_ALLOC = 1 << 27,
-  RF_PARTITION = 1 << 19, // Partition number (8 bits)
-  RF_NOT_SPECIAL = 1 << 18,
-  // RF_RL78_FAR = 1 << 17
+  RF_NOT_ADDR_SET = 1 << 27,
+  RF_NOT_ALLOC = 1 << 26,
+  RF_PARTITION = 1 << 18, // Partition number (8 bits)
+  RF_NOT_SPECIAL = 1 << 17,
   RF_WRITE = 1 << 16,
   RF_EXEC_WRITE = 1 << 15,
   RF_EXEC = 1 << 14,
@@ -959,17 +960,6 @@ static unsigned getSectionRank(const OutputSection &osec) {
     // and match GNU ld.
     StringRef name = osec.name;
     if (name == ".sdata" || (osec.type == SHT_NOBITS && name != ".sbss"))
-      rank |= 1;
-  }
-
-  if (config->emachine == EM_RL78) {
-    // We want to differentiate between far and near sections, so we allocate
-    // the "orphan" <sec>_AT<address> sections near their <sec> counter-parts.
-    if (osec.name.startswith(".bssf") || 
-        osec.name.startswith(".frodata") || osec.name.startswith(".constf"))
-      rank |= 1 << 17;
-    if (osec.name.startswith(".bss") || osec.name.startswith(".rodata") ||
-        osec.name.startswith(".frodata") || osec.name.startswith(".const"))
       rank |= 1;
   }
 
@@ -1468,6 +1458,121 @@ template <class ELFT> void Writer<ELFT>::sortSections() {
   script->adjustSectionsAfterSorting();
 }
 
+// Determines the relative order of the RL78 absolute sections.
+static void sortRL78ATSections(std::unique_ptr<LinkerScript> &script) {
+  SmallDenseMap<StringRef,
+      std::pair<SmallVector<SectionCommand *, 4>, size_t>, 4> atSecs;
+  SmallVector<SectionCommand *, 4> farATSecs;
+
+  // Extract the absolute sections from sectionCommands in atSecs/farATSecs.
+  auto i = script->sectionCommands.begin();
+  auto j = i;
+  for (const auto e = script->sectionCommands.end(); i != e; ++i) {
+    if (auto *osd = dyn_cast<OutputDesc>(*i);
+        osd && (config->emachine == EM_RL78) &&
+        (osd->osec.flags & SHF_RENESAS_ABS) && osd->osec.addrExpr &&
+        osd->osec.name.contains("_AT")) {
+      // Separate the far absolute sections from the near ones.
+      if (osd->osec.addrExpr().getValue() > 0xFFFF) {
+        farATSecs.emplace_back(*i);
+        continue;
+      }
+      auto pref = osd->osec.name.substr(0, osd->osec.name.find("_AT"));
+      auto &[secs, idx] = atSecs[pref];
+      if (secs.empty())
+        idx = i - script->sectionCommands.begin();
+      secs.emplace_back(*i);
+    } else {
+      *j++ = *i;
+    }
+  }
+
+  // Trim the sectionCommands vector if any absolute sections were found.
+  script->sectionCommands.resize(j - script->sectionCommands.begin());
+
+  // If any near absolute sections were found.
+  if (!atSecs.empty()) {
+    // This keeps track of the addresses and indices in sectionCommands
+    // of the AT sections.
+    SmallVector<std::pair<uint64_t, size_t>, 4> addrIdxs;
+
+    // Insert the absolute sections into sectionCommands.
+    for (auto it = atSecs.begin(); it != atSecs.end(); ++it) {
+      auto &pref = it->first;
+      auto &[secs, idx] = it->second;
+
+      // Sort the absolute sections in each bin by their address.
+      std::sort(secs.begin(), secs.end(), [](auto cmd1, auto cmd2) {
+        return cast<OutputDesc>(cmd1)->osec.addrExpr().getValue() <
+               cast<OutputDesc>(cmd2)->osec.addrExpr().getValue();
+      });
+
+      // The tentative position where to insert the AT sections is
+      // just before the regular section with the same name e.g.
+      // .rodata_AT03000 just before .rodata.
+      i = script->sectionCommands.begin();
+      auto pos = (size_t)std::distance(
+          i, std::find_if(i, script->sectionCommands.end(),
+                          [pref](const SectionCommand *cmd) {
+                            if (auto *osd = dyn_cast<OutputDesc>(cmd))
+                              return osd->osec.name == pref;
+                            return false;
+                          }));
+
+      // If no section was found, use the original index,
+      // determined based on the rank.
+      if (pos == script->sectionCommands.size())
+        pos = idx;
+
+      // Find the position of the AT section in addrIdxs by address and by
+      // tentative pos in sectionCommands.
+      auto addr = cast<OutputDesc>(secs.front())->osec.addrExpr().getValue();
+      auto itByAddr = std::lower_bound(addrIdxs.begin(), addrIdxs.end(), addr,
+                                       [&](const std::pair<uint64_t, size_t> &a,
+                                           uint64_t b) { return a.first < b; });
+      auto itByPos = std::lower_bound(addrIdxs.begin(), addrIdxs.end(), pos,
+                                      [&](const std::pair<uint64_t, size_t> &a,
+                                          size_t b) { return a.second < b; });
+
+      // If the two differ, adjust the position in sectionCommands.
+      if (itByAddr != itByPos) {
+        // If moving up, insert before the next existing AT section;
+        // otherwise, insert after the previous one.
+        if (itByAddr < itByPos) {
+          pos = itByAddr->second;
+        } else {
+          pos = (itByAddr - 1)->second + 1;
+        }
+      }
+
+      // Insert the addresses and indices of the AT sections into addrIdxs.
+      for (size_t i = 0; i != secs.size(); ++i)
+        itByAddr = std::next(addrIdxs.insert(itByAddr,
+            { cast<OutputDesc>(secs[i])->osec.addrExpr().getValue(), pos + i }));
+
+      // Update the indices of the rest of the AT sections.
+      for (; itByAddr != addrIdxs.end(); ++itByAddr)
+        itByAddr->second += secs.size();
+
+      // Finally, insert the AT sections at the determined position.
+      script->sectionCommands.insert(i + pos, secs.begin(), secs.end());
+    }
+  }
+
+  // If any far absolute sections were found.
+  if (!farATSecs.empty()) {
+    // Just sort them by their address and add them to the end of
+    // sectionCommands.
+    std::sort(
+        farATSecs.begin(), farATSecs.end(), [](auto cmd1, auto cmd2) {
+          return cast<OutputDesc>(cmd1)->osec.addrExpr().getValue() <
+                 cast<OutputDesc>(cmd2)->osec.addrExpr().getValue();
+        });
+    script->sectionCommands.insert(script->sectionCommands.end(),
+                                   farATSecs.begin(), farATSecs.end());
+  }
+}
+
 template <class ELFT> void Writer<ELFT>::sortOrphanSections() {
   // Orphan sections are sections present in the input files which are
   // not explicitly placed into the output file by the linker script.
@@ -1543,6 +1648,9 @@ template <class ELFT> void Writer<ELFT>::sortOrphanSections() {
     std::rotate(pos, nonScriptI, end);
     nonScriptI = end;
   }
+
+  if (config->emachine == EM_RL78)
+    sortRL78ATSections(script);
 }
 
 static bool compareByFilePosition(InputSection *a, InputSection *b) {
@@ -1619,7 +1727,10 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   ThunkCreator tc;
   AArch64Err843419Patcher a64p;
   ARMErr657417Patcher a32p;
-  config->noinhibitAssert = false;
+
+  if (config->emachine == EM_RL78)
+    static_cast<RL78PltSection &>(*in.plt).initAllocSize();
+
   script->assignAddresses();
   // .ARM.exidx and SHF_LINK_ORDER do not require precise addresses, but they
   // do require the relative addresses of OutputSections because linker scripts
@@ -1658,55 +1769,10 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
       changed |= a32p.createFixes();
     }
 
-    //if (in.plt)
-    //  changed |= in.plt->updateAllocSize();
-
-    for (Partition &part : partitions) {
-      changed |= part.relaDyn->updateAllocSize();
-      if (part.relrDyn)
-        changed |= part.relrDyn->updateAllocSize();
-    }
-
-    const Defined *changedSym = script->assignAddresses();
-    if (!changed) {
-      // Some symbols may be dependent on section addresses. When we break the
-      // loop, the symbol values are finalized because a previous
-      // assignAddresses() finalized section addresses.
-      if (!changedSym)
-        break;
-      if (++assignPasses == 5) {
-        errorOrWarn("assignment to symbol " + toString(*changedSym) +
-                    " does not converge");
-        break;
-      }
-    }
-  }
-  pass = 0;
-  for (;;) {
-    bool changed = target->needsThunks && tc.createThunks(pass, outputSections);
-
-    // With Thunk Size much smaller than branch range we expect to
-    // converge quickly; if we get to 10 something has gone wrong.
-    if (changed && pass >= 10) {
-      error("thunk creation not converged");
-      break;
-    }
-
-    if (config->fixCortexA53Errata843419) {
-      if (changed)
-        script->assignAddresses();
-      changed |= a64p.createFixes();
-    }
-    if (config->fixCortexA8) {
-      if (changed)
-        script->assignAddresses();
-      changed |= a32p.createFixes();
-    }
-
     if (in.mipsGot)
       in.mipsGot->updateAllocSize();
 
-    if (in.plt)
+    if (config->emachine == EM_RL78)
       changed |= in.plt->updateAllocSize();
 
     for (Partition &part : partitions) {
@@ -1732,6 +1798,9 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   if (!config->relocatable && config->emachine == EM_RISCV)
     riscvFinalizeRelax(pass);
 
+  if (config->emachine == EM_RL78)
+    static_cast<RL78PltSection &>(*in.plt).finiAllocSize();
+
   if (config->relocatable)
     for (OutputSection *sec : outputSections)
       sec->addr = 0;
@@ -1746,8 +1815,6 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
              osec->name + " is not a multiple of alignment (" +
              Twine(osec->addralign) + ")");
     }
-  config->noinhibitAssert = true;
-  script->assignAddresses();
 }
 
 // If Input Sections have been shrunk (basic block sections) then

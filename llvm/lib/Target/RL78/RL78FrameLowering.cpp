@@ -11,12 +11,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "RL78Subtarget.h"
+#include "RL78MachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 
 using namespace llvm;
 
-static uint32_t getCSRegisterInfo(MachineFunction &MF) {
+RL78FrameLowering::RL78FrameLowering(const RL78Subtarget &ST)
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsUp, Align(2), 0) {}
+
+unsigned RL78FrameLowering::calculateCSRegisterMask(MachineFunction &MF) const {
   uint32_t mask = ~0U;
   unsigned int sizeof_mask = CHAR_BIT * sizeof(mask);
   unsigned regNo;
@@ -33,7 +37,7 @@ static uint32_t getCSRegisterInfo(MachineFunction &MF) {
           !MF.getRegInfo().reg_empty(TRI->getSubReg(regNo, RL78::sub_lo)) ||
           !MF.getRegInfo().reg_empty(TRI->getSubReg(regNo, RL78::sub_hi)))
 
-        mask |= 1 << (regNo - RL78::RP0);
+          mask |= 1 << (regNo - RL78::RP0);
     }
   }
 
@@ -45,11 +49,9 @@ static uint32_t getCSRegisterInfo(MachineFunction &MF) {
   if (!MF.getRegInfo().reg_empty(RL78::ES) || MF.getFrameInfo().hasCalls())
     mask |= 1 << regNo;
 
+  MF.getInfo<RL78MachineFunctionInfo>()->setCSRegisterMask(mask);
   return mask;
 }
-
-RL78FrameLowering::RL78FrameLowering(const RL78Subtarget &ST)
-    : TargetFrameLowering(TargetFrameLowering::StackGrowsUp, Align(2), 0) {}
 
 void RL78FrameLowering::emitPrologue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
@@ -66,16 +68,11 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
   DebugLoc dl;
   bool NeedsStackRealignment = RegInfo.shouldRealignStack(MF);
 
-  // Get the number of bytes to allocate from the FrameInfo
-  // TODO: if we are using FP, we are wasting stack here, since we will
-  // reallocate stack for parameter passing before each call. So maybe we could
-  // decrease this initial allocation by the max space allocated for function
-  // calls?
+  // Get the number of bytes to allocate from the FrameInfo.
   unsigned NumBytes = (int)MFI.getStackSize();
 
   // Align the stack size (2).
-  if (NumBytes & 1) // TODO: is it even possible to have odd stack size? replace
-                    // with assert?
+  if (NumBytes & 1) 
     NumBytes++;
 
   unsigned NumBytesForCSRegs = 0;
@@ -100,7 +97,8 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     // Bit 10 representes nested interrupts.
 
     if (Specs & 0x8)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::EI));
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::EI))
+          .setMIFlags(MachineInstr::FrameSetup);
     // Bits 0, 1 and 2 represent the regiter bank:
     // 0 is a register bank was specified
     // 1,2 the bank number: 0/1/2/3.
@@ -110,62 +108,58 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       report_fatal_error("Bank selection is not supported for S1 core type");
     }
 
-    uint32_t mask = getCSRegisterInfo(MF);
+    uint32_t mask = calculateCSRegisterMask(MF);    
     // If we use the bank= specification.
     if (Bank) {
       // When no register is used or no function is called in an interrupt
       // handler, the instruction for switching register banks is not output
       // even if register bank switching is specified
       if (mask || MFI.hasCalls())
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::SEL)).addImm(Bank >> 1);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::SEL))
+            .addImm(Bank >> 1)
+            .setMIFlags(MachineInstr::FrameSetup);
     } else {
       for (unsigned reg = 0; reg < 4; ++reg) {
         if ((1 << reg) & mask) {
           BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
-              .addReg(RL78::RP0 + (reg % 4));
+              .addReg(RL78::RP0 + (reg % 4))
+              .setMIFlags(MachineInstr::FrameSetup);
           NumBytesForCSRegs += 2;
-          unsigned CFIIndex =
-              MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                  nullptr, NumBytesForCSRegs + 4));
-          BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-              .addCFIIndex(CFIIndex);
         }
       }
     }
     if (mask & (1 << 5) && mask & (1 << 4)) {
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_cs), RL78::R1)
-          .addReg(RL78::CS);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A), RL78::R0).addReg(RL78::R1);
+          .addReg(RL78::CS)
+          .setMIFlags(MachineInstr::FrameSetup);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A), RL78::R0)
+          .addReg(RL78::R1)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
-          .addReg(RL78::ES);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
+          .addReg(RL78::ES)
+          .setMIFlags(MachineInstr::FrameSetup);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+          .addReg(RL78::RP0)
+          .setMIFlags(MachineInstr::FrameSetup);
       NumBytesForCSRegs += 2;
-      unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-          nullptr, NumBytesForCSRegs + 4));
-      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-          .addCFIIndex(CFIIndex);
     } else {
       if (mask & (1 << 4)) {
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_cs), RL78::R1)
-            .addReg(RL78::CS);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
+            .addReg(RL78::CS)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameSetup);
         NumBytesForCSRegs += 2;
-        unsigned CFIIndex =
-            MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                nullptr, NumBytesForCSRegs + 4));
-        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-            .addCFIIndex(CFIIndex);
       }
       if (mask & (1 << 5)) {
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
-            .addReg(RL78::ES);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
+            .addReg(RL78::ES)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameSetup);
         NumBytesForCSRegs += 2;
-        unsigned CFIIndex =
-            MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-                nullptr, NumBytesForCSRegs + 4));
-        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-            .addCFIIndex(CFIIndex);
       }
     }
   }
@@ -175,7 +169,9 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     // Reserve a slot for the old sp.
     NumBytes += 2;
     // Save AX, to be restored after we are done aligning.
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+        .addReg(RL78::RP0)
+        .setMIFlags(MachineInstr::FrameSetup);
   }
 
   MFI.setStackSize(NumBytes + NumBytesForCSRegs);
@@ -183,136 +179,198 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
   // Emit SUBW SP, #N.
   if (NumBytes > 0) {
     if (NumBytes == 2)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp)).addReg(RL78::RP0);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+          .addReg(RL78::RP0)
+          .setMIFlags(MachineInstr::FrameSetup);
     else if (NumBytes < 0x100)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(NumBytes);
-    else if (NumBytes < 0x1FC) {
-      // TODO: we can do for 3 x SUBW as well if RP0 is used
+          .addImm(NumBytes)
+          .setMIFlags(MachineInstr::FrameSetup);
+    else if (NumBytes < 0x1FD) {
+      // Number of bytes taken by the instructions:
+      // SUBW_sp_imm = 2;
+      // Total:
+      // 2 + 2 = 4 bytes
+      // Number of cycles each instruction takes:
+      // SUBW_sp_imm = 1;
+      // Total:
+      // 1 + 1 = 2 cycles
       BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(0xFE);
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(NumBytes - 0xFE);
+          .addImm(NumBytes - 0xFE)
+          .setMIFlags(MachineInstr::FrameSetup);
+    } else if (NumBytes < 0x2FB) {
+      // Number of bytes taken by the instructions:
+      // SUBW_sp_imm = 2;
+      // Total:
+      // 2 + 2 + 2 = 6 bytes
+      // Number of cycles each instruction takes:
+      // SUBW_sp_imm = 1;
+      // Total:
+      // 1 + 1 + 1 = 3 cycles
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameSetup);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameSetup);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(NumBytes - (0xFE * 2))
+          .setMIFlags(MachineInstr::FrameSetup);
     } else if (NumBytes < 0x10000) {
-      // TODO: check if RP0 is actually used i.e. the function has parameters.
-      // BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
-      //    .addReg(RL78::RP0, RegState::Kill);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6, RegState::Define)
-          .addReg(RL78::RP0, RegState::Kill)
-          .addReg(RL78::RP6, RegState::Kill);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
-          .addReg(RL78::SPreg);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_rp_imm), RL78::RP0)
-          .addReg(RL78::RP0)
-          .addImm(NumBytes);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
-          .addReg(RL78::RP0);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6, RegState::Define)
-          .addReg(RL78::RP0, RegState::Kill)
-          .addReg(RL78::RP6, RegState::Kill);
+      if (MBB.isLiveIn(RL78::RP0) || MBB.isLiveIn(RL78::R0) ||
+          MBB.isLiveIn(RL78::R1)) {
+        // Number of bytes taken by the instructions:
+        // XCHW_AX_rp = 1; MOVW_rp_sp = 2; SUBW_rp_imm = 3; MOVW_sp_rp = 2;
+        // Total:
+        // 1 + 2 + 3 + 2 + 1 = 9 bytes
+        // Number of cycles each instruction takes:
+        // XCHW_AX_rp = 1; MOVW_rp_sp = 1; SUBW_rp_imm = 1; MOVW_sp_rp = 1;
+        // Total:
+        // 1 + 1 + 1 + 1 + 1 = 5 cycles
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+            .addReg(RL78::RP6, RegState::Define)
+            .addReg(RL78::RP0, RegState::Kill)
+            .addReg(RL78::RP6, RegState::Kill)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
+            .addReg(RL78::SPreg)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_rp_imm), RL78::RP0)
+            .addReg(RL78::RP0)
+            .addImm(NumBytes)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+            .addReg(RL78::RP6, RegState::Define)
+            .addReg(RL78::RP0, RegState::Kill)
+            .addReg(RL78::RP6, RegState::Kill)
+            .setMIFlags(MachineInstr::FrameSetup);
+      } else {
+        // Number of bytes taken by the instructions:
+        // MOVW_rp_sp = 2; SUBW_rp_imm = 3; MOVW_sp_rp = 2;
+        // Total:
+        // 2 + 3 + 2 = 7 bytes
+        // Number of cycles each instruction takes:
+        // MOVW_rp_sp = 1; SUBW_rp_imm = 1; MOVW_sp_rp = 1;
+        // Total:
+        // 1 + 1 + 1 = 3 cycles
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
+            .addReg(RL78::SPreg)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_rp_imm), RL78::RP0)
+            .addReg(RL78::RP0)
+            .addImm(NumBytes)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameSetup);
+      }
     }
     // Most RL78 devices just have a few KB of RAM,
     // the biggest RAM which I've seen on RL78 is 48 KB (R5F104xL) so well under
     // 64 KB (0x10000).
     else
       llvm_unreachable("Invalid stack allocation!");
-
-    unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(
-        nullptr, (NumBytes + NumBytesForCSRegs) + 4));
-    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-        .addCFIIndex(CFIIndex);
   }
 
   if (NeedsStackRealignment) {
     // Save SP to HL.
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP6)
-        .addReg(RL78::SPreg);
+        .addReg(RL78::SPreg)
+        .setMIFlags(MachineInstr::FrameSetup);
 
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
-        .addReg(RL78::SPreg);
+        .addReg(RL78::SPreg)
+        .setMIFlags(MachineInstr::FrameSetup);
 
     // Align to the requested boundary.
     const unsigned alignment = (~(MFI.getMaxAlign().value() - 1)) & 0xffff;
     if (MFI.getMaxAlign().value() & 0xFF00)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_r_imm), RL78::R1)
           .addReg(RL78::R1)
-          .addImm(alignment >> 8);
+          .addImm(alignment >> 8)
+          .setMIFlags(MachineInstr::FrameSetup);
 
     BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
         .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
+        .addReg(RL78::R0, RegState::Kill)
+        .setMIFlags(MachineInstr::FrameSetup);
     BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_r_imm), RL78::R1)
         .addReg(RL78::R1)
-        .addImm(alignment & 0xff);
+        .addImm(alignment & 0xff)
+        .setMIFlags(MachineInstr::FrameSetup);
     BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
         .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
+        .addReg(RL78::R0, RegState::Kill)
+        .setMIFlags(MachineInstr::FrameSetup);
 
     // Change SP to the new aligned address.
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
-        .addReg(RL78::RP0, RegState::Kill);
+        .addReg(RL78::RP0, RegState::Kill)
+        .setMIFlags(MachineInstr::FrameSetup);
 
     // Save the old sp just above the new stack start.
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
-        .addReg(RL78::RP6);
+        .addReg(RL78::RP6)
+        .setMIFlags(MachineInstr::FrameSetup);
     if (isUInt<8>(NumBytes)) {
       BuildMI(MBB, MBBI, dl, TII.get(RL78::STORE16_stack_slot_rp))
           .addReg(RL78::SPreg)
           .addImm(NumBytes - 2)
-          .addReg(RL78::RP0, RegState::Kill);
+          .addReg(RL78::RP0, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameSetup);
 
       // Restore old ax value.
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_rpi), RL78::RP0)
           .addReg(RL78::RP6, RegState::Kill)
-          .addImm(NumBytes);
+          .addImm(NumBytes)
+          .setMIFlags(MachineInstr::FrameSetup);
 
     } else if (isUInt<16>(NumBytes + 2)) {
       // Store using word[BC], save the old sp.
       BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
-          .addReg(RL78::RP2, RegState::Kill);
+          .addReg(RL78::RP2, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP2)
-          .addReg(RL78::SPreg);
+          .addReg(RL78::SPreg)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::STORE16_rpi_rp))
           .addReg(RL78::RP2, RegState::Kill)
           .addImm(NumBytes)
-          .addReg(RL78::RP0, RegState::Kill);
+          .addReg(RL78::RP0, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameSetup);
 
       // Restore old ax value.
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6, RegState::Kill);
+          .addReg(RL78::RP6, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_AX), RL78::RP2)
-          .addReg(RL78::RP0, RegState::Kill);
+          .addReg(RL78::RP0, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_rpi), RL78::RP0)
           .addReg(RL78::RP2, RegState::Kill)
-          .addImm(NumBytes);
+          .addImm(NumBytes)
+          .setMIFlags(MachineInstr::FrameSetup);
 
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2)
+          .setMIFlags(MachineInstr::FrameSetup);
     } else
       llvm_unreachable("Invalid stack offset!");
   }
 
-  if (hasFP(MF)) {
-    // Update FP with the new base value...
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP6)
-        .addReg(RL78::SPreg);
-    // Dwarf regnum of HL is 6.
-    unsigned CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, 6));
-    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-        .addCFIIndex(CFIIndex);
-
-    // Mark the FramePtr as live-in in every block except the entry.
-    for (MachineFunction::iterator I = std::next(MF.begin()), E = MF.end();
-         I != E; ++I)
-      I->addLiveIn(RL78::RP6);
-  }
 }
 
 MachineBasicBlock::iterator RL78FrameLowering::eliminateCallFramePseudoInstr(
@@ -325,29 +383,25 @@ MachineBasicBlock::iterator RL78FrameLowering::eliminateCallFramePseudoInstr(
   int64_t Amount = I->getOperand(0).getImm();
   const DebugLoc &DL = I->getDebugLoc();
 
-  if (I->getOpcode() == TII.getCallFrameSetupOpcode()) {
-
+  if (I->getOpcode() == TII.getCallFrameSetupOpcode())
     BuildMI(MBB, I, DL, TII.get(RL78::CALL_STACK_SETUP)).addImm(Amount);
-
-    // allocate stack for parameter passing
-    if (hasFP(MF) && Amount != 0)
-      BuildMI(MBB, I, DL, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
-          .addReg(RL78::SPreg)
-          .addImm(Amount);
-  } else {
-    // deallocate stack used for parameter passing
+  else
     BuildMI(MBB, I, DL, TII.get(RL78::CALL_STACK_DESTROY)).addImm(Amount);
-    if (hasFP(MF) && Amount != 0)
-      BuildMI(MBB, I, DL, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
-          .addReg(RL78::SPreg)
-          .addImm(Amount);
-  }
   return MBB.erase(I);
 }
 
 void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
+  const TargetRegisterInfo *TRI =
+      MF.getSubtarget<RL78Subtarget>().getRegisterInfo();
+  // We check around RET to see if rp0, r0 or r1 are LiveIn or not
+  bool RP0Live = MBB.computeRegisterLiveness(TRI, RL78::RP0, MBBI) ==
+                 llvm::MachineBasicBlock::LivenessQueryResult::LQR_Live;
+  bool R0Live = MBB.computeRegisterLiveness(TRI, RL78::R0, MBBI) ==
+                llvm::MachineBasicBlock::LivenessQueryResult::LQR_Live;
+  bool R1Live = MBB.computeRegisterLiveness(TRI, RL78::R1, MBBI) ==
+                llvm::MachineBasicBlock::LivenessQueryResult::LQR_Live;
   const RL78InstrInfo &TII =
       *static_cast<const RL78InstrInfo *>(MF.getSubtarget().getInstrInfo());
   DebugLoc dl = MBBI->getDebugLoc();
@@ -359,32 +413,6 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
   int NumBytes = (int)MFI.getStackSize();
   // if (NumBytes == 0)
   // return;
-
-  if (hasFP(MF)) {
-    // Restore SP from FP
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-        .addReg(RL78::RP6, RegState::Define)
-        .addReg(RL78::RP0, RegState::Kill)
-        .addReg(RL78::RP6, RegState::Kill);
-    // Dwarf regnum of AX is 0.
-    unsigned CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, 0));
-    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-        .addCFIIndex(CFIIndex);
-
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
-        .addReg(RL78::RP0);
-    // Dwarf regnum of SP is 32.
-    CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, 32));
-    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-        .addCFIIndex(CFIIndex);
-
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-        .addReg(RL78::RP6, RegState::Define)
-        .addReg(RL78::RP0, RegState::Kill)
-        .addReg(RL78::RP6, RegState::Kill);
-  }
 
   unsigned NumBytesForCSRegs = 0;
   uint64_t Specs;
@@ -417,7 +445,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
     // RBS1 bits are part of PSW register): "The data saved to the stack returns
     // to the PC and the PSW, and the program returns from the interrupt
     // servicing routine. "
-    mask = getCSRegisterInfo(MF);
+    mask = MF.getInfo<RL78MachineFunctionInfo>()->getCSRegisterMask();
 
     if (mask & (1 << 5) && mask & (1 << 4)) {
       NumBytesForCSRegs += 2;
@@ -437,116 +465,186 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
 
   unsigned NumBytesAdjusted = NumBytes - NumBytesForCSRegs;
 
+
   // Restore the old SP.
   const RL78RegisterInfo &RegInfo = *static_cast<const RL78RegisterInfo *>(
       MF.getSubtarget().getRegisterInfo());
+
   if (RegInfo.shouldRealignStack(MF)) {
     BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
-        .addReg(RL78::RP6, RegState::Kill);
+        .addReg(RL78::RP6, RegState::Kill)
+        .setMIFlags(MachineInstr::FrameDestroy);
 
     if (isUInt<8>(NumBytesAdjusted - 2))
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_stack_slot), RL78::RP0)
           .addReg(RL78::SPreg)
-          .addImm(NumBytesAdjusted - 2);
+          .addImm(NumBytesAdjusted - 2)
+          .setMIFlags(MachineInstr::FrameDestroy);
     else if (isUInt<16>(NumBytesAdjusted)) {
       // Load using word[BC], restore the old sp.
       BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
-          .addReg(RL78::RP2, RegState::Kill);
+          .addReg(RL78::RP2, RegState::Kill)
+          .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP2)
-          .addReg(RL78::SPreg);
+          .addReg(RL78::SPreg)
+          .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_rpi), RL78::RP0)
           .addReg(RL78::RP2, RegState::Kill)
-          .addImm(NumBytesAdjusted);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2);
+          .addImm(NumBytesAdjusted)
+          .setMIFlags(MachineInstr::FrameDestroy);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2)
+          .setMIFlags(MachineInstr::FrameDestroy);
     } else
       llvm_unreachable("Invalid stack offset!");
 
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
-        .addReg(RL78::RP0);
+        .addReg(RL78::RP0)
+        .setMIFlags(MachineInstr::FrameDestroy);
     BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
-        .addReg(RL78::RP6, RegState::Kill);
+        .addReg(RL78::RP6, RegState::Kill)
+        .setMIFlags(MachineInstr::FrameDestroy);
     // Free up the slot used to save AX in the prologue.
     NumBytesAdjusted += 2;
   }
 
   if (NumBytesAdjusted != 0) {
     if (NumBytesAdjusted == 2) 
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP6);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP6)
+          .setMIFlags(MachineInstr::FrameDestroy);
     else if (NumBytesAdjusted < 0x100)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(NumBytesAdjusted);
-    else if (NumBytesAdjusted < 0x1FC) {
-      // TODO: we can do for 3 x ADDW as well if RP0 is used
+          .addImm(NumBytesAdjusted)
+          .setMIFlags(MachineInstr::FrameDestroy);
+    else if (NumBytesAdjusted < 0x1FD) {
+      // Number of bytes taken by the instructions:
+      // ADDW_sp_imm = 2;
+      // Total:
+      // 2 + 2 = 4 bytes
+      // Number of cycles each instruction takes:
+      // ADDW_sp_imm = 1;
+      // Total:
+      // 1 + 1 = 2 cycles
       BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(0xFE);
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
           .addReg(RL78::SPreg)
-          .addImm(NumBytesAdjusted - 0xFE);
+          .addImm(NumBytesAdjusted - 0xFE)
+          .setMIFlags(MachineInstr::FrameDestroy);
+    } else if (NumBytesAdjusted < 0x2FB) {
+      // Number of bytes taken by the instructions:
+      // ADDW_sp_imm = 2;
+      // Total:
+      // 2 + 2 + 2 = 6 bytes
+      // Number of cycles each instruction takes:
+      // ADDW_sp_imm = 1;
+      // Total:
+      // 1 + 1 + 1 = 3 cycles
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameDestroy);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(0xFE)
+          .setMIFlags(MachineInstr::FrameDestroy);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(NumBytesAdjusted - (0xFE * 2))
+          .setMIFlags(MachineInstr::FrameDestroy);
     } else if (NumBytesAdjusted < 0x10000) {
-      // TODO: check if RP0 is usesd
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6, RegState::Define)
-          .addReg(RL78::RP0, RegState::Kill)
-          .addReg(RL78::RP6, RegState::Kill);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
-          .addReg(RL78::SPreg);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_rp_imm), RL78::RP0)
-          .addReg(RL78::RP0)
-          .addImm(NumBytesAdjusted);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
-          .addReg(RL78::RP0);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
-          .addReg(RL78::RP6, RegState::Define)
-          .addReg(RL78::RP0, RegState::Kill)
-          .addReg(RL78::RP6, RegState::Kill);
+      if (RP0Live || R0Live || R1Live) {
+        // Number of bytes taken by the instructions:
+        // XCHW_AX_rp = 1; MOVW_rp_sp = 2; ADDW_rp_imm = 3; MOVW_sp_rp = 2;
+        // Total:
+        // 1 + 2 + 3 + 2 + 1 = 9 bytes
+        // Number of cycles each instruction takes:
+        // XCHW_AX_rp = 1; MOVW_rp_sp = 1; ADDW_rp_imm = 1; MOVW_sp_rp = 1;
+        // Total:
+        // 1 + 1 + 1 + 1 + 1 = 5 cycles
+
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+            .addReg(RL78::RP6, RegState::Define)
+            .addReg(RL78::RP0, RegState::Kill)
+            .addReg(RL78::RP6, RegState::Kill)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
+            .addReg(RL78::SPreg)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_rp_imm), RL78::RP0)
+            .addReg(RL78::RP0)
+            .addImm(NumBytesAdjusted)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+            .addReg(RL78::RP6, RegState::Define)
+            .addReg(RL78::RP0, RegState::Kill)
+            .addReg(RL78::RP6, RegState::Kill)
+            .setMIFlags(MachineInstr::FrameDestroy);
+      } else {
+        // Number of bytes taken by the instructions:
+        // MOVW_rp_sp = 2; ADDW_rp_imm = 3; MOVW_sp_rp = 2;
+        // Total:
+        // 2 + 3 + 2 = 7 bytes
+        // Number of cycles each instruction takes:
+        // MOVW_rp_sp = 1; ADDW_rp_imm = 1; MOVW_sp_rp = 1;
+        // Total:
+        // 1 + 1 + 1 = 3 cycles
+
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP0)
+            .addReg(RL78::SPreg)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_rp_imm), RL78::RP0)
+            .addReg(RL78::RP0)
+            .addImm(NumBytesAdjusted)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
+      }
     } else
       llvm_unreachable("Invalid stack allocation!");
-
-    unsigned CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(nullptr, 4));
-    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-        .addCFIIndex(CFIIndex);
   }
+
   if (MF.getFunction().hasFnAttribute("brk_interrupt") ||
       MF.getFunction().hasFnAttribute("interrupt")) {
     if (mask & (1 << 5) && mask & (1 << 4)) {
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
+          .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_es_A), RL78::ES)
-          .addReg(RL78::R1);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r), RL78::R1).addReg(RL78::R0);
+          .addReg(RL78::R1)
+          .setMIFlags(MachineInstr::FrameDestroy);
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r), RL78::R1)
+          .addReg(RL78::R0)
+          .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_cs_A), RL78::CS)
-          .addReg(RL78::R1);
+          .addReg(RL78::R1)
+          .setMIFlags(MachineInstr::FrameDestroy);
       NumBytes -= 2;
-      unsigned CFIIndex = MF.addFrameInst(
-          MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
-      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-          .addCFIIndex(CFIIndex);
     } else {
       if (mask & (1 << 5)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_es_A), RL78::ES)
-            .addReg(RL78::R1);
+            .addReg(RL78::R1)
+            .setMIFlags(MachineInstr::FrameDestroy);
         NumBytes -= 2;
-        unsigned CFIIndex = MF.addFrameInst(
-            MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
-        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-            .addCFIIndex(CFIIndex);
       }
       if (mask & (1 << 4)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_cs_A), RL78::CS)
-            .addReg(RL78::R1);
+            .addReg(RL78::R1)
+            .setMIFlags(MachineInstr::FrameDestroy);
         NumBytes -= 2;
-        unsigned CFIIndex = MF.addFrameInst(
-            MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
-        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-            .addCFIIndex(CFIIndex);
       }
     }
 
@@ -554,12 +652,9 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       for (unsigned reg = 4; reg > 0; --reg) {
         if ((1 << (reg - 1)) & mask) {
           BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp),
-                  RL78::RP0 + ((reg - 1) % 4));
+                  RL78::RP0 + ((reg - 1) % 4))
+              .setMIFlags(MachineInstr::FrameDestroy);
           NumBytes -= 2;
-          unsigned CFIIndex = MF.addFrameInst(
-              MCCFIInstruction::cfiDefCfaOffset(nullptr, NumBytes + 4));
-          BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
-              .addCFIIndex(CFIIndex);
         }
       }
     }
@@ -576,7 +671,8 @@ bool RL78FrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
 // if frame pointer elimination is disabled.
 bool RL78FrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  return MFI.hasVarSizedObjects();
+  assert(!MFI.hasVarSizedObjects() && "Functions requiring a frame pointer are not supported.");
+  return false;
 }
 
 StackOffset RL78FrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
@@ -608,10 +704,7 @@ StackOffset RL78FrameLowering::getFrameIndexReference(const MachineFunction &MF,
 }
 
 bool RL78FrameLowering::isLeafProc(MachineFunction &MF) const {
-  MachineFrameInfo &MFI = MF.getFrameInfo();
-
-  return !(MFI.hasCalls() // has calls
-           || hasFP(MF)); // need FP
+  return !MF.getFrameInfo().hasCalls();
 }
 
 namespace {

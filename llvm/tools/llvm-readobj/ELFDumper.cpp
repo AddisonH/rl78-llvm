@@ -1248,7 +1248,7 @@ const EnumEntry<unsigned> ElfMachineType[] = {
   ENUM_ENT(EM_COREA_2ND,     "EM_COREA_2ND"),
   ENUM_ENT(EM_ARC_COMPACT2,  "EM_ARC_COMPACT2"),
   ENUM_ENT(EM_OPEN8,         "EM_OPEN8"),
-  ENUM_ENT(EM_RL78,          "Renesas RL78 family"),
+  ENUM_ENT(EM_RL78,          "Renesas RL78"),
   ENUM_ENT(EM_VIDEOCORE5,    "Broadcom VideoCore V processor"),
   ENUM_ENT(EM_78KOR,         "EM_78KOR"),
   ENUM_ENT(EM_56800EX,       "EM_56800EX"),
@@ -1407,7 +1407,13 @@ static std::string getGNUFlags(unsigned EOSAbi, unsigned EMachine,
       return E.Value == Flag && !E.AltName.empty();
     });
     if (I != FlagsList.end()) {
-      Str += I->AltName;
+      // For Renesas RL78, we assume that excluded sections have only one flag
+      // set. If a section contains multiple flags, it is treated as a
+      // Renesas ABS section.
+      if (EMachine == EM_RL78 && (Flag & ELF::SHF_EXCLUDE) && !Str.empty())
+        Str += "Y"; // SHF_RENESAS_ABS
+      else
+        Str += I->AltName;
       continue;
     }
 
