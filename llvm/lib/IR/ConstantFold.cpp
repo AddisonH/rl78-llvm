@@ -324,6 +324,13 @@ static Constant *ExtractConstantBytes(Constant *C, unsigned ByteStart,
   }
 }
 
+static Constant *foldMaybeUndesirableCast(unsigned opc, Constant *V,
+                                          Type *DestTy) {
+  return ConstantExpr::isDesirableCastOp(opc)
+             ? ConstantExpr::getCast(opc, V, DestTy)
+             : ConstantFoldCastInstruction(opc, V, DestTy);
+}
+
 Constant *llvm::ConstantFoldCastInstruction(unsigned opc, Constant *V,
                                             Type *DestTy) {
   if (isa<PoisonValue>(V))
@@ -349,29 +356,7 @@ Constant *llvm::ConstantFoldCastInstruction(unsigned opc, Constant *V,
     if (CE->isCast()) {
       // Try hard to fold cast of cast because they are often eliminable.
       if (unsigned newOpc = foldConstantCastPair(opc, CE, DestTy))
-        return ConstantExpr::getCast(newOpc, CE->getOperand(0), DestTy);
-    } else if (CE->getOpcode() == Instruction::GetElementPtr &&
-               // Do not fold addrspacecast (gep 0, .., 0). It might make the
-               // addrspacecast uncanonicalized.
-               opc != Instruction::AddrSpaceCast &&
-               // Do not fold bitcast (gep) with inrange index, as this loses
-               // information.
-               !cast<GEPOperator>(CE)->getInRangeIndex() &&
-               // Do not fold if the gep type is a vector, as bitcasting
-               // operand 0 of a vector gep will result in a bitcast between
-               // different sizes.
-               !CE->getType()->isVectorTy()) {
-      // If all of the indexes in the GEP are null values, there is no pointer
-      // adjustment going on.  We might as well cast the source pointer.
-      bool isAllNull = true;
-      for (unsigned i = 1, e = CE->getNumOperands(); i != e; ++i)
-        if (!CE->getOperand(i)->isNullValue()) {
-          isAllNull = false;
-          break;
-        }
-      if (isAllNull)
-        // This is casting one pointer type to another, always BitCast
-        return ConstantExpr::getPointerCast(CE->getOperand(0), DestTy);
+        return foldMaybeUndesirableCast(newOpc, CE->getOperand(0), DestTy);
     }
   }
 
@@ -386,18 +371,22 @@ Constant *llvm::ConstantFoldCastInstruction(unsigned opc, Constant *V,
     Type *DstEltTy = DestVecTy->getElementType();
     // Fast path for splatted constants.
     if (Constant *Splat = V->getSplatValue()) {
+      Constant *Res = foldMaybeUndesirableCast(opc, Splat, DstEltTy);
+      if (!Res)
+        return nullptr;
       return ConstantVector::getSplat(
-          cast<VectorType>(DestTy)->getElementCount(),
-          ConstantExpr::getCast(opc, Splat, DstEltTy));
+          cast<VectorType>(DestTy)->getElementCount(), Res);
     }
     SmallVector<Constant *, 16> res;
     Type *Ty = IntegerType::get(V->getContext(), 32);
     for (unsigned i = 0,
                   e = cast<FixedVectorType>(V->getType())->getNumElements();
          i != e; ++i) {
-      Constant *C =
-        ConstantExpr::getExtractElement(V, ConstantInt::get(Ty, i));
-      res.push_back(ConstantExpr::getCast(opc, C, DstEltTy));
+      Constant *C = ConstantExpr::getExtractElement(V, ConstantInt::get(Ty, i));
+      Constant *Casted = foldMaybeUndesirableCast(opc, C, DstEltTy);
+      if (!Casted)
+        return nullptr;
+      res.push_back(Casted);
     }
     return ConstantVector::get(res);
   }
@@ -1928,6 +1917,10 @@ static Constant *foldGEPOfGEP(GEPOperator *GEP, Type *PointeeTy, bool InBounds,
   if (PointeeTy != GEP->getResultElementType())
     return nullptr;
 
+  // Leave inrange handling to DL-aware constant folding.
+  if (GEP->getInRange())
+    return nullptr;
+
   Constant *Idx0 = cast<Constant>(Idxs[0]);
   if (Idx0->isNullValue()) {
     // Handle the simple case of a zero index.
@@ -1937,7 +1930,7 @@ static Constant *foldGEPOfGEP(GEPOperator *GEP, Type *PointeeTy, bool InBounds,
     NewIndices.append(Idxs.begin() + 1, Idxs.end());
     return ConstantExpr::getGetElementPtr(
         GEP->getSourceElementType(), cast<Constant>(GEP->getPointerOperand()),
-        NewIndices, InBounds && GEP->isInBounds(), GEP->getInRangeIndex());
+        NewIndices, InBounds && GEP->isInBounds());
   }
 
   gep_type_iterator LastI = gep_type_end(GEP);
@@ -1981,21 +1974,14 @@ static Constant *foldGEPOfGEP(GEPOperator *GEP, Type *PointeeTy, bool InBounds,
   NewIndices.push_back(ConstantExpr::get(Instruction::Add, Idx0, LastIdx));
   NewIndices.append(Idxs.begin() + 1, Idxs.end());
 
-  // The combined GEP normally inherits its index inrange attribute from
-  // the inner GEP, but if the inner GEP's last index was adjusted by the
-  // outer GEP, any inbounds attribute on that index is invalidated.
-  std::optional<unsigned> IRIndex = GEP->getInRangeIndex();
-  if (IRIndex && *IRIndex == GEP->getNumIndices() - 1)
-    IRIndex = std::nullopt;
-
   return ConstantExpr::getGetElementPtr(
       GEP->getSourceElementType(), cast<Constant>(GEP->getPointerOperand()),
-      NewIndices, InBounds && GEP->isInBounds(), IRIndex);
+      NewIndices, InBounds && GEP->isInBounds());
 }
 
 Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
                                           bool InBounds,
-                                          std::optional<unsigned> InRangeIndex,
+                                          std::optional<ConstantRange> InRange,
                                           ArrayRef<Value *> Idxs) {
   if (Idxs.empty()) return C;
 
@@ -2011,7 +1997,7 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
 
   auto IsNoOp = [&]() {
     // Avoid losing inrange information.
-    if (InRangeIndex)
+    if (InRange)
       return false;
 
     return all_of(Idxs, [](Value *Idx) {
@@ -2082,12 +2068,6 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
     if (!isa<ConstantInt>(Idxs[i - 1]) && !isa<ConstantDataVector>(Idxs[i - 1]))
       // Skip if the type of the previous index is not supported.
       continue;
-    if (InRangeIndex && i == *InRangeIndex + 1) {
-      // If an index is marked inrange, we cannot apply this canonicalization to
-      // the following index, as that will cause the inrange index to point to
-      // the wrong element.
-      continue;
-    }
     if (isa<StructType>(Ty)) {
       // The verify makes sure that GEPs into a struct are in range.
       continue;
@@ -2109,16 +2089,16 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
       }
     } else {
       auto *CV = cast<ConstantDataVector>(Idxs[i]);
-      bool InRange = true;
+      bool IsInRange = true;
       for (unsigned I = 0, E = CV->getNumElements(); I != E; ++I) {
         auto *CI = cast<ConstantInt>(CV->getElementAsConstant(I));
-        InRange &= isIndexInRangeOfArrayType(STy->getNumElements(), CI);
+        IsInRange &= isIndexInRangeOfArrayType(STy->getNumElements(), CI);
         if (CI->isNegative()) {
           Unknown = true;
           break;
         }
       }
-      if (InRange || Unknown)
+      if (IsInRange || Unknown)
         // It's in range, skip to the next index.
         // It's out of range and negative, don't try to factor it.
         continue;
@@ -2206,7 +2186,7 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
     for (unsigned i = 0, e = Idxs.size(); i != e; ++i)
       if (!NewIdxs[i]) NewIdxs[i] = cast<Constant>(Idxs[i]);
     return ConstantExpr::getGetElementPtr(PointeeTy, C, NewIdxs, InBounds,
-                                          InRangeIndex);
+                                          InRange);
   }
 
   // If all indices are known integers and normalized, we can do a simple
@@ -2215,8 +2195,9 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
     if (auto *GV = dyn_cast<GlobalVariable>(C))
       if (!GV->hasExternalWeakLinkage() && GV->getValueType() == PointeeTy &&
           isInBoundsIndices(Idxs))
-        return ConstantExpr::getGetElementPtr(PointeeTy, C, Idxs,
-                                              /*InBounds=*/true, InRangeIndex);
+        // TODO(gep_nowrap): Can also set NUW here.
+        return ConstantExpr::getGetElementPtr(
+            PointeeTy, C, Idxs, GEPNoWrapFlags::inBounds(), InRange);
 
   return nullptr;
 }

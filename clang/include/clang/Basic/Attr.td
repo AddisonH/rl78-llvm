@@ -1056,6 +1056,18 @@ def CFConsumed : InheritableParamAttr {
   let Documentation = [RetainBehaviorDocs];
 }
 
+
+// coro_only_destroy_when_complete indicates the coroutines whose return type
+// is marked by coro_only_destroy_when_complete can only be destroyed when the
+// coroutine completes. Then the space for the destroy functions can be saved.
+def CoroOnlyDestroyWhenComplete : InheritableAttr {
+  let Spellings = [Clang<"coro_only_destroy_when_complete">];
+  let Subjects = SubjectList<[CXXRecord]>;
+  let LangOpts = [CPlusPlus];
+  let Documentation = [CoroOnlyDestroyWhenCompleteDocs];
+  let SimpleHandler = 1;
+}
+
 // OSObject-based attributes.
 def OSConsumed : InheritableParamAttr {
   let Spellings = [Clang<"os_consumed">];
@@ -4225,7 +4237,7 @@ def RL78BRKInterrupt : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Args = [DefaultUnsignedArgument<"Specs", 0>];
   let ParseKind = "BRKInterrupt";
   let HasCustomParsing = 1;
-  let Documentation = [RL78InterruptDocs];
+  let Documentation = [RL78BRKInterruptDocs];
 }
 
 def RL78Saddr : InheritableAttr, TargetSpecificAttr<TargetRL78> {
@@ -4247,8 +4259,7 @@ def RL78Address : Attr, TargetSpecificAttr<TargetRL78> {
   let Subjects = SubjectList<[GlobalVar]>;
   let Args = [UnsignedArgument<"Address">];
   let ParseKind = "Address";
-  //TODO:
-  let Documentation = [RL78InlineASMDocs];
+  let Documentation = [RL78AddressDocs];
 }
 
 def RL78Near : TypeAttr, TargetSpecificAttr<TargetRL78> {
@@ -4264,5 +4275,5 @@ def RL78Far : TypeAttr, TargetSpecificAttr<TargetRL78> {
 def RL78Callt : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Spellings = [GCC<"callt">, CustomKeyword<"__callt">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [Undocumented];
+  let Documentation = [RL78CalltDocs];
 }

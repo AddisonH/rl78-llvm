@@ -45,7 +45,7 @@ public:
   };
 
   static VariantKind VariantKindFromTargetFlag(unsigned int flag) {
-    if (flag >= VK_RL78_SADW && flag < VK_RL78_LAST || flag == VK_RL78_None)
+    if ((flag >= VK_RL78_SADW && flag < VK_RL78_LAST) || flag == VK_RL78_None)
       return (VariantKind)flag;
     llvm_unreachable("Unexpected target flag value");
   }
@@ -71,6 +71,7 @@ private:
     bool AllowOnlyAbsPlusMinus = false;
     RL78MCExpr::VariantKind VariantKind = RL78MCExpr::VK_RL78_None;
     bool WasSizeOfPlusStartOf = false;
+    SMLoc Loc;
   };
   static ConversionStatus
   ConvertExpressionToFixups(const MCExpr *Expression,

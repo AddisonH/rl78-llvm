@@ -28,7 +28,7 @@ add_llvm_target(RL78CodeGen
   RL78CMPWithZeroElimination.cpp
   RL78SelectBTCLR.cpp
   RL78InsertExchangeInstructions.cpp
-  RL78BranchExpand.cpp
+  RL78ExpandPseudoInsts.cpp
   RL78InstructionSpecialization.cpp
   RL78ConstPropAndOpSwap.cpp
   RL78SelectionDAGTargetInfo.cpp

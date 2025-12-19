@@ -2750,7 +2750,40 @@ void Sema::ActOnCCRLPragmaEntry(const SmallVectorImpl<RenesasCCRLPragmaEntry> &P
         if (newEntry.Identifier.compare(entry.Identifier) == 0) {
           if (newEntry.PragmaType == RenesasCCRLPragmaType::CCRLInterrupt &&
               entry.PragmaType == RenesasCCRLPragmaType::CCRLInterrupt) {
-            RenesasCCRLPragmaEntries.push_back(newEntry);
+
+            bool NewHasBank = (newEntry.ExtraData & 0x1) != 0;
+            bool OldHasBank = (entry.ExtraData & 0x1) != 0;
+            bool NewHasEnable = (newEntry.ExtraData & (0x1 << 4)) != 0;
+            bool OldHasEnable = (entry.ExtraData & (0x1 << 4)) != 0;
+
+            // Reject multiple bank/enable specs at one function.
+            if (NewHasBank && OldHasBank) {
+              Diag(newEntry.Loc, diag::err_expected)
+                  << "only one specification of bank";
+              return;
+            }
+
+            if (NewHasEnable && OldHasEnable) {
+              Diag(newEntry.Loc, diag::err_expected)
+                  << "only one specification of enable";
+              return;
+            }
+
+            // More than one vector table can be specified as long as
+            // the addresses do not overlap.
+            llvm::SmallSet<unsigned, 8> Existing;
+            for (unsigned V : entry.ExtraDataVects)
+              Existing.insert(V);
+
+            for (unsigned V : newEntry.ExtraDataVects) {
+              if (Existing.insert(V).second)
+                const_cast<RenesasCCRLPragmaEntry &>(entry)
+                    .ExtraDataVects.push_back(V);
+              else
+                Diag(newEntry.Loc, diag::err_expected)
+                    << "unique values and not duplicates";
+            }
+
             return;
           }
           // CCRL specification:

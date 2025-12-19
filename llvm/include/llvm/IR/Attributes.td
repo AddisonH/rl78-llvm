@@ -44,6 +44,12 @@ class StrBoolAttr<string S> : Attr<S, []>;
 /// Arbitrary string attribute.
 class ComplexStrAttr<string S, list<AttrProperty> P> : Attr<S, P>;
 
+/// ConstantRange attribute.
+class ConstantRangeAttr<string S, list<AttrProperty> P> : Attr<S, P>;
+
+/// ConstantRangeList attribute.
+class ConstantRangeListAttr<string S, list<AttrProperty> P> : Attr<S, P>;
+
 /// Target-independent enum attributes.
 
 /// Alignment of parameter (5 bits) stored as log2 of alignment with +1 bias.
@@ -109,6 +115,9 @@ def FnRetThunkExtern : EnumAttr<"fn_ret_thunk_extern", [FnAttr]>;
 /// Pass structure in an alloca.
 def InAlloca : TypeAttr<"inalloca", [ParamAttr]>;
 
+/// Pointer argument memory is initialized.
+def Initializes : ConstantRangeListAttr<"initializes", [ParamAttr]>;
+
 /// Source said inlining was desirable.
 def InlineHint : EnumAttr<"inlinehint", [FnAttr]>;
 
@@ -150,6 +159,9 @@ def NoDuplicate : EnumAttr<"noduplicate", [FnAttr]>;
 
 /// Function does not deallocate memory.
 def NoFree : EnumAttr<"nofree", [FnAttr, ParamAttr]>;
+
+/// Argument is dead if the call unwinds.
+def DeadOnUnwind : EnumAttr<"dead_on_unwind", [ParamAttr]>;
 
 /// Disable implicit floating point insts.
 def NoImplicitFloat : EnumAttr<"noimplicitfloat", [FnAttr]>;
@@ -200,6 +212,9 @@ def NoSanitizeCoverage : EnumAttr<"nosanitize_coverage", [FnAttr]>;
 /// Null pointer in address space zero is valid.
 def NullPointerIsValid : EnumAttr<"null_pointer_is_valid", [FnAttr]>;
 
+/// Select optimizations that give decent debug info.
+def OptimizeForDebugging : EnumAttr<"optdebug", [FnAttr]>;
+
 /// Select optimizations for best fuzzing signal.
 def OptForFuzzing : EnumAttr<"optforfuzzing", [FnAttr]>;
 
@@ -211,6 +226,9 @@ def OptimizeNone : EnumAttr<"optnone", [FnAttr]>;
 
 /// Similar to byval but without a copy.
 def Preallocated : TypeAttr<"preallocated", [FnAttr, ParamAttr]>;
+
+/// Parameter or return value is within the specified range.
+def Range : ConstantRangeAttr<"range", [ParamAttr, RetAttr]>;
 
 /// Function does not access memory.
 def ReadNone : EnumAttr<"readnone", [ParamAttr]>;
@@ -273,6 +291,9 @@ def SanitizeHWAddress : EnumAttr<"sanitize_hwaddress", [FnAttr]>;
 /// MemTagSanitizer is on.
 def SanitizeMemTag : EnumAttr<"sanitize_memtag", [FnAttr]>;
 
+/// NumericalStabilitySanitizer is on.
+def SanitizeNumericalStability : EnumAttr<"sanitize_numerical_stability", [FnAttr]>;
+
 /// Speculative Load Hardening is enabled.
 ///
 /// Note that this uses the default compatibility (always compatible during
@@ -300,6 +321,9 @@ def VScaleRange : IntAttr<"vscale_range", [FnAttr]>;
 /// Function always comes back to callsite.
 def WillReturn : EnumAttr<"willreturn", [FnAttr]>;
 
+/// Pointer argument is writable.
+def Writable : EnumAttr<"writable", [ParamAttr]>;
+
 /// Function only writes to memory.
 def WriteOnly : EnumAttr<"writeonly", [ParamAttr]>;
 
@@ -311,6 +335,9 @@ def MustProgress : EnumAttr<"mustprogress", [FnAttr]>;
 
 /// Function is a presplit coroutine.
 def PresplitCoroutine : EnumAttr<"presplitcoroutine", [FnAttr]>;
+
+/// The coroutine would only be destroyed when it is complete.
+def CoroDestroyOnlyWhenComplete : EnumAttr<"coro_only_destroy_when_complete", [FnAttr]>;
 
 /// Target-independent string attributes.
 def LessPreciseFPMAD : StrBoolAttr<"less-precise-fpmad">;
@@ -342,6 +369,7 @@ def : CompatRule<"isEqual<SanitizeThreadAttr>">;
 def : CompatRule<"isEqual<SanitizeMemoryAttr>">;
 def : CompatRule<"isEqual<SanitizeHWAddressAttr>">;
 def : CompatRule<"isEqual<SanitizeMemTagAttr>">;
+def : CompatRule<"isEqual<SanitizeNumericalStabilityAttr>">;
 def : CompatRule<"isEqual<SafeStackAttr>">;
 def : CompatRule<"isEqual<ShadowCallStackAttr>">;
 def : CompatRule<"isEqual<UseSampleProfileAttr>">;

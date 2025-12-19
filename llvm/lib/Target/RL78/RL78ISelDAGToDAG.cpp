@@ -34,6 +34,7 @@ class RL78DAGToDAGISel : public SelectionDAGISel {
   const RL78Subtarget *Subtarget = nullptr;
 
   void MatchSET1CLR1(SDNode *&N);
+  bool MatchLOAD_SELECTCC(SDNode *&N);
   SDNode *SelectFI(SDNode *N);
 
 public:
@@ -50,6 +51,7 @@ public:
     return SelectionDAGISel::runOnMachineFunction(MF);
   }
 
+  void PreprocessISelDAG() override;
   void PostprocessISelDAG() override;
 
   void Select(SDNode *N) override;
@@ -83,11 +85,6 @@ public:
                     SDValue &Offset);
   bool SelectESADDRABS16(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
 
-  /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
-  /// inline asm expressions.
-  bool SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
-                                    std::vector<SDValue> &OutOps) override;
-
   StringRef getPassName() const override {
     return "RL78 DAG->DAG Pattern Instruction Selection";
   }
@@ -119,6 +116,28 @@ static bool AreCmpOpsEqual(SDValue Cmp) {
   return TraversePossibleMOV(LHS) == TraversePossibleMOV(RHS);
 }
 
+void RL78DAGToDAGISel::PreprocessISelDAG() {
+  SelectionDAG::allnodes_iterator Position = CurDAG->allnodes_end();
+
+  bool MadeChange = false;
+  while (Position != CurDAG->allnodes_begin()) {
+    SDNode *N = &*--Position;
+    // Skip dead nodes.
+    if (N->use_empty())
+      continue;
+
+    switch (N->getOpcode()) {
+    default:
+      break;
+    case ISD::LOAD:
+      MadeChange |= MatchLOAD_SELECTCC(N);
+      break;
+    }
+  }
+  if (MadeChange)
+    CurDAG->RemoveDeadNodes();
+}
+
 void RL78DAGToDAGISel::PostprocessISelDAG() {
   SelectionDAG::allnodes_iterator Position = CurDAG->allnodes_end();
 
@@ -132,18 +151,18 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
     // Eliminate cmp(w) ax, ax
     //           selectcc ...
     // Assume that N->getOperand(3).getMachineOpcode() == CMP_*.
-    if ((N->getMachineOpcode() == RL78::SELECTCC16_rp_rp ||
+    if (((N->getMachineOpcode() == RL78::SELECTCC16_rp_rp ||
          N->getMachineOpcode() == RL78::SELECTCC16_imm_rp ||
          N->getMachineOpcode() == RL78::SELECTCC16_rp_imm ||
          N->getMachineOpcode() == RL78::SELECTCC16_imm_imm ||
          N->getMachineOpcode() == RL78::SELECTCC8_r_r ||
          N->getMachineOpcode() == RL78::SELECTCC8_imm_r) &&
-            AreCmpOpsEqual(N->getOperand(3)) ||
-        (N->getMachineOpcode() == RL78::SELECTCC16_esaddr_rp ||
+            AreCmpOpsEqual(N->getOperand(3))) ||
+        ((N->getMachineOpcode() == RL78::SELECTCC16_esaddr_rp ||
          N->getMachineOpcode() == RL78::SELECTCC16_esaddr_imm ||
          N->getMachineOpcode() == RL78::SELECTCC8_esaddr_r ||
          N->getMachineOpcode() == RL78::SELECTCC8_esaddr_imm) &&
-            AreCmpOpsEqual(N->getOperand(5))) {
+            AreCmpOpsEqual(N->getOperand(5)))) {
 
       SDValue SelectionResult;
       SDValue TrueValue = N->getOperand(0);
@@ -159,9 +178,6 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
       case RL78CC::RL78CC_Z:
         SelectionResult = TrueValue;
         break;
-      default:
-        assert(false && "Unexpected condition code!");
-        break;
       }
 
       CurDAG->ReplaceAllUsesWith(N, &SelectionResult);
@@ -172,11 +188,12 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
       switch ((RL78CC::CondCodes)N->getConstantOperandVal(1)) {
       case RL78CC::RL78CC_C:
       case RL78CC::RL78CC_NZ:
-      case RL78CC::RL78CC_H:
-        FuncInfo.get()->MBB->removeSuccessor(
-            ((BasicBlockSDNode *)N->getOperand(0).getNode())->getBasicBlock(), true);
+      case RL78CC::RL78CC_H: {
+        auto tgtBB = (BasicBlockSDNode *)N->getOperand(0).getNode();
+        if (tgtBB->hasOneUse())
+          FuncInfo.get()->MBB->removeSuccessor(tgtBB->getBasicBlock(), true);
         CurDAG->ReplaceAllUsesWith(N, &N->getOperand(2));
-        break;
+      } break;
       case RL78CC::RL78CC_NC:
       case RL78CC::RL78CC_NH:
       case RL78CC::RL78CC_Z: {
@@ -185,11 +202,69 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
             CurDAG->getMachineNode(RL78::BR, dl, N->getValueType(0),
                                    N->getOperand(0), N->getOperand(2));
         CurDAG->ReplaceAllUsesWith(N, BranchNode);
+        // Also nullify the fall-through BR, now unreachable.
+        for (auto Use : BranchNode->uses()) {
+          if (Use->getMachineOpcode() == RL78::BR) {
+            auto tgtBB = (BasicBlockSDNode *)Use->getOperand(0).getNode();
+            if (tgtBB->hasOneUse())
+              FuncInfo.get()->MBB->removeSuccessor(tgtBB->getBasicBlock(), true);
+            CurDAG->ReplaceAllUsesWith(Use, &Use->getOperand(1));
+            break;
+          }
+        }
       } break;
-      default:
-        assert(false && "Unexpected condition code!");
+      }
+      MadeChange = true;
+    } else if ((N->getMachineOpcode() ==
+                    RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16 ||
+                N->getMachineOpcode() ==
+                    RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16 ||
+                N->getMachineOpcode() ==
+                    RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
+                N->getMachineOpcode() ==
+                    RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr) &&
+               AreCmpOpsEqual(N->getOperand(6))) {
+      SDValue AddrHi, AddrLo;
+      switch ((RL78CC::CondCodes)N->getConstantOperandVal(4)) {
+      case RL78CC::RL78CC_C:
+      case RL78CC::RL78CC_NZ:
+      case RL78CC::RL78CC_H:
+        AddrHi = N->getOperand(2);
+        AddrLo = N->getOperand(3);
+        break;
+      case RL78CC::RL78CC_NC:
+      case RL78CC::RL78CC_NH:
+      case RL78CC::RL78CC_Z:
+        AddrHi = N->getOperand(0);
+        AddrLo = N->getOperand(1);
         break;
       }
+
+      llvm::SmallVector<SDValue, 4> Ops = { AddrHi, AddrLo };
+      unsigned LdOpcode;
+      SDLoc dl(N);
+
+      switch (N->getMachineOpcode()) {
+      default:
+        llvm_unreachable("Unknown opcode.");
+      case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:
+        LdOpcode = RL78::MOV_r_esaddr16;
+        break;
+      case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
+        LdOpcode = RL78::LOAD16_rp_esaddr16;
+        break;
+      case RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr:
+        LdOpcode = RL78::LOAD8_r_esrpi;
+        Ops.push_back(CurDAG->getTargetConstant(0, dl, MVT::i16)); // +0 offset (imm).
+        break;
+      case RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr:
+        LdOpcode = RL78::LOAD16_rp_esrpi;
+        Ops.push_back(CurDAG->getTargetConstant(0, dl, MVT::i16)); // +0 offset (imm).
+        break;
+      }
+
+      MachineSDNode *LdNode = CurDAG->getMachineNode(LdOpcode, dl, N->getValueType(0), Ops);
+      CurDAG->ReplaceAllUsesWith(N, LdNode);
       MadeChange = true;
     }
   }
@@ -258,8 +333,6 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
     return false;
   if (Addr.getOpcode() == ISD::Constant)
     return false;
-  // TODO: do we need this?
-  // if (Addr.getOpcode() == ISD::TargetFrameIndex) return false;
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
       Addr.getOpcode() == ISD::TargetBlockAddress)
@@ -331,10 +404,10 @@ static bool selectADDRABS16(SDValue Addr, SDValue &Base, SelectionDAG *CurDAG,
 
   // addr16 + const
   if (Addr.getOpcode() == ISD::ADD &&
-      (Addr.getOperand(0).getOpcode() == ISD::Constant &&
-           Addr.getOperand(1).getOpcode() == RL78ISD::LOW16 ||
-       Addr.getOperand(1).getOpcode() == ISD::Constant &&
-           Addr.getOperand(0).getOpcode() == RL78ISD::LOW16)) {
+      ((Addr.getOperand(0).getOpcode() == ISD::Constant &&
+           Addr.getOperand(1).getOpcode() == RL78ISD::LOW16) ||
+       (Addr.getOperand(1).getOpcode() == ISD::Constant &&
+           Addr.getOperand(0).getOpcode() == RL78ISD::LOW16))) {
 
     int64_t additionalOffset = 0;
     SDValue Low16;
@@ -532,14 +605,7 @@ void RL78DAGToDAGISel::MatchSET1CLR1(SDNode *&N) {
     SDNode *MFIN = SelectFI(FIN);
     memOp = SDValue(MFIN, 0);
   }
-  if ((memOp->getOpcode() == RL78ISD::HI16) && (memOp->getNumOperands() > 2)) {
-    // FIXME: we can do an ADD + SET1/CLR1.
-    return;
-  }
   if (VT == MVT::i16) {
-    // FIXME: Instead of return we can do an optimization here
-    // (setTargetDAGCombine?!): imm >>= 8 and modify memOp to point at
-    // address+1.
     if (imm & 0xFF00)
       return;
     VT = MVT::i8;
@@ -555,6 +621,38 @@ void RL78DAGToDAGISel::MatchSET1CLR1(SDNode *&N) {
   CurDAG->RemoveDeadNodes();
   N = set1.getNode();
   return;
+}
+
+// Replace loads from SELECTCC between far addresses with LOAD_SELECTCC.
+// Needed for allowing the optimization from DAGCombiner::SimplifySelectOps()
+// when -mfar-data (i.e. the ptrs in the default address space are far), as
+// otherwise the load generates incorrect code (a near-address load from the
+// HI16 part of the selected far address). Returns true on success.
+bool RL78DAGToDAGISel::MatchLOAD_SELECTCC(SDNode*& N) {
+  LoadSDNode *LD = cast<LoadSDNode>(N);
+  SDValue Ptr = LD->getBasePtr();
+
+  if (LD->isSimple() && Ptr.getOpcode() == RL78ISD::SELECTCC) {
+    SDValue TrueAddr = Ptr.getOperand(0);
+    SDValue FalseAddr = Ptr.getOperand(1);
+
+    if (TrueAddr.getOpcode() == RL78ISD::HI16 || FalseAddr.getOpcode() == RL78ISD::HI16) {
+      SDValue Chain = LD->getChain();
+      SDValue TargetCC = Ptr.getOperand(2);
+      SDValue Cmp = Ptr.getOperand(3);
+
+      // Result type list: (valueVT, chain).
+      SDVTList VTs = CurDAG->getVTList(N->getValueType(0), MVT::Other);
+
+      // Build operands with incoming chain first, glue last.
+      SDValue Ops[] = { Chain, TrueAddr, FalseAddr, TargetCC, Cmp };
+      SDValue LoadSelectCC = CurDAG->getNode(RL78ISD::LOAD_SELECTCC, SDLoc(N), VTs, Ops);
+      CurDAG->ReplaceAllUsesWith(N, LoadSelectCC.getNode());
+      N = LoadSelectCC.getNode();
+      return true;
+    }
+  }
+  return false;
 }
 
 SDNode *RL78DAGToDAGISel::SelectFI(SDNode *N) {
@@ -642,40 +740,6 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
   }
   // N->dump(CurDAG);
   SelectCode(N);
-}
-
-/// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
-/// inline asm expressions.
-bool RL78DAGToDAGISel::SelectInlineAsmMemoryOperand(
-    const SDValue &Op, unsigned ConstraintID, std::vector<SDValue> &OutOps) {
-  SDValue Op0, Op1;
-  switch (ConstraintID) {
-  default:
-    return true;
-    // TODO: specializations (m should allow all of them).
-  case InlineAsm::Constraint_m: // Memory.
-    if (SelectADDRrr(Op, Op0, Op1) || SelectADDRri(Op, 256, false, Op0, Op1)) {
-      OutOps.push_back(Op0);
-      OutOps.push_back(Op1);
-      return false;
-    } else if (SelectADDRr(Op, Op0)) {
-      OutOps.push_back(Op0);
-      return false;
-    } else if (Op.getOpcode() == RL78ISD::LOW16) {
-      OutOps.push_back(Op);
-      return false;
-    } else if (Op.getOpcode() == ISD::FrameIndex) {
-      OutOps.push_back(Op);
-      return false;
-    } else if (CurDAG->getDataLayout().getPointerSizeInBits() == 32 &&
-               Op.getOpcode() == RL78ISD::HI16) { // for -mfar-data, still experimental
-      OutOps.push_back(Op->getOperand(0));
-      return false;
-    }
-    break;
-  }
-
-  return true;
 }
 
 /// createRL78ISelDag - This pass converts a legalized DAG into a

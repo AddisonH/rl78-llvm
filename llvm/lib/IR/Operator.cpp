@@ -27,6 +27,10 @@ bool Operator::hasPoisonGeneratingFlags() const {
     auto *OBO = cast<OverflowingBinaryOperator>(this);
     return OBO->hasNoUnsignedWrap() || OBO->hasNoSignedWrap();
   }
+  case Instruction::Trunc: {
+    auto *TI = dyn_cast<TruncInst>(this);
+    return TI->hasNoUnsignedWrap() || TI->hasNoSignedWrap();
+  }
   case Instruction::UDiv:
   case Instruction::SDiv:
   case Instruction::AShr:
@@ -35,8 +39,13 @@ bool Operator::hasPoisonGeneratingFlags() const {
   case Instruction::GetElementPtr: {
     auto *GEP = cast<GEPOperator>(this);
     // Note: inrange exists on constexpr only
-    return GEP->isInBounds() || GEP->getInRangeIndex() != std::nullopt;
+    return GEP->getNoWrapFlags() != GEPNoWrapFlags::none() ||
+           GEP->getInRange() != std::nullopt;
   }
+  case Instruction::ZExt:
+    if (auto *NNI = dyn_cast<PossiblyNonNegInst>(this))
+      return NNI->hasNonNeg();
+    return false;
   default:
     if (const auto *FP = dyn_cast<FPMathOperator>(this))
       return FP->hasNoNaNs() || FP->hasNoInfs();
@@ -61,6 +70,12 @@ Type *GEPOperator::getResultElementType() const {
   if (auto *I = dyn_cast<GetElementPtrInst>(this))
     return I->getResultElementType();
   return cast<GetElementPtrConstantExpr>(this)->getResultElementType();
+}
+
+std::optional<ConstantRange> GEPOperator::getInRange() const {
+  if (auto *CE = dyn_cast<GetElementPtrConstantExpr>(this))
+    return CE->getInRange();
+  return std::nullopt;
 }
 
 Align GEPOperator::getMaxPreservedAlignment(const DataLayout &DL) const {

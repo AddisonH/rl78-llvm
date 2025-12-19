@@ -1764,8 +1764,8 @@ static void insertSpills(const FrameDataInfo &FrameData, coro::Shape &Shape) {
       // Note: If we change the strategy dealing with alignment, we need to refine
       // this casting.
       if (GEP->getType() != Orig->getType())
-        return Builder.CreateBitCast(GEP, Orig->getType(),
-                                     Orig->getName() + Twine(".cast"));
+        return Builder.CreatePointerBitCastOrAddrSpaceCast(
+            GEP, Orig->getType(), Orig->getName() + Twine(".cast"));
     }
     return GEP;
   };
@@ -2431,10 +2431,8 @@ static void lowerLocalAllocas(ArrayRef<CoroAllocaAllocInst*> LocalAllocas,
     auto M = AI->getModule();
     IRBuilder<> Builder(AI);
 
-    // FIXME: is there a better way to figure it out here if a RL78 target?
-    auto StackPtrTy = Type::getInt8PtrTy(M->getContext(),
-        StringRef(M->getTargetTriple()).startswith("rl78") ?
-        M->getDataLayout().getAllocaAddrSpace() : 0);
+    auto StackPtrTy = Type::getInt8PtrTy(
+        M->getContext(), M->getDataLayout().getAllocaAddrSpace());
 
     // Save the stack depth.  Try to avoid doing this if the stackrestore
     // is going to immediately precede a return or something.

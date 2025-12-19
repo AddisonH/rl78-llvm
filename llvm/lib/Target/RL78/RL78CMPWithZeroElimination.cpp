@@ -200,39 +200,6 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
       Inst->eraseFromParent();
       Changed = true;
     }
-
-    // Eliminate instructions after the first unconditional branch.
-    // See: tests\LLVM_RL78\LLVM_RL78\gcc_c_torture\Input\pr86714.c
-    // We delete/merge/simplify conditional and unconditional branches in various places.
-    // But we don't update the BB successors (sometimes we can't), which results in the
-    // BranchFolding making wrong assumptions about the destination of said branches,
-    // since it looks at predecessors/successors.
-    // Attempt to fix this here.
-    LLVM_DEBUG(dbgs() << "Parsing " << MBB.getFullName()
-                      << " for dead code after BR \n");
-    InstToKill.clear();
-    bool killRemaining = false;
-    // Treat BR BB1
-    //       BR BB2
-    for (MachineBasicBlock::iterator currI = MBB.begin(), e = MBB.end();
-         currI != e; ++currI) {
-      if (currI->isUnconditionalBranch() && !killRemaining)
-        killRemaining = true;
-      else if (killRemaining)
-        InstToKill.push_back(&*currI);
-    }
-
-    for (MachineInstr *Inst : InstToKill) {
-      if (Inst->isBranch()) {
-        LLVM_DEBUG(dbgs() << "erasing successor: "
-                          << Inst->getOperand(0).getMBB() << "\n");
-        MBB.removeSuccessor(Inst->getOperand(0).getMBB());
-      }
-      LLVM_DEBUG(dbgs() << "erasing instruction: ");
-      LLVM_DEBUG(Inst->dump());
-      Inst->eraseFromParent();
-      Changed = true;
-    }
   }
   return Changed;
 }

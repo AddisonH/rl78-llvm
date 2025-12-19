@@ -34,7 +34,8 @@ StringRef getRL78DoubleSize(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
 StringRef getRL78DisableMDA(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
-
+void addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
+                              llvm::opt::ArgStringList &CmdArgs);
 //TODO: do we need this for calling convention
 //StringRef getRL78ABI(const llvm::opt::ArgList &Args,
 //                      const llvm::Triple &Triple);

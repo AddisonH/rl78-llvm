@@ -1663,8 +1663,8 @@ SDValue SelectionDAG::getConstant(const ConstantInt &Val, const SDLoc &DL,
 }
 
 SDValue SelectionDAG::getIntPtrConstant(uint64_t Val, const SDLoc &DL,
-                                        bool isTarget, uint32_t AS) {
-  return getConstant(Val, DL, TLI->getPointerTy(getDataLayout(), AS), isTarget);
+                                        bool isTarget) {
+  return getConstant(Val, DL, TLI->getPointerTy(getDataLayout()), isTarget);
 }
 
 SDValue SelectionDAG::getShiftAmountConstant(uint64_t Val, EVT VT,
@@ -4806,6 +4806,7 @@ bool SelectionDAG::isGuaranteedNotToBeUndefOrPoison(SDValue Op,
     return true;
 
   switch (Opcode) {
+  case ISD::CONDCODE:
   case ISD::VALUETYPE:
   case ISD::FrameIndex:
   case ISD::TargetFrameIndex:
@@ -4873,6 +4874,9 @@ bool SelectionDAG::canCreateUndefOrPoison(SDValue Op, const APInt &DemandedElts,
   if (VT.isScalableVector())
     return true;
 
+  if (ConsiderFlags && Op->hasPoisonGeneratingFlags())
+    return true;
+
   unsigned Opcode = Op.getOpcode();
   switch (Opcode) {
   case ISD::AssertSext:
@@ -4881,7 +4885,6 @@ bool SelectionDAG::canCreateUndefOrPoison(SDValue Op, const APInt &DemandedElts,
   case ISD::CONCAT_VECTORS:
   case ISD::INSERT_SUBVECTOR:
   case ISD::AND:
-  case ISD::OR:
   case ISD::XOR:
   case ISD::ROTL:
   case ISD::ROTR:
@@ -4892,7 +4895,6 @@ bool SelectionDAG::canCreateUndefOrPoison(SDValue Op, const APInt &DemandedElts,
   case ISD::BITREVERSE:
   case ISD::PARITY:
   case ISD::SIGN_EXTEND:
-  case ISD::ZERO_EXTEND:
   case ISD::TRUNCATE:
   case ISD::SIGN_EXTEND_INREG:
   case ISD::SIGN_EXTEND_VECTOR_INREG:
@@ -4902,21 +4904,34 @@ bool SelectionDAG::canCreateUndefOrPoison(SDValue Op, const APInt &DemandedElts,
   case ISD::BUILD_PAIR:
     return false;
 
+  case ISD::SETCC: {
+    // Integer setcc cannot create undef or poison.
+    if (Op.getOperand(0).getValueType().isInteger())
+      return false;
+
+    // FP compares are more complicated. They can create poison for nan/infinity
+    // based on options and flags. The options and flags also cause special
+    // nonan condition codes to be used. Those condition codes may be preserved
+    // even if the nonan flag is dropped somewhere.
+    ISD::CondCode CCCode = cast<CondCodeSDNode>(Op.getOperand(2))->get();
+    if (((unsigned)CCCode & 0x10U))
+      return true;
+
+    const TargetOptions &Options = getTarget().Options;
+    return Options.NoNaNsFPMath || Options.NoInfsFPMath;
+  }
+
+  case ISD::OR:
+  case ISD::ZERO_EXTEND:
   case ISD::ADD:
   case ISD::SUB:
   case ISD::MUL:
-    // Matches hasPoisonGeneratingFlags().
-    return ConsiderFlags && (Op->getFlags().hasNoSignedWrap() ||
-                             Op->getFlags().hasNoUnsignedWrap());
+    // No poison except from flags (which is handled above)
+    return false;
 
   case ISD::SHL:
     // If the max shift amount isn't in range, then the shift can create poison.
-    if (!getValidMaximumShiftAmountConstant(Op, DemandedElts))
-      return true;
-
-    // Matches hasPoisonGeneratingFlags().
-    return ConsiderFlags && (Op->getFlags().hasNoSignedWrap() ||
-                             Op->getFlags().hasNoUnsignedWrap());
+    return !getValidMaximumShiftAmountConstant(Op, DemandedElts);
 
   case ISD::INSERT_VECTOR_ELT:{
     // Ensure that the element index is in bounds.
@@ -4938,16 +4953,19 @@ bool SelectionDAG::canCreateUndefOrPoison(SDValue Op, const APInt &DemandedElts,
   return true;
 }
 
+bool SelectionDAG::isADDLike(SDValue Op, bool NoWrap) const {
+  unsigned Opcode = Op.getOpcode();
+  if (Opcode == ISD::OR)
+    return Op->getFlags().hasDisjoint() ||
+           haveNoCommonBitsSet(Op.getOperand(0), Op.getOperand(1));
+  if (Opcode == ISD::XOR)
+    return !NoWrap && isMinSignedConstant(Op.getOperand(1));
+  return false;
+}
+
 bool SelectionDAG::isBaseWithConstantOffset(SDValue Op) const {
-  if ((Op.getOpcode() != ISD::ADD && Op.getOpcode() != ISD::OR) ||
-      !isa<ConstantSDNode>(Op.getOperand(1)))
-    return false;
-
-  if (Op.getOpcode() == ISD::OR &&
-      !MaskedValueIsZero(Op.getOperand(0), Op.getConstantOperandAPInt(1)))
-    return false;
-
-  return true;
+  return Op.getNumOperands() == 2 && isa<ConstantSDNode>(Op.getOperand(1)) &&
+         (Op.isAnyAdd() || isADDLike(Op));
 }
 
 bool SelectionDAG::isKnownNeverNaN(SDValue Op, bool SNaN, unsigned Depth) const {
@@ -6423,10 +6441,18 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
   case ISD::OR:
   case ISD::XOR:
   case ISD::ADD:
+  case ISD::PTRADD:
   case ISD::SUB:
     assert(VT.isInteger() && "This operator does not apply to FP types!");
     assert(N1.getValueType() == N2.getValueType() &&
            N1.getValueType() == VT && "Binary operator types must match!");
+    // The equal operand types requirement is unnecessarily strong for PTRADD.
+    // However, the SelectionDAGBuilder does not generate PTRADDs with different
+    // operand types, and we'd need to re-implement GEP's non-standard wrapping
+    // logic everywhere where PTRADDs may be folded or combined to properly
+    // support them. If/when we introduce pointer types to the SDAG, we will
+    // need to relax this constraint.
+
     // (X ^|+- 0) -> X.  This commonly occurs when legalizing i64 values, so
     // it's worth handling here.
     if (N2CV && N2CV->isZero())
@@ -6787,6 +6813,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
       std::swap(N1, N2);
     } else {
       switch (Opcode) {
+      case ISD::PTRADD:
       case ISD::SUB:
         return getUNDEF(VT);     // fold op(undef, arg2) -> undef
       case ISD::SIGN_EXTEND_INREG:
@@ -6811,6 +6838,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
         return getConstant(0, DL, VT);
       [[fallthrough]];
     case ISD::ADD:
+    case ISD::PTRADD:
     case ISD::SUB:
     case ISD::UDIV:
     case ISD::SDIV:
@@ -7176,6 +7204,9 @@ SDValue SelectionDAG::getMemBasePlusOffset(SDValue Ptr, SDValue Offset,
                                            const SDNodeFlags Flags) {
   assert(Offset.getValueType().isInteger());
   EVT BasePtrVT = Ptr.getValueType();
+  if (TLI->shouldPreservePtrArith(this->getMachineFunction().getFunction(),
+                                  BasePtrVT))
+    return getNode(ISD::PTRADD, DL, BasePtrVT, Ptr, Offset, Flags);
   return getNode(ISD::ADD, DL, BasePtrVT, Ptr, Offset, Flags);
 }
 
@@ -11609,7 +11640,7 @@ bool SDNode::hasPredecessor(const SDNode *N) const {
 }
 
 void SDNode::intersectFlagsWith(const SDNodeFlags Flags) {
-  this->Flags.intersectWith(Flags);
+  this->Flags &= Flags;
 }
 
 SDValue

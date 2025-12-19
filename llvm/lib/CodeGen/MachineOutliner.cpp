@@ -114,6 +114,11 @@ static cl::opt<bool>
         cl::desc("Use section attribute in outlined functions"),
         cl::init(true));
 
+static cl::opt<bool> UseAddressSpace(
+    "use-address-space-in-outlined-functions", cl::NotHidden,
+    cl::desc("Use address space in outlined functions"),
+    cl::init(true));
+
 /// Number of times to re-run the outliner. This is not the total number of runs
 /// as the outliner will run at least one time. The default value is set to 0,
 /// meaning the outliner will run one time and rerun zero times after that.
@@ -132,16 +137,23 @@ namespace {
 struct MachineInstrExpressionTraitOutliner : public MachineInstrExpressionTrait {
   static unsigned getHashValue(const MachineInstr* const& MI) {
     unsigned int hashValue = MachineInstrExpressionTrait::getHashValue(MI);
+    unsigned int AddrSpace = MI->getParent()
+                                 ->getParent()
+                                 ->getFunction()
+                                 .getType()
+                                 ->getPointerAddressSpace();
     if (UseSectionAttribute && 
-        MI->getParent()->getParent()->getFunction().hasSection() ||
+        (MI->getParent()->getParent()->getFunction().hasSection() ||
         MI->getParent()->getParent()->getFunction().hasFnAttribute(
-            "implicit-section-name")) {
+            "implicit-section-name"))) {
       unsigned int secHash = hash_value(
         MI->getParent()->getParent()->getFunction().hasSection() ?
         MI->getParent()->getParent()->getFunction().getSection() : 
         MI->getParent()->getParent()->getFunction().getFnAttribute("implicit-section-name").getValueAsString());
       hashValue = hash_combine(hashValue, secHash);
     }
+    if (UseAddressSpace)
+      hashValue = hash_combine(hashValue, AddrSpace);
     return hashValue;
   }
 };
@@ -714,9 +726,19 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
   LLVM_DEBUG(dbgs() << "NEW FUNCTION: " << FunctionName << "\n");
 
   // Create the function using an IR-level function.
+  Function *F = nullptr;
   LLVMContext &C = M.getContext();
-  Function *F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
-                                 Function::ExternalLinkage, FunctionName, M);
+  Candidate &FirstCand = OF.Candidates.front();
+  const Function &ParentFn = FirstCand.getMF()->getFunction();
+  if (UseAddressSpace) {
+    unsigned int AddrSpace = ParentFn.getAddressSpace();
+    F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
+                         Function::ExternalLinkage,
+        AddrSpace, FunctionName, &M);
+  } else {
+    F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
+                         Function::ExternalLinkage, FunctionName, M);
+  }
 
   // NOTE: If this is linkonceodr, then we can take advantage of linker deduping
   // which gives us better results when we outline from linkonceodr functions.
@@ -728,7 +750,6 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
   F->addFnAttr(Attribute::OptimizeForSize);
   F->addFnAttr(Attribute::MinSize);
 
-  Candidate &FirstCand = OF.Candidates.front();
   const TargetInstrInfo &TII =
       *FirstCand.getMF()->getSubtarget().getInstrInfo();
 
@@ -743,7 +764,6 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
   if (UW != UWTableKind::None)
     F->setUWTableKind(UW);
 
-  const Function &ParentFn = FirstCand.getMF()->getFunction();
   if (UseSectionAttribute &&
       (ParentFn.hasSection() ||
        ParentFn.hasFnAttribute("implicit-section-name"))) {

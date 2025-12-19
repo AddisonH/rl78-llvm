@@ -640,6 +640,20 @@ private:
     return Str;
   }
 
+  template <typename T, typename TEnum>
+  std::string printRL78Flags(T Value,
+                             ArrayRef<EnumEntry<TEnum>> EnumValues) const {
+    std::string Str;
+    for (const EnumEntry<TEnum> &Flag : EnumValues) {
+      if ((Value & Flag.Value) == Flag.Value) {
+        if (!Str.empty())
+          Str += ", ";
+        Str += Flag.AltName;
+      }
+    }
+    return Str;
+  }
+
   formatted_raw_ostream &printField(struct Field F) const {
     if (F.Column != 0)
       OS.PadToColumn(F.Column);
@@ -3567,6 +3581,9 @@ static SmallVector<EnumEntry<unsigned>,8> extractRL78Flags(unsigned Value)
   }
   else if (Value & ELF::EF_RL78_MAA_0) {
     SetFlags.push_back({"EF_RL78_MAA_0",EF_RL78_MAA_0});
+  } 
+  else {
+    SetFlags.push_back({"EF_RL78_MAA_COMMON", 0x00});
   }
 
   if((Value & ELF::EF_RL78_CPU_16BIT) == ELF::EF_RL78_CPU_16BIT){
@@ -3672,7 +3689,7 @@ template <class ELFT> void GNUELFDumper<ELFT>::printFileHeaders() {
                           unsigned(ELF::EF_XTENSA_MACH));
   else if (e.e_machine == EM_RL78) {
     SmallVector<EnumEntry<unsigned>,8> setFlags = extractRL78Flags(e.e_flags);
-    ElfFlags = printFlags(e.e_flags, makeArrayRef(setFlags));
+    ElfFlags = printRL78Flags(e.e_flags, ArrayRef(setFlags));
   }
   Str = "0x" + utohexstr(e.e_flags);
   if (!ElfFlags.empty())
@@ -6920,7 +6937,7 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printFileHeaders() {
                    unsigned(ELF::EF_XTENSA_MACH));
     else if (E.e_machine == EM_RL78){
       SmallVector<EnumEntry<unsigned>,8> setFlags = extractRL78Flags(E.e_flags);
-      W.printFlags("Flags", E.e_flags, makeArrayRef(setFlags));
+      W.printFlags("Flags", E.e_flags, ArrayRef(setFlags));   
     }
     else
       W.printFlags("Flags", E.e_flags);

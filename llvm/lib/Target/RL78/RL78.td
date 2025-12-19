@@ -38,7 +38,7 @@ def RL78AsmParser : AsmParser {
 
 def Feature64bitDoubles : SubtargetFeature<"64bit-doubles", "has64BitDoubles", "true",
                                       "Use 64-bit Doubles">;
-// TODO actually set the MAA to 1
+
 def FeatureMirrorSourceOne : SubtargetFeature<"mirror-source-1", "mirrorSource", "1",
                                       "MAA is set to 1">;
 def FeatureMirrorSourceZero : SubtargetFeature<"mirror-source-0", "mirrorSource", "0",

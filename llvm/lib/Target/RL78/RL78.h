@@ -17,7 +17,8 @@
 #include "MCTargetDesc/RL78MCTargetDesc.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Target/TargetMachine.h"
-
+#include "llvm/MC/MCContext.h"
+#include "llvm/Support/SourceMgr.h"
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
 #include <unistd.h>
 #elif defined(_MSC_VER)
@@ -37,7 +38,7 @@ class PassRegistry;
 FunctionPass *createRL78ISelDag(RL78TargetMachine &TM, CodeGenOpt::Level OptLevel);
 
 FunctionPass *createRL78InsertExchangeInstructionsPass();
-FunctionPass *createRL78BranchExpandPass();
+FunctionPass *createRL78ExpandPseudoInstsPass();
 FunctionPass *createRL78SelectBTCLRPass();
 FunctionPass *createRL78CMPWithZeroElimPass();
 FunctionPass *createRL78AdjustMemRefsPass();
@@ -87,20 +88,20 @@ inline static const char *RL78CondCodeToString(RL78CC::CondCodes CC) {
   llvm_unreachable("Invalid condition code!");
 }
 
-static void RL78ReportError(bool condition, StringRef Reason,
-                            StringRef MoreDetails = "Error: ") {
+static inline void RL78ReportError(bool condition, StringRef Reason,
+                            MCContext *Ctx = nullptr, SMLoc Loc = SMLoc()) {
 
   if (!condition) {
-
-    SmallVector<char, 64> Buffer;
-    raw_svector_ostream OS(Buffer);
-    OS << MoreDetails << Reason << "\n";
-    StringRef MessageStr = OS.str();
-    ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
-    (void)written;
+    if (Ctx && Loc.isValid()) {
+      Ctx->getSourceManager()->PrintMessage(errs(), Loc, SourceMgr::DK_Error,
+                                            Reason);
+    } else {
+      SMDiagnostic Diag("", SourceMgr::DK_Error, Reason);
+      SourceMgr SM;
+      SM.PrintMessage(errs(), Diag, /*ShowColors=*/true);
+    }
     exit(1);
   }
 }
-
 } // end namespace llvm
 #endif

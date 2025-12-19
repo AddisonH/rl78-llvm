@@ -28,10 +28,16 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
   StringRef cpu = getRL78Cpu(Args, Triple);
   const Arg *disableMDA = Args.getLastArg(options::OPT_mdisable_mda);
   const Arg *mCode = Args.getLastArg(options::OPT_mnear_code, options::OPT_mfar_code);
+  const Arg *mirrorSource = Args.getLastArg(options::OPT_mirror_source_EQ);
 
+  bool isS1 = cpu.equals_insensitive("s1");
   bool isS2 = cpu.equals_insensitive("s2");
   
   bool mdaDisabled = disableMDA;
+  bool hasExplicitMirrorFlag =
+      Args.getLastArg(options::OPT_mirror_source_0) ||
+      Args.getLastArg(options::OPT_mirror_source_1) ||
+      Args.getLastArg(options::OPT_mirror_source_common);
 
   if (!cpu.equals_insensitive("s1") &&
       !cpu.equals_insensitive("s2") && !cpu.equals_insensitive("s3")){
@@ -45,21 +51,27 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
   }
 
   // Add any that the user explicitly requested on the command line,
-  // which may override the defaults.
+  // which may override the defaults. Positive command-line options are encoded
+  // as positive features starting with a "+" sign. Negative command-line
+  // options are encoded as negative features starting with a "-" sign.
   handleTargetFeaturesGroup(D, Triple, Args, Features, options::OPT_m_rl78_Features_Group);
 
-  if (mCode && mCode->getOption().getID() == options::OPT_mnear_code) {
-    Features.push_back("-far-code");
-    Features.erase(std::remove(Features.begin(), Features.end(), "+near-code"), Features.end());
+  if (mCode) {
+    // Add -far-code as the last feature if the last option is -mnear-code.
+    if (mCode->getOption().getID() == options::OPT_mnear_code) {
+      Features.push_back("-far-code");
+    }
+    // Do not add new features if the last option is -mfar-code.
+    // Remove all +near-code features regardless of whether the last option
+    // is -mfar-code or -mnear-code.
+    Features.erase(std::remove(Features.begin(), Features.end(), "+near-code"),
+                   Features.end());
   }
 
   const Arg *mData = Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
   if (mData) {
     if (mData->getOption().getID() == options::OPT_mnear_data) {
       Features.push_back("-far-data");
-      Features.erase(
-          std::remove(Features.begin(), Features.end(), "+near-data"),
-          Features.end());
     } else { // -mfar-data includes and replaces -mfar-rom
       const Arg *mRom =
           Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
@@ -70,6 +82,32 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
             Features.end());
       }
     }
+    Features.erase(std::remove(Features.begin(), Features.end(), "+near-data"),
+                   Features.end());
+  }
+
+  if (isS1 && (Args.getLastArg(options::OPT_mirror_source_1) ||
+               (mirrorSource && mirrorSource->containsValue("1")))) {
+    D.Diag(diag::err_drv_argument_not_allowed_with) << "-mirror-source=1"
+                                                    << "-mcpu=S1";
+    return;
+  }
+
+  if (!hasExplicitMirrorFlag) {
+    // Handle feature corresponding to "-mirror-source=" option.
+    if (mirrorSource) {
+      if (mirrorSource->containsValue("0"))
+        Features.push_back("+mirror-source-0");
+      else if (mirrorSource->containsValue("1"))
+        Features.push_back("+mirror-source-1");
+      else if (mirrorSource->containsValue("common"))
+        Features.push_back("+mirror-source-common");
+      else
+        D.Diag(diag::err_drv_invalid_argument_to_option)
+            << mirrorSource->getValue()
+            << mirrorSource->getOption().getName();
+    } else
+      Features.push_back("+mirror-source-0");
   }
 }
 
@@ -137,4 +175,136 @@ StringRef rl78::getRL78DisableMDA(const llvm::opt::ArgList &Args,
         return "mdisable-mda";
     // Default is enabled, but we don't have a flag for it.
     return "";
+}
+
+void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
+                               llvm::opt::ArgStringList &CmdArgs) {
+  Arg *OptArg = Args.getLastArg(options::OPT_O_Group);
+  char OptLevel =
+      (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
+
+  // Aggressive (-O3) speed optimizations
+  if (OptLevel == '3') {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-inline-threshold=600");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-unroll-runtime");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-enable-dfa-jump-thread");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-allow-unroll-and-jam");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-enable-unroll-and-jam");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-unroll-runtime-epilog");
+  }
+
+  if (OptLevel != 's' && OptLevel != 'z')
+    return;
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-licm");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-split-spill-mode=size");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-available-load-scan-limit=2");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-adce-remove-loops=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-enable-load-pre=false");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-addr-sink-combine-base-offs=false");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-addr-sink-using-gep=false");
+
+  // TODO: See if there is a replacement.
+  // CmdArgs.push_back("-mllvm");
+  // CmdArgs.push_back("-consider-local-interval-cost=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-block-placement=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-complex-addr-modes=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-machine-cse=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-enable-pre=false");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-sched-height=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-extra-vectorizer-passes=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-force-split-store=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-keep-loops=false");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-no-phi-elim-live-out-early-exit=true");
+
+  // TODO: See if there is a replacement.
+  // CmdArgs.push_back("-mllvm");
+  // CmdArgs.push_back("-simplifycfg-dup-ret=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-speculate-one-expensive-inst=false");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-bonus-inst-threshold=0");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-min-jump-table-entries=5");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-optsize-jump-table-density=56");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-phi-node-folding-threshold=0");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-static-likely-prob=72");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-tail-dup-indirect-size=14");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-tail-merge-size=2");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-tail-merge-threshold=210");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-triangle-chain-count=8");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-unroll-threshold=9");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-replexitval=never");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-lsr=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-machine-licm=true");
+
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-disable-phi-elim-edge-splitting=true");
 }

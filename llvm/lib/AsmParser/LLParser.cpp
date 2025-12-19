@@ -25,6 +25,7 @@
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Comdat.h"
 #include "llvm/IR/ConstantRange.h"
+#include "llvm/IR/ConstantRangeList.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -1456,6 +1457,10 @@ bool LLParser::parseEnumAttribute(Attribute::AttrKind Attr, AttrBuilder &B,
 
     return true;
   }
+  case Attribute::Range:
+    return parseRangeAttr(B);
+  case Attribute::Initializes:
+    return parseInitializesAttr(B);
   default:
     B.addAttribute(Attr);
     Lex.Lex();
@@ -2840,6 +2845,93 @@ bool LLParser::parseRequiredTypeAttr(AttrBuilder &B, lltok::Kind AttrToken,
   return false;
 }
 
+/// parseRangeAttr
+///   ::= range(<ty> <n>,<n>)
+bool LLParser::parseRangeAttr(AttrBuilder &B) {
+  Lex.Lex();
+
+  APInt Lower;
+  APInt Upper;
+  Type *Ty = nullptr;
+  LocTy TyLoc;
+
+  auto ParseAPSInt = [&](unsigned BitWidth, APInt &Val) {
+    if (Lex.getKind() != lltok::APSInt)
+      return tokError("expected integer");
+    if (Lex.getAPSIntVal().getBitWidth() > BitWidth)
+      return tokError(
+          "integer is too large for the bit width of specified type");
+    Val = Lex.getAPSIntVal().extend(BitWidth);
+    Lex.Lex();
+    return false;
+  };
+
+  if (parseToken(lltok::lparen, "expected '('") || parseType(Ty, TyLoc))
+    return true;
+  if (!Ty->isIntegerTy())
+    return error(TyLoc, "the range must have integer type!");
+
+  unsigned BitWidth = Ty->getPrimitiveSizeInBits();
+
+  if (ParseAPSInt(BitWidth, Lower) ||
+      parseToken(lltok::comma, "expected ','") || ParseAPSInt(BitWidth, Upper))
+    return true;
+  if (Lower == Upper)
+    return tokError("the range should not represent the full or empty set!");
+
+  if (parseToken(lltok::rparen, "expected ')'"))
+    return true;
+
+  B.addRangeAttr(ConstantRange(Lower, Upper));
+  return false;
+}
+
+/// parseInitializesAttr
+///   ::= initializes((Lo1,Hi1),(Lo2,Hi2),...)
+bool LLParser::parseInitializesAttr(AttrBuilder &B) {
+  Lex.Lex();
+
+  auto ParseAPSInt = [&](APInt &Val) {
+    if (Lex.getKind() != lltok::APSInt)
+      return tokError("expected integer");
+    Val = Lex.getAPSIntVal().extend(64);
+    Lex.Lex();
+    return false;
+  };
+
+  if (parseToken(lltok::lparen, "expected '('"))
+    return true;
+
+  SmallVector<ConstantRange, 2> RangeList;
+  // Parse each constant range.
+  do {
+    APInt Lower, Upper;
+    if (parseToken(lltok::lparen, "expected '('"))
+      return true;
+
+    if (ParseAPSInt(Lower) || parseToken(lltok::comma, "expected ','") ||
+        ParseAPSInt(Upper))
+      return true;
+
+    if (Lower == Upper)
+      return tokError("the range should not represent the full or empty set!");
+
+    if (parseToken(lltok::rparen, "expected ')'"))
+      return true;
+
+    RangeList.push_back(ConstantRange(Lower, Upper));
+  } while (EatIfPresent(lltok::comma));
+
+  if (parseToken(lltok::rparen, "expected ')'"))
+    return true;
+
+  auto CRLOrNull = ConstantRangeList::getConstantRangeList(RangeList);
+  if (!CRLOrNull.has_value())
+    return tokError("Invalid (unordered or overlapping) range list");
+  B.addInitializesAttr(*CRLOrNull);
+  return false;
+}
+
 /// parseOptionalOperandBundles
 ///    ::= /*empty*/
 ///    ::= '[' OperandBundle [, OperandBundle ]* ']'
@@ -3992,12 +4084,43 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS, Type *ExpectedTy) {
   case lltok::kw_extractelement: {
     unsigned Opc = Lex.getUIntVal();
     SmallVector<Constant*, 16> Elts;
-    bool InBounds = false;
+    GEPNoWrapFlags NW;
+    bool HasInRange = false;
+    APSInt InRangeStart;
+    APSInt InRangeEnd;
     Type *Ty;
     Lex.Lex();
 
-    if (Opc == Instruction::GetElementPtr)
-      InBounds = EatIfPresent(lltok::kw_inbounds);
+    if (Opc == Instruction::GetElementPtr) {
+      while (true) {
+        if (EatIfPresent(lltok::kw_inbounds))
+          NW |= GEPNoWrapFlags::inBounds();
+        else if (EatIfPresent(lltok::kw_nusw))
+          NW |= GEPNoWrapFlags::noUnsignedSignedWrap();
+        else if (EatIfPresent(lltok::kw_nuw))
+          NW |= GEPNoWrapFlags::noUnsignedWrap();
+        else
+          break;
+      }
+
+      if (EatIfPresent(lltok::kw_inrange)) {
+        if (parseToken(lltok::lparen, "expected '('"))
+          return true;
+        if (Lex.getKind() != lltok::APSInt)
+          return tokError("expected integer");
+        InRangeStart = Lex.getAPSIntVal();
+        Lex.Lex();
+        if (parseToken(lltok::comma, "expected ','"))
+          return true;
+        if (Lex.getKind() != lltok::APSInt)
+          return tokError("expected integer");
+        InRangeEnd = Lex.getAPSIntVal();
+        Lex.Lex();
+        if (parseToken(lltok::rparen, "expected ')'"))
+          return true;
+        HasInRange = true;
+      }
+    }
 
     if (parseToken(lltok::lparen, "expected '(' in constantexpr"))
       return true;
@@ -4008,9 +4131,7 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS, Type *ExpectedTy) {
         return true;
     }
 
-    std::optional<unsigned> InRangeOp;
-    if (parseGlobalValueVector(
-            Elts, Opc == Instruction::GetElementPtr ? &InRangeOp : nullptr) ||
+    if (parseGlobalValueVector(Elts) ||
         parseToken(lltok::rparen, "expected ')' in constantexpr"))
       return true;
 
@@ -4020,6 +4141,17 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS, Type *ExpectedTy) {
         return error(ID.Loc, "base of getelementptr must be a pointer");
 
       Type *BaseType = Elts[0]->getType();
+      std::optional<ConstantRange> InRange;
+      if (HasInRange) {
+        unsigned IndexWidth =
+            M->getDataLayout().getIndexTypeSizeInBits(BaseType);
+        InRangeStart = InRangeStart.extOrTrunc(IndexWidth);
+        InRangeEnd = InRangeEnd.extOrTrunc(IndexWidth);
+        if (InRangeStart.sge(InRangeEnd))
+          return error(ID.Loc, "expected end to be larger than start");
+        InRange = ConstantRange::getNonEmpty(InRangeStart, InRangeEnd);
+      }
+
       unsigned GEPWidth =
           BaseType->isVectorTy()
               ? cast<FixedVectorType>(BaseType)->getNumElements()
@@ -4049,15 +4181,8 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS, Type *ExpectedTy) {
       if (!GetElementPtrInst::getIndexedType(Ty, Indices))
         return error(ID.Loc, "invalid getelementptr indices");
 
-      if (InRangeOp) {
-        if (*InRangeOp == 0)
-          return error(ID.Loc,
-                       "inrange keyword may not appear on pointer operand");
-        --*InRangeOp;
-      }
-
-      ID.ConstantVal = ConstantExpr::getGetElementPtr(Ty, Elts[0], Indices,
-                                                      InBounds, InRangeOp);
+      ID.ConstantVal =
+          ConstantExpr::getGetElementPtr(Ty, Elts[0], Indices, NW, InRange);
     } else if (Opc == Instruction::ShuffleVector) {
       if (Elts.size() != 3)
         return error(ID.Loc, "expected three operands to shufflevector");
@@ -4133,9 +4258,8 @@ bool LLParser::parseOptionalComdat(StringRef GlobalName, Comdat *&C) {
 
 /// parseGlobalValueVector
 ///   ::= /*empty*/
-///   ::= [inrange] TypeAndValue (',' [inrange] TypeAndValue)*
-bool LLParser::parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts,
-                                      std::optional<unsigned> *InRangeOp) {
+///   ::= TypeAndValue (',' TypeAndValue)*
+bool LLParser::parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts) {
   // Empty list.
   if (Lex.getKind() == lltok::rbrace ||
       Lex.getKind() == lltok::rsquare ||
@@ -4144,8 +4268,9 @@ bool LLParser::parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts,
     return false;
 
   do {
-    if (InRangeOp && !*InRangeOp && EatIfPresent(lltok::kw_inrange))
-      *InRangeOp = Elts.size();
+    // Let the caller deal with inrange.
+    if (Lex.getKind() == lltok::kw_inrange)
+      return false;
 
     Constant *C;
     if (parseGlobalTypeAndValue(C))
@@ -6404,8 +6529,15 @@ int LLParser::parseInstruction(Instruction *&Inst, BasicBlock *BB,
   case lltok::kw_srem:
     return parseArithmetic(Inst, PFS, KeywordVal,
                            /*IsFP*/ false);
+  case lltok::kw_or: {
+    bool Disjoint = EatIfPresent(lltok::kw_disjoint);
+    if (parseLogical(Inst, PFS, KeywordVal))
+      return true;
+    if (Disjoint)
+      cast<PossiblyDisjointInst>(Inst)->setIsDisjoint(true);
+    return false;
+  }
   case lltok::kw_and:
-  case lltok::kw_or:
   case lltok::kw_xor:
     return parseLogical(Inst, PFS, KeywordVal);
   case lltok::kw_icmp:
@@ -6421,8 +6553,28 @@ int LLParser::parseInstruction(Instruction *&Inst, BasicBlock *BB,
   }
 
   // Casts.
-  case lltok::kw_trunc:
-  case lltok::kw_zext:
+  case lltok::kw_zext: {
+    bool NonNeg = EatIfPresent(lltok::kw_nneg);
+    bool Res = parseCast(Inst, PFS, KeywordVal);
+    if (Res != 0)
+      return Res;
+    if (NonNeg)
+      Inst->setNonNeg();
+    return 0;
+  }
+  case lltok::kw_trunc: {
+    bool NUW = EatIfPresent(lltok::kw_nuw);
+    bool NSW = EatIfPresent(lltok::kw_nsw);
+    if (!NUW)
+      NUW = EatIfPresent(lltok::kw_nuw);
+    if (parseCast(Inst, PFS, KeywordVal))
+      return true;
+    if (NUW)
+      cast<TruncInst>(Inst)->setHasNoUnsignedWrap(true);
+    if (NSW)
+      cast<TruncInst>(Inst)->setHasNoSignedWrap(true);
+    return false;
+  }
   case lltok::kw_sext:
   case lltok::kw_fptrunc:
   case lltok::kw_fpext:
@@ -7877,8 +8029,18 @@ int LLParser::parseGetElementPtr(Instruction *&Inst, PerFunctionState &PFS) {
   Value *Ptr = nullptr;
   Value *Val = nullptr;
   LocTy Loc, EltLoc;
+  GEPNoWrapFlags NW;
 
-  bool InBounds = EatIfPresent(lltok::kw_inbounds);
+  while (true) {
+    if (EatIfPresent(lltok::kw_inbounds))
+      NW |= GEPNoWrapFlags::inBounds();
+    else if (EatIfPresent(lltok::kw_nusw))
+      NW |= GEPNoWrapFlags::noUnsignedSignedWrap();
+    else if (EatIfPresent(lltok::kw_nuw))
+      NW |= GEPNoWrapFlags::noUnsignedWrap();
+    else
+      break;
+  }
 
   Type *Ty = nullptr;
   if (parseType(Ty) ||
@@ -7931,9 +8093,9 @@ int LLParser::parseGetElementPtr(Instruction *&Inst, PerFunctionState &PFS) {
 
   if (!GetElementPtrInst::getIndexedType(Ty, Indices))
     return error(Loc, "invalid getelementptr indices");
-  Inst = GetElementPtrInst::Create(Ty, Ptr, Indices);
-  if (InBounds)
-    cast<GetElementPtrInst>(Inst)->setIsInBounds(true);
+  GetElementPtrInst *GEP = GetElementPtrInst::Create(Ty, Ptr, Indices);
+  Inst = GEP;
+  GEP->setNoWrapFlags(NW);
   return AteExtraComma ? InstExtraComma : InstNormal;
 }
 

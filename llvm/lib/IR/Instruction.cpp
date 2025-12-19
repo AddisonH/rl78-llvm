@@ -161,23 +161,46 @@ bool Instruction::isOnlyUserOfAnyOperand() {
 }
 
 void Instruction::setHasNoUnsignedWrap(bool b) {
-  cast<OverflowingBinaryOperator>(this)->setHasNoUnsignedWrap(b);
+  if (auto *Inst = dyn_cast<OverflowingBinaryOperator>(this))
+    Inst->setHasNoUnsignedWrap(b);
+  else
+    cast<TruncInst>(this)->setHasNoUnsignedWrap(b);
 }
 
 void Instruction::setHasNoSignedWrap(bool b) {
-  cast<OverflowingBinaryOperator>(this)->setHasNoSignedWrap(b);
+  if (auto *Inst = dyn_cast<OverflowingBinaryOperator>(this))
+    Inst->setHasNoSignedWrap(b);
+  else
+    cast<TruncInst>(this)->setHasNoSignedWrap(b);
 }
 
 void Instruction::setIsExact(bool b) {
   cast<PossiblyExactOperator>(this)->setIsExact(b);
 }
 
+void Instruction::setNonNeg(bool b) {
+  assert(isa<PossiblyNonNegInst>(this) && "Must be zext");
+  SubclassOptionalData = (SubclassOptionalData & ~PossiblyNonNegInst::NonNeg) |
+                         (b * PossiblyNonNegInst::NonNeg);
+}
+
 bool Instruction::hasNoUnsignedWrap() const {
-  return cast<OverflowingBinaryOperator>(this)->hasNoUnsignedWrap();
+  if (auto *Inst = dyn_cast<OverflowingBinaryOperator>(this))
+    return Inst->hasNoUnsignedWrap();
+
+  return cast<TruncInst>(this)->hasNoUnsignedWrap();
 }
 
 bool Instruction::hasNoSignedWrap() const {
-  return cast<OverflowingBinaryOperator>(this)->hasNoSignedWrap();
+  if (auto *Inst = dyn_cast<OverflowingBinaryOperator>(this))
+    return Inst->hasNoSignedWrap();
+
+  return cast<TruncInst>(this)->hasNoSignedWrap();
+}
+
+bool Instruction::hasNonNeg() const {
+  assert(isa<PossiblyNonNegInst>(this) && "Must be zext");
+  return (SubclassOptionalData & PossiblyNonNegInst::NonNeg) != 0;
 }
 
 bool Instruction::hasPoisonGeneratingFlags() const {
@@ -201,10 +224,24 @@ void Instruction::dropPoisonGeneratingFlags() {
     cast<PossiblyExactOperator>(this)->setIsExact(false);
     break;
 
+  case Instruction::Or:
+    cast<PossiblyDisjointInst>(this)->setIsDisjoint(false);
+    break;
+
   case Instruction::GetElementPtr:
-    cast<GetElementPtrInst>(this)->setIsInBounds(false);
+    cast<GetElementPtrInst>(this)->setNoWrapFlags(GEPNoWrapFlags::none());
+    break;
+
+  case Instruction::ZExt:
+    setNonNeg(false);
+    break;
+
+  case Instruction::Trunc:
+    cast<TruncInst>(this)->setHasNoUnsignedWrap(false);
+    cast<TruncInst>(this)->setHasNoSignedWrap(false);
     break;
   }
+
   if (isa<FPMathOperator>(this)) {
     setHasNoNaNs(false);
     setHasNoInfs(false);
@@ -371,6 +408,10 @@ void Instruction::copyIRFlags(const Value *V, bool IncludeWrapFlags) {
     if (isa<PossiblyExactOperator>(this))
       setIsExact(PE->isExact());
 
+  if (auto *SrcPD = dyn_cast<PossiblyDisjointInst>(V))
+    if (auto *DestPD = dyn_cast<PossiblyDisjointInst>(this))
+      DestPD->setIsDisjoint(SrcPD->isDisjoint());
+
   // Copy the fast-math flags.
   if (auto *FP = dyn_cast<FPMathOperator>(V))
     if (isa<FPMathOperator>(this))
@@ -378,7 +419,12 @@ void Instruction::copyIRFlags(const Value *V, bool IncludeWrapFlags) {
 
   if (auto *SrcGEP = dyn_cast<GetElementPtrInst>(V))
     if (auto *DestGEP = dyn_cast<GetElementPtrInst>(this))
-      DestGEP->setIsInBounds(SrcGEP->isInBounds() || DestGEP->isInBounds());
+      DestGEP->setNoWrapFlags(SrcGEP->getNoWrapFlags() |
+                              DestGEP->getNoWrapFlags());
+
+  if (auto *NNI = dyn_cast<PossiblyNonNegInst>(V))
+    if (isa<PossiblyNonNegInst>(this))
+      setNonNeg(NNI->hasNonNeg());
 }
 
 void Instruction::andIRFlags(const Value *V) {
@@ -389,9 +435,20 @@ void Instruction::andIRFlags(const Value *V) {
     }
   }
 
+  if (auto *TI = dyn_cast<TruncInst>(V)) {
+    if (isa<TruncInst>(this)) {
+      setHasNoSignedWrap(hasNoSignedWrap() && TI->hasNoSignedWrap());
+      setHasNoUnsignedWrap(hasNoUnsignedWrap() && TI->hasNoUnsignedWrap());
+    }
+  }
+
   if (auto *PE = dyn_cast<PossiblyExactOperator>(V))
     if (isa<PossiblyExactOperator>(this))
       setIsExact(isExact() && PE->isExact());
+
+  if (auto *SrcPD = dyn_cast<PossiblyDisjointInst>(V))
+    if (auto *DestPD = dyn_cast<PossiblyDisjointInst>(this))
+      DestPD->setIsDisjoint(DestPD->isDisjoint() && SrcPD->isDisjoint());
 
   if (auto *FP = dyn_cast<FPMathOperator>(V)) {
     if (isa<FPMathOperator>(this)) {
@@ -403,7 +460,12 @@ void Instruction::andIRFlags(const Value *V) {
 
   if (auto *SrcGEP = dyn_cast<GetElementPtrInst>(V))
     if (auto *DestGEP = dyn_cast<GetElementPtrInst>(this))
-      DestGEP->setIsInBounds(SrcGEP->isInBounds() && DestGEP->isInBounds());
+      DestGEP->setNoWrapFlags(SrcGEP->getNoWrapFlags() &
+                              DestGEP->getNoWrapFlags());
+
+  if (auto *NNI = dyn_cast<PossiblyNonNegInst>(V))
+    if (isa<PossiblyNonNegInst>(this))
+      setNonNeg(hasNonNeg() && NNI->hasNonNeg());
 }
 
 const char *Instruction::getOpcodeName(unsigned OpCode) {
@@ -886,6 +948,8 @@ Instruction::getPrevNonDebugInstruction(bool SkipPseudoOp) const {
 }
 
 bool Instruction::isAssociative() const {
+  if (auto *II = dyn_cast<IntrinsicInst>(this))
+    return II->isAssociative();
   unsigned Opcode = getOpcode();
   if (isAssociative(Opcode))
     return true;

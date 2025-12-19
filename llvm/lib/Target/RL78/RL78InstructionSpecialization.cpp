@@ -30,7 +30,7 @@ struct Specialization {
 
   Specialization(unsigned int newOpCode, unsigned int enumImmValue,
                  const char *debugName)
-      : NewOpCode(newOpCode), DebugName(debugName), EnumImmValue(enumImmValue) {
+      : NewOpCode(newOpCode), EnumImmValue(enumImmValue), DebugName(debugName) {
   }
 
   Specialization(unsigned int newOpCode, const char *debugName)
@@ -41,8 +41,7 @@ struct Specialization {
                  char operandOffset = 0, bool zeroImm = false,
                  bool ucharImm = true)
       : NewOpCode(newOpCode), OperandOffset(operandOffset), ZeroImm(zeroImm),
-        UCharImm(ucharImm), AllowedOp1Regs(allowedOp1Regs),
-        AllowedOp2Regs(allowedOp2Regs), DebugName(debugName) {}
+        UCharImm(ucharImm), DebugName(debugName), AllowedOp1Regs(allowedOp1Regs), 	  AllowedOp2Regs(allowedOp2Regs) {}
 };
 
 namespace {
@@ -297,10 +296,10 @@ bool isAMemDEHLOp(MachineInstr &MI, Specialization &newOp) {
           (newOp.AllowedOp1Regs.count(memRegId) > 0 ||
            newOp.AllowedOp2Regs.count(memRegId) > 0) &&
           MI.getOperand(offsetIndex).isImm() &&
-          (newOp.ZeroImm && MI.getOperand(offsetIndex).getImm() == 0 ||
-           !newOp.ZeroImm &&
-               (newOp.UCharImm && MI.getOperand(offsetIndex).getImm() < 255 ||
-                !newOp.UCharImm)));
+          ((newOp.ZeroImm && MI.getOperand(offsetIndex).getImm() == 0) ||
+           (!newOp.ZeroImm &&
+            ((newOp.UCharImm && MI.getOperand(offsetIndex).getImm() < 255) ||
+             !newOp.UCharImm))));
 }
 
 bool isLimitedOp(MachineInstr &MI, Specialization &newOp) {
@@ -308,12 +307,12 @@ bool isLimitedOp(MachineInstr &MI, Specialization &newOp) {
   char op2Index = MI.getNumExplicitDefs() + newOp.OperandOffset + 1;
   bool firstOpOk =
       newOp.AllowedOp1Regs.size() == 0 ||
-      MI.getOperand(op1Index).isReg() &&
-          newOp.AllowedOp1Regs.count(MI.getOperand(op1Index).getReg().id()) > 0;
+      (MI.getOperand(op1Index).isReg() &&
+          newOp.AllowedOp1Regs.count(MI.getOperand(op1Index).getReg().id()) > 0);
   bool secondOpOk =
       newOp.AllowedOp2Regs.size() == 0 ||
-      MI.getOperand(op2Index).isReg() &&
-          newOp.AllowedOp2Regs.count(MI.getOperand(op2Index).getReg().id()) > 0;
+      (MI.getOperand(op2Index).isReg() &&
+          newOp.AllowedOp2Regs.count(MI.getOperand(op2Index).getReg().id()) > 0);
 
   return firstOpOk && secondOpOk;
 }

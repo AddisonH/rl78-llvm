@@ -9,6 +9,7 @@
 #include "MCTargetDesc/RL78FixupKinds.h"
 #include "MCTargetDesc/RL78MCTargetDesc.h"
 #include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -16,7 +17,8 @@
 #include "RL78.h"
 using namespace llvm;
 
-static unsigned adjustFixupValue(unsigned Kind, int64_t Value) {
+static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
+                                 MCContext &Ctx) {
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
@@ -57,25 +59,25 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value) {
 
   case RL78::fixup_RL78_DIR3U:
     RL78ReportError(Value >= -4 && Value < 8,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
 
   case RL78::fixup_RL78_DIR16U:
   case RL78::fixup_RL78_DIR16U_RAM:
   case RL78::fixup_RL78_DIR16UW_RAM:
     RL78ReportError(Value >= -32768 && Value <= 0xFFFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
 
   case RL78::fixup_RL78_DIR20U:
     RL78ReportError(Value >= -524288 && Value <= 0xFFFFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
 
   case RL78::fixup_RL78_DIR20U_16:
   case RL78::fixup_RL78_DIR20UW_16:
     RL78ReportError(Value >= -32768 && Value <= 0xFFFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
 
   case RL78::fixup_RL78_SYM:
@@ -83,28 +85,28 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value) {
 
   case RL78::fixup_RL78_DIR8S_PCREL:
     RL78ReportError(Value >= -128 && Value <= 0xFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
 	return Value - 1;
 
   case RL78::fixup_RL78_DIR16S_PCREL:
     RL78ReportError(Value >= -32768 && Value <= 0xFFFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value - 2;
 
   case RL78::fixup_RL78_DIR8U:
   case RL78::fixup_RL78_DIR8U_SAD:
   case RL78::fixup_RL78_DIR8UW_SAD:
     RL78ReportError(Value >= -128 && Value <= 0xFF,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
     
   case RL78::fixup_RL78_DIR_CALLT:
     RL78ReportError(Value >= -16 && Value < 0x20,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
 	return Value;
   case RL78::fixup_RL78_DIR32U:
     RL78ReportError(Value >= INT32_MIN && Value <= UINT32_MAX,
-                    "Instruction using illegal Value.");
+                    "Instruction using illegal Value.", &Ctx, Loc);
     return Value;
   }
 }
@@ -202,10 +204,21 @@ public:
     }
   }
 
+  bool fixupNeedsRelaxationAdvanced(
+      const MCFixup& Fixup, bool Resolved, uint64_t Value,
+      const MCRelaxableFragment* DF, const MCAsmLayout& Layout,
+      const bool WasForced) const override {
+    return fixupNeedsRelaxation(Fixup, Value, DF, Layout);
+  }
+
   bool mayNeedRelaxation(const MCInst &Inst,
                          const MCSubtargetInfo &STI) const override {
-    // FIXME.
-    return false;
+    switch (Inst.getOpcode()) {
+    case RL78::BR_rel16:
+      return true;
+    default:
+      return false;
+    }
   }
 
   /// fixupNeedsRelaxation - Target specific predicate for whether a given
@@ -213,13 +226,34 @@ public:
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override {
-    // FIXME.
-    llvm_unreachable("fixupNeedsRelaxation() unimplemented");
-    return false;
+    int64_t Offset = int64_t(Value);
+
+    switch ((unsigned)Fixup.getKind()) {
+    case RL78::fixup_RL78_DIR16S_PCREL:
+      return (Offset > -128 && Offset < 127);
+    default:
+      return false;
+    }
   }
-  void relaxInstruction(MCInst &Inst, const MCSubtargetInfo &STI) const override {
-    // FIXME.
-    llvm_unreachable("relaxInstruction() unimplemented");
+
+  void relaxInstruction(MCInst &Inst,
+                        const MCSubtargetInfo &STI) const override {
+    MCInst Res;
+
+    switch (Inst.getOpcode()) {
+    case RL78::BR_rel16:
+      Res.setOpcode(RL78::BR_rel8);
+      break;
+    default:
+      return;
+    }
+
+    unsigned NumOperands = Inst.getNumOperands();
+    for (unsigned i = 0; i < NumOperands; i++) {
+      Res.addOperand(Inst.getOperand(i));
+    }
+
+    Inst = std::move(Res);
   }
 
   bool writeNopData(raw_ostream &OS, uint64_t Count, const MCSubtargetInfo *STI) const override {
@@ -232,18 +266,18 @@ public:
 };
 
 class ELFRL78AsmBackend : public RL78AsmBackend {
-  Triple::OSType OSType;
 
 public:
   ELFRL78AsmBackend(const Target &T, Triple::OSType OSType)
-      : RL78AsmBackend(T), OSType(OSType) {}
+      : RL78AsmBackend(T) {}
 
   void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                   const MCValue &Target, MutableArrayRef<char> Data,
                   uint64_t Value, bool IsResolved,
                   const MCSubtargetInfo *STI) const override {
-
-    Value = adjustFixupValue(Fixup.getKind(), static_cast<int64_t>(Value));
+    MCContext &Ctx = Asm.getContext();
+    Value = adjustFixupValue(Fixup.getKind(), static_cast<int64_t>(Value),
+                             Fixup.getLoc(), Ctx);
     if (!Value)
       return; // Doesn't change encoding.
 

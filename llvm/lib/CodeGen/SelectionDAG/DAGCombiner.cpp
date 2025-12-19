@@ -416,7 +416,8 @@ namespace {
     SDValue visitMERGE_VALUES(SDNode *N);
     SDValue visitADD(SDNode *N);
     SDValue visitADDLike(SDNode *N);
-    SDValue visitADDLikeCommutative(SDValue N0, SDValue N1, SDNode *LocReference);
+    SDValue visitADDLikeCommutative(SDValue N0, SDValue N1,
+                                    SDNode *LocReference);
     SDValue visitSUB(SDNode *N);
     SDValue visitADDSAT(SDNode *N);
     SDValue visitSUBSAT(SDNode *N);
@@ -1191,7 +1192,10 @@ bool DAGCombiner::reassociationCanBreakAddressingModePattern(unsigned Opc,
   // (load/store (add, (add, x, y), offset2)) ->
   // (load/store (add, (add, x, offset2), y)).
 
-  if (Opc != ISD::ADD || N0.getOpcode() != ISD::ADD)
+  if (!N0.isAnyAdd())
+    return false;
+
+  if (Opc != ISD::ADD)
     return false;
 
   auto *C2 = dyn_cast<ConstantSDNode>(N1);
@@ -2393,7 +2397,7 @@ static bool canFoldInAddressingMode(SDNode *N, SDNode *Use, SelectionDAG &DAG,
   }
 
   TargetLowering::AddrMode AM;
-  if (N->getOpcode() == ISD::ADD) {
+  if (N->isAnyAdd()) {
     AM.HasBaseReg = true;
     ConstantSDNode *Offset = dyn_cast<ConstantSDNode>(N->getOperand(1));
     if (Offset)
@@ -2649,15 +2653,6 @@ static SDValue foldAddSubOfSignBit(SDNode *N, SelectionDAG &DAG) {
   return SDValue();
 }
 
-static bool isADDLike(SDValue V, const SelectionDAG &DAG) {
-  unsigned Opcode = V.getOpcode();
-  if (Opcode == ISD::OR)
-    return DAG.haveNoCommonBitsSet(V.getOperand(0), V.getOperand(1));
-  if (Opcode == ISD::XOR)
-    return isMinSignedConstant(V.getOperand(1));
-  return false;
-}
-
 static bool
 areBitwiseNotOfEachother(SDValue Op0, SDValue Op1) {
   return (isBitwiseNot(Op0) && Op0.getOperand(0) == Op1) ||
@@ -2739,7 +2734,7 @@ SDValue DAGCombiner::visitADDLike(SDNode *N) {
   // iff (or x, c0) is equivalent to (add x, c0).
   // Fold (add (xor x, c0), c1) -> (add x, (c0 + c1))
   // iff (xor x, c0) is equivalent to (add x, c0).
-  if (isADDLike(N0, DAG)) {
+  if (DAG.isADDLike(N0)) {
     SDValue N01 = N0.getOperand(1);
     if (SDValue Add = DAG.FoldConstantArithmetic(ISD::ADD, DL, VT, {N1, N01}))
       return DAG.getNode(ISD::ADD, DL, VT, N0.getOperand(0), Add);
@@ -2760,7 +2755,7 @@ SDValue DAGCombiner::visitADDLike(SDNode *N) {
     // Do this optimization only when adding c does not introduce instructions
     // for adding carries.
     auto ReassociateAddOr = [&](SDValue N0, SDValue N1) {
-      if (isADDLike(N0, DAG) && N0.hasOneUse() &&
+      if (DAG.isADDLike(N0) && N0.hasOneUse() &&
           isConstantOrConstantVector(N0.getOperand(1), /* NoOpaque */ true)) {
         // If N0's type does not split or is a sign mask, it does not introduce
         // add carry.
@@ -7824,7 +7819,7 @@ SDValue DAGCombiner::visitOR(SDNode *N) {
 
   // If OR can be rewritten into ADD, try combines based on ADD.
   if ((!LegalOperations || TLI.isOperationLegal(ISD::ADD, VT)) &&
-      DAG.haveNoCommonBitsSet(N0, N1))
+      DAG.isADDLike(SDValue(N, 0)))
     if (SDValue Combined = visitADDLike(N))
       return Combined;
 
@@ -13184,9 +13179,10 @@ SDValue DAGCombiner::visitSIGN_EXTEND(SDNode *N) {
     return V;
 
   // fold (sext x) -> (zext x) if the sign bit is known zero.
-  if ((!LegalOperations || TLI.isOperationLegal(ISD::ZERO_EXTEND, VT)) &&
+  if (!TLI.isSExtCheaperThanZExt(N0.getValueType(), VT) &&
+      (!LegalOperations || TLI.isOperationLegal(ISD::ZERO_EXTEND, VT)) &&
       DAG.SignBitIsZero(N0))
-    return DAG.getNode(ISD::ZERO_EXTEND, DL, VT, N0);
+    return DAG.getNode(ISD::ZERO_EXTEND, DL, VT, N0, SDNodeFlags::NonNeg);
 
   if (SDValue NewVSel = matchVSelectOpSizesWithSetCC(N))
     return NewVSel;
@@ -14006,10 +14002,9 @@ SDValue DAGCombiner::reduceLoadWidth(SDNode *N) {
   Align NewAlign = commonAlignment(LN0->getAlign(), PtrOff);
   SDLoc DL(LN0);
   // The original load itself didn't wrap, so an offset within it doesn't.
-  SDNodeFlags Flags;
-  Flags.setNoUnsignedWrap(true);
-  SDValue NewPtr = DAG.getMemBasePlusOffset(LN0->getBasePtr(),
-                                            TypeSize::Fixed(PtrOff), DL, Flags);
+  SDValue NewPtr =
+      DAG.getMemBasePlusOffset(LN0->getBasePtr(), TypeSize::getFixed(PtrOff),
+                               DL, SDNodeFlags::NoUnsignedWrap);
   AddToWorklist(NewPtr.getNode());
 
   SDValue Load;
@@ -20517,24 +20512,18 @@ SDValue DAGCombiner::replaceStoreOfInsertLoad(StoreSDNode *ST) {
                               &IsFast) ||
       !IsFast)
     return SDValue();
-  EVT PtrVT = Ptr.getValueType();
 
-  // RL78: this happens when the ptr is 32-bit and the index 16-bit
-  if (Idx.getValueType().getSizeInBits() < PtrVT.getSizeInBits())
-    Idx = DAG.getNode(ISD::ZERO_EXTEND, DL, PtrVT, Idx);
-
-  SDValue Offset =
-      DAG.getNode(ISD::MUL, DL, PtrVT, Idx,
-                  DAG.getConstant(EltVT.getSizeInBits() / 8, DL, PtrVT));
-  SDValue NewPtr = DAG.getNode(ISD::ADD, DL, PtrVT, Ptr, Offset);
   MachinePointerInfo PointerInfo(ST->getAddressSpace());
 
   // If the offset is a known constant then try to recover the pointer
   // info
+  SDValue NewPtr;
   if (auto *CIdx = dyn_cast<ConstantSDNode>(Idx)) {
     unsigned COffset = CIdx->getSExtValue() * EltVT.getSizeInBits() / 8;
     NewPtr = DAG.getMemBasePlusOffset(Ptr, TypeSize::Fixed(COffset), DL);
     PointerInfo = ST->getPointerInfo().getWithOffset(COffset);
+  } else {
+    NewPtr = TLI.getVectorElementPointer(DAG, Ptr, Value.getValueType(), Idx);
   }
 
   return DAG.getStore(Chain, DL, Elt, NewPtr, PointerInfo, ST->getAlign(),
@@ -26356,11 +26345,7 @@ bool DAGCombiner::SimplifySelectOps(SDNode *TheSelect, SDValue LHS,
         LLD->getBasePtr().getOpcode() == ISD::TargetFrameIndex ||
         RLD->getBasePtr().getOpcode() == ISD::TargetFrameIndex ||
         !TLI.isOperationLegalOrCustom(TheSelect->getOpcode(),
-                                      LLD->getBasePtr().getValueType()) ||
-        // FIXME: RL78 far pointers are not handled properly in the target
-        // lowering code currently so prevent this optimization here
-        (DAG.getTarget().getTargetTriple().isRL78() &&
-         DAG.getDataLayout().getPointerSizeInBits() == 32))
+                                      LLD->getBasePtr().getValueType()))
       return false;
 
     // The loads must not depend on one another.

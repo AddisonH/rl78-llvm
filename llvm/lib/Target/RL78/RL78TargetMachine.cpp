@@ -204,7 +204,7 @@ void RL78PassConfig::addPreEmitPass() {
   addPass(&MachineCopyPropagationID);
   addPass(createRL78CMPWithZeroElimPass());
   addPass(createRL78InstructionSpecializationPass());
-  addPass(createRL78BranchExpandPass());
+  addPass(createRL78ExpandPseudoInstsPass());
   addPass(createRL78SelectBTCLRPass());
   if (!InsertNOPWithLabel.empty()) {
     addPass(createRL78InsertNOPWithLabelPass());

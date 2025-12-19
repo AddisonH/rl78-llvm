@@ -15,6 +15,7 @@ add_llvm_unittest(IRTests
   BasicBlockTest.cpp
   CFGBuilder.cpp
   ConstantRangeTest.cpp
+  ConstantRangeListTest.cpp
   ConstantsTest.cpp
   DataLayoutTest.cpp
   DebugInfoTest.cpp

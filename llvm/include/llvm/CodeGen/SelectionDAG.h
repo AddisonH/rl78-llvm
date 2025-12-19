@@ -32,7 +32,6 @@
 #include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/Allocator.h"
@@ -667,7 +666,7 @@ public:
   SDValue getConstant(const ConstantInt &Val, const SDLoc &DL, EVT VT,
                       bool isTarget = false, bool isOpaque = false);
   SDValue getIntPtrConstant(uint64_t Val, const SDLoc &DL,
-                            bool isTarget = false, uint32_t AS = 0);
+                            bool isTarget = false);
   SDValue getShiftAmountConstant(uint64_t Val, EVT VT, const SDLoc &DL,
                                  bool LegalTypes = true);
   SDValue getVectorIdxConstant(uint64_t Val, const SDLoc &DL,
@@ -1015,17 +1014,13 @@ public:
   /// addressing some offset of an object. i.e. if a load is split into multiple
   /// components, create an add nuw from the base pointer to the offset.
   SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Ptr, TypeSize Offset) {
-    SDNodeFlags Flags;
-    Flags.setNoUnsignedWrap(true);
-    return getMemBasePlusOffset(Ptr, Offset, SL, Flags);
+    return getMemBasePlusOffset(Ptr, Offset, SL, SDNodeFlags::NoUnsignedWrap);
   }
 
   SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Ptr, SDValue Offset) {
     // The object itself can't wrap around the address space, so it shouldn't be
     // possible for the adds of the offsets to the split parts to overflow.
-    SDNodeFlags Flags;
-    Flags.setNoUnsignedWrap(true);
-    return getMemBasePlusOffset(Ptr, Offset, SL, Flags);
+    return getMemBasePlusOffset(Ptr, Offset, SL, SDNodeFlags::NoUnsignedWrap);
   }
 
   /// Return a new CALLSEQ_START node, that starts new call frame, in which
@@ -1034,10 +1029,9 @@ public:
   SDValue getCALLSEQ_START(SDValue Chain, uint64_t InSize, uint64_t OutSize,
                            const SDLoc &DL) {
     SDVTList VTs = getVTList(MVT::Other, MVT::Glue);
-    // FIXME: can we make the AS selection conditional i.e. only for RL78?
     SDValue Ops[] = { Chain,
-                      getIntPtrConstant(InSize, DL, true, getDataLayout().getAllocaAddrSpace()),
-                      getIntPtrConstant(OutSize, DL, true, getDataLayout().getAllocaAddrSpace()) };
+                      getIntPtrConstant(InSize, DL, true),
+                      getIntPtrConstant(OutSize, DL, true) };
     return getNode(ISD::CALLSEQ_START, DL, VTs, Ops);
   }
 
@@ -1058,11 +1052,10 @@ public:
 
   SDValue getCALLSEQ_END(SDValue Chain, uint64_t Size1, uint64_t Size2,
                          SDValue Glue, const SDLoc &DL) {
-    // FIXME: can we make the AS selection conditional i.e. only for RL78?
     return getCALLSEQ_END(
         Chain,
-        getIntPtrConstant(Size1, DL, /*isTarget=*/true, getDataLayout().getAllocaAddrSpace()),
-        getIntPtrConstant(Size2, DL, /*isTarget=*/true, getDataLayout().getAllocaAddrSpace()),
+        getIntPtrConstant(Size1, DL, /*isTarget=*/true),
+        getIntPtrConstant(Size2, DL, /*isTarget=*/true),
         Glue, DL);
   }
 
@@ -2118,6 +2111,13 @@ public:
   bool canCreateUndefOrPoison(SDValue Op, bool PoisonOnly = false,
                               bool ConsiderFlags = true,
                               unsigned Depth = 0) const;
+
+  /// Return true if the specified operand is an ISD::OR or ISD::XOR node
+  /// that can be treated as an ISD::ADD node.
+  /// or(x,y) == add(x,y) iff haveNoCommonBitsSet(x,y)
+  /// xor(x,y) == add(x,y) iff isMinSignedConstant(y) && !NoWrap
+  /// If \p NoWrap is true, this will not match ISD::XOR.
+  bool isADDLike(SDValue Op, bool NoWrap = false) const;
 
   /// Return true if the specified operand is an ISD::ADD with a ConstantSDNode
   /// on the right-hand side, or if it is an ISD::OR with a ConstantSDNode that

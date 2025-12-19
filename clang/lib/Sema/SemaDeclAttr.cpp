@@ -7875,6 +7875,52 @@ static void handleRL78InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL,
                                           FPT->getParamTypes(), EPI));
   }
 
+  if (!brk) {
+    SmallVector<unsigned, 4> FinalVects;
+    llvm::SmallSet<unsigned, 8> Seen;
+    // Get this attribute's bank/enable bits.
+    bool NewHasBank = (Specs & 0x1) != 0;
+    bool NewHasEnable = (Specs & (0x1 << 4)) != 0;
+
+    // Track and check for duplicate with existing attributes.
+    for (const auto *Attr : FD->specific_attrs<RL78InterruptAttr>()) {
+      bool OldHasBank = (Attr->getSpecs() & 0x1) != 0;
+      bool OldHasEnable = (Attr->getSpecs() & (0x1 << 4)) != 0;
+      // Reject multiple bank/enable specs at one function.
+      if (NewHasBank && OldHasBank) {
+        S.Diag(AL.getArgAsExpr(0)->getExprLoc(), diag::err_expected)
+            << "only one specification of bank";
+        return;
+      }
+
+      if (NewHasEnable && OldHasEnable) {
+        S.Diag(AL.getArgAsExpr(0)->getExprLoc(), diag::err_expected)
+            << "only one specification of enable";
+        return;
+      }
+
+      for (unsigned V : Attr->vects()) {
+        if (Seen.insert(V).second)
+          FinalVects.push_back(V);
+      }
+    }
+
+    // Drop all existing RL78InterruptAttr attributes.
+    FD->dropAttr<RL78InterruptAttr>();
+
+    // Check new vectors for duplicates.
+    for (unsigned V : ExtraDataVects) {
+      if (!Seen.insert(V).second) {
+        S.Diag(AL.getArgAsExpr(0)->getExprLoc(), diag::err_expected)
+            << "unique values and not duplicates";
+        return;
+      }
+      FinalVects.push_back(V);
+    }
+    // Final vector list includes both old and new.
+    ExtraDataVects = std::move(FinalVects);
+  }
+
   if (brk) {
     D->addAttr(::new (S.Context) RL78BRKInterruptAttr(S.Context, AL, Specs));
   } else {

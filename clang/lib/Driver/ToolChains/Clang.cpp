@@ -2262,139 +2262,19 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
       break;
     }
   }
-
+  
   Arg *OptArg = Args.getLastArg(options::OPT_O_Group);
-  char OptLevel = (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
-
-  // Aggressive (-O3) speed optimizations
-  if (OptLevel == '3') {
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-inline-threshold=600");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-unroll-runtime");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-dfa-jump-thread");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-allow-unroll-and-jam");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-unroll-and-jam");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-unroll-runtime-epilog");
-  } else if (OptLevel != 0) {
+  char OptLevel =
+      (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
+  if (OptLevel != 0 && OptLevel != '3') {
     const Arg *A = Args.getLastArg(
         options::OPT_finline_functions, options::OPT_finline_hint_functions,
         options::OPT_fno_inline_functions, options::OPT_fno_inline);
     if (A == nullptr)
       CmdArgs.push_back("-fno-inline");
   }
-  if (OptLevel != 's' && OptLevel != 'z')
-    return;
 
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-licm");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-split-spill-mode=size");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-available-load-scan-limit=2");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-adce-remove-loops=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-enable-load-pre=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-addr-sink-combine-base-offs=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-addr-sink-using-gep=false");
-
-  // TODO: See if there is a replacement.
-  // CmdArgs.push_back("-mllvm");
-  // CmdArgs.push_back("-consider-local-interval-cost=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-block-placement=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-complex-addr-modes=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-machine-cse=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-enable-pre=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-sched-height=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-extra-vectorizer-passes=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-force-split-store=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-keep-loops=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-no-phi-elim-live-out-early-exit=true");
-
-  // TODO: See if there is a replacement.
-  // CmdArgs.push_back("-mllvm");
-  // CmdArgs.push_back("-simplifycfg-dup-ret=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-speculate-one-expensive-inst=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-bonus-inst-threshold=0");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-min-jump-table-entries=5");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-optsize-jump-table-density=56");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-phi-node-folding-threshold=0");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-static-likely-prob=72");
-  
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-dup-indirect-size=14");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-merge-size=2");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-merge-threshold=210");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-triangle-chain-count=8");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-unroll-threshold=9");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-replexitval=never");
-  
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-lsr=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-machine-licm=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-phi-elim-edge-splitting=true");
+  rl78::addRL78PassTuneArgs(Args, CmdArgs);
 }
 
 void Clang::AddSparcTargetArgs(const ArgList &Args,
@@ -6879,27 +6759,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    IsWindowsMSVC))
     CmdArgs.push_back("-fms-extensions");
 
-  if (Args.hasFlag(options::OPT_frenesas_extensions, options::OPT_fno_renesas_extensions, false))
+  if (Args.hasFlag(options::OPT_frenesas_extensions,
+                   options::OPT_fno_renesas_extensions, false)) {
     CmdArgs.push_back("-frenesas-extensions");
-
-  Arg *mirrorSource = Args.getLastArg(options::OPT_mirror_source_EQ);
-  if (mirrorSource) {
-    if (mirrorSource->containsValue("0")) {
-      CmdArgs.push_back("-mmirror-source-0");
-    } else if (mirrorSource->containsValue("1")) {
-      CmdArgs.push_back("-mmirror-source-1");
-    } else if (mirrorSource->containsValue("common")) {
-      CmdArgs.push_back("-mmirror-source-common");
-    }
-  } else {
-    CmdArgs.push_back("-mmirror-source-0");
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-rl78-ccrl-asm-syntax");
   }
-
-  if ((CPU == "RL78_S1") &&
-      (Args.getLastArg(options::OPT_mirror_source_1) ||
-       (mirrorSource && mirrorSource->containsValue("1"))))
-    D.Diag(diag::err_drv_argument_not_allowed_with) << "-mirror-source=1"
-                                                    << "-mcpu=S1";
 
   const Arg *mCode =
       Args.getLastArg(options::OPT_mnear_code, options::OPT_mfar_code);

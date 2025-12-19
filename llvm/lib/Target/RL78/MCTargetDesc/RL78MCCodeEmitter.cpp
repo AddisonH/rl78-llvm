@@ -81,9 +81,6 @@ public:
   unsigned getBranchOnRegTargetOpValue(const MCInst &MI, unsigned OpNo,
                                        SmallVectorImpl<MCFixup> &Fixups,
                                        const MCSubtargetInfo &STI) const;
-
-private:
-  FeatureBitset computeAvailableFeatures(const FeatureBitset &FB) const;
 };
 
 } // end anonymous namespace
@@ -163,9 +160,6 @@ static void encodeBitManip1RInstruction(const MCInst &MI,
 void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                                           SmallVectorImpl<MCFixup> &Fixups,
                                           const MCSubtargetInfo &STI) const {
-  /* TODO: look into this auto generated pseudo lowerings
-  RL78_MC::verifyInstructionPredicates(MI,
-                              computeAvailableFeatures(STI.getFeatureBits()));*/
   unsigned long long Bits = getBinaryCodeForInstr(MI, Fixups, STI);
   unsigned Size = MCII.get(MI.getOpcode()).getSize();
   switch (MI.getOpcode()) {
@@ -303,7 +297,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                     "Invalid register for Instruction");
     // MOV [DE+byte], #byte	CA adr data.
     // MOV [HL+byte], #byte	CC adr data.
-    // TODO: insert asserts here and in similar places.
     if (RegOp != RL78::RP2 && RegOp != RL78::R2 && RegOp != RL78::R3) {
       Size = 3;
       Bits = (RegOp == RL78::RP4) ? 0xCA0000 : 0xCC0000;
@@ -434,9 +427,10 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                                            (MCFixupKind)RL78::fixup_RL78_DIR8U);
       Bits |= addr & 0xFF;
     }
+    // MOV A, word[B]    09 adrl adrh.
+    // MOV A, word[C]    29 adrl adrh.
     // MOV A, word[BC]   49 adrl adrh.
     else {
-
       if (RegOp == RL78::RP2)
         Bits = 0x490000;
       else if (RegOp == RL78::R2)
@@ -1624,6 +1618,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     Bits |= getTargetOpValue(MI, 2, 1, Fixups, STI,
                                (MCFixupKind)RL78::fixup_RL78_DIR8U) &
               0xFF;
+    break;
   case RL78::XOR_r_imm:
     Bits |= getTargetOpValue(MI, 2, 1, Fixups, STI,
                                (MCFixupKind)RL78::fixup_RL78_DIR8U) &
@@ -2158,6 +2153,12 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     Bits |= ((addressValue & 0xFF00) >> 8) | ((addressValue & 0xFF) << 8);
     break;
   }
+  case RL78::BR_AX: {
+    // br AX
+    RL78ReportError(MI.getOperand(0).getReg() == RL78::RP0,
+                    "Instruction using illegal register.");
+    break;
+  }
   case RL78::ADDW_rp_rp:
     RL78ReportError(MI.getOperand(0).getReg() == RL78::RP0,
                     "Instruction using illegal register.");
@@ -2430,8 +2431,6 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case RL78::SAR_r_i:
     // SHR A, X          31 XA (X -> 1..7)
     // SAR A, X          31 XB (X -> 1..7)
-    // Bits +=  getTargetOpValue(MI, 2, 3, Fixups, STI,
-    // (MCFixupKind)RL78::fixup_RL78_DIR3U) & 0xFF << 4; //TODO??
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
                     "Instruction using illegal register.");
     Bits += MI.getOperand(2).getImm() << 4;
@@ -2657,6 +2656,9 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // XOR1 CY, [HL].X       71 X7 (X -> 0..7 -> 8..F)
     RL78ReportError(MI.getOperand(0).getReg() == RL78::RP6,
                     "Instruction using illegal register.");
+    RL78ReportError(MI.getOperand(1).getImm() >= 0 &&
+                        MI.getOperand(1).getImm() <= 7,
+                    "Instruction using operand outside of range 0-7.");
     Bits += MI.getOperand(1).getImm() << 4;
     break;
   case RL78::SET1_memr:
@@ -2665,6 +2667,9 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // CLR1 [HL].X           71 X3 (X -> 0..7 -> 8..F)
     RL78ReportError(MI.getOperand(0).getReg() == RL78::RP6,
                     "Instruction using illegal register.");
+    RL78ReportError(MI.getOperand(1).getImm() >= 0 &&
+                        MI.getOperand(1).getImm() <= 7,
+                    "Instruction using operand outside of range 0-7.");
     Bits += MI.getOperand(1).getImm() << 4;
     break;
   case RL78::MOV1_memr_cy:
@@ -2747,8 +2752,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // CALL HL           61 FA
     Bits += (MI.getOperand(0).getReg() - RL78::RP0) << 4;
     break;
-  case RL78::CALL_addr16:
-  case RL78::CALL_sym16: {
+  case RL78::CALL_addr16: {
     unsigned int addressValue = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16U);
     unsigned int laddr = (0x00FF & addressValue) << 8;
@@ -2756,8 +2760,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     Bits |= (uaddr | laddr);
     break;
   }
-  case RL78::CALL_addr20:
-  case RL78::CALL_sym20: {
+  case RL78::CALL_addr20: {
     // call !!$addr20
     unsigned int addressValue = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR20U);
@@ -3329,10 +3332,10 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
       break;
   }
 
-
-  if (MO.isExpr() && fixup1 != RL78::fixup_RL78_DIR_CALLT) {
+  if (MO.isExpr() &&
+      fixup1 != static_cast<MCFixupKind>(RL78::fixup_RL78_DIR_CALLT)) {
     RL78MCExpr::createFixupsForExpression(MO.getExpr(), offset, valueSize,
-                                          Fixups, true, fixup1, Ctx, MO.getExpr()->getLoc());
+                                          Fixups, true, fixup1, Ctx, MI.getLoc());
     return 0;
   } 
 

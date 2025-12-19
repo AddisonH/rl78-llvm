@@ -1343,9 +1343,29 @@ static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
                dyn_cast<PossiblyExactOperator>(U)) {
     if (Div->isExact())
       Out << " exact";
+  } else if (const PossiblyDisjointInst *PDI =
+                 dyn_cast<PossiblyDisjointInst>(U)) {
+    if (PDI->isDisjoint())
+      Out << " disjoint";
   } else if (const GEPOperator *GEP = dyn_cast<GEPOperator>(U)) {
     if (GEP->isInBounds())
       Out << " inbounds";
+    else if (GEP->hasNoUnsignedSignedWrap())
+      Out << " nusw";
+    if (GEP->hasNoUnsignedWrap())
+      Out << " nuw";
+    if (auto InRange = GEP->getInRange()) {
+      Out << " inrange(" << InRange->getLower() << ", " << InRange->getUpper()
+          << ")";
+    }
+  } else if (const auto *NNI = dyn_cast<PossiblyNonNegInst>(U)) {
+    if (NNI->hasNonNeg())
+      Out << " nneg";
+  } else if (const auto *TI = dyn_cast<TruncInst>(U)) {
+    if (TI->hasNoUnsignedWrap())
+      Out << " nuw";
+    if (TI->hasNoSignedWrap())
+      Out << " nsw";
   }
 }
 
@@ -1591,18 +1611,13 @@ static void WriteConstantInternal(raw_ostream &Out, const Constant *CV,
       Out << ' ' << static_cast<CmpInst::Predicate>(CE->getPredicate());
     Out << " (";
 
-    std::optional<unsigned> InRangeOp;
     if (const GEPOperator *GEP = dyn_cast<GEPOperator>(CE)) {
       WriterCtx.TypePrinter->print(GEP->getSourceElementType(), Out);
       Out << ", ";
-      InRangeOp = GEP->getInRangeIndex();
-      if (InRangeOp)
-        ++*InRangeOp;
     }
 
-    for (User::const_op_iterator OI=CE->op_begin(); OI != CE->op_end(); ++OI) {
-      if (InRangeOp && unsigned(OI - CE->op_begin()) == *InRangeOp)
-        Out << "inrange ";
+    for (User::const_op_iterator OI = CE->op_begin(); OI != CE->op_end();
+         ++OI) {
       WriterCtx.TypePrinter->print((*OI)->getType(), Out);
       Out << ' ';
       WriteAsOperandInternal(Out, *OI, WriterCtx);

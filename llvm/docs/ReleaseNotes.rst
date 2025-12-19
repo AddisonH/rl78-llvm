@@ -55,25 +55,12 @@ The new requirements are as follows:
 Changes to the LLVM IR
 ----------------------
 
-* Typed pointers are no longer supported and the ``-opaque-pointers`` option
-  has been removed. See the `opaque pointers <OpaquePointers.html>`__
-  documentation for migration instructions.
-
-* The ``nofpclass`` attribute was introduced. This allows more
-  optimizations around special floating point value comparisons.
-
-* Introduced new ``llvm.ldexp`` and ``llvm.experimental.constrained.ldexp`` intrinsics.
-
-* Introduced new ``llvm.frexp`` intrinsic.
-
-* The constant expression variants of the following instructions have been
-  removed:
-
-  * ``select``
-
-* Introduced a set of experimental `convergence control intrinsics
-  <ConvergentOperations.html>`__ to explicitly define the semantics of convergent
-  operations.
+* Added Memory Model Relaxation Annotations (MMRAs).
+* Added ``nusw`` and ``nuw`` flags to ``getelementptr`` instruction.
+* Renamed ``llvm.experimental.vector.reverse`` intrinsic to ``llvm.vector.reverse``.
+* Renamed ``llvm.experimental.vector.splice`` intrinsic to ``llvm.vector.splice``.
+* Renamed ``llvm.experimental.vector.interleave2`` intrinsic to ``llvm.vector.interleave2``.
+* Renamed ``llvm.experimental.vector.deinterleave2`` intrinsic to ``llvm.vector.deinterleave2``.
 
 Changes to LLVM infrastructure
 ------------------------------

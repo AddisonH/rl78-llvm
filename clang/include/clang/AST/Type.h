@@ -524,9 +524,9 @@ public:
            (A == LangAS::__near && B == LangAS::Default) ||
            (A == LangAS::Default && B == LangAS::__near) ||
            (A == LangAS::__far_data && B == LangAS::__near) ||
-           (A == LangAS::__far_data && B == LangAS::Default) || 
+           (A == LangAS::__far_data && B == LangAS::Default) ||
            (A == LangAS::__far_code && B == LangAS::__near) ||
-           (A == LangAS::__far_code && B == LangAS::Default) || 
+           (A == LangAS::__far_code && B == LangAS::Default) ||
            (A == LangAS::__far_code && B == LangAS::__far_data) ||
            (A == LangAS::__far_data && B == LangAS::__far_code);
   }
@@ -1696,7 +1696,7 @@ protected:
 
     /// Extra information which affects how the function is called, like
     /// regparm and the calling convention.
-    unsigned ExtInfo : 15;
+    unsigned ExtInfo : 13;
 
     /// The ref-qualifier associated with a \c FunctionProtoType.
     ///
@@ -1985,10 +1985,7 @@ protected:
   Type(TypeClass tc, QualType canon, TypeDependence Dependence)
       : ExtQualsTypeCommonBase(this,
                                canon.isNull() ? QualType(this_(), 0) : canon) {
-    // TODO: for now lets increase all types to accomodate the far/nondefault AS bit flags.
-    // In the future, we could do what was done with ConstantMatrixTypeBitfields:
-    // https://github.com/llvm/llvm-project/commit/94b43118e2203fed8ca0377ae762c08189aa6f3d
-    static_assert(sizeof(*this) <= 16 + sizeof(ExtQualsTypeCommonBase),
+    static_assert(sizeof(*this) <= 8 + sizeof(ExtQualsTypeCommonBase),
                   "changing bitfields changed sizeof(Type)!");
     static_assert(alignof(decltype(*this)) % sizeof(void *) == 0,
                   "Insufficient alignment!");
@@ -3884,8 +3881,7 @@ public:
     };
     enum { NoCfCheckMask = 0x800 };
     enum { CmseNSCallMask = 0x1000 };
-    //TODO: RL78 double check that the field is properly handled everywhere
-    enum { FarMask = 0x2000 }; 
+    enum { FarMask = 0x2000 };
     enum { NonDefaultASMask = 0x4000 };
     uint16_t Bits = CC_C;
 
@@ -3904,7 +3900,7 @@ public:
              (hasRegParm ? ((regParm + 1) << RegParmOffset) : 0) |
              (NoCfCheck ? NoCfCheckMask : 0) |
              (cmseNSCall ? CmseNSCallMask : 0) |
-             (Far ? FarMask : 0) | 
+             (Far ? FarMask : 0) |
              (NonDefaultAS ? NonDefaultASMask : 0);
     }
 
@@ -4023,10 +4019,15 @@ public:
     uint16_t NumExceptionType = 0;
   };
 
+  /// RL78-specific function bits.
+  bool Far : 1;
+  bool NonDefaultAS : 1;
+
 protected:
   FunctionType(TypeClass tc, QualType res, QualType Canonical,
                TypeDependence Dependence, ExtInfo Info)
-      : Type(tc, Canonical, Dependence), ResultType(res) {
+      : Type(tc, Canonical, Dependence), ResultType(res),
+        Far(Info.getFar()), NonDefaultAS(Info.getNonDefaultAS()) {
     FunctionTypeBits.ExtInfo = Info.Bits;
   }
 
@@ -4052,7 +4053,14 @@ public:
   bool getFar() const { return getExtInfo().getFar(); }
   bool getNonDefaultAS() const { return getExtInfo().getNonDefaultAS(); }
   CallingConv getCallConv() const { return getExtInfo().getCC(); }
-  ExtInfo getExtInfo() const { return ExtInfo(FunctionTypeBits.ExtInfo); }
+  ExtInfo getExtInfo() const {
+    /// Note that all but two of the ExtInfo bits are kept in
+    /// FunctionTypeBits.ExtInfo; the extra two bits (Far and NonDefaultAS)
+    /// are stored in FunctionType.
+    return ExtInfo(FunctionTypeBits.ExtInfo)
+                    .withFar(Far)
+                    .withNonDefaultAS(NonDefaultAS);
+  }
 
   static_assert((~Qualifiers::FastMask & Qualifiers::CVRMask) == 0,
                 "Const, volatile and restrict are assumed to be a subset of "

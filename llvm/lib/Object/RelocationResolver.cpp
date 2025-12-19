@@ -522,7 +522,6 @@ static bool supportsRL78(uint64_t Type) {
 static uint64_t resolveRL78(uint64_t Type, uint64_t Offset, uint64_t S,
                              uint64_t LocData, int64_t Addend) {
   int64_t RA = Addend;
-  uint64_t A = LocData;
   switch (Type) {
   case ELF::R_RL78_DIR32U:
     return (S + RA) & 0xFFFFFFFF;

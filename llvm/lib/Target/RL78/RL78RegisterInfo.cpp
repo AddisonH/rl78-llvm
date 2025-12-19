@@ -375,6 +375,5 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 }
 
 Register RL78RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const RL78FrameLowering *TFI = getFrameLowering(MF);
   return RL78::SPreg;
 }

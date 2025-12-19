@@ -190,7 +190,6 @@ SDValue RL78TargetLowering::LowerFormalArguments(
         unsigned VReg =
             MF.getRegInfo().createVirtualRegister(&RL78::RL78RPRegsRegClass);
         MF.getRegInfo().addLiveIn(VA.getLocReg(), VReg);
-        SDValue HiPart = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i16);
         Arg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i16);
       } else {
         llvm_unreachable("Not implemented!");
@@ -435,7 +434,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   bool isMemLoc = false;
   // Walk the register / memloc assignments, inserting copies / loads.
-  int fpOffset = 0;
   for (unsigned i = 0, byvalArgIdx = 0, e = ArgLocs.size(); i < e; ++i) {
     CCValAssign &VA = ArgLocs[i];
     SDValue Arg = OutVals[i];
@@ -499,13 +497,10 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                           false, // AlwaysInline
                           false, // isTailCall
                           MachinePointerInfo(StackAS), MachinePointerInfo(StackAS));
-
-        fpOffset = ArgLocs[i + PartNum - 1].getLocMemOffset() + 2;
         i += PartNum - 1;
         MemOpChains.push_back(MemCpyChain);
       } else {
         int Offset = VA.getLocMemOffset();
-        fpOffset = Offset + 2;
         int FI = MF.getFrameInfo().CreateFixedObject(
             Arg.getValueSizeInBits() / 8, Offset, true);
 
@@ -600,18 +595,22 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (InFlag.getNode())
     Ops.push_back(InFlag);
 
-  if (IsCallt)
-    Chain = DAG.getNode(RL78ISD::CALLT, dl, NodeTys, Ops);
-  else if (isTailCall)
-    Chain = DAG.getNode(RL78ISD::TAIL_CALL, dl, NodeTys, Ops);
-  else
-    Chain = DAG.getNode(RL78ISD::CALL, dl, NodeTys, Ops);
+  // Normal calls are generated before CALLSEQ_END, tail calls after.
+  if (!isTailCall) {
+    Chain = DAG.getNode(IsCallt ? RL78ISD::CALLT : RL78ISD::CALL, dl, NodeTys, Ops);
+    InFlag = Chain.getValue(1);
+  }
+
+  Chain = DAG.getCALLSEQ_END(Chain, ArgsSize, 0, InFlag, dl);
   InFlag = Chain.getValue(1);
 
-  unsigned AS = DAG.getDataLayout().getAllocaAddrSpace();
-  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(ArgsSize, dl, true, AS),
-                             DAG.getIntPtrConstant(0, dl, true, AS), InFlag, dl);
-  InFlag = Chain.getValue(1);
+  if (isTailCall) {
+    if (Ops.back().getValueType() == MVT::Glue)
+      Ops.pop_back();
+    Ops.push_back(InFlag);
+    Chain = DAG.getNode(RL78ISD::TAIL_CALL, dl, NodeTys, Ops);
+    InFlag = Chain.getValue(1);
+  }
 
   // Assign locations to each value returned by this call.
   SmallVector<CCValAssign, 16> RVLocs;
@@ -1069,8 +1068,6 @@ static RL78CC::CondCodes IntCondCCodeToICC(ISD::CondCode CC) {
 
 static RL78CC::CondCodes AdjustICCForOperandSwitch(RL78CC::CondCodes ICC) {
   switch (ICC) {
-  default:
-    llvm_unreachable("Unknown integer condition code!");
   case RL78CC::RL78CC_Z:
     return RL78CC::RL78CC_Z;
   case RL78CC::RL78CC_NZ:
@@ -1084,6 +1081,8 @@ static RL78CC::CondCodes AdjustICCForOperandSwitch(RL78CC::CondCodes ICC) {
   case RL78CC::RL78CC_NC:
     return RL78CC::RL78CC_NH;
   }
+  llvm_unreachable(
+      "Invalid condition code passed to AdjustICCForOperandSwitch");
 }
 
 static unsigned IntCondCCodeSign(ISD::CondCode CC) {
@@ -1102,26 +1101,6 @@ static unsigned IntCondCCodeSign(ISD::CondCode CC) {
   case ISD::SETLE:
   case ISD::SETGE:
     return 1;
-  }
-}
-
-// Condition result if LHS == RHS.
-static bool CondResultLHSeqRHS(ISD::CondCode CC) {
-  switch (CC) {
-  default:
-    llvm_unreachable("Unknown integer condition code!");
-  case ISD::SETEQ:
-  case ISD::SETULE:
-  case ISD::SETUGE:
-  case ISD::SETLE:
-  case ISD::SETGE:
-    return true;
-  case ISD::SETNE:
-  case ISD::SETULT:
-  case ISD::SETUGT:
-  case ISD::SETLT:
-  case ISD::SETGT:
-    return false;
   }
 }
 
@@ -1145,6 +1124,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::EXTRACT_ELEMENT, MVT::i32, Custom);
   setOperationAction(ISD::ADD, MVT::i32, Custom);
   setOperationAction(ISD::INLINEASM, MVT::i32, Custom);
+  setOperationAction(ISD::PTRADD, MVT::i32, Custom);
 
   // Expand var-args ops.
   setOperationAction(ISD::VASTART, MVT::Other, Custom);
@@ -1207,14 +1187,16 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SMUL_LOHI, MVT::i8, Expand);
   setOperationAction(ISD::SMULO, MVT::i16, Custom);
   setOperationAction(ISD::UMULO, MVT::i16, Custom);
-  // We expand BRCOND to BR_CC becuase
-  // in some cases we can expand it to  BT/BF/BTCRL.
+  // We expand BRCOND to BR_CC because
+  // in some cases we can expand it to BT/BF/BTCRL.
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
   setOperationAction(ISD::BR_CC, MVT::i8, Custom);
   setOperationAction(ISD::BR_CC, MVT::i16, Custom);
   //
   setOperationAction(ISD::SELECT_CC, MVT::i8, Custom);
   setOperationAction(ISD::SELECT_CC, MVT::i16, Custom);
+
+  setOperationAction(ISD::BRIND, MVT::i32, Custom);
 
   setOperationAction(ISD::SELECT, MVT::i8, Expand);
   setOperationAction(ISD::SELECT, MVT::i16, Expand);
@@ -1388,6 +1370,23 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
     MaxLoadsPerMemcmp = 32;
 }
 
+bool llvm::RL78TargetLowering::splitValueIntoRegisterParts(
+    SelectionDAG &DAG, const SDLoc &DL, SDValue Val, SDValue *Parts,
+    unsigned NumParts, MVT PartVT, std::optional<CallingConv::ID> CC) const {
+  if (Val.getValueType() == MVT::i16 && NumParts == 2 && PartVT == MVT::i16) {
+    if (Val.getOpcode() == ISD::FrameIndex) {
+      SDValue Lo = DAG.getNode(ISD::BITCAST, DL, MVT::i16, Val);
+      SDValue Hi = DAG.getConstant(0xf, DL, MVT::i16);
+
+      Parts[0] = Lo;
+      Parts[1] = Hi;
+
+      return true;
+    }
+  }
+  return false;
+}
+
 bool RL78TargetLowering::useSoftFloat() const { return true; }
 
 unsigned RL78TargetLowering::getJumpTableEncoding() const {
@@ -1450,86 +1449,57 @@ bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
 }
 
 const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
+#define MAKE_CASE(V)                                                           \
+  case V:                                                                      \
+    return #V;
   switch ((RL78ISD::NodeType)Opcode) {
-  case RL78ISD::FIRST_NUMBER:
-    break;
-  case RL78ISD::SEL_RB:
-    return "RL78ISD::SEL_RB";
-  case RL78ISD::CMP:
-    return "RL78ISD::CMP";
-  case RL78ISD::LOWCMP:
-    return "RL78ISD::LOWCMP";
-  case RL78ISD::CALL:
-    return "RL78ISD::CALL";
-  case RL78ISD::TAIL_CALL:
-    return "RL78ISD::TAIL_CALL";
-  case RL78ISD::RET:
-    return "RL78ISD::RET";
-  case RL78ISD::RETI:
-    return "RL78ISD::RETI";
-  case RL78ISD::RETB:
-    return "RL78ISD::RETB";
-  case RL78ISD::BRCC:
-    return "RL78ISD::BRCC";
-  case RL78ISD::SELECTCC:
-    return "RL78ISD::SELECTCC";
-  case RL78ISD::SELECTCCBTBF:
-    return "RL78ISD::SELECTCCBTBF";
-  case RL78ISD::BTBF:
-    return "RL78ISD::BTBF";
-  case RL78ISD::SET1:
-    return "RL78ISD::SET1";
-  case RL78ISD::CLR1:
-    return "RL78ISD::CLR1";
-  case RL78ISD::DIVWU:
-    return "RL78ISD::DIVWU";
-  case RL78ISD::LOW8:
-    return "RL78ISD::LOW8";
-  case RL78ISD::LOW16:
-    return "RL78ISD::LOW16";
-  case RL78ISD::HI16:
-    return "RL78ISD::HI16";
-  case RL78ISD::CALLT:
-    return "RL78ISD::CALLT";
-  case RL78ISD::MOV1TOCY:
-    return "RL78ISD::MOV1TOCY";
-  case RL78ISD::MOV1FROMCY:
-    return "RL78ISD::MOV1FROMCY";
-  case RL78ISD::LOAD1TOCY:
-    return "RL78ISD::LOAD1TOCY";
-  case RL78ISD::STORE1FROMCY:
-    return "RL78ISD::STORE1FROMCY";
-  case RL78ISD::AND1CY:
-    return "RL78ISD::AND1CY";
-  case RL78ISD::OR1CY:
-    return "RL78ISD::OR1CY";
-  case RL78ISD::XOR1CY:
-    return "RL78ISD::XOR1CY";
-  case RL78ISD::NOT1CY:
-    return "RL78ISD::NOT1CY";
-  case RL78ISD::XCHW:
-    return "RL78ISD::XCHW";
-  case RL78ISD::ANDMEM:
-    return "RL78ISD::ANDMEM";
-  case RL78ISD::ORMEM:
-    return "RL78ISD::ORMEM";
-  case RL78ISD::XORMEM:
-    return "RL78ISD::XORMEM";
-  case RL78ISD::MACH:
-    return "RL78ISD::MACH";
-  case RL78ISD::MACHU:
-    return "RL78ISD::MACHU";
-  case RL78ISD::INC:
-    return "RL78ISD::INC";
+    case RL78ISD::FIRST_NUMBER:
+      break;
+    MAKE_CASE(RL78ISD::SEL_RB)
+    MAKE_CASE(RL78ISD::CMP)
+    MAKE_CASE(RL78ISD::LOWCMP)
+    MAKE_CASE(RL78ISD::CALL)
+    MAKE_CASE(RL78ISD::TAIL_CALL)
+    MAKE_CASE(RL78ISD::RET)
+    MAKE_CASE(RL78ISD::RETI)
+    MAKE_CASE(RL78ISD::RETB)
+    MAKE_CASE(RL78ISD::BRCC)
+    MAKE_CASE(RL78ISD::SELECTCC)
+    MAKE_CASE(RL78ISD::SELECTCCBTBF)
+    MAKE_CASE(RL78ISD::BTBF)
+    MAKE_CASE(RL78ISD::SET1)
+    MAKE_CASE(RL78ISD::CLR1)
+    MAKE_CASE(RL78ISD::DIVWU)
+    MAKE_CASE(RL78ISD::LOW8)
+    MAKE_CASE(RL78ISD::LOW16)
+    MAKE_CASE(RL78ISD::HI16)
+    MAKE_CASE(RL78ISD::CALLT)
+    MAKE_CASE(RL78ISD::MOV1TOCY)
+    MAKE_CASE(RL78ISD::MOV1FROMCY)
+    MAKE_CASE(RL78ISD::LOAD1TOCY)
+    MAKE_CASE(RL78ISD::STORE1FROMCY)
+    MAKE_CASE(RL78ISD::AND1CY)
+    MAKE_CASE(RL78ISD::OR1CY)
+    MAKE_CASE(RL78ISD::XOR1CY)
+    MAKE_CASE(RL78ISD::NOT1CY)
+    MAKE_CASE(RL78ISD::XCHW)
+    MAKE_CASE(RL78ISD::ANDMEM)
+    MAKE_CASE(RL78ISD::ORMEM)
+    MAKE_CASE(RL78ISD::XORMEM)
+    MAKE_CASE(RL78ISD::MACH)
+    MAKE_CASE(RL78ISD::MACHU)
+    MAKE_CASE(RL78ISD::INC)
+    MAKE_CASE(RL78ISD::LOAD_SELECTCC)
   }
+#undef MAKE_CASE
   return nullptr;
 }
 
 EVT RL78TargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
                                            EVT VT) const {
-  // TODO: is this OK?
   if (!VT.isVector())
     return MVT::i16;
+    
   return VT.changeVectorElementTypeToInteger();
 }
 
@@ -1623,7 +1593,6 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     }
   }
   else {
-    //FIXME: temp fix for correct plt selection until we get rid of the plt.
     SDValue Result = DAG.getTargetGlobalAddress(GV, SDLoc(Op), VT, Offset,
                                                 RL78MCExpr::VK_RL78_FUNCTION);
     return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
@@ -1647,6 +1616,23 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     // case CodeModel::Large: {
     //}
   }
+}
+
+// An addrspacecast (1 -> 0) is needed for the sret ptrs if -mfar-data,
+// because the ptr to stack slot is near and the default pointer type is far.
+// A simple zero-extend won't cut it as the data near segment is 0xF, not 0x0.
+SDValue RL78TargetLowering::lowerStackSlotForSRet(SDValue StackSlot,
+                                                  Type *&StackSlotPtrType,
+                                                  CallLoweringInfo &CLI) const {
+  const auto &DL = CLI.DAG.getDataLayout();
+
+  if (DL.getPointerSizeInBits() == 32) {
+    StackSlotPtrType = PointerType::get(CLI.RetTy, 0);
+    return CLI.DAG.getAddrSpaceCast(
+        SDLoc(StackSlot), getPointerTy(DL), StackSlot, DL.getAllocaAddrSpace(), 0);
+  }
+
+  return SDValue{};
 }
 
 SDValue RL78TargetLowering::LowerExternalSymbol(SDValue Op,
@@ -1714,6 +1700,29 @@ static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
   return Cmp;
 }
 
+static void TruncateCompareOpsIfPossible(SDValue &RHS, SDValue &LHS,
+                                         SelectionDAG &DAG, SDLoc dl,
+                                         bool enabled) {
+  if (((LHS.getOpcode() == ISD::ZERO_EXTEND && LHS.hasOneUse()) ||
+       (LHS.getOpcode() == ISD::AssertZext && LHS.hasOneUse() &&
+        LHS.getOperand(0).hasOneUse())) &&
+      enabled)
+    LHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8,
+                      LHS.getOpcode() == ISD::AssertZext ? LHS.getOperand(0)
+                                                         : LHS);
+  if (((RHS.getOpcode() == ISD::ZERO_EXTEND && RHS.hasOneUse()) ||
+       (RHS.getOpcode() == ISD::AssertZext && RHS.hasOneUse() &&
+        RHS.getOperand(0).hasOneUse())) &&
+      enabled)
+    RHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8,
+                      RHS.getOpcode() == ISD::AssertZext ? RHS.getOperand(0)
+                                                         : RHS);
+  if (LHS.getValueType() == MVT::i8 && RHS.getValueType() != MVT::i8)
+    RHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, RHS);
+  else if (RHS.getValueType() == MVT::i8 && LHS.getValueType() != MVT::i8)
+    LHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, LHS);
+}
+
 static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
   SDValue Chain = Op.getOperand(0);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
@@ -1756,6 +1765,8 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
                            op0Half, constVal);
       }
     }
+
+    TruncateCompareOpsIfPossible(LHS, RHS, DAG, dl, DAG.shouldOptForSize());
   }
 
   // If signed comparison with 0 we can use BT/BF.
@@ -1778,11 +1789,13 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
                        topHalf, constVal);
   }
 
-  // Comparisons with imm values can be done more efficiently for imm = { 0, 1}
-  // (see LowerSignedCMPWImm) op < 2 can be replaced with op <= 1. op < 1 can be
-  // replaced with op <= 0 (OBS. llvm already does this for unsigned
-  // comparison). OBS. if we remove LowerSignedCMPWImm this has no effect.
-  if ((CC == ISD::SETLT) && (LHS.getValueType() == MVT::i16) &&
+  // Comparisons with imm values can be done more efficiently for imm = { 0, 1 }.
+  //   op < 2 can be replaced with op <= 1.
+  //   op < 1 can be replaced with op <= 0.
+  // (OBS. llvm already does this for unsigned comparison).
+  // LE: Enabled this for (LHS.getValueType() == MVT::i8) to promote CMP0's use
+  if ((CC == ISD::SETLT) &&
+      (LHS.getValueType() == MVT::i8 || LHS.getValueType() == MVT::i16) &&
       isa<ConstantSDNode>(RHS) &&
       ((cast<ConstantSDNode>(RHS)->getZExtValue() == 1) ||
        (cast<ConstantSDNode>(RHS)->getZExtValue() == 2))) {
@@ -1793,16 +1806,7 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
     cc = IntCondCCodeToICC(ISD::SETLE);
     TargetCC = DAG.getConstant(cc, dl, MVT::i8);
   }
-  // if LHS == RHS we don't need a conditional instruction, also we don't have
-  // CMP(W) instrutions on RL78 which accept the same register for both
-  // operands; so we really need to check for this here as a safety net.
-  // FIXME: this should be eliminated much eariler (recheck in newer LLVM) Saw
-  // this with gcc.c-torture\execute\920428-1.c and
-  // gcc.c-torture\execute\921112-1.c on -O3.
-  if (LHS == RHS) {
-    if ((CC == ISD::SETLE) || (CC == ISD::SETGE) || (CC == ISD::SETEQ))
-      return DAG.getNode(ISD::BR, dl, MVT::Other, Chain, Dest);
-  }
+
   // Create the CMP node.
   SDValue Cmp = SwitchCMPOperands(dl, cc, CCSign, LHS, RHS, DAG, TargetCC);
   // DAG.dump();
@@ -1852,9 +1856,11 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
                            FVal, TargetCC, op0Half, constVal);
       }
     }
+
+    TruncateCompareOpsIfPossible(LHS, RHS, DAG, dl, true);
   }
 
-    // If signed comparison with 0 we can use BT/BF.
+  // If signed comparison with 0 we can use BT/BF.
   if (cmpSign && isa<ConstantSDNode>(RHS) &&
       LHS.getValueType().bitsGE(MVT::i8) &&
       ((cast<ConstantSDNode>(RHS)->getZExtValue() == 0 && CC == ISD::SETLT) ||
@@ -1900,7 +1906,7 @@ static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
   SDValue FI = DAG.getFrameIndex(FuncInfo->getVarArgsFrameOffset(), PtrVT);
 
   return DAG.getStore(Op.getOperand(0), DL, FI, Op.getOperand(1),
-                      MachinePointerInfo(SV), 0);
+                      MachinePointerInfo(SV), llvm::MaybeAlign());
 }
 
 static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
@@ -1924,8 +1930,9 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
                          MachinePointerInfo(SV));
   // Load the actual argument out of the pointer VAList.
   // We can't count on greater alignment than the word size.
+  auto AlignInBytes = std::min(PtrVT.getSizeInBits(), VT.getSizeInBits()) / 8;
   return DAG.getLoad(VT, DL, InChain, VAList, MachinePointerInfo(),
-                     std::min(PtrVT.getSizeInBits(), VT.getSizeInBits()) / 8);
+                     llvm::MaybeAlign(AlignInBytes));
 }
 
 // this is basically a copy of SelectionDAG::expandVACopy(),
@@ -1944,65 +1951,6 @@ static SDValue LowerVACOPY(SDValue Op, SelectionDAG &DAG,
                              MachinePointerInfo(VS));
   return DAG.getStore(Tmp1.getValue(1), dl, Tmp1, Op->getOperand(1),
                       MachinePointerInfo(VD));
-}
-
-static SDValue getFRAMEADDR(uint64_t depth, SDValue Op, SelectionDAG &DAG,
-                            const RL78Subtarget *Subtarget) {
-  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
-
-  MFI.setFrameAddressIsTaken(true);
-
-  EVT VT = Op.getValueType();
-  SDLoc dl(Op);
-  unsigned FrameReg =
-      Subtarget->getRegisterInfo()->getFrameRegister(DAG.getMachineFunction());
-
-  if (depth == 0)
-    return DAG.getCopyFromReg(DAG.getEntryNode(), dl, FrameReg, VT);
-  return SDValue();
-}
-
-static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
-                              const RL78Subtarget *Subtarget) {
-  unsigned level = Op.getConstantOperandVal(0);
-  if (level > 0) {
-    DAG.getContext()->emitError("__builtin_frame_address is supported only for "
-                                "current function (level = 0)");
-    return SDValue();
-  }
-  return getFRAMEADDR(0, Op, DAG, Subtarget);
-}
-
-// This can be called with __builtin_return_address, currently we made a change
-// in Intrinsics.td to fix the following assert from Instructions.td: for
-// (unsigned i = 0; i != Args.size(); ++i) assert((i >= FTy->getNumParams() ||
-//    FTy->getParamType(i) == Args[i]->getType()) &&
-//    "Calling a function with a bad signature!");
-static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
-                               const RL78TargetLowering &TLI,
-                               const RL78Subtarget *Subtarget) {
-  MachineFunction &MF = DAG.getMachineFunction();
-  MachineFrameInfo &MFI = MF.getFrameInfo();
-  MFI.setReturnAddressIsTaken(true);
-
-  if (TLI.verifyReturnAddressArgumentIsConstant(Op, DAG))
-    return SDValue();
-
-  unsigned level = Op.getConstantOperandVal(0);
-  if (level > 0) {
-    DAG.getContext()->emitError("__builtin_return_address is supported only "
-                                "for current function (level = 0)");
-    return SDValue();
-  }
-  SDLoc dl(Op);
-
-  // Need frame address to find return address of the caller.
-  SDValue FrameAddr = getFRAMEADDR(0, Op, DAG, Subtarget);
-  int FI = MFI.CreateFixedObject(2, -2, true);
-  SDValue FIN = DAG.getFrameIndex(FI, MVT::i16);
-
-  return DAG.getLoad(Op.getValueType(), dl, DAG.getEntryNode(), FIN,
-                     MachinePointerInfo());
 }
 
 SDValue RL78TargetLowering::LowerLibCall(SDValue Op, SelectionDAG &DAG,
@@ -2056,7 +2004,7 @@ SDValue RL78TargetLowering::LowerLibCall(SDValue Op, SelectionDAG &DAG,
 }
 
 SDValue RL78TargetLowering::LowerMULO(SDValue Op, SelectionDAG &DAG) const {
-  // TODO: Copied from the default TargetLowering::expandMULO implementation,
+  // Copied from the default TargetLowering::expandMULO implementation,
   // with a minor change. We needed to do this because the default expand passed
   // the arguments to the libcall without setting their OrigArgIndex correctly,
   // to signal that they were split up because type legalization (i32 -> 2xi16).
@@ -2164,7 +2112,7 @@ SDValue RL78TargetLowering::LowerMULO(SDValue Op, SelectionDAG &DAG) const {
     CallOptions.setSExt(isSigned);
     CallOptions.setIsPostTypeLegalization(true);
 
-    // TODO: main difference between the default expand and our custom one:
+    // Main difference between the default expand and our custom one:
     // Here we use build_pair instead of passing them as:
     // SDValue Args[] = { LHS, HiLHS, RHS, HiRHS };
     // This way the type legalizer kicks in again and correctly sets the
@@ -2454,8 +2402,9 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
       if (isa<GlobalVariable>(GV) &&
           dyn_cast<GlobalVariable>(GV)->hasAttribute("saddr")) {
         // we can use xor saddr, #byte
-        SDValue Mask = DAG.getTargetConstant(1 << Op.getConstantOperandVal(3),
-                                             DL, MVT::i8);
+        SDValue Mask = DAG.getTargetConstant(
+            1ULL << Op.getConstantOperandVal(3), DL, MVT::i8);
+
         return SDValue(DAG.getMachineNode(
                            RL78::XOR_saddr_imm, DL, MVT::Other,
                            DAG.getTargetGlobalAddress(GV, DL, MVT::i16, Offset),
@@ -2649,9 +2598,9 @@ SDValue RL78TargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
                     LD->getMemOperand()->getFlags(), LD->getAAInfo());
     SDValue HiPtr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(IncrementSize));
     SDValue Hi = DAG.getLoad(MVT::i8, dl, Chain, HiPtr,
-                             LD->getPointerInfo().getWithOffset(IncrementSize),
-                             MinAlign(align.value(), IncrementSize),
-                             LD->getMemOperand()->getFlags(), LD->getAAInfo());
+                    LD->getPointerInfo().getWithOffset(IncrementSize),
+                    llvm::MaybeAlign(MinAlign(align.value(), IncrementSize)),
+                    LD->getMemOperand()->getFlags(), LD->getAAInfo());
 
     SDValue SubRegHi = DAG.getTargetConstant(RL78::sub_hi, dl, MVT::i8);
     SDValue SubRegLow = DAG.getTargetConstant(RL78::sub_lo, dl, MVT::i8);
@@ -2694,11 +2643,11 @@ SDValue RL78TargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
         DAG.getTruncStore(Chain, dl, SDValue(Lo, 0), Ptr, ST->getPointerInfo(),
                           MVT::i8, align, ST->getMemOperand()->getFlags());
     Ptr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(IncrementSize));
-    SDValue Store2 =
-        DAG.getTruncStore(Chain, dl, SDValue(Hi, 0), Ptr,
-                          ST->getPointerInfo().getWithOffset(IncrementSize),
-                          MVT::i8, MinAlign(align.value(), IncrementSize),
-                          ST->getMemOperand()->getFlags(), ST->getAAInfo());
+    SDValue Store2 = DAG.getTruncStore(
+        Chain, dl, SDValue(Hi, 0), Ptr,
+        ST->getPointerInfo().getWithOffset(IncrementSize), MVT::i8,
+        llvm::MaybeAlign(MinAlign(align.value(), IncrementSize)),
+        ST->getMemOperand()->getFlags(), ST->getAAInfo());
 
     SDValue lowered =
         DAG.getNode(ISD::TokenFactor, dl, MVT::Other, Store1, Store2);
@@ -2713,27 +2662,18 @@ SDValue RL78TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   llvm_unreachable("Should not custom lower this SETCC!");
 }
 
-static SDValue LowerLOW16(SDValue Op, SelectionDAG &DAG) {
-  // Op.dump();
-  // Op.getOperand(0).dump();
-  // VK_RL78_LOW16
-
-  // SDValue Result = DAG.getTargetGlobalAddress(GV, SDLoc(Op), VT, Offset);
-  return Op;
-}
-
 SDValue RL78TargetLowering::PerformBRCCCombine(SDNode *N,
                                                DAGCombinerInfo &DCI) const {
   // Convert a ? (0-b) back to a + b ? 0
   if (N->getOpcode() == ISD::BR_CC &&
-      (N->getOperand(2)->getOpcode() == ISD::SUB &&
-          N->getOperand(2)->hasOneUse() &&
-           N->getOperand(2)->getOperand(0).getOpcode() == ISD::Constant &&
-           N->getOperand(2)->getConstantOperandVal(0) == 0 ||
-       N->getOperand(3)->getOpcode() == ISD::SUB &&
-          N->getOperand(3)->hasOneUse() &&
-           N->getOperand(3)->getOperand(0).getOpcode() == ISD::Constant &&
-           N->getOperand(3)->getConstantOperandVal(0) == 0)) {
+      ((N->getOperand(2)->getOpcode() == ISD::SUB &&
+        N->getOperand(2)->hasOneUse() &&
+        N->getOperand(2)->getOperand(0).getOpcode() == ISD::Constant &&
+        N->getOperand(2)->getConstantOperandVal(0) == 0) ||
+       (N->getOperand(3)->getOpcode() == ISD::SUB &&
+        N->getOperand(3)->hasOneUse() &&
+        N->getOperand(3)->getOperand(0).getOpcode() == ISD::Constant &&
+        N->getOperand(3)->getConstantOperandVal(0) == 0))) {
     SDLoc dl(N);
     SDValue Chain = N->getOperand(0);
     ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(1))->get();
@@ -2995,7 +2935,6 @@ SDValue RL78TargetLowering::PerformMULADDCombine(SDNode *N,
 SDValue RL78TargetLowering::PerformXORAddCombine(SDNode *N,
                                                  DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
-  unsigned op = ISD::DELETED_NODE;
   SDValue X, Y;
 
   //  X^0xFFFF + Y <=> Y - 1 - X
@@ -3103,17 +3042,42 @@ SDValue RL78TargetLowering::PerformSUBCombine(SDNode *N,
 
 SDValue RL78TargetLowering::PerformTruncateCombine(SDNode *N,
                                                    DAGCombinerInfo &DCI) const {
+  SDLoc dl(N);
   // Trunc (i32 >> 16) to i16 => extract high(i32).
   if (N->getOpcode() == ISD::TRUNCATE && N->getValueType(0) == MVT::i16 &&
       N->getOperand(0)->getOpcode() == ISD::SRL &&
       N->getOperand(0)->getValueType(0) == MVT::i32 &&
       N->getOperand(0)->getOperand(1)->getOpcode() == ISD::Constant &&
       N->getOperand(0)->getConstantOperandVal(1) == 16) {
-    SDLoc dl(N);
     SDValue high = DCI.DAG.getConstant(1, dl, MVT::i16);
     return DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
                            N->getOperand(0)->getOperand(0), high);
   }
+
+  // Replace trunc(Op16) to i8 with Op8, where Op permits.
+  if (!DCI.isBeforeLegalizeOps() && N->getOpcode() == ISD::TRUNCATE &&
+      N->getValueType(0) == MVT::i8) {
+    switch (N->getOperand(0).getOpcode()) {
+    default:
+      return SDValue();
+    case ISD::ADD:
+    case ISD::SUB:
+    case ISD::AND:
+    case ISD::OR:
+    case ISD::XOR: {
+      if (N->getOperand(0)->hasOneUse()) {
+        SDValue LHS = DCI.DAG.getExtOrTrunc(
+            false, N->getOperand(0)->getOperand(0), dl, MVT::i8);
+        SDValue RHS = DCI.DAG.getExtOrTrunc(
+            false, N->getOperand(0)->getOperand(1), dl, MVT::i8);
+        return DCI.DAG.getNode(N->getOperand(0).getOpcode(), dl, MVT::i8, LHS,
+                               RHS);
+      }
+      break;
+    }
+    }
+  }
+
   return SDValue();
 }
 
@@ -3232,7 +3196,6 @@ SDValue RL78TargetLowering::PerformORCombine(SDNode *N,
         DCI.DAG.haveNoCommonBitsSet(N->getOperand(0), N->getOperand(1)) &&
         N->getOperand(1).getOpcode() == ISD::Constant &&
         N->getConstantOperandVal(1) == 1) {
-      auto a = N->getConstantOperandVal(1);
       return DCI.DAG.getNode(RL78ISD::INC, dl, MVT::i8, N->getOperand(0),
                              DCI.DAG.getTargetConstant(1, dl, MVT::i8));
     }
@@ -3322,15 +3285,13 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
 
       SDLoc dl(N);
       std::vector<SDValue> AsmNodeOperands;
-      for (int i = 0; i < N->getNumOperands(); i++) {
+      for (unsigned i = 0; i < N->getNumOperands(); i++) {
       if (N->getOperand(i)->getOpcode() == ISD::TargetExternalSymbol &&
           N->getOperand(i)->getValueType(0) == MVT::i32) {
         ExternalSymbolSDNode *E =
             dyn_cast<ExternalSymbolSDNode>(N->getOperand(i));
         // We use VK_RL78_LAST to create a new node and to not reuse the old,
         // i32 one.
-        // TODO: maybe we should fix this at the origin
-        // (SelectionDAGBuilder::visitInlineAsm)?
         AsmNodeOperands.push_back(DCI.DAG.getTargetExternalSymbol(
             E->getSymbol(), MVT::i16, RL78MCExpr::VK_RL78_LAST));
       } else {
@@ -3379,18 +3340,6 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
   default:
     LLVM_DEBUG(Op.dump());
     llvm_unreachable("Should not custom lower this!");
-  // TODO: remove.
-  case RL78ISD::HI16:
-  case RL78ISD::LOW16: {
-    SDValue Result =
-        withTargetFlags(Op.getOperand(0), RL78MCExpr::VK_RL78_LOWW, DAG);
-    return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), MVT::i16, Result);
-  }
-  // case RL78ISD::HI16: {
-  //  SDValue Result = withTargetFlags(Op.getOperand(0),
-  //  RL78MCExpr::VK_RL78_HI8, DAG); return DAG.getNode(RL78ISD::HI16,
-  //  SDLoc(Op), MVT::i16, Result);
-  //}
   case ISD::ADDRSPACECAST:
     if (Op.getValueType() != Op.getOperand(0).getValueType()) {
       llvm_unreachable("Unexpected address space cast");
@@ -3402,10 +3351,6 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
     return LowerLOAD(Op, DAG);
   case ISD::STORE:
     return LowerSTORE(Op, DAG);
-  case ISD::RETURNADDR:
-    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
-  case ISD::FRAMEADDR:
-    return LowerFRAMEADDR(Op, DAG, Subtarget);
   case ISD::ExternalSymbol:
     return LowerExternalSymbol(Op, DAG);
   case ISD::GlobalAddress:
@@ -3795,19 +3740,9 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_abs16(
   return BB;
 }
 
-static bool IsMemr(MachineInstr &MI) {
-  return MI.getOpcode() == RL78::CMPW_rp_memri ||
-         MI.getOpcode() == RL78::CMP_r_memri ||
-         MI.getOpcode() == RL78::CMP_r_memrr;
-}
-
 MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMP0(bool cmpw, MachineInstr &MI,
+RL78TargetLowering::LowerSignedCMP0(MachineInstr &MI,
                                     MachineBasicBlock *BB) const {
-  // The sign operand is the last explicit operand.
-  if (MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() == 0)
-    return BB;
-
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
@@ -3857,6 +3792,12 @@ RL78TargetLowering::LowerSignedCMP0(bool cmpw, MachineInstr &MI,
   return BB;
 }
 
+MachineBasicBlock *
+RL78TargetLowering::LowerCMP0(MachineInstr &MI, MachineBasicBlock *BB) const {
+  // The sign operand is the last explicit operand.
+  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
+      BB : LowerSignedCMP0(MI, BB);
+}
 
 static void CopyChangeOpToReg(unsigned opPosition, Register R, MachineBasicBlock *BB,
                               MachineInstr &MI, DebugLoc &DL,
@@ -3864,41 +3805,6 @@ static void CopyChangeOpToReg(unsigned opPosition, Register R, MachineBasicBlock
   assert(MI.getOperand(opPosition).isReg() && "Expected register operand");
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), R).add(MI.getOperand(opPosition));
   MI.getOperand(opPosition).ChangeToRegister(R, false);
-}
-
-static void MakeComparisonSigned(Register R1orRP0, unsigned int copyOpcode, MachineBasicBlock *BB,
-                                 MachineInstr &MI, DebugLoc &DL,
-                                 const TargetInstrInfo *TII,
-                                 unsigned copyOpPosition1,
-                                 signed copyOpPosition2 = -1,
-                                 signed copyOpPosition3 = -1) {
-  // Next: xor1_cy_a.
-  // Next: mov_A_op1.
-  // Next: xor1_cy_a.
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::XOR1_cy_r))
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(7);
-  if (copyOpPosition2 == -1 && copyOpPosition3 == -1) {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(copyOpcode), R1orRP0)
-        .add(MI.getOperand(copyOpPosition1));
-  } else if (copyOpPosition2 != -1 && copyOpPosition3 == -1) {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(copyOpcode), R1orRP0)
-        .add(MI.getOperand(copyOpPosition1))
-        .add(MI.getOperand(copyOpPosition2));
-  } else {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(copyOpcode), R1orRP0)
-        .add(MI.getOperand(copyOpPosition1))
-        .add(MI.getOperand(copyOpPosition2))
-        .add(MI.getOperand(copyOpPosition3));
-  }
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::XOR1_cy_r))
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(7);
 }
 
 // Signed comparison: Insert 2 xor1 instructions to
@@ -3911,17 +3817,39 @@ static void MakeComparisonSigned(Register R1orRP0, unsigned int copyOpcode, Mach
 // the sign bits into consideration: xor1 CY, 0 (sign bit of 1) => CY = 1 xor1
 // CY, 1 (sign bit of 0xFF) => CY = 0 which is the correct result for LT (1 >
 // -1) Another solution would be to insert xor <op0>, #0x80 + xor <op1>, #0x80
-// before the CMP hower that solution requires writing those registers so the
+// before the CMP; however that solution requires writing those registers so the
 // unchanged values need to be backed up if they are used later on (decreased
-// reg pressure).
+// reg pressure) LE: Actually tried the XOR variant and decided is not worth it.
+static void
+MakeComparisonSigned(Register R1orRP0, unsigned int opcode, MachineBasicBlock *BB,
+                     MachineInstr &MI, DebugLoc &DL,
+                     const TargetInstrInfo *TII,
+                     llvm::ArrayRef<int> OpPositions) {
+  // Next: xor1_cy_a.
+  // Next: mov_A_op1.
+  // Next: xor1_cy_a.
+  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL, TII->get(RL78::XOR1_cy_r))
+      .addReg(RL78::R1, RegState::Kill)
+      .addImm(7);
+
+  auto MIB = BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
+                     TII->get(opcode), R1orRP0);
+  for (int pos : OpPositions)
+    MIB.add(MI.getOperand(pos));
+
+  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL, TII->get(RL78::XOR1_cy_r))
+      .addReg(RL78::R1, RegState::Kill)
+      .addImm(7);
+}
+
+// Ensure correct register usage for LowerCMP.
 MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const {
+RL78TargetLowering::LowerCMPOps(MachineInstr &MI,
+                                MachineBasicBlock *BB) const {
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
-  // Ensure correct register usage.
   switch (MI.getOpcode()) {
   case RL78::CMP_saddr_imm:
     break;
@@ -3970,11 +3898,15 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     llvm_unreachable("Cannot lower this instruction!");
   }
 
-  // If it's an unsigned comparison we have nothing else to do.
-  // The sign operand is the last explicit operand.
-  if (MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() == 0)
-    return BB;
+  return BB;
+}
 
+MachineBasicBlock *
+RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
+                                   MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
   switch (MI.getOpcode()) {
   default:
@@ -4052,28 +3984,21 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
         BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
                 TII->get(RL78::NOT1_cy));
     break;
-
   case RL78::CMP_r_r:
     // Next: xor1_cy_a.
     // Next: mov_A_op1.
     // Next: xor1_cy_a.
     MakeComparisonSigned(RL78::R1, RL78::MOV_A_r, BB, MI, DL, TII, 1);
     break;
-
   case RL78::CMP_r_abs16:
     // Next: xor1_cy_A.
     // Next: mov_A_op1.
     // Next: xor1_cy_A.
     MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_abs16, BB, MI, DL, TII, 1);
     break;
-
   case RL78::CMP_r_esaddr16:
-    // Next: xor1_cy_A.
-    // Next: mov_A_op1.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::R1, RL78::MOV_r_esaddr16, BB, MI, DL, TII, 1, 2);
+    MakeComparisonSigned(RL78::R1, RL78::MOV_r_esaddr16, BB, MI, DL, TII, {1, 2});
     break;
-
   case RL78::CMP_r_saddr:
     // Next: xor1_cy_A.
     // Next: xor1_cy_op1.
@@ -4086,12 +4011,10 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
         .add(MI.getOperand(1))
         .addImm(7);
     break;
-
   case RL78::CMP_r_memri:
     // Next: xor1_cy_A.
     // Next: mov_A_op1.
     // Next: xor1_cy_A.
-
     if (MI.getOperand(2).getImm() == 0) {
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
               TII->get(RL78::XOR1_cy_memr))
@@ -4113,41 +4036,61 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
         .addImm(7);
     break;
   case RL78::CMP_r_esmemHLi:
-
     if (MI.getOperand(3).getImm() == 0) {
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
               TII->get(RL78::XOR1_esmemr))
           .add(MI.getOperand(1))
           .add(MI.getOperand(2))
           .addImm(7);
-    } else {
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
               TII->get(RL78::XOR1_cy_r))
           .addReg(RL78::R1, RegState::Kill)
           .addImm(7);
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::LOAD8_r_esrpi), RL78::R1)
-          .add(MI.getOperand(1))
-          .add(MI.getOperand(2))
-          .add(MI.getOperand(3));
+    } else {
+      MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_esrpi, BB, MI, DL, TII, {1, 2, 3});
     }
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
     break;
   case RL78::CMP_r_memrr:
     // Next: xor1_cy_A.
     // Next: MOV_A_op1.
     // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_memrr, BB, MI, DL, TII, 1, 2);
+    MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_memrr, BB, MI, DL, TII, {1, 2});
     break;
   case RL78::CMP_r_esmemRpr:
-    // Next: xor1_cy_A.
-    // Next: MOV_A_op1.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::R1, RL78::LOAD8_a_esmemRpr, BB, MI, DL, TII, 1, 2, 3);
+    MakeComparisonSigned(RL78::R1, RL78::LOAD8_a_esmemRpr, BB, MI, DL, TII, {1, 2, 3});
     break;
+  }
+
+  return BB;
+}
+
+MachineBasicBlock *
+RL78TargetLowering::LowerCMP(MachineInstr &MI, MachineBasicBlock *BB) const {
+  // The sign operand is the last explicit operand.
+  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
+      BB : LowerSignedCMP(MI, BB);
+}
+
+MachineBasicBlock *
+RL78TargetLowering::LowerCMPWOps(MachineInstr &MI,
+                                 MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
+
+  // Ensure correct register usage.
+  switch (MI.getOpcode()) {
+  case RL78::CMPW_rp_esaddr16:
+      LowerESSrc(MI, BB, 1);
+      [[fallthrough]];
+  case RL78::CMPW_rp_imm:
+  case RL78::CMPW_rp_rp:
+  case RL78::CMPW_rp_abs16:
+  case RL78::CMPW_rp_saddr:
+      CopyChangeOpToReg(0, RL78::RP0, BB, MI, DL, TII);
+      break;
+  default:
+    llvm_unreachable("Cannot lower this instruction!");
   }
 
   return BB;
@@ -4159,33 +4102,10 @@ RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  // TODO: think about volatile if we can use xor1 with saddr 8 bit load.
-
-  // Ensure correct register usage.
-  switch (MI.getOpcode()) {
-  case RL78::CMPW_rp_esaddr16:
-      LowerESSrc(MI, BB, 1);
-      [[fallthrough]];
-  case RL78::CMPW_rp_imm:
-  case RL78::CMPW_rp_rp:
-  case RL78::CMPW_rp_abs16:
-  case RL78::CMPW_rp_saddr:
-    CopyChangeOpToReg(0, RL78::RP0, BB, MI, DL, TII);
-    break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  }
-
-  // If unsigned comparison nothing else to do.
-  // The sign operand is the last explicit operand.
-  if (MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() == 0)
-    return BB;
-
 
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Cannot lower this instruction!");
-
   case RL78::CMPW_rp_imm:
     // xor1_cy_A.
     // if imm negative, NOT1_cy.
@@ -4199,7 +4119,6 @@ RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
               TII->get(RL78::NOT1_cy));
     break;
-
   case RL78::CMPW_rp_rp:
     // Next: xor1_cy_AX.hi.
     // Next: MOV_A_op1.hi.
@@ -4218,45 +4137,42 @@ RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
         .addReg(RL78::R1, RegState::Kill)
         .addImm(7);
     break;
-
   case RL78::CMPW_rp_abs16:
     // Next: xor1_cy_A.
     // Next: load ax, abs16.
     // Next: xor1_cy_A.
     MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_abs16, BB, MI, DL, TII, 1);
     break;
-
   case RL78::CMPW_rp_saddr:
     // Next: xor1_cy_A.
     // Next: load AX, saddr.
     // Next: xor1_cy_A.
     MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_saddrp, BB, MI, DL, TII, 1);
     break;
-
   case RL78::CMPW_rp_esaddr16:
     // Next: xor1_cy_A.
     // Next: load AX, esaddr16.
     // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esaddr16, BB, MI, DL, TII, 1, 2);
+    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esaddr16, BB, MI, DL, TII, {1, 2});
     break;
   }
-
   return BB;
 }
 
+MachineBasicBlock *
+RL78TargetLowering::LowerCMPW(MachineInstr &MI, MachineBasicBlock *BB) const {
+  // The sign operand is the last explicit operand.
+  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
+      BB : LowerSignedCMPW(MI, BB);
+}
 
 MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
-                                       MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  // BB->dump();
-  // First insert the copies into AX and HL:
+RL78TargetLowering::LowerCMPWMemOps(MachineInstr &MI,
+                                    MachineBasicBlock *BB) const {
+  // Insert the copies into AX and HL:
   // AX = COPY %0.
   // HL = COPY %1.
   // CMPW AX, [HL+byte].
-
   switch (MI.getOpcode()) {
   case RL78::CMPW_rp_esmemHLi:
     LowerESSrc(MI, BB, 1);
@@ -4272,27 +4188,31 @@ RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
     break;
   }
 
-  // If unsigned comparison nothing else to do.
-  assert(MI.getOperand(MI.getNumExplicitOperands() - 1).isImm() && "Invalid CMPW instruction operand(3)!");
-  if (MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() == 0)
-    return BB;
+  return BB;
+}
+
+MachineBasicBlock *
+RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
+                                       MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
+  
   // Second we insert XOR1 instructions (see LowerSignedCMP for a detailed
   // explanation) The final sequence will look like this: AX = COPY %0 HL = COPY
   // %1 CMPW AX, [HL+byte] XOR1 Cy, A.7 MOV A, [HL+byte+1] XOR1 Cy, A.7.
-
-
   switch (MI.getOpcode()) {
   case RL78::CMPW_rp_esmemHLi:
     // Next: xor1_cy_A.
     // Next: load AX, esaddr16.
     // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esmemHLi, BB, MI, DL, TII, 1, 2, 3);
+    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esmemHLi, BB, MI, DL, TII, {1, 2, 3});
     break;
   case RL78::CMPW_rp_memri:
     // Next: xor1_cy_A.
     // Next: load AX, memHLi.
     // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_memHLi, BB, MI, DL, TII, 1, 2);
+    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_memHLi, BB, MI, DL, TII, {1, 2});
     break;
   default:
     llvm_unreachable("Cannot lower this instruction!");
@@ -4300,6 +4220,13 @@ RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
   }
 
   return BB;
+}
+
+MachineBasicBlock *
+RL78TargetLowering::LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const {
+  // The sign operand is the last explicit operand.
+  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
+      BB : LowerSignedCMPWMem(MI, BB);
 }
 
 static bool LowerXorSpecialCases(unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) {
@@ -4393,20 +4320,8 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
   return BB;
 }
 
-static bool isCCRegDead(MachineInstr &MI) {
-  //
-  for (unsigned i = MI.getNumExplicitOperands(), e = MI.getNumOperands();
-       i != e; ++i) {
-    if (MI.getOperand(i).isReg() &&
-        (MI.getOperand(i).getReg() == RL78::CCreg) && MI.getOperand(i).isDef())
-      return MI.getOperand(i).isDead();
-  }
-  //
-  return false;
-}
-
 static bool IsCarryDead(MachineInstr &MI) {
-  for (int i = 0; i < MI.getNumOperands(); i++)
+  for (unsigned i = 0; i < MI.getNumOperands(); i++)
     if (MI.getOperand(i).isReg() && MI.getOperand(i).getReg() == RL78::CCreg &&
         MI.getOperand(i).isDead())
       return true;
@@ -4497,11 +4412,11 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int opcode, MachineInstr &MI,
           .addImm(Imm == 0xFFFF ? RL78CC::RL78CC_C : RL78CC::RL78CC_NC);
 
       unsigned carryOpcode;
-      if (Imm == 0 && RL78::SUBC_A_imm == opcode ||
-          Imm == 0xFFFF && RL78::ADDC_A_imm == opcode)
+      if ((Imm == 0 && RL78::SUBC_A_imm == opcode) ||
+          (Imm == 0xFFFF && RL78::ADDC_A_imm == opcode))
         carryOpcode = RL78::DECW_rp;
-      else if (Imm == 0 && RL78::ADDC_A_imm == opcode ||
-               Imm == 0xFFFF && RL78::SUBC_A_imm == opcode)
+      else if ((Imm == 0 && RL78::ADDC_A_imm == opcode) ||
+               (Imm == 0xFFFF && RL78::SUBC_A_imm == opcode))
         carryOpcode = RL78::INCW_rp;
       else
         llvm_unreachable("Unexpected opcode in LowerADDE_Sube");
@@ -4796,7 +4711,7 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
         .add(MI.getOperand(TrueOpIndex));
   }
   // Although it's only 1 COPY instruction it can be expanded to several
-  // mov/movw or xch/xchw, the branch expand pass will insert a skip instruciton
+  // mov/movw or xch/xchw, the branch expand pass will insert a skip instruction
   // if possible.
 
   switch (MI.getOpcode()) {
@@ -4846,7 +4761,98 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   return sinkMBB;
 }
 
-// In order to implement the very stric register class constraints for the
+MachineBasicBlock *
+RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
+                                       MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
+  MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
+
+  // The lowering strategy is the same as for LowerSELECTCC,
+  // we just need to select a pair of values instead of a single one +
+  // perform a load from the far address formed by the selected values pair.
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineFunction::iterator It = ++BB->getIterator();
+  MachineFunction *F = BB->getParent();
+  MachineBasicBlock *copy0MBB = F->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *sinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  F->insert(It, copy0MBB);
+  F->insert(It, sinkMBB);
+  // Transfer the remainder of BB and its successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), BB,
+                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(BB);
+  // Add the true and fallthrough blocks as its successors.
+  BB->addSuccessor(copy0MBB);
+  BB->addSuccessor(sinkMBB);
+
+  // Virtual regs to hold the seg/ofs of the true/false addresses.
+  const auto RtSeg = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+  const auto RtOfs = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+  const auto RfSeg = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+  const auto RfOfs = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+
+  const auto CopyOp =
+      MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
+      MI.getOpcode() == RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr
+          ? RL78::COPY
+          : RL78::MOVW_rp_imm;
+
+  // The 'true' branch regs are set in the current BB + a BRCC added to sinkMBB.
+  BuildMI(*BB, MI, DL, TII->get(CopyOp), RtSeg)
+      .add(MI.getOperand(1));
+  BuildMI(*BB, MI, DL, TII->get(CopyOp), RtOfs)
+      .add(MI.getOperand(2));
+  BuildMI(*BB, MI, DL, TII->get(RL78::BRCC))
+      .addMBB(sinkMBB)
+      .add(MI.getOperand(5));
+
+  // In the copy0MBB, copy/init the regs for the 'false' branch.
+  auto IT = copy0MBB->begin();
+  BuildMI(*copy0MBB, IT, DL, TII->get(CopyOp), RfSeg)
+      .add(MI.getOperand(3));
+  BuildMI(*copy0MBB, IT, DL, TII->get(CopyOp), RfOfs)
+      .add(MI.getOperand(4));
+
+  // Fall-through to the sink MBB.
+  copy0MBB->addSuccessor(sinkMBB);
+
+  // Now in the sink MBB, create tho PHIs to get the selected address in R_seg/R_ofs.
+  auto R_seg = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+  auto R_ofs = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
+
+  IT = sinkMBB->begin();
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::PHI), R_seg)
+      .addReg(RfSeg)
+      .addMBB(copy0MBB)
+      .addReg(RtSeg)
+      .addMBB(BB);
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::PHI), R_ofs)
+      .addReg(RfOfs)
+      .addMBB(copy0MBB)
+      .addReg(RtOfs)
+      .addMBB(BB);
+
+  // Finally emit the 8/16 bit load.
+  BuildMI(*sinkMBB, IT, DL,
+          TII->get(MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
+                   MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16
+                       ? RL78::LOAD8_r_esrpi
+                       : RL78::LOAD16_rp_esrpi),
+          MI.getOperand(0).getReg())
+      .addReg(R_seg, RegState::Kill)
+      .addReg(R_ofs, RegState::Kill)
+      .addImm(0);
+
+  // The pseudo instruction is gone now.
+  MI.eraseFromParent();
+
+  return sinkMBB;
+}
+
+
+// In order to implement the very strict register class constraints for the
 // various instructions we first started by writing in tablegen the real
 // constraints (i.e. RL78AReg for ADD dest). This made it impossible for the
 // both register allocators (greedy, pbpqp) to find any soluition even in simple
@@ -4909,7 +4915,6 @@ MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
     // If we get here we should not be optimizing for size, so bundles should be
     // ok.
     unsigned Rs1 = MI.getOperand(1).getReg();
-    unsigned Rs2 = MI.getOperand(2).getReg();
     unsigned Rd = MI.getOperand(0).getReg();
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).addReg(Rs1);
     BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
@@ -5526,7 +5531,7 @@ RL78TargetLowering::LowerToHLByteOrWordBC(unsigned RegPos, unsigned ImmPos,
                                           MachineBasicBlock *BB) const {
 
   const MachineOperand &MO = MI.getOperand(ImmPos);
-  if (MO.isImm() && MO.getImm() > 255 || MO.isGlobal() || MO.isSymbol())
+  if ((MO.isImm() && MO.getImm() > 255) || MO.isGlobal() || MO.isSymbol())
     return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP2);
   else
     return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP6);
@@ -5536,12 +5541,12 @@ MachineBasicBlock *
 RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                 MachineBasicBlock *BB) const {
   // MI.dump();
-  bool OptForSpeed =  getTargetMachine().getOptLevel() == CodeGenOpt::Aggressive;
+  bool OptForSpeed = getTargetMachine().getOptLevel() == CodeGenOpt::Aggressive;
+
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Unknown instruction!");
   case RL78::MOVW_rp_stack_slot:
-    // FIXME : we can use BC, DE, HL as well.
     return Lower16bitAXDst(MI, BB);
   case RL78::BSWAP32_rp:
     return LowerBSWAP32(MI, BB);
@@ -5604,10 +5609,10 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::CMPW_rp_abs16:
   case RL78::CMPW_rp_saddr:
   case RL78::CMPW_rp_esaddr16:
-    return LowerSignedCMPW(MI, BB);
+    return LowerCMPW(MI, LowerCMPWOps(MI, BB));
   case RL78::CMPW_rp_memri:
   case RL78::CMPW_rp_esmemHLi:
-    return LowerSignedCMPWMem(MI, BB);
+    return LowerCMPWMem(MI, LowerCMPWMemOps(MI, BB));
   case RL78::CMP_abs16_imm:
   case RL78::CMP_r_memri:
   case RL78::CMP_r_memrr:
@@ -5620,14 +5625,14 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::CMP_esaddr16_imm:
   case RL78::CMP_r_esmemHLi:
   case RL78::CMP_r_esmemRpr:
-    return LowerSignedCMP(MI, BB);
+    return LowerCMP(MI, LowerCMPOps(MI, BB));
   case RL78::CMP0_r:
-    return LowerSignedCMP0(false, MI, Lower8bitASrc(MI, BB));
+    return LowerCMP0(MI, Lower8bitASrc(MI, BB));
   case RL78::CMP0_abs16:
   case RL78::CMP0_saddr:
-    return LowerSignedCMP0(false, MI, BB);
+    return LowerCMP0(MI, BB);
   case RL78::CMP0_esaddr16:
-    return LowerSignedCMP0(false, MI, LowerESSrc(MI, BB, 0));
+    return LowerCMP0(MI, LowerESSrc(MI, BB, 0));
   case RL78::SHR_r_i:
     return Lower8BitOpAA(MI, BB);
   case RL78::SHLW_rp_imm:
@@ -5958,7 +5963,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
           MI.removeFromParent();
           return BB;
       }
-      // fallthrough
+      [[fallthrough]];
   }
   case RL78::LowCMPW_rp_imm:
   case RL78::LowCMPW_rp_saddr:
@@ -5985,7 +5990,14 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     MI.getOperand(5).ChangeToRegister(RL78::RP2, false);
     return BB;
   }
-
+  case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:
+  case RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr:
+  case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
+  case RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr:
+    return LowerLOAD_SELECTCC(MI, BB);
+  case RL78::BR_AX: {
+    return Lower16bitAXSrc(MI, BB);
+  }
   }
 }
 
@@ -6081,10 +6093,9 @@ RL78TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       if (VT == MVT::i8)
         return std::pair<unsigned, const TargetRegisterClass *>(
             0U, &RL78::RL78RegRegClass);
-
-    } else {
-      return std::make_pair(0u, static_cast<TargetRegisterClass *>(nullptr));
-    }
+    } 
+    // Default return if VT is not i16 or i8:
+    return std::make_pair(0u, static_cast<TargetRegisterClass *>(nullptr));
   } else {
     return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
   }
@@ -6353,6 +6364,32 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     }
     return;
   }
+  case ISD::PTRADD: {
+    // Since for RL78 data alocation is prohibited accross segments,
+    // offsets are added to the lower 16 bits only.
+    SDValue Ptr = N->getOperand(0), Ofs = N->getOperand(1);
+    SDLoc dl(N);
+
+    // Extract the two 16-bit parts of the 32-bit ptr.
+    auto HiPtr = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Ptr,
+                                DAG.getConstant(1, dl, MVT::i16));
+    auto LoPtr = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Ptr,
+                                DAG.getConstant(0, dl, MVT::i16));
+
+    // And just the lower 16-bit part of the offset.
+    auto LoOfs = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Ofs,
+                                DAG.getConstant(0, dl, MVT::i16));
+
+    // Add the lower ptr and ofs parts, keeping the PTRADD flags.
+    auto LoPtrOfs =
+        DAG.getNode(ISD::ADD, dl, MVT::i16, LoPtr, LoOfs, N->getFlags());
+
+    // The result is the unchanged hi part of the ptr + the lower parts' sum.
+    Results.push_back(
+        DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, LoPtrOfs, HiPtr)
+    );
+    return;
+  }
   case ISD::LOAD:
   case ISD::STORE:
     // We made 32 bit load/store custom for LowerOperationWrapper.
@@ -6534,6 +6571,20 @@ void RL78TargetLowering::LowerOperationWrapper(
     LLVM_DEBUG(N->dump());
     llvm_unreachable("Do not know how to custom type legalize this operation!");
     return;
+  case ISD::BRIND: {
+    SDValue Chain = N->getOperand(0);
+    SDValue Target = N->getOperand(1);
+
+    SDValue Low16 = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Target,
+                                DAG.getConstant(0, dl, MVT::i32));
+    SDValue High16 = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Target,
+                                 DAG.getConstant(1, dl, MVT::i32));
+
+    SDValue High8 = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, High16);
+    Chain = DAG.getCopyToReg(Chain, dl, RL78::CS, High8);
+    Results.push_back(DAG.getNode(ISD::BRIND, dl, MVT::Other, Chain, Low16));
+    return;
+  }
   case ISD::INTRINSIC_WO_CHAIN: {
     switch (N->getConstantOperandVal(0)) {
     case Intrinsic::rl78_remul:

@@ -62,7 +62,7 @@ const LangASMap RL78TargetInfo::RL78AddrSpaceMap = {
 };
 
 ArrayRef<const char *> RL78TargetInfo::getGCCRegNames() const {
-  return llvm::makeArrayRef(GCCRegNames);
+  return llvm::ArrayRef(GCCRegNames);
 }
 
 const TargetInfo::GCCRegAlias RL78TargetInfo::GCCRegAliases[] = {
@@ -71,7 +71,7 @@ const TargetInfo::GCCRegAlias RL78TargetInfo::GCCRegAliases[] = {
     {{"d"}, "r5"},   {{"e"}, "r4"},   {{"h"}, "r7"},   {{"l"}, "r6"}};
 
 ArrayRef<TargetInfo::GCCRegAlias> RL78TargetInfo::getGCCRegAliases() const {
-  return llvm::makeArrayRef(GCCRegAliases);
+  return llvm::ArrayRef(GCCRegAliases);
 }
 
 RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,

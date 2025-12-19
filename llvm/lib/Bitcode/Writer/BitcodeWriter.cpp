@@ -33,6 +33,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Comdat.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/IR/ConstantRangeList.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DebugLoc.h"
@@ -123,6 +124,7 @@ enum {
   FUNCTION_INST_BINOP_ABBREV,
   FUNCTION_INST_BINOP_FLAGS_ABBREV,
   FUNCTION_INST_CAST_ABBREV,
+  FUNCTION_INST_CAST_FLAGS_ABBREV,
   FUNCTION_INST_RET_VOID_ABBREV,
   FUNCTION_INST_RET_VAL_ABBREV,
   FUNCTION_INST_UNREACHABLE_ABBREV,
@@ -735,6 +737,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_NO_SANITIZE_COVERAGE;
   case Attribute::NullPointerIsValid:
     return bitc::ATTR_KIND_NULL_POINTER_IS_VALID;
+  case Attribute::OptimizeForDebugging:
+    return bitc::ATTR_KIND_OPTIMIZE_FOR_DEBUGGING;
   case Attribute::OptForFuzzing:
     return bitc::ATTR_KIND_OPT_FOR_FUZZING;
   case Attribute::OptimizeForSize:
@@ -777,6 +781,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_SANITIZE_THREAD;
   case Attribute::SanitizeMemory:
     return bitc::ATTR_KIND_SANITIZE_MEMORY;
+  case Attribute::SanitizeNumericalStability:
+    return bitc::ATTR_KIND_SANITIZE_NUMERICAL_STABILITY;
   case Attribute::SpeculativeLoadHardening:
     return bitc::ATTR_KIND_SPECULATIVE_LOAD_HARDENING;
   case Attribute::SwiftError:
@@ -809,6 +815,16 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_MUSTPROGRESS;
   case Attribute::PresplitCoroutine:
     return bitc::ATTR_KIND_PRESPLIT_COROUTINE;
+  case Attribute::Writable:
+    return bitc::ATTR_KIND_WRITABLE;
+  case Attribute::CoroDestroyOnlyWhenComplete:
+    return bitc::ATTR_KIND_CORO_ONLY_DESTROY_WHEN_COMPLETE;
+  case Attribute::DeadOnUnwind:
+    return bitc::ATTR_KIND_DEAD_ON_UNWIND;
+  case Attribute::Range:
+    return bitc::ATTR_KIND_RANGE;
+  case Attribute::Initializes:
+    return bitc::ATTR_KIND_INITIALIZES;
   case Attribute::EndAttrKinds:
     llvm_unreachable("Can not encode end-attribute kinds marker.");
   case Attribute::None:
@@ -819,6 +835,40 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
   }
 
   llvm_unreachable("Trying to encode unknown attribute");
+}
+
+static void emitSignedInt64(SmallVectorImpl<uint64_t> &Vals, uint64_t V) {
+  if ((int64_t)V >= 0)
+    Vals.push_back(V << 1);
+  else
+    Vals.push_back((-V << 1) | 1);
+}
+
+static void emitWideAPInt(SmallVectorImpl<uint64_t> &Vals, const APInt &A) {
+  // We have an arbitrary precision integer value to write whose
+  // bit width is > 64. However, in canonical unsigned integer
+  // format it is likely that the high bits are going to be zero.
+  // So, we only write the number of active words.
+  unsigned NumWords = A.getActiveWords();
+  const uint64_t *RawData = A.getRawData();
+  for (unsigned i = 0; i < NumWords; i++)
+    emitSignedInt64(Vals, RawData[i]);
+}
+
+static void emitConstantRange(SmallVectorImpl<uint64_t> &Record,
+                              const ConstantRange &CR, bool EmitBitWidth) {
+  unsigned BitWidth = CR.getBitWidth();
+  if (EmitBitWidth)
+    Record.push_back(BitWidth);
+  if (BitWidth > 64) {
+    Record.push_back(CR.getLower().getActiveWords() |
+                     (uint64_t(CR.getUpper().getActiveWords()) << 32));
+    emitWideAPInt(Record, CR.getLower());
+    emitWideAPInt(Record, CR.getUpper());
+  } else {
+    emitSignedInt64(Record, CR.getLower().getSExtValue());
+    emitSignedInt64(Record, CR.getUpper().getSExtValue());
+  }
 }
 
 void ModuleBitcodeWriter::writeAttributeGroupTable() {
@@ -854,13 +904,26 @@ void ModuleBitcodeWriter::writeAttributeGroupTable() {
           Record.append(Val.begin(), Val.end());
           Record.push_back(0);
         }
-      } else {
-        assert(Attr.isTypeAttribute());
+      } else if (Attr.isTypeAttribute()) {
         Type *Ty = Attr.getValueAsType();
         Record.push_back(Ty ? 6 : 5);
         Record.push_back(getAttrKindEncoding(Attr.getKindAsEnum()));
         if (Ty)
           Record.push_back(VE.getTypeID(Attr.getValueAsType()));
+      } else if (Attr.isConstantRangeAttribute()) {
+        Record.push_back(7);
+        Record.push_back(getAttrKindEncoding(Attr.getKindAsEnum()));
+        emitConstantRange(Record, Attr.getValueAsConstantRange(),
+                          /*EmitBitWidth=*/true);
+      } else {
+        assert(Attr.isConstantRangeListAttribute());
+        Record.push_back(8);
+        Record.push_back(getAttrKindEncoding(Attr.getKindAsEnum()));
+        ArrayRef<ConstantRange> Val = Attr.getValueAsConstantRangeList();
+        Record.push_back(Val.size());
+        Record.push_back(Val[0].getBitWidth());
+        for (auto &CR : Val)
+          emitConstantRange(Record, CR, /*EmitBitWidth=*/false);
       }
     }
 
@@ -1522,6 +1585,9 @@ static uint64_t getOptimizationFlags(const Value *V) {
   } else if (const auto *PEO = dyn_cast<PossiblyExactOperator>(V)) {
     if (PEO->isExact())
       Flags |= 1 << bitc::PEO_EXACT;
+  } else if (const auto *PDI = dyn_cast<PossiblyDisjointInst>(V)) {
+    if (PDI->isDisjoint())
+      Flags |= 1 << bitc::PDI_DISJOINT;
   } else if (const auto *FPMO = dyn_cast<FPMathOperator>(V)) {
     if (FPMO->hasAllowReassoc())
       Flags |= bitc::AllowReassoc;
@@ -1537,6 +1603,21 @@ static uint64_t getOptimizationFlags(const Value *V) {
       Flags |= bitc::AllowContract;
     if (FPMO->hasApproxFunc())
       Flags |= bitc::ApproxFunc;
+  } else if (const auto *NNI = dyn_cast<PossiblyNonNegInst>(V)) {
+    if (NNI->hasNonNeg())
+      Flags |= 1 << bitc::PNNI_NON_NEG;
+  } else if (const auto *TI = dyn_cast<TruncInst>(V)) {
+    if (TI->hasNoSignedWrap())
+      Flags |= 1 << bitc::TIO_NO_SIGNED_WRAP;
+    if (TI->hasNoUnsignedWrap())
+      Flags |= 1 << bitc::TIO_NO_UNSIGNED_WRAP;
+  } else if (const auto *GEP = dyn_cast<GEPOperator>(V)) {
+    if (GEP->isInBounds())
+      Flags |= 1 << bitc::GEP_INBOUNDS;
+    if (GEP->hasNoUnsignedSignedWrap())
+      Flags |= 1 << bitc::GEP_NUSW;
+    if (GEP->hasNoUnsignedWrap())
+      Flags |= 1 << bitc::GEP_NUW;
   }
 
   return Flags;
@@ -1654,24 +1735,6 @@ void ModuleBitcodeWriter::writeDIGenericSubrange(
 
   Stream.EmitRecord(bitc::METADATA_GENERIC_SUBRANGE, Record, Abbrev);
   Record.clear();
-}
-
-static void emitSignedInt64(SmallVectorImpl<uint64_t> &Vals, uint64_t V) {
-  if ((int64_t)V >= 0)
-    Vals.push_back(V << 1);
-  else
-    Vals.push_back((-V << 1) | 1);
-}
-
-static void emitWideAPInt(SmallVectorImpl<uint64_t> &Vals, const APInt &A) {
-  // We have an arbitrary precision integer value to write whose
-  // bit width is > 64. However, in canonical unsigned integer
-  // format it is likely that the high bits are going to be zero.
-  // So, we only write the number of active words.
-  unsigned NumWords = A.getActiveWords();
-  const uint64_t *RawData = A.getRawData();
-  for (unsigned i = 0; i < NumWords; i++)
-    emitSignedInt64(Vals, RawData[i]);
 }
 
 void ModuleBitcodeWriter::writeDIEnumerator(const DIEnumerator *N,
@@ -2658,11 +2721,11 @@ void ModuleBitcodeWriter::writeConstants(unsigned FirstVal, unsigned LastVal,
         Code = bitc::CST_CODE_CE_GEP;
         const auto *GO = cast<GEPOperator>(C);
         Record.push_back(VE.getTypeID(GO->getSourceElementType()));
-        if (std::optional<unsigned> Idx = GO->getInRangeIndex()) {
-          Code = bitc::CST_CODE_CE_GEP_WITH_INRANGE_INDEX;
-          Record.push_back((*Idx << 1) | GO->isInBounds());
-        } else if (GO->isInBounds())
-          Code = bitc::CST_CODE_CE_INBOUNDS_GEP;
+        Record.push_back(getOptimizationFlags(GO));
+        if (std::optional<ConstantRange> Range = GO->getInRange()) {
+          Code = bitc::CST_CODE_CE_GEP_WITH_INRANGE;
+          emitConstantRange(Record, *Range, /*EmitBitWidth=*/true);
+        }
         for (unsigned i = 0, e = CE->getNumOperands(); i != e; ++i) {
           Record.push_back(VE.getTypeID(C->getOperand(i)->getType()));
           Record.push_back(VE.getValueID(C->getOperand(i)));
@@ -2813,6 +2876,12 @@ void ModuleBitcodeWriter::writeInstruction(const Instruction &I,
         AbbrevToUse = FUNCTION_INST_CAST_ABBREV;
       Vals.push_back(VE.getTypeID(I.getType()));
       Vals.push_back(getEncodedCastOpcode(I.getOpcode()));
+      uint64_t Flags = getOptimizationFlags(&I);
+      if (Flags != 0) {
+        if (AbbrevToUse == FUNCTION_INST_CAST_ABBREV)
+          AbbrevToUse = FUNCTION_INST_CAST_FLAGS_ABBREV;
+        Vals.push_back(Flags);
+      }
     } else {
       assert(isa<BinaryOperator>(I) && "Unknown instruction!");
       Code = bitc::FUNC_CODE_INST_BINOP;
@@ -2845,7 +2914,7 @@ void ModuleBitcodeWriter::writeInstruction(const Instruction &I,
     Code = bitc::FUNC_CODE_INST_GEP;
     AbbrevToUse = FUNCTION_INST_GEP_ABBREV;
     auto &GEPInst = cast<GetElementPtrInst>(I);
-    Vals.push_back(GEPInst.isInBounds());
+    Vals.push_back(getOptimizationFlags(&I));
     Vals.push_back(VE.getTypeID(GEPInst.getSourceElementType()));
     for (unsigned i = 0, e = I.getNumOperands(); i != e; ++i)
       pushValueAndType(I.getOperand(i), InstID, Vals);
@@ -3634,6 +3703,18 @@ void ModuleBitcodeWriter::writeBlockInfo() {
         FUNCTION_INST_CAST_ABBREV)
       llvm_unreachable("Unexpected abbrev ordering!");
   }
+  { // INST_CAST_FLAGS abbrev for FUNCTION_BLOCK.
+    auto Abbv = std::make_shared<BitCodeAbbrev>();
+    Abbv->Add(BitCodeAbbrevOp(bitc::FUNC_CODE_INST_CAST));
+    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6)); // OpVal
+    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed,    // dest ty
+                              VE.computeBitsRequiredForTypeIndicies()));
+    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 4)); // opc
+    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8)); // flags
+    if (Stream.EmitBlockInfoAbbrev(bitc::FUNCTION_BLOCK_ID, Abbv) !=
+        FUNCTION_INST_CAST_FLAGS_ABBREV)
+      llvm_unreachable("Unexpected abbrev ordering!");
+  }
 
   { // INST_RET abbrev for FUNCTION_BLOCK.
     auto Abbv = std::make_shared<BitCodeAbbrev>();
@@ -3660,7 +3741,7 @@ void ModuleBitcodeWriter::writeBlockInfo() {
   {
     auto Abbv = std::make_shared<BitCodeAbbrev>();
     Abbv->Add(BitCodeAbbrevOp(bitc::FUNC_CODE_INST_GEP));
-    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1));
+    Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 3));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, // dest ty
                               Log2_32_Ceil(VE.getTypes().size() + 1)));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));

@@ -43,7 +43,7 @@ static const char CyrillicUTF[] = "\xd0\xaf";
 template<unsigned int N>
 static std::string SmallStringToString(SmallString<N> SM) {
   std::string s = "";
-  for(int i = 0; i < N; i++)
+  for(size_t i = 0; i < SM.size(); i++)
     s += SM[i];
   return s;
 }

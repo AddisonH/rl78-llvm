@@ -1,4 +1,4 @@
-//===-- RL78InstPrinter.cpp - Convert RL78 MCInst to assembly syntax -----==//
+﻿//===-- RL78InstPrinter.cpp - Convert RL78 MCInst to assembly syntax -----==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -159,7 +159,8 @@ void RL78InstPrinter::printABS8Operand(const MCInst *MI, int opNum,
                                        raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(opNum);
   if (MO.isImm())
-    O << "0xffe" << format_hex_no_prefix(MO.getImm(), 2);
+    O << (((MO.getImm() & 0xFF) < 0x20) ? "0xfff" : "0xffe")
+      << format_hex_no_prefix(MO.getImm() & 0xFF, 2);
   else if (MO.isExpr())
     MO.getExpr()->print(O, &MAI);
   else
@@ -412,6 +413,8 @@ void RL78InstPrinter::printCCOperand(const MCInst *MI, int opNum,
   case RL78::BTBF_A:
   case RL78::BTBF_memr:
   case RL78::BTCLR_A:
+  case RL78::BTBF_sfrRegi_addr:
+  case RL78::BTCLR_sfrRegi_addr:
   case RL78::BTBF_sfri_addr:
   case RL78::BTBF_PSWi_addr:
   case RL78::BTBF_esmemr:

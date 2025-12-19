@@ -3206,6 +3206,15 @@ public:
     return isOperationLegalOrCustom(Op, VT);
   }
 
+  /// True if target has some particular form of dealing with pointer arithmetic
+  /// semantics for pointers with the given value type. False if pointer
+  /// arithmetic should not be preserved for passes such as instruction
+  /// selection, and can fallback to regular arithmetic.
+  /// This should be removed when PTRADD nodes are widely supported by backends.
+  virtual bool shouldPreservePtrArith(const Function &F, EVT PtrVT) const {
+    return false;
+  }
+
   /// Does this target support complex deinterleaving
   virtual bool isComplexDeinterleavingSupported() const { return false; }
 
@@ -4552,6 +4561,15 @@ public:
   /// to duplicate return instructions to enable tailcall optimization.
   virtual bool mayBeEmittedAsTailCall(const CallInst *) const {
     return false;
+  }
+
+  /// Give target a chance to custom lower a stack slot for sret demotion.
+  /// Returns the lowered stack slot (in which case the type might be changed
+  /// as well) or an empty value if custom lowering isn't needed (the default).
+  virtual SDValue lowerStackSlotForSRet(SDValue            /*StackSlot*/,
+                                        Type *&            /*StackSlotPtrType*/,
+                                        CallLoweringInfo & /*CLI*/) const {
+    return SDValue();
   }
 
   /// Return the builtin name for the __builtin___clear_cache intrinsic

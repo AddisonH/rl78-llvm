@@ -100,10 +100,10 @@ bool RL78ESOptPass::runOnMachineFunction(MachineFunction &MF) {
             Changed = true;
           } else if (Next->getOperand(1).isIdenticalTo(Last.getOperand(1)) &&
                      (Next->getOpcode() == RL78::MOV_es_imm ||
-                      Next->getOpcode() == RL78::MOV_es_A &&
-                          (!std::prev(Next)->isCopy() ||
-                           std::prev(Next)->getOperand(0).getReg() !=
-                               RL78::R1))) {
+                      (Next->getOpcode() == RL78::MOV_es_A &&
+                       (!std::prev(Next)->isCopy() ||
+                        std::prev(Next)->getOperand(0).getReg() !=
+                            RL78::R1)))) {
             // Eliminate the second initialization with an imm or with R1 but
             // with missing/already eliminated copy.
             MachineInstr &Mov = *Next;

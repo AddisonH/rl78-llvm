@@ -3812,14 +3812,12 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_return_address: {
     Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
                                                    getContext().UnsignedIntTy);
-    auto PtrTy = getContext().getLangOpts().RenesasRL78 ? AllocaInt8PtrTy : Int8PtrTy;
-    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress, PtrTy);
+    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress);
     return RValue::get(Builder.CreateCall(F, Depth));
   }
   case Builtin::BI_ReturnAddress: {
-    auto PtrTy = getContext().getLangOpts().RenesasRL78 ? AllocaInt8PtrTy : Int8PtrTy;
-    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress, PtrTy);
-    return RValue::get(Builder.CreateCall(F, Builder.getIntN(getTarget().getIntWidth(), 0)));
+    Function *F = CGM.getIntrinsic(Intrinsic::returnaddress);
+    return RValue::get(Builder.CreateCall(F, Builder.getInt32(0)));
   }
   case Builtin::BI__builtin_frame_address: {
     Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
@@ -20622,12 +20620,9 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
     // don't remove the near address space
     Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
     if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
-        !getLangOpts().RenesasRL78DataModel)
+        !getLangOpts().RenesasRL78DataModel) 
       ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-          ArgValue0,
-          llvm::PointerType::getWithSamePointeeType(
-              cast<llvm::PointerType>(ArgValue0->getType()), /*AddrSpace=*/0));
-
+          ArgValue0, llvm::PointerType::get(getLLVMContext(), /*AddrSpace=*/0));    
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
     Value *ArgValue2 = EmitScalarExpr(E->getArg(2));
     Value *ArgValue3 = EmitScalarExpr(E->getArg(3));
@@ -20676,12 +20671,9 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
     // don't remove the near address space
     Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
     if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
-        !getLangOpts().RenesasRL78DataModel)
-      ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-          ArgValue0,
-          llvm::PointerType::getWithSamePointeeType(
-              cast<llvm::PointerType>(ArgValue0->getType()), /*AddrSpace=*/0));
-
+        !getLangOpts().RenesasRL78DataModel) 
+        ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
+          ArgValue0, llvm::PointerType::get(getLLVMContext(), /*AddrSpace=*/0));
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
 
     auto PtrTy = ArgValue0->getType();

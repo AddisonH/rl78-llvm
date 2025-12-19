@@ -60,14 +60,14 @@ FunctionPass *llvm::createRL78ConstPropAndOpSwap() {
 }
 
 static bool IsMACReg(Register reg, const MachineRegisterInfo *MRI) {
-  return !reg.isVirtual() && (reg == RL78::MACRH && reg == RL78::MACRL) ||
-         reg.isVirtual() &&
-             (MRI->getRegClass(reg) == &RL78::RL78RegMACRHRegClass ||
-              MRI->getRegClass(reg) == &RL78::RL78RegMACRLRegClass);
+  return (!reg.isVirtual() && (reg == RL78::MACRH && reg == RL78::MACRL)) ||
+         (reg.isVirtual() &&
+          ((MRI->getRegClass(reg) == &RL78::RL78RegMACRHRegClass ||
+            MRI->getRegClass(reg) == &RL78::RL78RegMACRLRegClass)));
 }
 
 bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
-
+ 
   bool changed = false;
   MRI = &(MF.getRegInfo());
   TRI = MF.getSubtarget().getRegisterInfo();
@@ -138,8 +138,8 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
 
             MachineInstr &MI2 = *Next;
 
-            if (MI2.getOpcode() == RL78::MUL8_r_r ||
-                MI2.getOpcode() == RL78::MUL16_rp_rp && Next != MBB.end()) {
+            if ((MI2.getOpcode() == RL78::MUL8_r_r) ||
+                (MI2.getOpcode() == RL78::MUL16_rp_rp && Next != MBB.end())) {
 
               std::pair<std::optional<MachineOperand>, unsigned int> crspCpyAndInstrMIop1 =
                   getCoresspondingCpyOrConst(MI.getOperand(1), ACPM);

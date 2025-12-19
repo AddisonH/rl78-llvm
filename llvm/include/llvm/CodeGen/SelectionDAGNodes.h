@@ -214,6 +214,7 @@ public:
   inline bool isTargetOpcode() const;
   inline bool isMachineOpcode() const;
   inline bool isUndef() const;
+  inline bool isAnyAdd() const;
   inline unsigned getMachineOpcode() const;
   inline const DebugLoc &getDebugLoc() const;
   inline void dump() const;
@@ -378,33 +379,49 @@ template<> struct simplify_type<SDUse> {
 /// the backend.
 struct SDNodeFlags {
 private:
-  bool NoUnsignedWrap : 1;
-  bool NoSignedWrap : 1;
-  bool Exact : 1;
-  bool NoNaNs : 1;
-  bool NoInfs : 1;
-  bool NoSignedZeros : 1;
-  bool AllowReciprocal : 1;
-  bool AllowContract : 1;
-  bool ApproximateFuncs : 1;
-  bool AllowReassociation : 1;
+  friend class SDNode;
 
-  // We assume instructions do not raise floating-point exceptions by default,
-  // and only those marked explicitly may do so.  We could choose to represent
-  // this via a positive "FPExcept" flags like on the MI level, but having a
-  // negative "NoFPExcept" flag here makes the flag intersection logic more
-  // straightforward.
-  bool NoFPExcept : 1;
-  // Instructions with attached 'unpredictable' metadata on IR level.
-  bool Unpredictable : 1;
+  unsigned Flags = 0;
+
+  template <unsigned Flag> void setFlag(bool B) {
+    Flags = (Flags & ~Flag) | (B ? Flag : 0);
+  }
 
 public:
+  enum : unsigned {
+    None = 0,
+    NoUnsignedWrap = 1 << 0,
+    NoSignedWrap = 1 << 1,
+    NoWrap = NoUnsignedWrap | NoSignedWrap,
+    Exact = 1 << 2,
+    Disjoint = 1 << 3,
+    NonNeg = 1 << 4,
+    NoNaNs = 1 << 5,
+    NoInfs = 1 << 6,
+    NoSignedZeros = 1 << 7,
+    AllowReciprocal = 1 << 8,
+    AllowContract = 1 << 9,
+    ApproximateFuncs = 1 << 10,
+    AllowReassociation = 1 << 11,
+
+    // We assume instructions do not raise floating-point exceptions by default,
+    // and only those marked explicitly may do so.  We could choose to represent
+    // this via a positive "FPExcept" flags like on the MI level, but having a
+    // negative "NoFPExcept" flag here makes the flag intersection logic more
+    // straightforward.
+    NoFPExcept = 1 << 12,
+    // Instructions with attached 'unpredictable' metadata on IR level.
+    Unpredictable = 1 << 13,
+
+    // NOTE: Please update LargestValue in LLVM_DECLARE_ENUM_AS_BITMASK below
+    // the class definition when adding new flags.
+
+    PoisonGeneratingFlags = NoUnsignedWrap | NoSignedWrap | Exact | Disjoint |
+                            NonNeg | NoNaNs | NoInfs,
+  };
+
   /// Default constructor turns off all optimization flags.
-  SDNodeFlags()
-      : NoUnsignedWrap(false), NoSignedWrap(false), Exact(false), NoNaNs(false),
-        NoInfs(false), NoSignedZeros(false), AllowReciprocal(false),
-        AllowContract(false), ApproximateFuncs(false),
-        AllowReassociation(false), NoFPExcept(false), Unpredictable(false) {}
+  SDNodeFlags(unsigned Flags = SDNodeFlags::None) : Flags(Flags) {}
 
   /// Propagate the fast-math-flags from an IR FPMathOperator.
   void copyFMF(const FPMathOperator &FPMO) {
@@ -418,50 +435,56 @@ public:
   }
 
   // These are mutators for each flag.
-  void setNoUnsignedWrap(bool b) { NoUnsignedWrap = b; }
-  void setNoSignedWrap(bool b) { NoSignedWrap = b; }
-  void setExact(bool b) { Exact = b; }
-  void setNoNaNs(bool b) { NoNaNs = b; }
-  void setNoInfs(bool b) { NoInfs = b; }
-  void setNoSignedZeros(bool b) { NoSignedZeros = b; }
-  void setAllowReciprocal(bool b) { AllowReciprocal = b; }
-  void setAllowContract(bool b) { AllowContract = b; }
-  void setApproximateFuncs(bool b) { ApproximateFuncs = b; }
-  void setAllowReassociation(bool b) { AllowReassociation = b; }
-  void setNoFPExcept(bool b) { NoFPExcept = b; }
-  void setUnpredictable(bool b) { Unpredictable = b; }
+  void setNoUnsignedWrap(bool b) { setFlag<NoUnsignedWrap>(b); }
+  void setNoSignedWrap(bool b) { setFlag<NoSignedWrap>(b); }
+  void setExact(bool b) { setFlag<Exact>(b); }
+  void setDisjoint(bool b) { setFlag<Disjoint>(b); }
+  void setNonNeg(bool b) { setFlag<NonNeg>(b); }
+  void setNoNaNs(bool b) { setFlag<NoNaNs>(b); }
+  void setNoInfs(bool b) { setFlag<NoInfs>(b); }
+  void setNoSignedZeros(bool b) { setFlag<NoSignedZeros>(b); }
+  void setAllowReciprocal(bool b) { setFlag<AllowReciprocal>(b); }
+  void setAllowContract(bool b) { setFlag<AllowContract>(b); }
+  void setApproximateFuncs(bool b) { setFlag<ApproximateFuncs>(b); }
+  void setAllowReassociation(bool b) { setFlag<AllowReassociation>(b); }
+  void setNoFPExcept(bool b) { setFlag<NoFPExcept>(b); }
+  void setUnpredictable(bool b) { setFlag<Unpredictable>(b); }
 
   // These are accessors for each flag.
-  bool hasNoUnsignedWrap() const { return NoUnsignedWrap; }
-  bool hasNoSignedWrap() const { return NoSignedWrap; }
-  bool hasExact() const { return Exact; }
-  bool hasNoNaNs() const { return NoNaNs; }
-  bool hasNoInfs() const { return NoInfs; }
-  bool hasNoSignedZeros() const { return NoSignedZeros; }
-  bool hasAllowReciprocal() const { return AllowReciprocal; }
-  bool hasAllowContract() const { return AllowContract; }
-  bool hasApproximateFuncs() const { return ApproximateFuncs; }
-  bool hasAllowReassociation() const { return AllowReassociation; }
-  bool hasNoFPExcept() const { return NoFPExcept; }
-  bool hasUnpredictable() const { return Unpredictable; }
+  bool hasNoUnsignedWrap() const { return Flags & NoUnsignedWrap; }
+  bool hasNoSignedWrap() const { return Flags & NoSignedWrap; }
+  bool hasExact() const { return Flags & Exact; }
+  bool hasDisjoint() const { return Flags & Disjoint; }
+  bool hasNonNeg() const { return Flags & NonNeg; }
+  bool hasNoNaNs() const { return Flags & NoNaNs; }
+  bool hasNoInfs() const { return Flags & NoInfs; }
+  bool hasNoSignedZeros() const { return Flags & NoSignedZeros; }
+  bool hasAllowReciprocal() const { return Flags & AllowReciprocal; }
+  bool hasAllowContract() const { return Flags & AllowContract; }
+  bool hasApproximateFuncs() const { return Flags & ApproximateFuncs; }
+  bool hasAllowReassociation() const { return Flags & AllowReassociation; }
+  bool hasNoFPExcept() const { return Flags & NoFPExcept; }
+  bool hasUnpredictable() const { return Flags & Unpredictable; }
 
-  /// Clear any flags in this flag set that aren't also set in Flags. All
-  /// flags will be cleared if Flags are undefined.
-  void intersectWith(const SDNodeFlags Flags) {
-    NoUnsignedWrap &= Flags.NoUnsignedWrap;
-    NoSignedWrap &= Flags.NoSignedWrap;
-    Exact &= Flags.Exact;
-    NoNaNs &= Flags.NoNaNs;
-    NoInfs &= Flags.NoInfs;
-    NoSignedZeros &= Flags.NoSignedZeros;
-    AllowReciprocal &= Flags.AllowReciprocal;
-    AllowContract &= Flags.AllowContract;
-    ApproximateFuncs &= Flags.ApproximateFuncs;
-    AllowReassociation &= Flags.AllowReassociation;
-    NoFPExcept &= Flags.NoFPExcept;
-    Unpredictable &= Flags.Unpredictable;
+  bool operator==(const SDNodeFlags &Other) const {
+    return Flags == Other.Flags;
   }
+  void operator&=(const SDNodeFlags &OtherFlags) { Flags &= OtherFlags.Flags; }
+  void operator|=(const SDNodeFlags &OtherFlags) { Flags |= OtherFlags.Flags; }
 };
+
+LLVM_DECLARE_ENUM_AS_BITMASK(decltype(SDNodeFlags::None),
+                             SDNodeFlags::Unpredictable);
+
+inline SDNodeFlags operator|(SDNodeFlags LHS, SDNodeFlags RHS) {
+  LHS |= RHS;
+  return LHS;
+}
+
+inline SDNodeFlags operator&(SDNodeFlags LHS, SDNodeFlags RHS) {
+  LHS &= RHS;
+  return LHS;
+}
 
 /// Represents one node in the SelectionDAG.
 ///
@@ -670,6 +693,11 @@ public:
 
   /// Return true if the type of the node type undefined.
   bool isUndef() const { return NodeType == ISD::UNDEF; }
+
+  /// Returns true if the node type is ADD or PTRADD.
+  bool isAnyAdd() const {
+    return NodeType == ISD::ADD || NodeType == ISD::PTRADD;
+  }
 
   /// Test if this node is a memory intrinsic (with valid pointer information).
   /// INTRINSIC_W_CHAIN and INTRINSIC_VOID nodes are sometimes created for
@@ -976,10 +1004,15 @@ public:
 
   SDNodeFlags getFlags() const { return Flags; }
   void setFlags(SDNodeFlags NewFlags) { Flags = NewFlags; }
+  void dropFlags(unsigned Mask) { Flags &= ~Mask; }
 
   /// Clear any flags in this node that aren't also set in Flags.
   /// If Flags is not in a defined state then this has no effect.
   void intersectFlagsWith(const SDNodeFlags Flags);
+
+  bool hasPoisonGeneratingFlags() const {
+    return Flags.Flags & SDNodeFlags::PoisonGeneratingFlags;
+  }
 
   void setCFIType(uint32_t Type) { CFIType = Type; }
   uint32_t getCFIType() const { return CFIType; }
@@ -1182,6 +1215,8 @@ inline unsigned SDValue::getMachineOpcode() const {
 inline bool SDValue::isUndef() const {
   return Node->isUndef();
 }
+
+inline bool SDValue::isAnyAdd() const { return Node->isAnyAdd(); }
 
 inline bool SDValue::use_empty() const {
   return !Node->hasAnyUseOfValue(ResNo);

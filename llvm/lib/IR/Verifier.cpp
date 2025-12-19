@@ -72,6 +72,7 @@
 #include "llvm/IR/Comdat.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/ConstantRange.h"
+#include "llvm/IR/ConstantRangeList.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/CycleInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -1928,6 +1929,14 @@ void Verifier::verifyParameterAttrs(AttributeSet Attrs, Type *Ty,
         "'noinline and alwaysinline' are incompatible!",
         V);
 
+  Check(!(Attrs.hasAttribute(Attribute::Writable) &&
+          Attrs.hasAttribute(Attribute::ReadNone)),
+        "Attributes writable and readnone are incompatible!", V);
+
+  Check(!(Attrs.hasAttribute(Attribute::Writable) &&
+          Attrs.hasAttribute(Attribute::ReadOnly)),
+        "Attributes writable and readonly are incompatible!", V);
+
   AttributeMask IncompatibleAttrs = AttributeFuncs::typeIncompatible(Ty);
   for (Attribute Attr : Attrs) {
     if (!Attr.isStringAttribute() &&
@@ -1967,12 +1976,25 @@ void Verifier::verifyParameterAttrs(AttributeSet Attrs, Type *Ty,
     }
   }
 
+  if (Attrs.hasAttribute(Attribute::Initializes)) {
+    auto Inits = Attrs.getAttribute(Attribute::Initializes).getInitializes();
+    Check(!Inits.empty(), "Attribute 'initializes' does not support empty list",
+          V);
+    Check(ConstantRangeList::isOrderedRanges(Inits),
+          "Attribute 'initializes' does not support unordered ranges", V);
+  }
+
   if (Attrs.hasAttribute(Attribute::NoFPClass)) {
     uint64_t Val = Attrs.getAttribute(Attribute::NoFPClass).getValueAsInt();
     Check(Val != 0, "Attribute 'nofpclass' must have at least one test bit set",
           V);
     Check((Val & ~static_cast<unsigned>(fcAllFlags)) == 0,
           "Invalid value for 'nofpclass' test mask", V);
+  }
+  if (Attrs.hasAttribute(Attribute::Range)) {
+    auto CR = Attrs.getAttribute(Attribute::Range).getValueAsConstantRange();
+    Check(Ty->isIntOrIntVectorTy(CR.getBitWidth()),
+          "Range bit width must match type bit width!", V);
   }
 }
 
@@ -2107,7 +2129,23 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
 
     Check(!Attrs.hasFnAttr(Attribute::MinSize),
           "Attributes 'minsize and optnone' are incompatible!", V);
+
+    Check(!Attrs.hasFnAttr(Attribute::OptimizeForDebugging),
+          "Attributes 'optdebug and optnone' are incompatible!", V);
   }
+
+  if (Attrs.hasFnAttr(Attribute::OptimizeForDebugging)) {
+    Check(!Attrs.hasFnAttr(Attribute::OptimizeForSize),
+          "Attributes 'optsize and optdebug' are incompatible!", V);
+
+    Check(!Attrs.hasFnAttr(Attribute::MinSize),
+          "Attributes 'minsize and optdebug' are incompatible!", V);
+  }
+
+  Check(!Attrs.hasAttrSomewhere(Attribute::Writable) ||
+        isModSet(Attrs.getMemoryEffects().getModRef(IRMemLocation::ArgMem)),
+        "Attribute writable and memory without argmem: write are incompatible!",
+        V);
 
   if (Attrs.hasFnAttr("aarch64_pstate_sm_enabled")) {
     Check(!Attrs.hasFnAttr("aarch64_pstate_sm_compatible"),

@@ -20,7 +20,6 @@ namespace llvm {
 class RL78TargetMachine : public LLVMTargetMachine {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   //RL78Subtarget Subtarget;
-  bool is64Bit;
   mutable StringMap<std::unique_ptr<RL78Subtarget>> SubtargetMap;
 
 public:

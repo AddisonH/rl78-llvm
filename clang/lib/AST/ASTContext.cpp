@@ -3092,8 +3092,6 @@ QualType ASTContext::removeAddrSpaceQualType(QualType T) const {
   if (!T.hasAddressSpace())
     return T;
 
-  // If we are dealing with arrays, the address space is on the element type.
-  // TODO: should this be moved to strip()?
   if (const ArrayType *Array = getAsArrayType(T.getDesugaredType(*this))) {
     if (Array->isConstantArrayType()) {
       const auto CArray = dyn_cast<ConstantArrayType>(Array);
@@ -3604,9 +3602,13 @@ QualType ASTContext::getConstantArrayType(QualType EltTy,
   // the target.
   // RL78: Keep array size == int size for -mfar-data
   llvm::APInt ArySize(ArySizeIn);
-  ArySize = ArySize.zextOrTrunc(getLangOpts().RenesasRL78DataModel
-                                    ? Target->getIntWidth()
-                                    : Target->getMaxPointerWidth());
+  if (Target->getTriple().isRL78())
+    ArySize = ArySize.zextOrTrunc(getLangOpts().RenesasRL78DataModel
+                                      ? Target->getIntWidth()
+                                      : Target->getMaxPointerWidth());
+  else
+    ArySize = ArySize.zextOrTrunc(Target->getMaxPointerWidth());
+  
   llvm::FoldingSetNodeID ID;
   ConstantArrayType::Profile(ID, *this, EltTy, ArySize, SizeExpr, ASM,
                              IndexTypeQuals);
@@ -11650,7 +11652,7 @@ static void HandleRL78BuiltinPrototypes(const ASTContext *Context,
 
   // See if we need to make some of the pointer arguments far
   bool NeedsFarDataPointers = false;
-  bool IsFarRom = Context->getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far;
+  bool IsFarRom = Context->getLangOpts().RenesasRL78RomModelFar;
   if (!Name.compare("memcpy") || !Name.compare( "memmove") ||
       !Name.compare( "memset") || !Name.compare( "memcmp") ||
       !Name.compare( "memchr") || !Name.compare( "strcpy") ||
@@ -11664,13 +11666,13 @@ static void HandleRL78BuiltinPrototypes(const ASTContext *Context,
 
   if (ResType->isPointerType() &&
       (NeedsFarDataPointers ||
-       ResType->getPointeeType().getQualifiers().hasConst() && IsFarRom))
+       (ResType->getPointeeType().getQualifiers().hasConst() && IsFarRom)))
     ResType = Context->getPointerType(Context->getAddrSpaceQualType(
         ResType->getPointeeType(), LangAS::__far_data));
   for (size_t i = 0; i < ArgTypes.size(); i++) {
     if (ArgTypes[i]->isPointerType() &&
         (NeedsFarDataPointers ||
-         ArgTypes[i]->getPointeeType().getQualifiers().hasConst() && IsFarRom)) {
+         (ArgTypes[i]->getPointeeType().getQualifiers().hasConst() && IsFarRom))) {
       ArgTypes[i] = Context->getPointerType(Context->getAddrSpaceQualType(
           ArgTypes[i]->getPointeeType(), LangAS::__far_data));
     }

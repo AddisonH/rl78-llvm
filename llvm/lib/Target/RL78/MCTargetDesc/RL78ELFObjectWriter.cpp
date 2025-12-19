@@ -36,11 +36,9 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
                                            const MCFixup &Fixup,
                                            bool IsPCRel) const {
 
-  // We let LLVM fold some SymA - SymB cases so we check for it in particular.
-  // FIXME: We could generalze this as there's no CCRL relocation accepting 2
-  // symbols.
-  if (((unsigned)Fixup.getKind() == RL78::fixup_RL78_OPsub) && Target.getSymB())
-    RL78ReportError(false, "Invalid oprands for relocation R_RL78_OPsub.");
+  // No CCRL relocation accepts two symbols.
+  if (Target.getSymB())
+    RL78ReportError(false, "Invalid number of operands for relocation.");
 
   if (IsPCRel) {
     switch ((unsigned)Fixup.getKind()) {
@@ -51,8 +49,6 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
       return ELF::R_RL78_DIR16S_PCREL;
     case RL78::fixup_RL78_DIR8S_PCREL:
       return ELF::R_RL78_DIR8S_PCREL;
-      // TODO: this is generated when using exceptions we need to look at this
-      // closer.
     case FK_Data_4:
       return ELF::R_RL78_DIR32U;
     }

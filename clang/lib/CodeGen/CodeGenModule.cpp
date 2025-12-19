@@ -5009,7 +5009,7 @@ LangAS CodeGenModule::GetGlobalConstantAddressSpace() const {
     // UniformConstant storage class is not viable as pointers to it may not be
     // casted to Generic pointers which are used to model HIP's "flat" pointers.
     return LangAS::cuda_device;
-  if(LangOpts.getRenesasRL78RomModel() == clang::LangOptions::RL78RomModelKind::Far)
+  if(LangOpts.RenesasRL78RomModelFar)
     return LangAS::__far_data;
   if (auto AS = getTarget().getConstantAddressSpace())
     return *AS;

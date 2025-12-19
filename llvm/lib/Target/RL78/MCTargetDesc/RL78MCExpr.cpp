@@ -123,24 +123,24 @@ bool RL78MCExpr::getFixupForKind(RL78MCExpr::VariantKind Kind, RL78::Fixups &Fix
       Fixup = RL78::fixup_RL78_OPlowW;
     return true;
   case VK_RL78_MIRHW:
-    if (IsPopPush) // TODO detect this at parsing stage?
+    if (IsPopPush)
       return false;
     else
       Fixup = RL78::fixup_RL78_OPhighW_MIR;
     return true;
   case VK_RL78_MIRLW:
-    if (IsPopPush) // TODO detect this at parsing stage?
+    if (IsPopPush)
       return false;
     else
       Fixup = RL78::fixup_RL78_OPlowW_MIR;
     return true;
   case VK_RL78_SMRLW:
-    if (IsPopPush) // TODO detect this at parsing stage?
+    if (IsPopPush)
       return false;
     Fixup = RL78::fixup_RL78_OPlowW_SMIR;
     return true;
   case VK_RL78_STARTOF:
-    if (IsPopPush) // TODO detect this at parsing stage?
+    if (IsPopPush)
       return false;
     else
       Fixup = RL78::fixup_RL78_OPscttop;
@@ -173,18 +173,14 @@ bool GetAbsValueForVariant(RL78MCExpr::VariantKind Kind, int64_t &AbsVal) {
     AbsVal = AbsVal & 0xFF;
     break;
   case RL78MCExpr::VK_RL78_HIGHW:
-  // TODO: for now we emit a warning and treat it like HIGHW
-  case RL78MCExpr::VK_RL78_MIRHW:
     AbsVal = (AbsVal >> 16) & 0xFFFF;
     break;
   case RL78MCExpr::VK_RL78_LOWW:
-  case RL78MCExpr::VK_RL78_SMRLW:
-  // TODO: for VK_RL78_MIRLW we emit a warning and treat it like LOWW
-  // CC-RL uses the device file to know the mirror start address and to
-  // correctly transform this.
-  case RL78MCExpr::VK_RL78_MIRLW:
     AbsVal = AbsVal & 0xFFFF;
     break;
+  case RL78MCExpr::VK_RL78_MIRHW:
+  case RL78MCExpr::VK_RL78_MIRLW:
+  case RL78MCExpr::VK_RL78_SMRLW:
   case RL78MCExpr::VK_RL78_STARTOF:
   case RL78MCExpr::VK_RL78_SIZEOF:
   case RL78MCExpr::VK_RL78_BITPOSITIONAL:
@@ -362,11 +358,11 @@ bool RL78MCExpr::FoldBitPositionalExpression(const MCExpr *Value,
       // A1.X OpCode Sym
       // Sym AnyOpExceptSub Sym.B
       // If we have a bit position, but RHS/LHS finds another
-      if (LHSBitPosition != -1 && RHSBitPosition != -1 ||
-          LHSBitPosition != -1 && !RHSAddressValue.isAbsolute() ||
-          !LHSAddressValue.isAbsolute() && !RHSAddressValue.isAbsolute() &&
-              Op != MCBinaryExpr::Sub ||
-          BitPosition != -1 && (LHSBitPosition != -1 || RHSBitPosition != -1))
+      if ((LHSBitPosition != -1 && RHSBitPosition != -1) ||
+          (LHSBitPosition != -1 && !RHSAddressValue.isAbsolute()) ||
+          (!LHSAddressValue.isAbsolute() && !RHSAddressValue.isAbsolute() &&
+              Op != MCBinaryExpr::Sub) ||
+          ((BitPosition != -1) && ((LHSBitPosition != -1) || (RHSBitPosition != -1))))
         return false;
 
       BitPosition = RHSBitPosition != -1 ? RHSBitPosition : LHSBitPosition;
@@ -482,11 +478,73 @@ RL78MCExpr::ConversionStatus RL78MCExpr::HandleBinaryRelAbsOp(
   return CurrentStatus;
 }
 
+// Checking what VariantKind was used by the ConversionStatus and get its
+// position.
+const char *GetKindLocation(SMLoc Loc, RL78MCExpr::VariantKind Kind) {
+
+  StringRef String(Loc.getPointer() ? Loc.getPointer() + 1 : nullptr);
+  if (String.empty())
+    return nullptr;
+
+  StringRef KindString;
+  String = String.slice(0, String.find("\n"));
+
+  switch (Kind) {
+  case RL78MCExpr::VK_RL78_None:
+    return nullptr;
+    break;
+  case RL78MCExpr::VK_RL78_LOW:
+    KindString = "LOW";
+    break;
+  case RL78MCExpr::VK_RL78_LOWW:
+    KindString = "LOWW";
+    break;
+  case RL78MCExpr::VK_RL78_HIGHW:
+    KindString = "HIGHW";
+    break;
+  case RL78MCExpr::VK_RL78_HIGH:
+    KindString = "HIGH";
+    break;
+  case RL78MCExpr::VK_RL78_MIRHW:
+    KindString = "MIRHW";
+    break;
+  case RL78MCExpr::VK_RL78_MIRLW:
+    KindString = "MIRLW";
+    break;
+  case RL78MCExpr::VK_RL78_SMRLW:
+    KindString = "SMRLW";
+    break;
+  case RL78MCExpr::VK_RL78_STARTOF:
+    KindString = "STARTOF";
+    break;
+  case RL78MCExpr::VK_RL78_SIZEOF:
+    KindString = "SIZEOF";
+    break;
+  default:
+    return nullptr;
+    break;
+  }
+
+  size_t Pos;
+  if ((Pos = String.find(KindString)) != StringRef::npos)
+    return String.data() + Pos;
+  return nullptr;
+}
+
 RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     const MCExpr *Expression, SmallVectorImpl<MCFixup> &fixups, bool &NeedsPop,
     unsigned FixupFromOp, MCContext &Ctx, SMLoc Loc, int64_t offset,
     RL78::Fixups &DirectFixup) {
   ConversionStatus CurrentStatus;
+  ConversionStatus DefaultStatus = {/*Success*/ false,
+                                    /*SymWithPossibleOffset*/ nullptr,
+                                    /*Constant*/ 0,
+                                    /*IsAbsolute*/ false,
+                                    /*AllowOnlyAbsPlusMinus*/ false,
+                                    /*VariantKind*/ RL78MCExpr::VK_RL78_None,
+                                    /*WasSizeOfPlusStartOf*/ false,
+                                    /*Loc*/ Loc};
+  const char *ExprLoc = nullptr;
 
   std::set<RL78MCExpr::VariantKind> VariantSet1 = {};
   std::set<RL78MCExpr::VariantKind> VariantSet2 = {};
@@ -494,87 +552,105 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
   switch (Expression->getKind()) {
   case MCExpr::Constant: {
     const MCConstantExpr *ConstExpr = cast<MCConstantExpr>(Expression);
-    return {/*Success*/ true, /*SymWithPossibleOffset*/ nullptr,
-            /*Constant*/ ConstExpr->getValue(), /*IsAbsolute*/ true};
+    DefaultStatus.Success = true;
+    DefaultStatus.Constant = ConstExpr->getValue();
+    DefaultStatus.IsAbsolute = true;
+    return DefaultStatus;
   }
 
   case MCExpr::SymbolRef: {
     const MCSymbolRefExpr *SymExpr = cast<MCSymbolRefExpr>(Expression);
-    return {/*Success*/ true, /*SymWithPossibleOffset*/ SymExpr, /*Constant*/ 0,
-            /*IsAbsolute*/ false};
+    DefaultStatus.Success = true;
+    DefaultStatus.SymWithPossibleOffset = SymExpr;
+    return DefaultStatus;
   }
 
   case MCExpr::Target: {
     const RL78MCExpr *TargetExpr = cast<RL78MCExpr>(Expression);
     const MCExpr *SubExpr = TargetExpr->getSubExpr();
     RL78::Fixups Fixup;
+    ExprLoc = GetKindLocation(Loc, TargetExpr->getVariantKind());
     ConversionStatus SubStatus = ConvertExpressionToFixups(
-        SubExpr, fixups, NeedsPop, FixupFromOp, Ctx, Loc, offset, DirectFixup);
+        SubExpr, fixups, NeedsPop, FixupFromOp, Ctx,
+        ExprLoc ? SMLoc::getFromPointer(ExprLoc) : Loc, offset, DirectFixup);
     CurrentStatus.VariantKind = TargetExpr->getVariantKind();
     CurrentStatus.WasSizeOfPlusStartOf = SubStatus.WasSizeOfPlusStartOf;
+    CurrentStatus.Loc =
+        SubStatus.Success ? SMLoc::getFromPointer(ExprLoc) : SubStatus.Loc;
+
+   if (!CurrentStatus.Loc.isValid()) {
+      ExprLoc = GetKindLocation(Loc, CurrentStatus.VariantKind);
+      CurrentStatus.Loc = ExprLoc ? SMLoc::getFromPointer(ExprLoc) : Loc;
+    }
 
     if (!SubStatus.Success ||
         !TargetExpr->getFixupForKind(
             Fixup, SubStatus.VariantKind != RL78MCExpr::VK_RL78_None,
-            FixupFromOp))
-      return ConversionStatus();
+            FixupFromOp)) {
+      CurrentStatus.SymWithPossibleOffset = nullptr;
+      return CurrentStatus;
+    }
 
     // FXIME: hack which needs to be deleted when we get rid of the plt.
     // Remove DirectFixup from param list.
     if (CurrentStatus.VariantKind == VK_RL78_FUNCTION) {
       DirectFixup = Fixup;
       const MCSymbolRefExpr *SymExpr = cast<MCSymbolRefExpr>(SubExpr);
-      return {/*Success*/ true,
-              /*SymWithPossibleOffset*/ SymExpr,
-              /*Constant*/ 0,
-              /*IsAbsolute*/ false};
+      DefaultStatus.Success = true;
+      DefaultStatus.SymWithPossibleOffset = SymExpr;
+      return DefaultStatus;
     }
-
-    if (SubStatus.IsAbsolute) {
-      CurrentStatus.Success = GetAbsValueForVariant(CurrentStatus.VariantKind,
-                                                    CurrentStatus.Constant);
-      CurrentStatus.IsAbsolute = true;
-    } else {
-
-      // TODO: uncomment datapos when we allow it to be relocateable
+    if ((CurrentStatus.VariantKind == VK_RL78_MIRLW ||
+         CurrentStatus.VariantKind == VK_RL78_MIRHW ||
+         CurrentStatus.VariantKind == VK_RL78_SMRLW) ||
+        !SubStatus.IsAbsolute) {
       const std::set<RL78MCExpr::VariantKind> CurrentExprSet1 = {
           VK_RL78_HIGH, VK_RL78_LOW, VK_RL78_HIGHW, VK_RL78_LOWW};
       const std::set<RL78MCExpr::VariantKind> SubExprSet1 = {
-          VK_RL78_MIRHW, VK_RL78_MIRLW, VK_RL78_SMRLW /*, VK_RL78_DATAPOS*/};
+          VK_RL78_MIRHW, VK_RL78_MIRLW, VK_RL78_SMRLW};
       const std::set<RL78MCExpr::VariantKind> CurrentExprSet2 = {
           VK_RL78_MIRHW, VK_RL78_MIRLW, VK_RL78_SMRLW};
       const std::set<RL78MCExpr::VariantKind> SubExprSet2 = {
           VK_RL78_HIGH,  VK_RL78_LOW,   VK_RL78_HIGHW, VK_RL78_LOWW,
-          VK_RL78_MIRHW, VK_RL78_MIRLW, VK_RL78_SMRLW /*,  VK_RL78_DATAPOS*/};
+          VK_RL78_MIRHW, VK_RL78_MIRLW, VK_RL78_SMRLW};
       // Note 1. Operation is possible when X is not relocatable terms operated
       // on by MIRHW, MIRLW, SMRLW, or DATAPOS. Note 2. Operation is possible
       // when X is not relocatable terms operated on by HIGH, LOW, HIGHW, LOWW,
       // MIRHW, MIRLW, SMRLW, or DATAPOS.
 
-      if (CurrentExprSet1.find(CurrentStatus.VariantKind) !=
+      if ((CurrentExprSet1.find(CurrentStatus.VariantKind) !=
                   CurrentExprSet1.end() &&
-              SubExprSet1.find(SubStatus.VariantKind) != SubExprSet1.end() ||
-          CurrentExprSet2.find(CurrentStatus.VariantKind) !=
+              SubExprSet1.find(SubStatus.VariantKind) != SubExprSet1.end()) ||
+          (CurrentExprSet2.find(CurrentStatus.VariantKind) !=
                   CurrentExprSet2.end() &&
-              SubExprSet2.find(SubStatus.VariantKind) != SubExprSet2.end())
-        return ConversionStatus();
+              SubExprSet2.find(SubStatus.VariantKind) != SubExprSet2.end()))
+        return DefaultStatus;
 
       CurrentStatus.Success = true;
       CurrentStatus.IsAbsolute = false;
       CurrentStatus.AllowOnlyAbsPlusMinus = true;
       if (TargetExpr->getVariantKind() != RL78MCExpr::VK_RL78_SADW) {
         NeedsPop = (CurrentStatus.VariantKind != VK_RL78_FUNCTION);
-        fixups.push_back(
-            MCFixup::create(offset,
-                            SubStatus.VariantKind == RL78MCExpr::VK_RL78_None
-                                ? (SubStatus.SymWithPossibleOffset
-                                       ? SubStatus.SymWithPossibleOffset
-                                       : MCConstantExpr::create(0, Ctx))
-                                : MCConstantExpr::create(0, Ctx),
-                            (MCFixupKind)Fixup, Loc));
+        const MCExpr *ExprValue = nullptr;
+
+        if (SubStatus.VariantKind == RL78MCExpr::VK_RL78_None) {
+          if (SubStatus.SymWithPossibleOffset)
+            ExprValue = SubStatus.SymWithPossibleOffset;
+          else
+            ExprValue = MCConstantExpr::create(SubStatus.Constant, Ctx);
+        } else
+          ExprValue = MCConstantExpr::create(0, Ctx);
+
+        fixups.push_back(MCFixup::create(
+            offset, ExprValue ? ExprValue : MCConstantExpr::create(0, Ctx),
+            (MCFixupKind)Fixup, Loc));
       } else {
         CurrentStatus.SymWithPossibleOffset = SubExpr;
       }
+    } else {
+      CurrentStatus.Success = GetAbsValueForVariant(CurrentStatus.VariantKind,
+                                                    CurrentStatus.Constant);
+      CurrentStatus.IsAbsolute = true;
     }
     return CurrentStatus;
   }
@@ -583,14 +659,19 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     const MCBinaryExpr *BinaryExpr =
         static_cast<const MCBinaryExpr *>(Expression);
     MCBinaryExpr::Opcode Op = BinaryExpr->getOpcode();
-    ConversionStatus LHS = ConvertExpressionToFixups(
-        BinaryExpr->getLHS(), fixups, NeedsPop, FixupFromOp, Ctx, Loc, offset, DirectFixup);
+
+    ConversionStatus LHS =
+        ConvertExpressionToFixups(BinaryExpr->getLHS(), fixups, NeedsPop,
+                                  FixupFromOp, Ctx, Loc, offset, DirectFixup);
+
     ConversionStatus RHS = ConvertExpressionToFixups(
-        BinaryExpr->getRHS(), fixups, NeedsPop, FixupFromOp, Ctx, Loc, offset, DirectFixup);
+        BinaryExpr->getRHS(), fixups, NeedsPop, FixupFromOp, Ctx,
+        BinaryExpr->getLoc(),
+        offset, DirectFixup);
 
     if (!LHS.Success || !RHS.Success || LHS.WasSizeOfPlusStartOf ||
         RHS.WasSizeOfPlusStartOf)
-      return ConversionStatus();
+      return !RHS.Success ? RHS : LHS;
 
     // Based on the CC-RL manual 5.1.14 (Table 5.8)
     // If both are absolute, all operations are permitted.
@@ -604,14 +685,15 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
                                                 ? RHS.SymWithPossibleOffset
                                                 : LHS.SymWithPossibleOffset;
       int64_t Abs = LHS.IsAbsolute ? LHS.Constant : RHS.Constant;
+      DefaultStatus.Loc = BinaryExpr->getLoc();
       switch (Op) {
       case llvm::MCBinaryExpr::Add:
         if (!LHS.IsAbsolute && !RHS.IsAbsolute) {
           // STARTOF + SIZEOF is permitted as an exception
-          if (LHS.VariantKind == RL78MCExpr::VK_RL78_STARTOF &&
-                  RHS.VariantKind == RL78MCExpr::VK_RL78_SIZEOF ||
-              RHS.VariantKind == RL78MCExpr::VK_RL78_STARTOF &&
-                  LHS.VariantKind == RL78MCExpr::VK_RL78_SIZEOF) {
+          if ((LHS.VariantKind == RL78MCExpr::VK_RL78_STARTOF &&
+                  RHS.VariantKind == RL78MCExpr::VK_RL78_SIZEOF) ||
+              (RHS.VariantKind == RL78MCExpr::VK_RL78_STARTOF &&
+                  LHS.VariantKind == RL78MCExpr::VK_RL78_SIZEOF)) {
             NeedsPop = true;
             fixups.push_back(MCFixup::create(
                 offset, MCConstantExpr::create(0, Ctx),
@@ -621,7 +703,7 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
             CurrentStatus.VariantKind = RL78MCExpr::VK_RL78_STARTOF;
             return CurrentStatus;
           }
-          return ConversionStatus();
+          return DefaultStatus;
         } else {
           // ABS + REL
           // REL + ABS
@@ -633,7 +715,8 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
       case llvm::MCBinaryExpr::Sub:
         if (LHS.IsAbsolute) {
           // ABS - REL
-          return ConversionStatus();
+          DefaultStatus.Loc = LHS.Loc;
+          return DefaultStatus;
         } else if (RHS.IsAbsolute) {
           // REL - ABS
           CurrentStatus.Success = true;
@@ -642,7 +725,7 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
                                       false);
         } else if (LHS.AllowOnlyAbsPlusMinus || RHS.AllowOnlyAbsPlusMinus ||
                    !LHS.SymWithPossibleOffset || !RHS.SymWithPossibleOffset) {
-          return ConversionStatus();
+          return DefaultStatus;
         } else {
           // REL - REL
           NeedsPop = true;
@@ -659,41 +742,39 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
               (MCFixupKind)RL78::Fixups::fixup_RL78_OPsub, Loc));
           return CurrentStatus;
         }
-
         break;
       default:
-        return ConversionStatus();
-        break;
+        return DefaultStatus;
       }
     }
 
-    return ConversionStatus();
+    return DefaultStatus;
   }
   case MCExpr::Unary: {
     const MCUnaryExpr *UnaryExpr = static_cast<const MCUnaryExpr *>(Expression);
+    DefaultStatus.Loc = UnaryExpr->getLoc();
     int64_t Res;
     if (UnaryExpr->getOpcode() == MCUnaryExpr::Plus)
-      return ConvertExpressionToFixups(UnaryExpr->getSubExpr(), fixups,
-                                       NeedsPop, FixupFromOp, Ctx, Loc, offset,
-                                       DirectFixup);
+      return ConvertExpressionToFixups(
+          UnaryExpr->getSubExpr(), fixups, NeedsPop, FixupFromOp, Ctx,
+          UnaryExpr->getLoc(), offset, DirectFixup);
     if (UnaryExpr->getSubExpr()->evaluateAsAbsolute(Res)) {
       if (UnaryExpr->getOpcode() == MCUnaryExpr::Minus)
         Res = -Res;
       else if (UnaryExpr->getOpcode() == MCUnaryExpr::Not)
         Res = ~Res;
       else
-        return ConversionStatus();
+        return DefaultStatus;
       CurrentStatus.Success = true;
       CurrentStatus.IsAbsolute = true;
       CurrentStatus.Constant = Res;
+      CurrentStatus.Loc = UnaryExpr->getLoc();
       return CurrentStatus;
     } else
-      return ConversionStatus();
+      return DefaultStatus;
   }
-  default:
-    break;
   }
-  return ConversionStatus();
+  return DefaultStatus;
 }
 
 
@@ -741,10 +822,9 @@ void RL78MCExpr::createFixupsForExpression(const MCExpr *expression,
       ConversionStatus Status = ConvertExpressionToFixups(expression, fixups, NeedsPop, FixupFromOp,
                                     Ctx, Loc, offset, DirectFixup);
 
-      // TODO: Loc might be null, leading to an unhelpful error message.
       if (!Status.Success) {
         LLVM_DEBUG(expression->dump());
-        Ctx.reportError(Loc, "invalid expression");
+        Ctx.reportError(Status.Loc, "invalid expression");
         return;
       }
 
@@ -754,7 +834,7 @@ void RL78MCExpr::createFixupsForExpression(const MCExpr *expression,
                                          (MCFixupKind)PopFixup, Loc));
       } else {
         if (!Status.SymWithPossibleOffset) {
-          Ctx.reportError(Loc, "error during expression evaluation");
+          Ctx.reportError(Status.Loc, "error during expression evaluation");
           return;
         }
         fixups.push_back(MCFixup::create(offset, Status.SymWithPossibleOffset,

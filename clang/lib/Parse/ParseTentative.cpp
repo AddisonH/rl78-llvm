@@ -1828,6 +1828,7 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
   case tok::kw___near:
     if (getLangOpts().RenesasRL78)
       return TPResult::True;
+  [[fallthrough]];
   default:
     return TPResult::False;
   }

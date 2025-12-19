@@ -3847,8 +3847,8 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD, Scope *S,
   }
 
   if (getLangOpts().RenesasRL78 &&
-      (New->hasAttr<RL78CalltAttr>() && !Old->hasAttr<RL78CalltAttr>() ||
-       !New->hasAttr<RL78CalltAttr>() && Old->hasAttr<RL78CalltAttr>())) {
+      ((New->hasAttr<RL78CalltAttr>() && !Old->hasAttr<RL78CalltAttr>()) ||
+       (!New->hasAttr<RL78CalltAttr>() && Old->hasAttr<RL78CalltAttr>()))) {
     Diag(New->getLocation(), diag::error_rl78_callt_change)
         << New->hasAttr<RL78CalltAttr>();
     Diag(OldLocation, diag::note_previous_declaration);
@@ -6730,6 +6730,8 @@ Sema::ActOnTypedefDeclarator(Scope* S, Declarator& D, DeclContext* DC,
           Diag(D.getName().StartLocation, diag::err_rl78_address_not_applicable);
           break;
         }
+        default:
+          break;
         };
       }
   }
@@ -7059,10 +7061,9 @@ void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
             QualType NewElementType =
                 NewVarType->getAsArrayTypeUnsafe()->getElementType();
             if (!NewElementType->isPointerType() ||
-                NewElementType->isPointerType() &&
-                    !NewElementType->getPointeeType()->isFunctionType()) {
-              if (getLangOpts().getRenesasRL78RomModel() ==
-                    LangOptions::RL78RomModelKind::Far)
+                (NewElementType->isPointerType() &&
+                    !NewElementType->getPointeeType()->isFunctionType())) {
+              if (getLangOpts().RenesasRL78RomModelFar)
               NewElementType =
                   Context.getAddrSpaceQualType(NewElementType,
                                                LangAS::__far_data);
@@ -7072,8 +7073,7 @@ void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
           } else {
             // Assume it's a simple global variable and set the address space
             // directly.
-            if (getLangOpts().getRenesasRL78RomModel() ==
-                LangOptions::RL78RomModelKind::Far)
+            if (getLangOpts().RenesasRL78RomModelFar)
               NewVarType =
                   Context.getAddrSpaceQualType(NewVarType, LangAS::__far_data);
             else if (getLangOpts().RenesasExt && !getLangOpts()
@@ -11129,7 +11129,9 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
             if(!entry.ExtraDataVects.empty())
                 dropFarFromFunctionDecl(Context, NewFD);
             NewFD->addAttr(
-                RL78InterruptAttr::CreateImplicit(Context, entry.ExtraData, (unsigned *)entry.ExtraDataVects.begin(), (unsigned)entry.ExtraDataVects.size()));
+               RL78InterruptAttr::CreateImplicit(Context, entry.ExtraData,
+  const_cast<unsigned *>(entry.ExtraDataVects.begin()),
+  entry.ExtraDataVects.size())); 
             // Retain interrupt function declared with "static".
             if (NewFD->getStorageClass() == SC_Static)
               NewFD->addAttr(UsedAttr::CreateImplicit(Context));
@@ -11231,8 +11233,6 @@ if (Context.getTargetInfo().getTriple().isRL78()) {
             // If __saddr is specified for a function, a compilation error will
             // occur.
             Diag(NewFD->getLocation(), diag::err_rl78_saddr_not_applicable);
-            break;
-          default:
             break;
           }
           break;

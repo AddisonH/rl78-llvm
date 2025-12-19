@@ -154,7 +154,6 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(Reg, RegState::Kill);
       } else {
-        // TODO: we need a CFI_INSTRUCTION everywhere we a have a PUSH/POP
         BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
             .addReg(RL78::RP0, RegState::Kill);
         BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
@@ -326,39 +325,115 @@ void RemoveMOVWs(MachineInstr &MI, MachineBasicBlock &MBB,
   }
 }
 
-// FIXME: If we have a store to Offset 0 or 2 and the previous instruction is
-// SUBW SP, {2,4} we can replace
-// the SUBW and store with 2 push instructions.
-// OBS. We can do this only with registers from bank 0.
-// if (((MI.getOpcode() == RL78::STORE8_stack_slot_r) || (MI.getOpcode() ==
-// RL78::STORE16_stack_slot_r)) &&
-//    (Offset <= 2) &&
-//    RL78::RL78RPBank0RegClass.contains(MI.getOperand(2).getReg()) &&
-//    (MachineBasicBlock::iterator(MI) != MI.getParent()->begin())) {
-//    MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
-//    //
-//    if ((MI2.getOpcode() == RL78::SUBW_sp_imm) && (MI2.getOperand(2).getImm()
-//    <= 4) &&
-//        (Offset <= MI2.getOperand(2).getImm() - 2)) {
-//        //
-//        if (MI2.getOperand(2).getImm() == 2) {
-//            BuildMI(*MI.getParent(), II, DL,
-//            TII->get(RL78::PUSH_r)).add(MI.getOperand(2));
-//        }
-//        else if (MI2.getOperand(2).getImm() == 4) {
-//            BuildMI(*MI.getParent(), II, DL,
-//            TII->get(RL78::PUSH_r)).addReg(MI.getOperand(2).getReg());
-//            BuildMI(*MI.getParent(), II, DL,
-//            TII->get(RL78::PUSH_r)).add(MI.getOperand(2));
-//        }
-//        //
-//        MI.eraseFromParent();
-//        MI2.eraseFromParent();
-//        //MI.getParent()->dump();
-//        return;
-//    }
-//}
-//
+bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
+                          DebugLoc &DL, const TargetInstrInfo *TII) {
+  auto I = MachineBasicBlock::iterator(MI);
+  if (I == MBB.begin())
+    return false;
+
+  auto PrevIt = std::prev(I);
+  Register Reg = MI.getOperand(2).getReg();
+
+  // Replace the unnecessary movw instruction and change the register of the 'push'
+  // instruction with the register of the movw.
+  if (MI.getOpcode() == RL78::STORE16_stack_slot_rp &&
+      MI.getOperand(1).getImm() == 0) {
+    // The instructions might come one after the other, or there might be a
+    // CALL_STACK_SETUP between them.
+    if (PrevIt->getOpcode() == RL78::PUSH_rp) {
+      PrevIt->getOperand(0).setReg(Reg);
+      MI.eraseFromParent();
+      return true;
+    } else if (PrevIt->getOpcode() == RL78::CALL_STACK_SETUP) {
+      auto PushInstr = MachineBasicBlock::iterator(PrevIt);
+      if (PushInstr == MBB.begin())
+        return false;
+
+      PushInstr = std::prev(PrevIt);
+      if (PushInstr->getOpcode() == RL78::PUSH_rp) {
+        PushInstr->getOperand(0).setReg(Reg);
+        MI.eraseFromParent();
+        return true;
+      }
+    }
+  }
+
+  if (MI.getOpcode() != RL78::STORE16_stack_slot_rp)
+    return false;
+
+  // In the case of:
+  // subw sp, #4
+  // movw [sp+0], ax
+  // movw [sp+2], ax
+  // or
+  // subw sp, #4
+  // movw [sp+2], ax
+  // movw [sp+0], ax
+  // Eliminate the 2 unnecessary movws, since 2 pushes already save X
+  // value to [sp+0] / [sp+2].
+
+  int MIOffset = MI.getOperand(1).getImm();
+  if (MIOffset != 0 && MIOffset != 2)
+      return false;
+
+  Reg = MI.getOperand(2).getReg();
+
+  I = MI.getIterator();
+  if (I == MBB.begin())
+      return false;
+
+  PrevIt = std::prev(I);
+  if (PrevIt->getOpcode() != RL78::STORE16_stack_slot_rp)
+      return false;
+
+  // Check if the 2nd movw has an offset of 0 or 2, and uses a different
+  // register than the 1st movw.
+  int PrevOffset = PrevIt->getOperand(1).getImm();
+  if ((PrevOffset != 0 && PrevOffset != 2) || PrevOffset == MIOffset)
+      return false;
+
+  if (PrevIt->getOperand(2).getReg() != Reg)
+      return false;
+
+  if (PrevIt == MBB.begin())
+      return false;
+
+  auto SubwIt = std::prev(PrevIt);
+  if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
+      SubwIt->getOperand(2).getImm() == 4) {
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+
+      PrevIt->eraseFromParent();
+      MI.eraseFromParent();
+      SubwIt->eraseFromParent();
+      return true;
+  }
+
+  // There might be a stack setup between the subw and the first movw, so the
+  // SubwIt is actually a CALL_STACK_SETUP.
+  auto StackSetupIt = SubwIt;
+  if (StackSetupIt->getOpcode() == RL78::CALL_STACK_SETUP) {
+      if (StackSetupIt == MBB.begin())
+      return false;
+
+      auto SubwIt = std::prev(StackSetupIt);
+
+      if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
+          SubwIt->getOperand(2).getImm() == 4) {
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+
+      PrevIt->eraseFromParent();
+      MI.eraseFromParent();
+      SubwIt->eraseFromParent();
+      return true;
+      }
+  }
+  return false;
+}
+
+
 bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
     MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();
@@ -406,7 +481,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         // If dest is A/X/B/C we might be able to use CLRB/ONEB.
-        if (RL78::RL78Bank0LoRegClass.contains(MI.getOperand(0).getReg())) {
+        if (RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg())) {
           if (MI.getOperand(1).isImm()) {
             if (MI.getOperand(1).getImm() == 0) {
               // Build the CLRB instruction.
@@ -622,24 +697,26 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
       case RL78::STORE16_stack_slot_rp:
-        insert16BitExchange(MI, 2, DL, MBB, TII, isALive || isXLive);
+        if (!ReplaceStoreWithPush(MI, MBB, DL, TII)) {
+          insert16BitExchange(MI, 2, DL, MBB, TII, isALive || isXLive);
+        }
         break;
       case RL78::STORE8_stack_slot_r:
         insert8BitExchange(MI, 2, DL, MBB, TII, isALive);
         break;
-      // TODO remove all COPY
-      // TODO: won't be better to just a custom inserter and remove the copies
-      // here.
       case RL78::LOAD8_r_abs16:
-        if (!RL78::RL78Bank0LoRegClass.contains(MI.getOperand(0).getReg()))
+        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
+          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
+        break;
+      case RL78::LOAD8_rlo_saddr:
+        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
           insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
       case RL78::MOV_r_esaddr16:
-        if (!RL78::RL78Bank0LoRegClass.contains(MI.getOperand(0).getReg()))
+        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
           insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
       case RL78::HI16_rp_rp: {
-        // TODO: see if it would be better to use custom inserter instead
         Register dst = MI.getOperand(0).getReg();
         Register src = MI.getOperand(1).getReg();
         if (dst != src) {
@@ -856,9 +933,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.empty())
       continue;
-    // True if BC = SP.
-    bool BCHasSP = false;
-
     for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end();
          Next != E;) {
       MachineInstr &MI1 = *Next;
@@ -866,11 +940,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       // if this wasn't the last instruction in BB
       if (Next != MBB.end()) {
         MachineInstr &MI2 = *Next;
-        //
-        if (MI2.getNumOperands() >= 1 && MI2.getOperand(0).isReg() &&
-            MI2.getOperand(0).isDef() &&
-            (MI2.getOperand(0).getReg() == RL78::RP2))
-          BCHasSP = (MI2.getOpcode() == RL78::MOVW_rp_sp);
+        
         // if the 2 opcodes are equal, XCH/XCHW instructions using the same
         // registers(first one is A anyways)
         if ((MI1.getOpcode() == MI2.getOpcode()) &&
@@ -894,11 +964,11 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // remove them both
           MI1.eraseFromParent();
           MI2.eraseFromParent();
-        }
-#if 0
-        else if ((MI1.getOpcode() == RL78::POP_rp) &&
+
+        } else if ((MI1.getOpcode() == RL78::POP_rp) &&
                    (MI2.getOpcode() == RL78::PUSH_rp) &&
-                   (MI1.getOperand(0).getReg() == MI2.getOperand(0).getReg())) {
+                   (MI1.getOperand(0).getReg() == MI2.getOperand(0).getReg()) &&
+                   (MI1.getOperand(0).isKill() && MI2.getOperand(0).isKill())) {
           // update iterator
           ++Next;
           // remove them both
@@ -910,29 +980,15 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // POP BC
           // PUSH BC
           // MOVW BC, SP
-          // TODO: we should try a more generic solution for all regs in bank0.
-          // if (BCHasSP && (MI1.getOperand(0).getReg() == RL78::RP2) && (Next
-          // != MBB.end())) {
-          //  MachineInstr &MI3 = *Next;
-          //  if ((MI3.getOpcode() == RL78::MOVW_rp_sp) &&
-          //  MI3.getOperand(0).isReg() &&
-          //    (MI3.getOperand(0).getReg() == RL78::RP2)) {
-          //    ++Next;
-          //    MI3.eraseFromParent();
-          //  }
-          //}
-        }
-#endif
-        // TODO: do we need it here?
-        else if ((MI1.getOpcode() == RL78::MOVW_rp_AX) &&
-                 (MI2.getOpcode() == RL78::MOVW_AX_rp) &&
-                 (MI1.getOperand(0).getReg() == MI2.getOperand(1).getReg()) &&
-                 MI2.getOperand(1).isKill()) {
-          // update iterator
-          ++Next;
-          // remove them both
-          MI1.eraseFromParent();
-          MI2.eraseFromParent();
+          if ((Next != MBB.end())) {
+            MachineInstr &MI3 = *Next;
+            if ((MI3.getOpcode() == RL78::MOVW_rp_sp) &&
+                MI3.getOperand(0).isReg() &&
+                (MI3.getOperand(0).getReg() == RL78::RP2)) {
+              ++Next;
+              MI3.eraseFromParent();
+            }
+          }
         }
       }
     }

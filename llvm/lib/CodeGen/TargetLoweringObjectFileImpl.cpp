@@ -949,8 +949,8 @@ MCSection *TargetLoweringObjectFileELF::SelectSectionForGlobal(
   if (!(Flags & ELF::SHF_MERGE) && !Kind.isCommon()) {
     if (Kind.isText())
       EmitUniqueSection = TM.getFunctionSections() ||
-                          TM.getTargetTriple().getArch() == Triple::RL78 &&
-                              GO->getName().startswith("OUTLINED_FUNCTION_");
+                          (TM.getTargetTriple().getArch() == Triple::RL78 &&
+                              GO->getName().startswith("OUTLINED_FUNCTION_"));
     else
       EmitUniqueSection = TM.getDataSections();
   }

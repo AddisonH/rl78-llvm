@@ -1611,11 +1611,24 @@ DIE &DwarfUnit::constructMemberDIE(DIE &Buffer, const DIDerivedType *DT) {
 
     DIELoc *VBaseLocationDie = new (DIEValueAllocator) DIELoc;
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_dup);
-    addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
+    if (Asm->TM.getTargetTriple().isRL78() &&
+        (DT->getFlags() & DINode::FlagShortInheritanceDeref)) {
+      // For near we need only 2 byte addresses, not 4.
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
+    } else {
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
+    }
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_constu);
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_udata, DT->getOffsetInBits());
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_minus);
-    addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
+    if (Asm->TM.getTargetTriple().isRL78() &&
+        (DT->getFlags() & DINode::FlagShortInheritanceDeref)) {
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
+    } else {
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
+    }
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_plus);
 
     addBlock(MemberDie, dwarf::DW_AT_data_member_location, VBaseLocationDie);

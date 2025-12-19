@@ -36,6 +36,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -47,6 +49,23 @@
 
 using namespace llvm;
 #define DEBUG_TYPE "rl78-asm-parser"
+
+const llvm::SmallVector<llvm::StringLiteral, 16> sectionNames = {
+    ".callt0",
+    ".text",
+    ".textf",
+    ".textf_unit64kp",
+    ".const",
+    ".constf",
+    ".data",
+    ".dataf",
+    ".sdata",
+    ".bss",
+    ".bssf",
+    ".sbss",
+    ".option_byte",
+    ".security_id",
+    ".flash_security_id"};
 
 namespace llvm {
     extern cl::opt<bool> EnableRL78CCRLAsmSyntax;
@@ -105,6 +124,8 @@ class RL78AsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseEsRegRegAddrOperand(OperandVector &Operands);
   OperandMatchResultTy parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
                                                       StringRef Mnemonic);
+  bool tokenHasNoDotOrHasSemicolon();
+  int64_t parseBeforeDot(const std::string &before_dot);
   OperandMatchResultTy parseOperand(OperandVector &Operands, StringRef Name);
 
   bool tryParseBCCorSCC(OperandVector &Operands, StringRef Name, SMLoc NameLoc);
@@ -146,9 +167,20 @@ private:
     size_t End;
   };
 
+  struct EquOrSetSymbol {
+    SMLoc loc;
+    StringRef name;
+    bool isEqu;
+
+    bool operator==(const EquOrSetSymbol &other) const {
+      return name == other.name && isEqu == other.isEqu;
+    }
+  };
+
   StringMap<RelocationAttributeDefault> RelocationAttributeMap;
   StringMap<std::string> MacroBodies;
-  
+  SmallVector<EquOrSetSymbol, 8> EquAndSetSymbols;
+
   void InitializeRelocationAttributeMap();
   bool parseDirectiveSymbolAttribute(MCSymbolAttr Attr);
   bool parseIdentifier(StringRef &Res);
@@ -184,6 +216,13 @@ private:
                                   unsigned TargetExpressionKind);
   bool isLeftSideOfBitPositionalABitPositional(AsmToken bitPositionalTok,
                                                MCContext &ctx);
+  EquOrSetSymbol* findEquOrSetSymbol(StringRef name);
+  void updateEquAndSetSymbols(EquOrSetSymbol equOrSetSymbol);
+  bool isNameInReservedNames(
+      StringRef name, const llvm::ArrayRef<llvm::StringLiteral> reservedNames);
+  bool checkSymbolDefinitionExpression(StringRef Name, MCAsmParser &Parser,
+                                       MCSymbol *&Sym, const MCExpr *Value,
+                                       SMLoc EqualLoc, bool isEqu);
 
   // Parsed, but ignored directives
   bool parseDirectiveLine();
@@ -206,10 +245,6 @@ public:
 } // end anonymous namespace
 
 static constexpr const char *BitPositionSymbolPrefix = ".$$$";
-
-static const MCPhysReg IntRegs[8] = {
-    RL78::R0,  RL78::R1,  RL78::R2,  RL78::R3,  RL78::R4,  RL78::R5,  RL78::R6,
-    RL78::R7};
 
 namespace {
 
@@ -1330,23 +1365,6 @@ bool RL78AsmParser::parseDirectiveSymbolAttribute(MCSymbolAttr Attr) {
     if (Parser.discardLTOSymbol(Name))
       return false;
 
-    static const llvm::SmallVector<llvm::StringLiteral, 16> sectionNames = {
-        ".callt0",
-        ".text",
-        ".textf",
-        ".textf_unit64kp",
-        ".const",
-        ".constf",
-        ".data",
-        ".dataf",
-        ".sdata",
-        ".bss",
-        ".bssf",
-        ".sbss",
-        ".option_byte",
-        ".security_id",
-        ".flash_security_id"};
-
     for (llvm::StringRef section : sectionNames) {
       if (section.compare_insensitive(Name) == 0)
         return Error(Loc, "Section name cannot be defined as public/extern.");
@@ -1493,7 +1511,6 @@ bool RL78AsmParser::ParseSectionAddress(std::string SectionName,
 void RL78AsmParser::SwitchToSection(StringRef NewSectionName, unsigned Type,
                                     unsigned Flags) {
   int64_t Size = 0;
-  StringRef GroupName;
   const MCExpr *Subsection = nullptr;
   MCSection *ELFSection = getParser().getContext().getELFSection(
       NewSectionName, Type, Flags, Size);
@@ -1559,8 +1576,8 @@ bool RL78AsmParser::LookupRelocationAttribute(
   if (RelocationAttributeMatch == RelocationAttributeMap.end())
     return TokError("unexpected relocation-attribute in directive");
 
-  if (Attribute.compare_insensitive("OPT_BYTE") == 0 && SectionName.compare("") != 0 && SectionName.compare(".option_byte") != 0 ||
-      Attribute.compare_insensitive("SECUR_ID") == 0 && SectionName.compare("") != 0 && SectionName.compare(".security_id") != 0)
+  if ((Attribute.compare_insensitive("OPT_BYTE") == 0 && SectionName.compare("") != 0 && SectionName.compare(".option_byte") != 0) ||
+      (Attribute.compare_insensitive("SECUR_ID") == 0 && SectionName.compare("") != 0 && SectionName.compare(".security_id") != 0))
 	return TokError("special section name cannot be changed");
 
   // Not exactly an appropriate place, but check for section name correctness
@@ -1718,7 +1735,6 @@ bool RL78AsmParser::parseDSDirective() {
 }
 
 bool RL78AsmParser::parseDirectiveAlign() {
-  SMLoc AlignmentLoc = getLexer().getLoc();
   int64_t Alignment;
   SMLoc MaxBytesLoc;
   bool HasFillExpr = false;
@@ -1768,7 +1784,6 @@ bool RL78AsmParser::parseDirectiveAlign() {
   if (!HasFillExpr && UseCodeAlign) {
     getStreamer().emitCodeAlignment(Align(Alignment), STI, MaxBytesToFill);
   } else {
-    // FIXME: Target specific behavior about how the "extra" bytes are filled.
     getStreamer().emitValueToAlignment(Align(Alignment), FillExpr, 1, MaxBytesToFill);
   }
   return ReturnVal;
@@ -1930,6 +1945,7 @@ bool RL78AsmParser::parseDirectiveMacro(StringRef Name) {
 }
 
 
+
 /// Returns whether the given symbol is used anywhere in the given expression,
 /// or subexpressions.
 static bool isSymbolUsedInExpression(const MCSymbol *Sym, const MCExpr *Value) {
@@ -1957,31 +1973,110 @@ static bool isSymbolUsedInExpression(const MCSymbol *Sym, const MCExpr *Value) {
   llvm_unreachable("Unknown expr kind!");
 }
 
-static bool checkSymbolDefinitionExpression(StringRef Name, bool allow_redef,
-                               MCAsmParser &Parser, MCSymbol *&Sym,
-                               const MCExpr *Value, SMLoc EqualLoc) {
+RL78AsmParser::EquOrSetSymbol *
+RL78AsmParser::findEquOrSetSymbol(StringRef name) {
+  for (EquOrSetSymbol &symbol : EquAndSetSymbols) {
+    if (symbol.name == name)
+      return &symbol;
+  }
+  return nullptr;
+}
+
+bool RL78AsmParser::isNameInReservedNames(
+    StringRef name, const llvm::ArrayRef<llvm::StringLiteral> reservedNames) {
+  for (llvm::StringRef reservedName : reservedNames) {
+    if (reservedName.compare_insensitive(name) == 0)
+      return true;
+  }
+  return false;
+}
+
+bool RL78AsmParser::checkSymbolDefinitionExpression(
+    StringRef Name, MCAsmParser &Parser, MCSymbol *&Sym, const MCExpr *Value,
+    SMLoc EqualLoc, bool isEqu) {
 
   if (Parser.parseToken(AsmToken::EndOfStatement))
     return true;
+
+  static const llvm::SmallVector<llvm::StringLiteral, 17> directiveNames = {
+      ".cseg",   ".dseg",   ".equ",   ".set",   ".public", ".extern",
+      ".extbit", ".vector", ".macro", ".local", ".rept",   ".irp",
+      ".exitm",  ".exitma", ".endm",  ".bcond", ".bseg"
+  };
+
+  static const llvm::SmallVector<llvm::StringLiteral, 13>
+      controlInstructionNames = {"include", "binclude", "mirror",  "nowarning",
+                                 "warning", "ifdef",    "ifndef",  "if",
+                                 "ifn",     "elseif",   "elseifn", "else",
+                                 "endif"};
+
+  static const llvm::SmallVector<llvm::StringLiteral, 22> registerNames = {
+      "pc",  "sp",  "h",   "l",       "d",   "e",  "b",  "c",
+      "a",   "x",   "hl",  "de",      "bc",  "ax", "es", "cs",
+      "spl", "sph", "psw", "reserve", "pmc", "mem"};
+
+  static const llvm::SmallVector<llvm::StringLiteral, 82> instructionNames = {
+      "mov",  "xch",   "oneb",  "clrb",  "movs",  "movw", "xchw", "onew",
+      "clrw", "add",   "addc",  "sub",   "subc",  "and",  "or",   "xor",
+      "cmp",  "cmp0",  "cmps",  "addw",  "subw",  "cmpw", "mulu", "mulhu",
+      "mulh", "divhu", "divwu", "machu", "mach",  "inc",  "dec",  "incw",
+      "decw", "shr",   "shrw",  "shl",   "shlw",  "sar",  "sarw", "ror",
+      "rol",  "rorc",  "rolc",  "rolwc", "mov1",  "and1", "or1",  "xor1",
+      "set1", "clr1",  "not1",  "call",  "callt", "brk",  "ret",  "reti",
+      "retb", "push",  "pop",   "br",    "bc",    "bnc",  "bz",   "bnz",
+      "bh",   "bnh",   "bt",    "bf",    "btclr", "skc",  "sknc", "skz",
+      "sknz", "skh",   "sknh",  "sel",   "nop",   "ei",   "di",   "halt",
+      "stop"};
+
+  if (isNameInReservedNames(Name, sectionNames))
+    return Parser.Error(EqualLoc,
+                        "Section name cannot be used in EQU/SET definition.");
+
+  if (isNameInReservedNames(Name, directiveNames))
+    return Parser.Error(EqualLoc,
+                        "Directive name cannot be used in EQU/SET definition.");
+
+  if (isNameInReservedNames(Name, controlInstructionNames))
+    return Parser.Error(
+        EqualLoc,
+        "Control instruction name cannot be used in EQU/SET definition.");
+
+  if (isNameInReservedNames(Name, registerNames))
+    return Parser.Error(EqualLoc,
+                        "Register name cannot be used in EQU/SET definition.");
+
+  if (isNameInReservedNames(Name, instructionNames))
+    return Parser.Error(
+        EqualLoc, "Instruction name cannot be used in EQU/SET definition.");
 
   // Validate that the LHS is allowed to be a variable (either it has not been
   // used as a symbol, or it is an absolute symbol).
   Sym = Parser.getContext().lookupSymbol(Name);
   if (Sym) {
     // Diagnose assignment to a label.
-    //
-    // FIXME: Diagnostics. Note the location of the definition as a label.
-    // FIXME: Diagnose assignment to protected identifier (e.g., register name).
     if (Value && isSymbolUsedInExpression(Sym, Value))
       return Parser.Error(EqualLoc, "Recursive use of '" + Name + "'");
     else if (Sym->isUndefined(/*SetUsed*/ false) && !Sym->isUsed() &&
              !Sym->isVariable())
       ; // Allow redefinitions of undefined symbols only used in directives.
-    else if (Sym->isVariable() && !Sym->isUsed() && allow_redef)
-      ; // Allow redefinitions of variables that haven't yet been used.
-    else if (!Sym->isUndefined() && (!Sym->isVariable() || !allow_redef))
-      return Parser.Error(EqualLoc, "redefinition of '" + Name + "'");
-    else if (!Sym->isVariable())
+    else if (!Sym->isUndefined()) {
+
+      EquOrSetSymbol *foundSymbol = findEquOrSetSymbol(Name);
+
+      if (!Sym->isVariable() || !foundSymbol)
+        return Parser.Error(EqualLoc, "redefinition of '" + Name + "'");
+
+      // Only symbols originally defined using SET can be redefined using SET.
+      if (foundSymbol->isEqu || (!foundSymbol->isEqu && isEqu)) {
+        SourceMgr &SM = Parser.getSourceManager();
+        auto LineCol = SM.getLineAndColumn(foundSymbol->loc);
+        return Parser.Error(EqualLoc, "redefinition of '" + Name + "'. '" +
+                                          Name + "' is defined at " +
+                                          std::to_string(LineCol.first) + ":" +
+                                          std::to_string(LineCol.second) + ".");
+      }
+      
+    } else if (!Sym->isVariable())
       return Parser.Error(EqualLoc, "invalid assignment to '" + Name + "'");
     else if (!isa<MCConstantExpr>(Sym->getVariableValue()))
       return Parser.Error(EqualLoc,
@@ -2011,8 +2106,22 @@ bool RL78AsmParser::HasTargetSubExpressionKind(const MCExpr *Expr,
     const RL78MCExpr *TExpr = cast<RL78MCExpr>(Expr);
     return TExpr->getVariantKind() == TargetExpressionKind;
   }
-  default:
-    return false;
+  }
+  return false;
+}
+
+void RL78AsmParser::updateEquAndSetSymbols(EquOrSetSymbol equOrSetSymbol) {
+
+  if (equOrSetSymbol.isEqu) {
+    EquAndSetSymbols.push_back(equOrSetSymbol);
+  } else {
+    EquOrSetSymbol *foundSymbol = findEquOrSetSymbol(equOrSetSymbol.name);
+    if (foundSymbol == nullptr) {
+      EquAndSetSymbols.push_back(equOrSetSymbol);
+    } else {
+      llvm::erase_value(EquAndSetSymbols, *foundSymbol);
+      EquAndSetSymbols.push_back(equOrSetSymbol);
+    }
   }
 }
 
@@ -2037,8 +2146,8 @@ bool RL78AsmParser::parseDirectiveSet(StringRef Name) {
   if (!Value->evaluateAsAbsolute(Res))
     return Parser.TokError("not an absolute expression");
 
-  if (checkSymbolDefinitionExpression(Name, true, getParser(), Sym, Value,
-                                      EqualLoc))
+  if (checkSymbolDefinitionExpression(Name, getParser(), Sym, Value, EqualLoc,
+                                      false))
     return true;
   if (!Sym)
     Sym = Parser.getContext().getOrCreateSymbol(Name);
@@ -2047,6 +2156,7 @@ bool RL78AsmParser::parseDirectiveSet(StringRef Name) {
 
   Sym->setRedefinable(true);
   getStreamer().emitAssignment(Sym, MCConstantExpr::create(Res, getContext()));
+  updateEquAndSetSymbols(EquOrSetSymbol{EqualLoc, Name, false});
   return false;
 }
 
@@ -2101,8 +2211,8 @@ bool RL78AsmParser::parseDirectiveEqu(StringRef Name) {
     CreateBitposSym = true;
   }
 
-  if (checkSymbolDefinitionExpression(Name, false, getParser(), Sym, Value,
-                                      EqualLoc))
+  if (checkSymbolDefinitionExpression(Name, getParser(), Sym, Value, EqualLoc,
+                                      true))
     return true;
 
   if (CreateBitposSym && BitPosSym)
@@ -2134,6 +2244,8 @@ bool RL78AsmParser::parseDirectiveEqu(StringRef Name) {
   getStreamer().emitAssignment(
       Sym, MCConstantExpr::create(AbsoluteValue, getContext()));
 
+  updateEquAndSetSymbols(EquOrSetSymbol{EqualLoc, Name, true});
+
   return false;
 }
 
@@ -2142,7 +2254,6 @@ bool RL78AsmParser::parseDirectiveVector(StringRef Name) {
 
   MCSymbol *Sym = Parser.getContext().lookupSymbol(Name);
 
-  SMLoc EqualLoc = Parser.getTok().getLoc();
   // Eat the .VECTOR
   Lex();
 
@@ -2183,12 +2294,8 @@ bool RL78AsmParser::parseDirectiveVector(StringRef Name) {
 bool RL78AsmParser::parseDirectiveLine() {
   AsmToken Token = getLexer().getTok();
 
-  StringRef FileName;
-  int64_t LineNo;
-
   // Parse optional filename
   if (Token.is(AsmToken::String)) {
-    FileName = Token.getString();
     Lex();
     if (getParser().check(getLexer().getTok().isNot(AsmToken::Comma),
                           getLexer().getTok().getLoc(),
@@ -2201,7 +2308,6 @@ bool RL78AsmParser::parseDirectiveLine() {
   if (getLexer().getTok().isNot(AsmToken::Integer))
     return TokError("unexpected token in directive");
 
-  LineNo = getLexer().getTok().getIntVal();
   Lex();
 
   return false;
@@ -2399,7 +2505,6 @@ StringRef StripTempSymbolPrefix(StringRef Symbol) {
   size_t Start = Symbol.find(Guard) + Guard.size();
   size_t End = Symbol.rfind(Guard);
   if (Start != StringRef::npos && End != StringRef::npos && Start != End) {
-    StringRef Temp = Symbol.substr(Start, End - Start);
     return Symbol.substr(Start, End - Start);
   }
 
@@ -2420,10 +2525,9 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
   const AsmToken &Token = getLexer().getTok();
-
-  if (Token.is(AsmToken::Identifier) &&
-          (Token.getString().compare_insensitive("cy") == 0 ||
-           Token.getString().compare_insensitive("es") == 0) ||
+  if ((Token.is(AsmToken::Identifier) &&
+       (Token.getString().compare_insensitive("cy") == 0 ||
+        Token.getString().compare_insensitive("es") == 0)) ||
       Token.is(AsmToken::LBrac))
     return MatchOperand_NoMatch;
 
@@ -2624,11 +2728,28 @@ RL78AsmParser::ParseShiftIntegerOperand(OperandVector &Operands,
   return ResTy;
 }
 
+bool RL78AsmParser::tokenHasNoDotOrHasSemicolon() {
+  return getLexer().getTok().getString().find(".") == std::string::npos ||
+         getLexer().getTok().getString().find(";") != std::string::npos;
+}
+
+int64_t RL78AsmParser::parseBeforeDot(const std::string &before_dot) {
+  int64_t value = 0;
+  std::stringstream ss;
+  if (before_dot.find("F") != std::string::npos ||
+      before_dot.find("f") != std::string::npos) {
+    ss << std::hex << before_dot;
+  } else {
+    ss << before_dot;
+  }
+  ss >> value;
+  return value;
+}
+
 OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
                                                  StringRef Mnemonic) {
-  // TODO: cleanup/code duplication reduction
   SMLoc S = Parser.getTok().getLoc();
-  SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+  SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
   const MCExpr *Res;
 
   // SEL RB0
@@ -2643,7 +2764,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
 
     Parser.Lex(); // Eat the Hash token.
     SMLoc S = Parser.getTok().getLoc();
-    SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+    SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
     const MCExpr *EVal;
     Parser.parseExpression(EVal, E);
     Operands.push_back(RL78Operand::CreateImm(EVal, S, E));
@@ -2655,20 +2776,15 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
     if (getLexer().is(AsmToken::Exclaim)) {
       Parser.Lex();
       SMLoc S = Parser.getTok().getLoc();
-      SMLoc E =
-          SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
       const MCExpr *EVal;
       Parser.parseExpression(EVal, E);
-      if (Mnemonic.compare("call") == 0)
-        Operands.push_back(RL78Operand::CreatebrtargetRel16(EVal, S, E));
-      else
-        Operands.push_back(RL78Operand::CreatebrtargetRel16(EVal, S, E));
+      Operands.push_back(RL78Operand::CreatebrtargetRel16(EVal, S, E));
       return MatchOperand_Success;
 
     } else {
       SMLoc S = Parser.getTok().getLoc();
-      SMLoc E =
-          SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
       const MCExpr *EVal;
       Parser.parseExpression(EVal, E);
       Operands.push_back(RL78Operand::CreatebrtargetRel8(EVal, S, E));
@@ -2681,31 +2797,19 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
     if (getLexer().is(AsmToken::Exclaim)) {
       Parser.Lex();
       SMLoc S = Parser.getTok().getLoc();
-      SMLoc E =
-          SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
       const MCExpr *EVal;
       Parser.parseExpression(EVal, E);
-      if (Mnemonic.compare("br") == 0) {
-        Operands.push_back(RL78Operand::CreateToken(ExclFirst.getString(),
-                                                    ExclFirst.getLoc()));
-        Operands.push_back(RL78Operand::CreateToken(ExclSecond.getString(),
-                                                    ExclSecond.getLoc()));
-
-        Operands.push_back(RL78Operand::CreateAbs20(EVal, S, E));
-      } else {
-        Operands.push_back(RL78Operand::CreateToken(ExclFirst.getString(),
-                                                    ExclFirst.getLoc()));
-        Operands.push_back(RL78Operand::CreateToken(ExclSecond.getString(),
-                                                    ExclSecond.getLoc()));
-
-        Operands.push_back(RL78Operand::CreateAbs20(EVal, S, E));
-      }
+      Operands.push_back(
+          RL78Operand::CreateToken(ExclFirst.getString(), ExclFirst.getLoc()));
+      Operands.push_back(RL78Operand::CreateToken(ExclSecond.getString(),
+                                                  ExclSecond.getLoc()));
+      Operands.push_back(RL78Operand::CreateAbs20(EVal, S, E));
       return MatchOperand_Success;
     } else {
 
       SMLoc S = Parser.getTok().getLoc();
-      SMLoc E =
-          SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
       const MCExpr *EVal;
       StringRef checkDot = getLexer().getTok().getString();
 
@@ -2720,14 +2824,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
         int64_t value = getSymbolAliasValue(before_dot);
 
         if (value == 0) {
-          std::stringstream ss;
-          if (before_dot.find("F") != std::string::npos ||
-              before_dot.find("f") != std::string::npos) {
-            ss << std::hex << before_dot;
-          } else {
-            ss << before_dot;
-          }
-          ss >> value;
+          value = parseBeforeDot(before_dot);
         }
 
         if (value != 0)
@@ -2745,8 +2842,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
         const MCExpr *EVal;
         EVal = MCConstantExpr::create(std::stoi(Imm), getContext());
         SMLoc S = Parser.getTok().getLoc();
-        SMLoc E =
-            SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+        SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
         Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
         Parser.Lex();
         return MatchOperand_Success;
@@ -2774,8 +2870,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
                   const MCExpr *EVal;
                   EVal = MCConstantExpr::create(std::stoi(Imm), getContext());
                   SMLoc S = Parser.getTok().getLoc();
-                  SMLoc E = SMLoc::getFromPointer(
-                      Parser.getTok().getLoc().getPointer() - 1);
+                  SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
                   Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
                   Parser.Lex();
                 } else
@@ -2805,21 +2900,15 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
           const MCExpr *EVal;
 
           SMLoc S = Parser.getTok().getLoc();
-          SMLoc E =
-              SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+          SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
           std::string before_dot = checkDot.substr(0, dot).str();
 
           int64_t value = getSymbolAliasValue(before_dot);
 
           if (value == 0) {
-            std::stringstream ss;
-            if (before_dot.find("F") != std::string::npos ||
-                before_dot.find("f") != std::string::npos) {
-              ss << std::hex << before_dot;
-            } else
-              ss << before_dot;
-            ss >> value;
+            value = parseBeforeDot(before_dot);
           }
+
           if (value != 0) {
             EVal = MCConstantExpr::create(value, getContext());
           } else {
@@ -2834,7 +2923,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
           std::string Imm = checkDot.substr(dot + 1, checkDot.size()).str();
           EVal = MCConstantExpr::create(std::stoi(Imm), getContext());
           S = Parser.getTok().getLoc();
-          E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+          E = SMLoc::getFromPointer(S.getPointer() - 1);
           Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
           Parser.Lex();
 
@@ -2854,8 +2943,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
   // ES : word[BC].
   if (parseEsRegRegAddrAndDotOperand(Operands, Mnemonic) ==
           MatchOperand_Success &&
-      (getLexer().getTok().getString().find(".") == std::string::npos ||
-       getLexer().getTok().getString().find(";") != std::string::npos))
+      tokenHasNoDotOrHasSemicolon())
     return MatchOperand_Success;
 
   if (ParseShiftIntegerOperand(Operands, Mnemonic) == MatchOperand_Success)
@@ -2865,13 +2953,11 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
   // word[c].
   // word[b].
   if (parseRegOffsetAddrOperand(Operands, Mnemonic) == MatchOperand_Success &&
-      (getLexer().getTok().getString().find(".") == std::string::npos ||
-       getLexer().getTok().getString().find(";") != std::string::npos))
+      tokenHasNoDotOrHasSemicolon())
     return MatchOperand_Success;
 
   if (RegBrackets(Operands, Mnemonic) == MatchOperand_Success &&
-      (getLexer().getTok().getString().find(".") == std::string::npos ||
-       getLexer().getTok().getString().find(";") != std::string::npos))
+      tokenHasNoDotOrHasSemicolon())
     return MatchOperand_Success;
 
   StringRef checkDot = getLexer().getTok().getString();
@@ -2901,7 +2987,6 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
   dot = TokenString.find('.');
   int64_t BitPositionValue;
   if (dot == 0) {
-    // TODO: eliminate code duplication
     if (Token.is(AsmToken::Real)) {
       // See if we have (0xf230+4).[0-7]
       if (TokenString.size() != 2 || TokenString[1] < '0' ||
@@ -3069,7 +3154,6 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
           (Mnemonic.compare("set1") == 0 || Mnemonic.compare("clr1") == 0)) {
 
         std::string before_dot = name.substr(0, dot).str();
-        StringRef sfrx = before_dot;
         int64_t value = getSymbolAliasValue(before_dot);
 
         if (value == 0) {
@@ -3408,34 +3492,6 @@ bool RL78AsmParser::matchRegisterNameByName(StringRef name, MCRegister &Register
   }
 
   return searchSymbolAlias(name, Register, RegKind);
-}
-
-// Determine if an expression contains a reference to the symbol
-// "_GLOBAL_OFFSET_TABLE_".
-static bool hasGOTReference(const MCExpr *Expr) {
-  switch (Expr->getKind()) {
-  case MCExpr::Target:
-    if (const RL78MCExpr *SE = dyn_cast<RL78MCExpr>(Expr))
-      return hasGOTReference(SE->getSubExpr());
-    break;
-
-  case MCExpr::Constant:
-    break;
-
-  case MCExpr::Binary: {
-    const MCBinaryExpr *BE = cast<MCBinaryExpr>(Expr);
-    return hasGOTReference(BE->getLHS()) || hasGOTReference(BE->getRHS());
-  }
-
-  case MCExpr::SymbolRef: {
-    const MCSymbolRefExpr &SymRef = *cast<MCSymbolRefExpr>(Expr);
-    return (SymRef.getSymbol().getName() == "_GLOBAL_OFFSET_TABLE_");
-  }
-
-  case MCExpr::Unary:
-    return hasGOTReference(cast<MCUnaryExpr>(Expr)->getSubExpr());
-  }
-  return false;
 }
 
 OperandMatchResultTy RL78AsmParser::tryParseRegister(MCRegister &Register, SMLoc &StartLoc,

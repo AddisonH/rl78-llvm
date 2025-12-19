@@ -1484,7 +1484,7 @@ Constant *ConstantExpr::getWithOperands(ArrayRef<Constant *> Ops, Type *Ty,
     assert(SrcTy || (Ops[0]->getType() == getOperand(0)->getType()));
     return ConstantExpr::getGetElementPtr(
         SrcTy ? SrcTy : GEPO->getSourceElementType(), Ops[0], Ops.slice(1),
-        GEPO->isInBounds(), GEPO->getInRangeIndex(), OnlyIfReducedTy);
+        GEPO->getNoWrapFlags(), GEPO->getInRange(), OnlyIfReducedTy);
   }
   case Instruction::ICmp:
   case Instruction::FCmp:
@@ -2331,6 +2331,28 @@ bool ConstantExpr::isSupportedBinOp(unsigned Opcode) {
   }
 }
 
+bool ConstantExpr::isDesirableCastOp(unsigned Opcode) {
+  switch (Opcode) {
+  case Instruction::ZExt:
+  case Instruction::SExt:
+    return false;
+  case Instruction::Trunc:
+  case Instruction::FPTrunc:
+  case Instruction::FPExt:
+  case Instruction::UIToFP:
+  case Instruction::SIToFP:
+  case Instruction::FPToUI:
+  case Instruction::FPToSI:
+  case Instruction::PtrToInt:
+  case Instruction::IntToPtr:
+  case Instruction::BitCast:
+  case Instruction::AddrSpaceCast:
+    return true;
+  default:
+    llvm_unreachable("Argument must be cast opcode");
+  }
+}
+
 Constant *ConstantExpr::getSizeOf(Type* Ty) {
   // sizeof is implemented as: (i64) gep (Ty*)null, 1
   // Note that a non-inbounds gep is used, as null isn't within any object.
@@ -2377,18 +2399,19 @@ Constant *ConstantExpr::getCompare(unsigned short Predicate, Constant *C1,
 }
 
 Constant *ConstantExpr::getGetElementPtr(Type *Ty, Constant *C,
-                                         ArrayRef<Value *> Idxs, bool InBounds,
-                                         std::optional<unsigned> InRangeIndex,
+                                         ArrayRef<Value *> Idxs,
+                                         GEPNoWrapFlags NW,
+                                         std::optional<ConstantRange> InRange,
                                          Type *OnlyIfReducedTy) {
   assert(Ty && "Must specify element type");
   assert(isSupportedGetElementPtr(Ty) && "Element type is unsupported!");
 
   if (Constant *FC =
-          ConstantFoldGetElementPtr(Ty, C, InBounds, InRangeIndex, Idxs))
-    return FC;          // Fold a few common cases.
+          ConstantFoldGetElementPtr(Ty, C, NW.isInBounds(), InRange, Idxs))
+    return FC; // Fold a few common cases.
 
-  assert(GetElementPtrInst::getIndexedType(Ty, Idxs) &&
-         "GEP indices invalid!");;
+  assert(GetElementPtrInst::getIndexedType(Ty, Idxs) && "GEP indices invalid!");
+  ;
 
   // Get the result type of the getelementptr!
   Type *ReqTy = GetElementPtrInst::getGEPReturnType(C, Idxs);
@@ -2420,11 +2443,8 @@ Constant *ConstantExpr::getGetElementPtr(Type *Ty, Constant *C,
     ArgVec.push_back(Idx);
   }
 
-  unsigned SubClassOptionalData = InBounds ? GEPOperator::IsInBounds : 0;
-  if (InRangeIndex && *InRangeIndex < 63)
-    SubClassOptionalData |= (*InRangeIndex + 1) << 1;
   const ConstantExprKeyType Key(Instruction::GetElementPtr, ArgVec, 0,
-                                SubClassOptionalData, std::nullopt, Ty);
+                                NW.getRaw(), std::nullopt, Ty, InRange);
 
   LLVMContextImpl *pImpl = C->getContext().pImpl;
   return pImpl->ExprConstants.getOrCreate(ReqTy, Key);
@@ -2687,6 +2707,32 @@ Constant *ConstantExpr::getBinOpIdentity(unsigned Opcode, Type *Ty,
   }
 }
 
+Constant *ConstantExpr::getIntrinsicIdentity(Intrinsic::ID ID, Type *Ty) {
+  switch (ID) {
+  case Intrinsic::umax:
+    return Constant::getNullValue(Ty);
+  case Intrinsic::umin:
+    return Constant::getAllOnesValue(Ty);
+  case Intrinsic::smax:
+    return Constant::getIntegerValue(
+        Ty, APInt::getSignedMinValue(Ty->getIntegerBitWidth()));
+  case Intrinsic::smin:
+    return Constant::getIntegerValue(
+        Ty, APInt::getSignedMaxValue(Ty->getIntegerBitWidth()));
+  default:
+    return nullptr;
+  }
+}
+
+Constant *ConstantExpr::getIdentity(Instruction *I, Type *Ty,
+                                    bool AllowRHSConstant, bool NSZ) {
+  if (I->isBinaryOp())
+    return getBinOpIdentity(I->getOpcode(), Ty, AllowRHSConstant, NSZ);
+  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I))
+    return getIntrinsicIdentity(II->getIntrinsicID(), Ty);
+  return nullptr;
+}
+
 Constant *ConstantExpr::getBinOpAbsorber(unsigned Opcode, Type *Ty) {
   switch (Opcode) {
   default:
@@ -2712,13 +2758,15 @@ const char *ConstantExpr::getOpcodeName() const {
 }
 
 GetElementPtrConstantExpr::GetElementPtrConstantExpr(
-    Type *SrcElementTy, Constant *C, ArrayRef<Constant *> IdxList, Type *DestTy)
+    Type *SrcElementTy, Constant *C, ArrayRef<Constant *> IdxList, Type *DestTy,
+    std::optional<ConstantRange> InRange)
     : ConstantExpr(DestTy, Instruction::GetElementPtr,
                    OperandTraits<GetElementPtrConstantExpr>::op_end(this) -
                        (IdxList.size() + 1),
                    IdxList.size() + 1),
       SrcElementTy(SrcElementTy),
-      ResElementTy(GetElementPtrInst::getIndexedType(SrcElementTy, IdxList)) {
+      ResElementTy(GetElementPtrInst::getIndexedType(SrcElementTy, IdxList)),
+      InRange(std::move(InRange)) {
   Op<0>() = C;
   Use *OperandList = getOperandList();
   for (unsigned i = 0, E = IdxList.size(); i != E; ++i)
@@ -2731,6 +2779,10 @@ Type *GetElementPtrConstantExpr::getSourceElementType() const {
 
 Type *GetElementPtrConstantExpr::getResultElementType() const {
   return ResElementTy;
+}
+
+std::optional<ConstantRange> GetElementPtrConstantExpr::getInRange() const {
+  return InRange;
 }
 
 //===----------------------------------------------------------------------===//

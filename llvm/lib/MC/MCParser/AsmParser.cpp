@@ -818,8 +818,7 @@ enum { DEFAULT_ADDRSPACE = 0 };
 
 AsmParser::AsmParser(SourceMgr &SM, MCContext &Ctx, MCStreamer &Out,
                      const MCAsmInfo &MAI, unsigned CB = 0)
-    : Lexer(MAI), Ctx(Ctx), Out(Out), MAI(MAI), SrcMgr(SM),
-      CurBuffer(CB ? CB : SM.getMainFileID()), MacrosEnabledFlag(true) {
+    : Out(Out), MAI(MAI), MacrosEnabledFlag(true), Ctx(Ctx), Lexer(MAI), SrcMgr(SM), CurBuffer(CB ? CB : SM.getMainFileID()) {
   HadError = false;
   // Save the old handler.
   SavedDiagHandler = SrcMgr.getDiagHandler();
@@ -6420,10 +6419,11 @@ bool RL78AsmParser::parseStatement(ParseStatementInfo &Info,
        NextTok.compare_insensitive("IF") == 0 || NextTok.compare_insensitive("IFN") == 0 ||
        NextTok.compare_insensitive("ELSE") == 0 || NextTok.compare_insensitive("ELSEIF") == 0 ||
        NextTok.compare_insensitive("ELSEIFN") == 0 || NextTok.compare_insensitive("ENDIF") == 0 ||
-       NextTok.compare_insensitive("INCLUDE") == 0 && !TheCondState.Ignore ||
-       NextTok.compare_insensitive("BINCLUDE") == 0 && !TheCondState.Ignore ||
-       NextTok.compare_insensitive("WARNING") == 0 && !TheCondState.Ignore ||
-       NextTok.compare_insensitive("NOWARNING") == 0 && !TheCondState.Ignore)) {
+       (!TheCondState.Ignore &&
+        (NextTok.compare_insensitive("INCLUDE") == 0 ||
+         NextTok.compare_insensitive("BINCLUDE") == 0 ||
+         NextTok.compare_insensitive("WARNING") == 0 ||
+         NextTok.compare_insensitive("NOWARNING") == 0)))) {
     Lex(); // Eat the $.
     Lex(); // Eat the directive.
     if (NextTok.compare_insensitive("IFDEF") == 0)
@@ -6591,10 +6591,7 @@ bool RL78AsmParser::parseMacroArguments(const MCAsmMacro *M,
   // - macros defined with parameters accept at most that many of them
   for (unsigned Parameter = 0; !NParameters || Parameter < NParameters;
        ++Parameter) {
-    SMLoc IDLoc = Lexer.getLoc();
     MCAsmMacroParameter FA;
-    SMLoc StrLoc = Lexer.getLoc();
-    SMLoc EndLoc;
     if (parseMacroArgument(FA.Value, false))
       return true;
     unsigned PI = Parameter;
@@ -7134,13 +7131,6 @@ bool RL78AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc,
     if (Lexer.isNot(AsmToken::RParen))
       return TokError("expected ')'");
     Lex(); // Eat the operator.
-    int64_t Abs;
-    if ((FirstTokenKind == AsmToken::MirHW ||
-         FirstTokenKind == AsmToken::MirLW) &&
-        Res->evaluateAsAbsolute(Abs))
-      Warning(FirstTokenLoc, (FirstTokenKind == AsmToken::MirHW)
-                                 ? "will behave as HIGHW"
-                                 : "will behave as LOWW");
     Res = getTargetParser().createTargetUnaryExpr(Res, FirstTokenKind, Ctx);
     return !Res;
   case AsmToken::DataPos:

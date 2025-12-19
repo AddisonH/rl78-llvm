@@ -1361,6 +1361,10 @@ define void @instructions.bitwise_binops(i8 %op1, i8 %op2) {
   xor i8 %op1, %op2
   ; CHECK: xor i8 %op1, %op2
 
+  ; disjoint
+  or disjoint i8 %op1, %op2
+  ; CHECK: or disjoint i8 %op1, %op2
+
   ret void
 }
 
@@ -1556,7 +1560,7 @@ exit:
   ; CHECK: select <2 x i1> <i1 true, i1 false>, <2 x i8> <i8 2, i8 3>, <2 x i8> <i8 3, i8 2>
 
   call void @f.nobuiltin() builtin
-  ; CHECK: call void @f.nobuiltin() #51
+  ; CHECK: call void @f.nobuiltin() #52
 
   call fastcc noalias ptr @f.noalias() noinline
   ; CHECK: call fastcc noalias ptr @f.noalias() #12
@@ -1937,8 +1941,8 @@ declare void @f.speculatable() speculatable
 ;; Constant Expressions
 
 define ptr @constexpr() {
-  ; CHECK: ret ptr getelementptr inbounds ({ [4 x ptr], [4 x ptr] }, ptr null, i32 0, inrange i32 1, i32 2)
-  ret ptr getelementptr inbounds ({ [4 x ptr], [4 x ptr] }, ptr null, i32 0, inrange i32 1, i32 2)
+  ; CHECK: ret ptr getelementptr inbounds inrange(-16, 16) ({ [4 x ptr], [4 x ptr] }, ptr null, i32 0, i32 1, i32 2)
+  ret ptr getelementptr inbounds inrange(-16, 16) ({ [4 x ptr], [4 x ptr] }, ptr null, i32 0, i32 1, i32 2)
 }
 
 define void @instructions.strictfp() strictfp {
@@ -1980,6 +1984,8 @@ declare void @f.nosanitize_bounds() nosanitize_bounds
 declare void @f.allockind() allockind("alloc,uninitialized")
 ; CHECK: declare void @f.allockind() #50
 
+declare void @f.sanitize_numerical_stability() sanitize_numerical_stability
+; CHECK: declare void @f.sanitize_numerical_stability() #51
 
 ; CHECK: declare nofpclass(snan) float @nofpclass_snan(float nofpclass(snan))
 declare nofpclass(snan) float @nofpclass_snan(float nofpclass(snan))
@@ -2102,7 +2108,8 @@ define float @nofpclass_callsites(float %arg) {
 ; CHECK: attributes #48 = { allocsize(1,0) }
 ; CHECK: attributes #49 = { nosanitize_bounds }
 ; CHECK: attributes #50 = { allockind("alloc,uninitialized") }
-; CHECK: attributes #51 = { builtin }
+; CHECK: attributes #51 = { sanitize_numerical_stability }
+; CHECK: attributes #52 = { builtin }
 
 ;; Metadata
 

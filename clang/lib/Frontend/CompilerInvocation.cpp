@@ -670,7 +670,7 @@ static bool RoundTrip(ParseFn Parse, GenerateFn Generate,
                       bool CheckAgainstOriginalInvocation = false,
                       bool ForceRoundTrip = false) {
 #ifndef NDEBUG
-  bool DoRoundTripDefault = false; // TODO: RL78 revert back to true after fixing target features vs langopts (ex: mfar-code/far-code)
+  bool DoRoundTripDefault = true; 
 #else
   bool DoRoundTripDefault = false;
 #endif
@@ -3726,18 +3726,14 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   if (T.isRL78()) {
     Opts.RenesasRL78 = 1;
     Opts.RenesasExt = Args.hasArg(OPT_frenesas_extensions);
-    Opts.RenesasRL78CodeModel = Args.hasArg(OPT_mfar_code) ? 1 : 0;
-    Opts.RenesasRL78DataModel = Args.hasArg(OPT_mfar_data) ? 1 : 0;
-
-    const Arg *mRom =
-        Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
-                        options::OPT_mfar_rom);
-    if (mRom == nullptr || mRom->getOption().getID() == options::OPT_mnear_rom)
-      Opts.setRenesasRL78RomModel(LangOptions::RL78RomModelKind::Near);
-    else if (mRom->getOption().getID() == options::OPT_mfar_rom)
-      Opts.setRenesasRL78RomModel(LangOptions::RL78RomModelKind::Far);
-    else
-      Opts.setRenesasRL78RomModel(LangOptions::RL78RomModelKind::Common);
+    Opts.RenesasRL78CodeModel = Args.hasArg(OPT_mfar_code);
+    Opts.RenesasRL78DataModel = Args.hasArg(OPT_mfar_data);
+    Opts.RenesasRL78RomModelNear = Args.hasArg(OPT_mnear_rom);
+    Opts.RenesasRL78RomModelFar = Args.hasArg(OPT_mfar_rom);
+    Opts.RenesasRL78RomModelCommon = Args.hasArg(OPT_mcommon_rom);
+    if (!Opts.RenesasRL78RomModelNear && !Opts.RenesasRL78RomModelFar &&
+        !Opts.RenesasRL78RomModelCommon)
+      Opts.RenesasRL78RomModelNear = true;
   }
 
   Opts.MSCompatibilityVersion = 0;

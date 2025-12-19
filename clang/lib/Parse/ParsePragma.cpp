@@ -2430,6 +2430,10 @@ static RenesasCCRLInterruptPragmaExtra ParseInterruptSpec(Preprocessor &PP, Toke
 	    PP.Diag(Tok, diag::err_expected) << "only one specification of enable";
 		return extraInfoInterrupt;
 	  } else enabledSpecified = true;
+      
+      // Bit 4 marks "enable" specified.
+      Result |= (0x1 << 4);
+
       if (Tok.getIdentifierInfo() != NULL) {
         const StringRef &enable = Tok.getIdentifierInfo()->getName();
         if (enable.compare("false") == 0)

@@ -5091,7 +5091,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
      // RL78 mfar-rom handling
      // NOTE: if -mfar-data, the default AS is far => we don't need to change the AS
      if (!T->isFunctionType() && !T.hasAddressSpace() &&
-          (T.isConstQualified() && S.getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far))
+          (T.isConstQualified() && S.getLangOpts().RenesasRL78RomModelFar))
         T = S.getASTContext().getAddrSpaceQualType(T, LangAS::__far_data);
 
      // RL78 mfar-code typedef handling
@@ -5369,6 +5369,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
               IsDefault = false;
               lastAttr = &attr;
               break;
+            default:
+              break;
             }
           }
           if (!IsDefault)
@@ -5392,6 +5394,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
             case ParsedAttr::AT_RL78Far:
             case ParsedAttr::AT_RL78Near:
               lastAttr = &attr;
+              break;
+            default:
               break;
             }
           }

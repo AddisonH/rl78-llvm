@@ -70,9 +70,9 @@ public:
     if (Opts.RenesasRL78DataModel)
       Builder.defineMacro("__FAR_DATA__");
 
-    if(Opts.getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far)
+    if(Opts.RenesasRL78RomModelFar)
       Builder.defineMacro("__FAR_ROM__");
-    else if(Opts.getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Common)
+    else if(Opts.RenesasRL78RomModelCommon)
       Builder.defineMacro("__COMMON_ROM__");
     
     if(Opts.RenesasRL78CodeModel)
@@ -127,7 +127,7 @@ public:
         llvm::is_contained({"nd", "fd"}, parts[1]) &&
         llvm::is_contained({"d32", "d64"}, parts[2]) &&
         (parts.size() == 3 ||
-         parts.size() == 4 && llvm::is_contained({"mda", "nomda"}, parts[3]));
+         (parts.size() == 4 && llvm::is_contained({"mda", "nomda"}, parts[3])));
     assert(validABI);
     if (validABI)
       ABI = Name;

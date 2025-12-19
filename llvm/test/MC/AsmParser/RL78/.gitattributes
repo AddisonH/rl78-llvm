@@ -1,0 +1,2 @@
+incbin_abcd binary
+preserve-comments-crlf.s text eol=crlf

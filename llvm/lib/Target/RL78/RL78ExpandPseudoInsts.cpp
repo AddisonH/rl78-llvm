@@ -1,4 +1,4 @@
-//===-- RL78BranchExpand.cpp - Define TargetMachine for RL78 --------------===//
+//===-- RL78ExpandPseudoInsts.cpp - Define TargetMachine for RL78 --------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,31 +13,32 @@
 
 using namespace llvm;
 
-// TODO: look at BranchRelaxation.
 
 namespace {
-class RL78BranchExpandPass : public MachineFunctionPass {
+class RL78ExpandPseudoInsts : public MachineFunctionPass {
 public:
-  RL78BranchExpandPass() : MachineFunctionPass(ID) {}
+  RL78ExpandPseudoInsts() : MachineFunctionPass(ID) {}
 
-  StringRef getPassName() const override { return "RL78 branch expand"; }
+  StringRef getPassName() const override { return "RL78 expand pseudo instructions"; }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
 private:
   static char ID;
   //
-  std::map<int, unsigned> bbSizeMap;
+  std::map<const MachineBasicBlock *, unsigned> bbSizeMap;
+  std::map<const MachineBasicBlock *, uint64_t> bbOffsetMap;
   //
   bool processBranch(MachineInstr &MI, MachineBasicBlock &MBB,
                      const TargetInstrInfo *TII);
+  void buildBBOffsetMap(MachineFunction &MF, const TargetInstrInfo *TII);
 };
 
-char RL78BranchExpandPass::ID = 0;
+char RL78ExpandPseudoInsts::ID = 0;
 } // end anonymous namespace
 
-FunctionPass *llvm::createRL78BranchExpandPass() {
-  return new RL78BranchExpandPass();
+FunctionPass *llvm::createRL78ExpandPseudoInstsPass() {
+  return new RL78ExpandPseudoInsts();
 }
 
 static unsigned calcBasicBlockSize(MachineBasicBlock &MBB, const TargetInstrInfo *TII) {
@@ -80,16 +81,29 @@ static bool isSingleInstructionBB(MachineBasicBlock &MBB) {
   return (blockSize == 1);
 }
 
-bool RL78BranchExpandPass::processBranch(MachineInstr &MI,
+void RL78ExpandPseudoInsts::buildBBOffsetMap(MachineFunction &MF,
+                                            const TargetInstrInfo *TII) {
+  bbOffsetMap.clear();
+  uint64_t Off = 0;
+  for (MachineBasicBlock &MBB : MF) {
+    bbOffsetMap[&MBB] = Off;
+    auto It = bbSizeMap.find(&MBB);
+    unsigned Size =
+        (It != bbSizeMap.end()) ? It->second : calcBasicBlockSize(MBB, TII);
+    Off += Size;
+  }
+}
+
+bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
                                          MachineBasicBlock &MBB,
                                          const TargetInstrInfo *TII) {
-  // Return if not the BRCC/BR/BTBF/BTCLR.
+  // Return if not BRCC/BR/BTBF/BTCLR.
   if ((MI.getOpcode() != RL78::BRCC) && (MI.getOpcode() != RL78::BR) &&
       (MI.getOpcode() != RL78::BTBF) && (MI.getOpcode() != RL78::BTBF_mem) &&
       (MI.getOpcode() != RL78::BTBF_sfr))
     return false;
   // MI.dump();
-  MachineFunction::iterator MBBI = MBB.getIterator(), MBBE;
+  MachineFunction::iterator MBBI = MBB.getIterator();
   MachineBasicBlock &targetMBB = *MI.getOperand(0).getMBB();
   // if this is the last instruction in MBB and the next (fall-through) block
   // has only 1 instruction.
@@ -105,32 +119,26 @@ bool RL78BranchExpandPass::processBranch(MachineInstr &MI,
     // bytes, BT, BF, BTCLR = 3/4}.
     unsigned jumpSize = 0;
     unsigned range = 0;
-    // Find jump direction:
-    // targetMBB->isLayoutSuccessor(MBB) might be useful
-    // however we will be looking at BranchRelaxation.
-    bool forwardJump = false;
-    for (MBBI = ++MBB.getIterator(), MBBE = MBB.getParent()->end();
-         MBBI != MBBE; ++MBBI)
-      if (targetMBB.getIterator() == MBBI) {
-        forwardJump = true;
-        break;
+    unsigned sourceOff = bbOffsetMap[&MBB];
+    unsigned targetOff = bbOffsetMap[&targetMBB];
+    unsigned sourceBBSize = bbSizeMap[&MBB];
+    // size(instruction) = { BC, BNC, BZ, BNZ = 2 bytes, BH, BNH = 3 bytes,
+    // BR = 2, BT, BF, BTCLR = 3/4}.
+    unsigned instrSize = 4;
+    // Find jump distance, if the target BB is the same as the source BB
+    // then the jump distance will be size of the source BB.
+    if (&MBB == &targetMBB) {
+      jumpSize = sourceBBSize;
+      range = 127 - instrSize;
+    } else {                       // Find jump direction.
+      if (targetOff > sourceOff) { // Forward jump.
+        jumpSize = targetOff - (sourceOff + sourceBBSize);
+        range = 127;
+      } else { // Backward jump.
+        // range = -128 + size(instruction)
+        jumpSize = (sourceOff + sourceBBSize) - targetOff;
+        range = 128 - instrSize;
       }
-    if (forwardJump) {
-      for (MBBI = ++MBB.getIterator(), MBBE = targetMBB.getIterator();
-           MBBI != MBBE; ++MBBI)
-        jumpSize += bbSizeMap.at(MBBI->getNumber());
-      range = 127;
-    }
-    // Backward jump.
-    else {
-      for (MBBI = MBB.getIterator();
-           MBBE = targetMBB.getIterator(), MBBI != MBBE; --MBBI)
-        jumpSize += bbSizeMap.at(MBBI->getNumber());
-      jumpSize += bbSizeMap.at(targetMBB.getNumber());
-      // range = -128 + size(instruction)
-      // size(instruction) = { BC, BNC, BZ, BNZ = 2 bytes, BH, BNH = 3 bytes, BR
-      // = 2, BT, BF, BTCLR = 3/4}.
-      range = 128 - 4;
     }
     //
     if (jumpSize < range) {
@@ -236,34 +244,47 @@ bool RL78BranchExpandPass::processBranch(MachineInstr &MI,
   return true;
 }
 
-bool RL78BranchExpandPass::runOnMachineFunction(MachineFunction &MF) {
+bool RL78ExpandPseudoInsts::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
+  bool LocalChanged = false;
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();
-  // Calc the size of each basic block.
-  for (MachineBasicBlock &MBB : MF) {
-    bbSizeMap.insert(
-        std::pair<int, unsigned>(MBB.getNumber(), calcBasicBlockSize(MBB, TII)));
-  }
-  //
-  // MF.dump();
-  for (MachineBasicBlock &MBB : MF) {
-    if (MBB.empty())
-      continue;
-    //
-    MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
-    if (I == MBB.end())
-      continue;
-    //
-    Changed |= processBranch(*I, MBB, TII);
-    // The iterator may be invalidated.
-    I = MBB.getLastNonDebugInstr();
-    // Was this the only branch instruction?
-    if (I == MBB.begin() || !(I->isBranch()))
-      continue;
-    Changed |= processBranch(*(--I), MBB, TII);
-  }
-  //
+  do {
+    // Calc the size of each basic block.
+    bbSizeMap.clear();
+    for (MachineBasicBlock &MBB : MF)
+      bbSizeMap[&MBB] = calcBasicBlockSize(MBB, TII);
+    buildBBOffsetMap(MF, TII);
+    // MF.dump();
+    LocalChanged = false;
+    for (MachineBasicBlock &MBB : MF) {
+      if (MBB.empty())
+        continue;
+      //
+      MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
+      if (I == MBB.end())
+        continue;
+      //
+      if (processBranch(*I, MBB, TII)) {
+        LocalChanged = true;
+        bbSizeMap[&MBB] = calcBasicBlockSize(MBB, TII);
+        buildBBOffsetMap(MF, TII);
+      }
+      // The iterator may be invalidated.
+      I = MBB.getLastNonDebugInstr();
+      // Was this the only branch instruction?
+      if (I == MBB.begin() || !(I->isBranch()))
+        continue;
+      if (processBranch(*(--I), MBB, TII)) {
+        LocalChanged = true;
+        bbSizeMap[&MBB] = calcBasicBlockSize(MBB, TII);
+        buildBBOffsetMap(MF, TII);
+      }
+    }
+    Changed |= LocalChanged;
+
+  } while (LocalChanged);
   // MF.dump();
   bbSizeMap.clear();
+  bbOffsetMap.clear();
   return Changed;
 }

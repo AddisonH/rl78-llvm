@@ -380,12 +380,6 @@ public:
     IncompleteOnly = 3,
   };
 
-  enum class RL78RomModelKind {
-    Near = 0,
-    Far = 1,
-    Common = 2,
-  };
-
 public:
   /// The used language standard.
   LangStandard::Kind LangStd;

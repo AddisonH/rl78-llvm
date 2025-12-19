@@ -25,7 +25,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
 #include <algorithm>
 using namespace llvm;
 
@@ -4707,7 +4706,7 @@ void DAGTypeLegalizer::ExpandIntRes_XMULO(SDNode *N,
   }
 
   Type *RetTy = VT.getTypeForEVT(*DAG.getContext());
-  EVT PtrVT = TLI.getPointerTy(DAG.getDataLayout(), DAG.getDataLayout().getProgramAddressSpace());
+  EVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
   Type *PtrTy = PtrVT.getTypeForEVT(*DAG.getContext());
 
   // Replace this with a libcall that will check overflow.
@@ -4760,10 +4759,7 @@ void DAGTypeLegalizer::ExpandIntRes_XMULO(SDNode *N,
   }
 
   // Also pass the address of the overflow check.
-  if (DAG.getTarget().getTargetTriple().isRL78() && DAG.getDataLayout().getPointerSizeInBits() == 32)
-    Entry.Node = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, Temp, DAG.getConstant(0xf, dl, MVT::i16));
-  else
-    Entry.Node = Temp;
+  Entry.Node = Temp;
   Entry.Ty = PtrTy->getPointerTo();
   Entry.IsSExt = true;
   Entry.IsZExt = false;

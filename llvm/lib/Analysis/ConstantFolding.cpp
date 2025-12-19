@@ -828,7 +828,7 @@ Constant *SymbolicallyEvaluateBinop(unsigned Opc, Constant *Op0, Constant *Op1,
 /// that they aren't implicitly casted by the getelementptr.
 Constant *CastGEPIndices(Type *SrcElemTy, ArrayRef<Constant *> Ops,
                          Type *ResultTy, bool InBounds,
-                         std::optional<unsigned> InRangeIndex,
+                         std::optional<ConstantRange> InRange,
                          const DataLayout &DL, const TargetLibraryInfo *TLI) {
   Type *IntIdxTy = DL.getIndexType(ResultTy);
   Type *IntIdxScalarTy = IntIdxTy->getScalarType();
@@ -856,8 +856,8 @@ Constant *CastGEPIndices(Type *SrcElemTy, ArrayRef<Constant *> Ops,
   if (!Any)
     return nullptr;
 
-  Constant *C = ConstantExpr::getGetElementPtr(
-      SrcElemTy, Ops[0], NewIdxs, InBounds, InRangeIndex);
+  Constant *C = ConstantExpr::getGetElementPtr(SrcElemTy, Ops[0], NewIdxs,
+                                               InBounds, InRange);
   return ConstantFoldConstant(C, DL, TLI);
 }
 
@@ -880,7 +880,6 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
                                   ArrayRef<Constant *> Ops,
                                   const DataLayout &DL,
                                   const TargetLibraryInfo *TLI) {
-  const GEPOperator *InnermostGEP = GEP;
   bool InBounds = GEP->isInBounds();
 
   Type *SrcElemTy = GEP->getSourceElementType();
@@ -889,9 +888,8 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
   if (!SrcElemTy->isSized() || isa<ScalableVectorType>(SrcElemTy))
     return nullptr;
 
-  if (Constant *C = CastGEPIndices(SrcElemTy, Ops, ResTy,
-                                   GEP->isInBounds(), GEP->getInRangeIndex(),
-                                   DL, TLI))
+  if (Constant *C = CastGEPIndices(SrcElemTy, Ops, ResTy, GEP->isInBounds(),
+                                   GEP->getInRange(), DL, TLI))
     return C;
 
   Constant *Ptr = Ops[0];
@@ -911,9 +909,12 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
           SrcElemTy, ArrayRef((Value *const *)Ops.data() + 1, Ops.size() - 1)));
   Ptr = StripPtrCastKeepAS(Ptr);
 
+  std::optional<ConstantRange> InRange = GEP->getInRange();
+  if (InRange)
+    InRange = InRange->sextOrTrunc(BitWidth);
+
   // If this is a GEP of a GEP, fold it all into a single GEP.
   while (auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
-    InnermostGEP = GEP;
     InBounds &= GEP->isInBounds();
 
     SmallVector<Value *, 4> NestedOps(llvm::drop_begin(GEP->operands()));
@@ -927,6 +928,14 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
       }
     if (!AllConstantInt)
       break;
+
+    // TODO: Try to intersect two inrange attributes?
+    if (!InRange) {
+      InRange = GEP->getInRange();
+      if (InRange)
+        // Adjust inrange by offset until now.
+        InRange = InRange->sextOrTrunc(BitWidth).subtract(Offset);
+    }
 
     Ptr = cast<Constant>(GEP->getOperand(0));
     SrcElemTy = GEP->getSourceElementType();
@@ -990,21 +999,8 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
     NewIdxs.push_back(ConstantInt::get(
         Type::getIntNTy(Ptr->getContext(), Index.getBitWidth()), Index));
 
-  // Preserve the inrange index from the innermost GEP if possible. We must
-  // have calculated the same indices up to and including the inrange index.
-  std::optional<unsigned> InRangeIndex;
-  if (std::optional<unsigned> LastIRIndex = InnermostGEP->getInRangeIndex())
-    if (SrcElemTy == InnermostGEP->getSourceElementType() &&
-        NewIdxs.size() > *LastIRIndex) {
-      InRangeIndex = LastIRIndex;
-      for (unsigned I = 0; I <= *LastIRIndex; ++I)
-        if (NewIdxs[I] != InnermostGEP->getOperand(I + 1))
-          return nullptr;
-    }
-
-  // Create a GEP.
   return ConstantExpr::getGetElementPtr(SrcElemTy, Ptr, NewIdxs, InBounds,
-                                        InRangeIndex);
+                                        InRange);
 }
 
 /// Attempt to constant fold an instruction with the
@@ -1052,8 +1048,8 @@ Constant *ConstantFoldInstOperandsImpl(const Value *InstOrCE, unsigned Opcode,
       return C;
 
     return ConstantExpr::getGetElementPtr(SrcElemTy, Ops[0], Ops.slice(1),
-                                          GEP->isInBounds(),
-                                          GEP->getInRangeIndex());
+                                          GEP->getNoWrapFlags(),
+                                          GEP->getInRange());
   }
 
   if (auto *CE = dyn_cast<ConstantExpr>(InstOrCE)) {
@@ -1462,7 +1458,7 @@ Constant *llvm::ConstantFoldCastOperand(unsigned Opcode, Constant *C,
                                             /*IsSigned=*/false);
       }
     }
-    return ConstantExpr::getCast(Opcode, C, DestTy);
+    break;
   case Instruction::IntToPtr:
     // If the input is a ptrtoint, turn the pair into a ptr to ptr bitcast if
     // the int size is >= the ptr size and the address spaces are the same.
@@ -1481,8 +1477,7 @@ Constant *llvm::ConstantFoldCastOperand(unsigned Opcode, Constant *C,
         }
       }
     }
-
-    return ConstantExpr::getCast(Opcode, C, DestTy);
+    break;
   case Instruction::Trunc:
   case Instruction::ZExt:
   case Instruction::SExt:
@@ -1493,10 +1488,14 @@ Constant *llvm::ConstantFoldCastOperand(unsigned Opcode, Constant *C,
   case Instruction::FPToUI:
   case Instruction::FPToSI:
   case Instruction::AddrSpaceCast:
-      return ConstantExpr::getCast(Opcode, C, DestTy);
+    break;
   case Instruction::BitCast:
     return FoldBitCast(C, DestTy, DL);
   }
+
+  if (ConstantExpr::isDesirableCastOp(Opcode))
+    return ConstantExpr::getCast(Opcode, C, DestTy);
+  return ConstantFoldCastInstruction(Opcode, C, DestTy);
 }
 
 //===----------------------------------------------------------------------===//

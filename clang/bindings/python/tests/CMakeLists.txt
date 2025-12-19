@@ -47,6 +47,11 @@ if(${LLVM_NATIVE_ARCH} MATCHES "^(AArch64|Hexagon|Sparc|SystemZ)$")
   set(RUN_PYTHON_TESTS FALSE)
 endif()
 
+# Bypass python tests on RL78
+if(${LLVM_TARGETS_TO_BUILD} MATCHES "RL78")
+  set(RUN_PYTHON_TESTS FALSE)
+endif()
+
 if(RUN_PYTHON_TESTS)
     set_property(GLOBAL APPEND PROPERTY
                  LLVM_ALL_ADDITIONAL_TEST_TARGETS check-clang-python)

@@ -351,6 +351,8 @@ namespace llvm {
     bool parseFnAttributeValuePairs(AttrBuilder &B,
                                     std::vector<unsigned> &FwdRefAttrGrps,
                                     bool inAttrGrp, LocTy &BuiltinLoc);
+    bool parseRangeAttr(AttrBuilder &B);
+    bool parseInitializesAttr(AttrBuilder &B);
     bool parseRequiredTypeAttr(AttrBuilder &B, lltok::Kind AttrToken,
                                Attribute::AttrKind AttrKind);
 
@@ -541,8 +543,7 @@ namespace llvm {
                     Type *ExpectedTy = nullptr);
     bool parseGlobalValue(Type *Ty, Constant *&C);
     bool parseGlobalTypeAndValue(Constant *&V);
-    bool parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts,
-                                std::optional<unsigned> *InRangeOp = nullptr);
+    bool parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts);
     bool parseOptionalComdat(StringRef GlobalName, Comdat *&C);
     bool parseSanitizer(GlobalVariable *GV);
     bool parseMetadataAsValue(Value *&V, PerFunctionState &PFS);

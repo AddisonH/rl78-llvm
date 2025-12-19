@@ -187,6 +187,7 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       default:
           break;
       }
+      break;
   default:
     break;
   }

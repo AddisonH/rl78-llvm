@@ -81,7 +81,7 @@ def RL78BCXReg : RegisterClass<"RL78", [i8], 8, (add R0, R2, R3)>;
 
 def RL78Bank0Reg : RegisterClass<"RL78", [i8], 8, (add R0, R1, R2, R3, R4, R5, R6, R7)>;
 
-def RL78Bank0Lo : RegisterClass<"RL78", [i8], 8, (add R1, R0, R2, R3)>;
+def RL78Low : RegisterClass<"RL78", [i8], 8, (add R1, R0, R2, R3)>;
 
 def RL78Bank0Hi : RegisterClass<"RL78", [i8], 8, (add R4, R5, R6, R7)>;
 

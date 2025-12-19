@@ -100,7 +100,7 @@ bool RL78AdjustMemRefsPass::runOnMachineFunction(MachineFunction &MF) {
         // Gather load/store address regs.
         const MachineOperand &Imm = MI.getOperand(addrPos + 1);
         // If address requires word[BC] force the vreg assignment to BC.
-        if (Imm.isImm() && Imm.getImm() > 255 || Imm.isGlobal() ||
+        if ((Imm.isImm() && Imm.getImm() > 255) || Imm.isGlobal() ||
             Imm.isSymbol())
           needsBC.insert(MI.getOperand(addrPos).getReg());
 

@@ -17,6 +17,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/FMF.h"
+#include "llvm/IR/GEPNoWrapFlags.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -94,6 +95,9 @@ private:
   }
 
 public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
   /// Test whether this operation is known to never
   /// undergo unsigned overflow, aka the nuw property.
   bool hasNoUnsignedWrap() const {
@@ -124,6 +128,12 @@ public:
   }
 };
 
+template <>
+struct OperandTraits<OverflowingBinaryOperator>
+    : public FixedNumOperandTraits<OverflowingBinaryOperator, 2> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(OverflowingBinaryOperator, Value)
+
 /// A udiv or sdiv instruction, which can be marked as "exact",
 /// indicating that no bits are destroyed.
 class PossiblyExactOperator : public Operator {
@@ -141,6 +151,9 @@ private:
   }
 
 public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
   /// Test whether this division is known to be exact, with zero remainder.
   bool isExact() const {
     return SubclassOptionalData & IsExact;
@@ -164,6 +177,12 @@ public:
            (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
   }
 };
+
+template <>
+struct OperandTraits<PossiblyExactOperator>
+    : public FixedNumOperandTraits<PossiblyExactOperator, 2> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(PossiblyExactOperator, Value)
 
 /// Utility class for floating point operations which can have
 /// information about relaxed accuracy requirements attached to them.
@@ -376,33 +395,29 @@ class LShrOperator
 class ZExtOperator : public ConcreteOperator<Operator, Instruction::ZExt> {};
 
 class GEPOperator
-  : public ConcreteOperator<Operator, Instruction::GetElementPtr> {
-  friend class GetElementPtrInst;
-  friend class ConstantExpr;
+    : public ConcreteOperator<Operator, Instruction::GetElementPtr> {
+public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
-  enum {
-    IsInBounds = (1 << 0),
-    // InRangeIndex: bits 1-6
-  };
-
-  void setIsInBounds(bool B) {
-    SubclassOptionalData =
-      (SubclassOptionalData & ~IsInBounds) | (B * IsInBounds);
+  GEPNoWrapFlags getNoWrapFlags() const {
+    return GEPNoWrapFlags::fromRaw(SubclassOptionalData);
   }
 
-public:
   /// Test whether this is an inbounds GEP, as defined by LangRef.html.
-  bool isInBounds() const {
-    return SubclassOptionalData & IsInBounds;
+  bool isInBounds() const { return getNoWrapFlags().isInBounds(); }
+
+  bool hasNoUnsignedSignedWrap() const {
+    return getNoWrapFlags().hasNoUnsignedSignedWrap();
+  }
+
+  bool hasNoUnsignedWrap() const {
+    return getNoWrapFlags().hasNoUnsignedWrap();
   }
 
   /// Returns the offset of the index with an inrange attachment, or
   /// std::nullopt if none.
-  std::optional<unsigned> getInRangeIndex() const {
-    if (SubclassOptionalData >> 1 == 0)
-      return std::nullopt;
-    return (SubclassOptionalData >> 1) - 1;
-  }
+  std::optional<ConstantRange> getInRange() const;
 
   inline op_iterator       idx_begin()       { return op_begin()+1; }
   inline const_op_iterator idx_begin() const { return op_begin()+1; }
@@ -514,12 +529,21 @@ public:
                      APInt &ConstantOffset) const;
 };
 
+template <>
+struct OperandTraits<GEPOperator>
+    : public VariadicOperandTraits<GEPOperator, 1> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(GEPOperator, Value)
+
 class PtrToIntOperator
     : public ConcreteOperator<Operator, Instruction::PtrToInt> {
   friend class PtrToInt;
   friend class ConstantExpr;
 
 public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
   Value *getPointerOperand() {
     return getOperand(0);
   }
@@ -542,12 +566,21 @@ public:
   }
 };
 
+template <>
+struct OperandTraits<PtrToIntOperator>
+    : public FixedNumOperandTraits<PtrToIntOperator, 1> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(PtrToIntOperator, Value)
+
 class BitCastOperator
     : public ConcreteOperator<Operator, Instruction::BitCast> {
   friend class BitCastInst;
   friend class ConstantExpr;
 
 public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
   Type *getSrcTy() const {
     return getOperand(0)->getType();
   }
@@ -557,12 +590,21 @@ public:
   }
 };
 
+template <>
+struct OperandTraits<BitCastOperator>
+    : public FixedNumOperandTraits<BitCastOperator, 1> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(BitCastOperator, Value)
+
 class AddrSpaceCastOperator
     : public ConcreteOperator<Operator, Instruction::AddrSpaceCast> {
   friend class AddrSpaceCastInst;
   friend class ConstantExpr;
 
 public:
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
   Value *getPointerOperand() { return getOperand(0); }
 
   const Value *getPointerOperand() const { return getOperand(0); }
@@ -575,6 +617,12 @@ public:
     return getType()->getPointerAddressSpace();
   }
 };
+
+template <>
+struct OperandTraits<AddrSpaceCastOperator>
+    : public FixedNumOperandTraits<AddrSpaceCastOperator, 1> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(AddrSpaceCastOperator, Value)
 
 } // end namespace llvm
 

@@ -1060,17 +1060,42 @@ ExprResult Sema::DefaultVariadicArgumentPromotion(Expr *E, VariadicCallType CT,
   E = ExprRes.get();
 
   QualType ExprType = E->getType();
-  //TODO: RL78 see if we need to treat far_code 
-  if (getLangOpts().RenesasExt &&
-      ExprType->isPointerType() &&
-      cast<PointerType>(ExprType->getCanonicalTypeInternal())->getPointeeType().getAddressSpace() != LangAS::__far_data) {
-    QualType ExprSubType = cast<PointerType>(ExprType->getCanonicalTypeInternal())->getPointeeType();
-    QualType ExprTypeWithDestAS =
-        Context.getAddrSpaceQualType(Context.removeAddrSpaceQualType(ExprSubType), LangAS::__far_data);
-    ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
-    E = ImpCastExprToType(E, ExprTypeWithDestAS, CK_AddressSpaceConversion,
-                          E->getValueKind())
-            .get();
+  if (getLangOpts().RenesasExt && ExprType->isPointerType()) {
+    QualType ExprSubType =
+        cast<PointerType>(ExprType->getCanonicalTypeInternal())
+            ->getPointeeType();
+    if (!ExprSubType->isFunctionType() &&
+      getAddressSpace(ExprSubType, Context) != LangAS::__far_data) {
+      QualType ExprTypeWithDestAS = Context.getAddrSpaceQualType(
+          Context.removeAddrSpaceQualType(ExprSubType), LangAS::__far_data);
+      ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
+      E = ImpCastExprToType(E, ExprTypeWithDestAS, CK_AddressSpaceConversion,
+                          E->getValueKind()).get();
+    } else if (ExprSubType->isFunctionType() &&
+        getAddressSpace(ExprSubType, Context) != LangAS::__far_code) {
+        if (const FunctionNoProtoType* FPT =
+            dyn_cast<FunctionNoProtoType>(ExprSubType)) {
+              FunctionType::ExtInfo EPI = FPT->getExtInfo();
+              EPI = EPI.withFar(true);
+              QualType ExprTypeWithDestAS =
+                  Context.getFunctionNoProtoType(FPT->getReturnType(), EPI);
+              ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
+              E = ImpCastExprToType(E, ExprTypeWithDestAS,
+                                  CK_AddressSpaceConversion, E->getValueKind())
+                    .get();
+      } else if (const FunctionProtoType *FPT =
+                       dyn_cast<FunctionProtoType>(ExprSubType)) {
+                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
+                EPI.ExtInfo = EPI.ExtInfo.withFar(true);
+                QualType ExprTypeWithDestAS = Context.getFunctionType(FPT->getReturnType(),
+                                                 FPT->getParamTypes(), EPI);
+                ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
+                E = ImpCastExprToType(E, ExprTypeWithDestAS,
+                                      CK_AddressSpaceConversion,
+                                      E->getValueKind())
+                        .get();
+        }
+    }
   }
 
   // Diagnostics regarding non-POD argument types are
@@ -1979,7 +2004,7 @@ Sema::ActOnStringLiteral(ArrayRef<Token> StringToks, Scope *UDLScope) {
     StringTokLocs.push_back(Tok.getLocation());
 
   QualType CharTy = Context.CharTy;
-  if(getLangOpts().getRenesasRL78RomModel() == LangOptions::RL78RomModelKind::Far)
+  if(getLangOpts().RenesasRL78RomModelFar)
     CharTy = Context.getAddrSpaceQualType(CharTy, LangAS::__far_data);
   StringLiteral::StringKind Kind = StringLiteral::Ordinary;
   if (Literal.isWide()) {
@@ -6866,6 +6891,11 @@ static bool checkArgsForPlaceholders(Sema &S, MultiExprArg args) {
 static FunctionDecl *rewriteBuiltinFunctionDecl(Sema *Sema, ASTContext &Context,
                                                 FunctionDecl *FDecl,
                                                 MultiExprArg ArgExprs) {
+
+  // For RL78, standard library function is not a candidate for a rewrite.
+  if (Context.getTargetInfo().getTriple().isRL78() &&
+      Context.BuiltinInfo.isPredefinedLibFunction(FDecl->getBuiltinID()))
+    return nullptr;
 
   QualType DeclType = FDecl->getType();
   const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(DeclType);
@@ -17665,8 +17695,6 @@ bool Sema::DiagnoseAssignmentResult(AssignConvertType ConvTy,
   case IncompatiblePointerDiscardsQualifiers: {
     // Perform array-to-pointer decay if necessary.
     if (SrcType->isArrayType()) SrcType = Context.getArrayDecayedType(SrcType);
-    // Perform function-to-pointer decay if necessary.
-    if (SrcType->isFunctionType()) SrcType = Context.getPointerType(SrcType);
     isInvalid = true;
 
     Qualifiers lhq = SrcType->getPointeeType().getQualifiers();

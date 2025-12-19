@@ -2156,8 +2156,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32IZFH-NEXT:    fmv.s fa0, fs0
 ; RV32IZFH-NEXT:    call __fixsfdi@plt
 ; RV32IZFH-NEXT:    lui a4, 524288
-; RV32IZFH-NEXT:    lui a2, 524288
-; RV32IZFH-NEXT:    beqz s0, .LBB10_2
+; RV32IZFH-NEXT:    lui a3, 524288
+; RV32IZFH-NEXT:    beqz s2, .LBB10_2
 ; RV32IZFH-NEXT:  # %bb.1: # %start
 ; RV32IZFH-NEXT:    mv a2, a1
 ; RV32IZFH-NEXT:  .LBB10_2: # %start
@@ -2204,8 +2204,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32IDZFH-NEXT:    fmv.s fa0, fs0
 ; RV32IDZFH-NEXT:    call __fixsfdi@plt
 ; RV32IDZFH-NEXT:    lui a4, 524288
-; RV32IDZFH-NEXT:    lui a2, 524288
-; RV32IDZFH-NEXT:    beqz s0, .LBB10_2
+; RV32IDZFH-NEXT:    lui a3, 524288
+; RV32IDZFH-NEXT:    beqz s2, .LBB10_2
 ; RV32IDZFH-NEXT:  # %bb.1: # %start
 ; RV32IDZFH-NEXT:    mv a2, a1
 ; RV32IDZFH-NEXT:  .LBB10_2: # %start
@@ -2459,8 +2459,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32ID-ILP32-NEXT:    fle.s s0, fa5, fa4
 ; RV32ID-ILP32-NEXT:    call __fixsfdi@plt
 ; RV32ID-ILP32-NEXT:    lui a4, 524288
-; RV32ID-ILP32-NEXT:    lui a2, 524288
-; RV32ID-ILP32-NEXT:    beqz s0, .LBB10_2
+; RV32ID-ILP32-NEXT:    lui a3, 524288
+; RV32ID-ILP32-NEXT:    beqz s2, .LBB10_2
 ; RV32ID-ILP32-NEXT:  # %bb.1: # %start
 ; RV32ID-ILP32-NEXT:    mv a2, a1
 ; RV32ID-ILP32-NEXT:  .LBB10_2: # %start
@@ -2514,8 +2514,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32ID-NEXT:    fle.s s0, fa5, fa0
 ; RV32ID-NEXT:    call __fixsfdi@plt
 ; RV32ID-NEXT:    lui a4, 524288
-; RV32ID-NEXT:    lui a2, 524288
-; RV32ID-NEXT:    beqz s0, .LBB10_2
+; RV32ID-NEXT:    lui a3, 524288
+; RV32ID-NEXT:    beqz s2, .LBB10_2
 ; RV32ID-NEXT:  # %bb.1: # %start
 ; RV32ID-NEXT:    mv a2, a1
 ; RV32ID-NEXT:  .LBB10_2: # %start
@@ -2567,8 +2567,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32IFZFHMIN-NEXT:    fmv.s fa0, fs0
 ; RV32IFZFHMIN-NEXT:    call __fixsfdi@plt
 ; RV32IFZFHMIN-NEXT:    lui a4, 524288
-; RV32IFZFHMIN-NEXT:    lui a2, 524288
-; RV32IFZFHMIN-NEXT:    beqz s0, .LBB10_2
+; RV32IFZFHMIN-NEXT:    lui a3, 524288
+; RV32IFZFHMIN-NEXT:    beqz s2, .LBB10_2
 ; RV32IFZFHMIN-NEXT:  # %bb.1: # %start
 ; RV32IFZFHMIN-NEXT:    mv a2, a1
 ; RV32IFZFHMIN-NEXT:  .LBB10_2: # %start
@@ -2616,8 +2616,8 @@ define i64 @fcvt_l_h_sat(half %a) nounwind {
 ; RV32IDZFHMIN-NEXT:    fmv.s fa0, fs0
 ; RV32IDZFHMIN-NEXT:    call __fixsfdi@plt
 ; RV32IDZFHMIN-NEXT:    lui a4, 524288
-; RV32IDZFHMIN-NEXT:    lui a2, 524288
-; RV32IDZFHMIN-NEXT:    beqz s0, .LBB10_2
+; RV32IDZFHMIN-NEXT:    lui a3, 524288
+; RV32IDZFHMIN-NEXT:    beqz s2, .LBB10_2
 ; RV32IDZFHMIN-NEXT:  # %bb.1: # %start
 ; RV32IDZFHMIN-NEXT:    mv a2, a1
 ; RV32IDZFHMIN-NEXT:  .LBB10_2: # %start
@@ -2940,7 +2940,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32IZFH-NEXT:    fmv.w.x fa5, zero
 ; RV32IZFH-NEXT:    fle.s a0, fa5, fa0
 ; RV32IZFH-NEXT:    neg s1, a0
-; RV32IZFH-NEXT:    call __fixunssfdi@plt
+; RV32IZFH-NEXT:    call __fixunssfdi
 ; RV32IZFH-NEXT:    and a0, s1, a0
 ; RV32IZFH-NEXT:    or a0, s0, a0
 ; RV32IZFH-NEXT:    and a1, s1, a1
@@ -2974,7 +2974,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32IDZFH-NEXT:    fmv.w.x fa5, zero
 ; RV32IDZFH-NEXT:    fle.s a0, fa5, fa0
 ; RV32IDZFH-NEXT:    neg s1, a0
-; RV32IDZFH-NEXT:    call __fixunssfdi@plt
+; RV32IDZFH-NEXT:    call __fixunssfdi
 ; RV32IDZFH-NEXT:    and a0, s1, a0
 ; RV32IDZFH-NEXT:    or a0, s0, a0
 ; RV32IDZFH-NEXT:    and a1, s1, a1
@@ -3007,7 +3007,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32IZHINX-NEXT:    neg s0, a1
 ; RV32IZHINX-NEXT:    fle.s a1, zero, a0
 ; RV32IZHINX-NEXT:    neg s1, a1
-; RV32IZHINX-NEXT:    call __fixunssfdi@plt
+; RV32IZHINX-NEXT:    call __fixunssfdi
 ; RV32IZHINX-NEXT:    and a0, s1, a0
 ; RV32IZHINX-NEXT:    or a0, s0, a0
 ; RV32IZHINX-NEXT:    and a1, s1, a1
@@ -3040,7 +3040,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32IZDINXZHINX-NEXT:    neg s0, a1
 ; RV32IZDINXZHINX-NEXT:    fle.s a1, zero, a0
 ; RV32IZDINXZHINX-NEXT:    neg s1, a1
-; RV32IZDINXZHINX-NEXT:    call __fixunssfdi@plt
+; RV32IZDINXZHINX-NEXT:    call __fixunssfdi
 ; RV32IZDINXZHINX-NEXT:    and a0, s1, a0
 ; RV32IZDINXZHINX-NEXT:    or a0, s0, a0
 ; RV32IZDINXZHINX-NEXT:    and a1, s1, a1
@@ -3139,7 +3139,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32ID-ILP32-NEXT:    fmv.w.x fa5, zero
 ; RV32ID-ILP32-NEXT:    fle.s a1, fa5, fa4
 ; RV32ID-ILP32-NEXT:    neg s1, a1
-; RV32ID-ILP32-NEXT:    call __fixunssfdi@plt
+; RV32ID-ILP32-NEXT:    call __fixunssfdi
 ; RV32ID-ILP32-NEXT:    and a0, s1, a0
 ; RV32ID-ILP32-NEXT:    or a0, s0, a0
 ; RV32ID-ILP32-NEXT:    and a1, s1, a1
@@ -3179,7 +3179,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; RV32ID-NEXT:    fmv.w.x fa5, zero
 ; RV32ID-NEXT:    fle.s a0, fa5, fa0
 ; RV32ID-NEXT:    neg s1, a0
-; RV32ID-NEXT:    call __fixunssfdi@plt
+; RV32ID-NEXT:    call __fixunssfdi
 ; RV32ID-NEXT:    and a0, s1, a0
 ; RV32ID-NEXT:    or a0, s0, a0
 ; RV32ID-NEXT:    and a1, s1, a1
@@ -3218,7 +3218,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; CHECK32-IZFHMIN-NEXT:    fmv.w.x fa5, zero
 ; CHECK32-IZFHMIN-NEXT:    fle.s a0, fa5, fa0
 ; CHECK32-IZFHMIN-NEXT:    neg s1, a0
-; CHECK32-IZFHMIN-NEXT:    call __fixunssfdi@plt
+; CHECK32-IZFHMIN-NEXT:    call __fixunssfdi
 ; CHECK32-IZFHMIN-NEXT:    and a0, s1, a0
 ; CHECK32-IZFHMIN-NEXT:    or a0, s0, a0
 ; CHECK32-IZFHMIN-NEXT:    and a1, s1, a1
@@ -3252,7 +3252,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; CHECK32-IZHINXMIN-NEXT:    neg s0, a1
 ; CHECK32-IZHINXMIN-NEXT:    fle.s a1, zero, a0
 ; CHECK32-IZHINXMIN-NEXT:    neg s1, a1
-; CHECK32-IZHINXMIN-NEXT:    call __fixunssfdi@plt
+; CHECK32-IZHINXMIN-NEXT:    call __fixunssfdi
 ; CHECK32-IZHINXMIN-NEXT:    and a0, s1, a0
 ; CHECK32-IZHINXMIN-NEXT:    or a0, s0, a0
 ; CHECK32-IZHINXMIN-NEXT:    and a1, s1, a1
@@ -3286,7 +3286,7 @@ define i64 @fcvt_lu_h_sat(half %a) nounwind {
 ; CHECK32-IZDINXZHINXMIN-NEXT:    neg s0, a1
 ; CHECK32-IZDINXZHINXMIN-NEXT:    fle.s a1, zero, a0
 ; CHECK32-IZDINXZHINXMIN-NEXT:    neg s1, a1
-; CHECK32-IZDINXZHINXMIN-NEXT:    call __fixunssfdi@plt
+; CHECK32-IZDINXZHINXMIN-NEXT:    call __fixunssfdi
 ; CHECK32-IZDINXZHINXMIN-NEXT:    and a0, s1, a0
 ; CHECK32-IZDINXZHINXMIN-NEXT:    or a0, s0, a0
 ; CHECK32-IZDINXZHINXMIN-NEXT:    and a1, s1, a1

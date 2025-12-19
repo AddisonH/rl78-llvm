@@ -1532,6 +1532,81 @@ Currently, only the following parameter attributes are defined:
     If a function reads from a writeonly pointer argument, the behavior is
     undefined.
 
+``writable``
+    This attribute is only meaningful in conjunction with ``dereferenceable(N)``
+    or another attribute that implies the first ``N`` bytes of the pointer
+    argument are dereferenceable.
+
+    In that case, the attribute indicates that the first ``N`` bytes will be
+    (non-atomically) loaded and stored back on entry to the function.
+
+    This implies that it's possible to introduce spurious stores on entry to
+    the function without introducing traps or data races. This does not
+    necessarily hold throughout the whole function, as the pointer may escape
+    to a different thread during the execution of the function. See also the
+    :ref:`atomic optimization guide <Optimization outside atomic>`
+
+    The "other attributes" that imply dereferenceability are
+    ``dereferenceable_or_null`` (if the pointer is non-null) and the
+    ``sret``, ``byval``, ``byref``, ``inalloca``, ``preallocated`` family of
+    attributes. Note that not all of these combinations are useful, e.g.
+    ``byval`` arguments are known to be writable even without this attribute.
+
+    The ``writable`` attribute cannot be combined with ``readnone``,
+    ``readonly`` or a ``memory`` attribute that does not contain
+    ``argmem: write``.
+
+``initializes((Lo1, Hi1), ...)``
+    This attribute indicates that the function initializes the ranges of the
+    pointer parameter's memory, ``[%p+LoN, %p+HiN)``. Initialization of memory
+    means the first memory access is a non-volatile, non-atomic write. The
+    write must happen before the function returns. If the function unwinds,
+    the write may not happen.
+
+    This attribute only holds for the memory accessed via this pointer
+    parameter. Other arbitrary accesses to the same memory via other pointers
+    are allowed.
+
+    The ``writable`` or ``dereferenceable`` attribute do not imply the
+    ``initializes`` attribute. The ``initializes`` attribute does not imply
+    ``writeonly`` since ``initializes`` allows reading from the pointer
+    after writing.
+
+    This attribute is a list of constant ranges in ascending order with no
+    overlapping or consecutive list elements. ``LoN/HiN`` are 64-bit integers,
+    and negative values are allowed in case the argument points partway into
+    an allocation. An empty list is not allowed.
+
+``dead_on_unwind``
+    At a high level, this attribute indicates that the pointer argument is dead
+    if the call unwinds, in the sense that the caller will not depend on the
+    contents of the memory. Stores that would only be visible on the unwind
+    path can be elided.
+
+    More precisely, the behavior is as-if any memory written through the
+    pointer during the execution of the function is overwritten with a poison
+    value on unwind. This includes memory written by the implicit write implied
+    by the ``writable`` attribute. The caller is allowed to access the affected
+    memory, but all loads that are not preceded by a store will return poison.
+
+    This attribute cannot be applied to return values.
+
+``range(<ty> <a>, <b>)``
+    This attribute expresses the possible range of the parameter or return value.
+    If the value is not in the specified range, it is converted to poison.
+    The arguments passed to ``range`` have the following properties:
+
+    -  The type must match the scalar type of the parameter or return value.
+    -  The pair ``a,b`` represents the range ``[a,b)``.
+    -  Both ``a`` and ``b`` are constants.
+    -  The range is allowed to wrap.
+    -  The range should not represent the full or empty set. That is, ``a!=b``.
+    
+    This attribute may only be applied to parameters or return values with integer 
+    or vector of integer types.
+    
+    For vector-typed parameters, the range is applied element-wise.
+
 .. _gc:
 
 Garbage Collector Strategy Names
@@ -1872,6 +1947,8 @@ example:
     passes make choices that keep the code size of this function as small
     as possible and perform optimizations that may sacrifice runtime
     performance in order to minimize the size of the generated code.
+    This attribute is incompatible with the ``optdebug`` and ``optnone``
+    attributes.
 ``naked``
     This attribute disables prologue / epilogue emission for the
     function. This can have very system-specific consequences.
@@ -2024,6 +2101,12 @@ example:
    Note: Comparing address of a global variable to ``null`` may still
    evaluate to false because of a limitation in querying this attribute inside
    constant expressions.
+``optdebug``
+    This attribute suggests that optimization passes and code generator passes
+    should make choices that try to preserve debug info without significantly
+    degrading runtime performance.
+    This attribute is incompatible with the ``minsize``, ``optsize``, and
+    ``optnone`` attributes.
 ``optforfuzzing``
     This attribute indicates that this function should be optimized
     for maximum fuzzing signal.
@@ -2033,7 +2116,7 @@ example:
     Code generation defaults to the "fast" instruction selector.
     This attribute cannot be used together with the ``alwaysinline``
     attribute; this attribute is also incompatible
-    with the ``minsize`` attribute and the ``optsize`` attribute.
+    with the ``minsize``, ``optsize``, and ``optdebug`` attributes.
 
     This attribute requires the ``noinline`` attribute to be specified on
     the function as well, so the function is never inlined into any caller.
@@ -2044,6 +2127,8 @@ example:
     passes make choices that keep the code size of this function low,
     and otherwise do optimizations specifically to reduce code size as
     long as they do not significantly impact runtime performance.
+    This attribute is incompatible with the ``optdebug`` and ``optnone``
+    attributes.
 ``"patchable-function"``
     This attribute tells the code generator that the code
     generated for this function needs to follow certain conventions that
@@ -9901,6 +9986,7 @@ Syntax:
 ::
 
       <result> = or <ty> <op1>, <op2>   ; yields ty:result
+      <result> = or disjoint <ty> <op1>, <op2>   ; yields ty:result
 
 Overview:
 """""""""
@@ -9931,6 +10017,12 @@ The truth table used for the '``or``' instruction is:
 +-----+-----+-----+
 |   1 |   1 |   1 |
 +-----+-----+-----+
+
+``disjoint`` means that for each bit, that bit is zero in at least one of the
+inputs. This allows the Or to be treated as an Add since no carry can occur from
+any bit. If the disjoint keyword is present, the result value of the ``or`` is a
+:ref:`poison value <poisonvalues>` if both inputs have a one in the same bit
+position. For vectors, only the element containing the bit is poison.
 
 Example:
 """"""""
@@ -10834,9 +10926,12 @@ Syntax:
 
 ::
 
-      <result> = getelementptr <ty>, ptr <ptrval>{, [inrange] <ty> <idx>}*
-      <result> = getelementptr inbounds <ty>, ptr <ptrval>{, [inrange] <ty> <idx>}*
-      <result> = getelementptr <ty>, <N x ptr> <ptrval>, [inrange] <vector index type> <idx>
+      <result> = getelementptr <ty>, ptr <ptrval>{, <ty> <idx>}*
+      <result> = getelementptr inbounds <ty>, ptr <ptrval>{, <ty> <idx>}*
+      <result> = getelementptr nusw <ty>, ptr <ptrval>{, <ty> <idx>}*
+      <result> = getelementptr nuw <ty>, ptr <ptrval>{, <ty> <idx>}*
+      <result> = getelementptr inrange(S,E) <ty>, ptr <ptrval>{, <ty> <idx>}*
+      <result> = getelementptr <ty>, <N x ptr> <ptrval>, <vector index type> <idx>
 
 Overview:
 """""""""
@@ -10932,25 +11027,65 @@ for the given testcase is equivalent to:
       ret ptr %t5
     }
 
-If the ``inbounds`` keyword is present, the result value of a
-``getelementptr`` with any non-zero indices is a
-:ref:`poison value <poisonvalues>` if one of the following rules is violated:
+The indices are first converted to offsets in the pointer's index type. If the
+currently indexed type is a struct type, the struct offset corresponding to the
+index is sign-extended or truncated to the pointer index type. Otherwise, the
+index itself is sign-extended or truncated, and then multiplied by the type
+allocation size (that is, the size rounded up to the ABI alignment) of the
+currently indexed type.
 
-*  The base pointer has an *in bounds* address of an allocated object, which
-   means that it points into an allocated object, or to its end.
-*  If the type of an index is larger than the pointer index type, the
-   truncation to the pointer index type preserves the signed value.
-*  The multiplication of an index by the type size does not wrap the pointer
-   index type in a signed sense (``nsw``).
-*  The successive addition of offsets (without adding the base address) does
-   not wrap the pointer index type in a signed sense (``nsw``).
-*  The successive addition of the current address, interpreted as an unsigned
-   number, and an offset, interpreted as a signed number, does not wrap the
-   unsigned address space and remains *in bounds* of the allocated object.
-   As a corollary, if the added offset is non-negative, the addition does not
-   wrap in an unsigned sense (``nuw``).
-*  In cases where the base is a vector of pointers, the ``inbounds`` keyword
-   applies to each of the computations element-wise.
+The offsets are then added to the low bits of the base address up to the index
+type width, with silently-wrapping two's complement arithmetic. If the pointer
+size is larger than the index size, this means that the bits outside the index
+type width will not be affected.
+
+The result value of the ``getelementptr`` may be outside the object pointed
+to by the base pointer. The result value may not necessarily be used to access
+memory though, even if it happens to point into allocated storage. See the
+:ref:`Pointer Aliasing Rules <pointeraliasing>` section for more
+information.
+
+The ``getelementptr`` instruction may have a number of attributes that impose
+additional rules. If any of the rules are violated, the result value is a
+:ref:`poison value <poisonvalues>`. In cases where the base is a vector of
+pointers, the attributes apply to each computation element-wise.
+
+For ``nusw`` (no unsigned signed wrap):
+
+ * If the type of an index is larger than the pointer index type, the
+   truncation to the pointer index type preserves the signed value
+   (``trunc nsw``).
+ * The multiplication of an index by the type size does not wrap the pointer
+   index type in a signed sense (``mul nsw``).
+ * The successive addition of each offset (without adding the base address)
+   does not wrap the pointer index type in a signed sense (``add nsw``).
+ * The successive addition of the current address, truncated to the pointer
+   index type and interpreted as an unsigned number, and each offset,
+   interpreted as a signed number, does not wrap the pointer index type.
+
+For ``nuw`` (no unsigned wrap):
+
+ * If the type of an index is larger than the pointer index type, the
+   truncation to the pointer index type preserves the unsigned value
+   (``trunc nuw``).
+ * The multiplication of an index by the type size does not wrap the pointer
+   index type in an unsigned sense (``mul nuw``).
+ * The successive addition of each offset (without adding the base address)
+   does not wrap the pointer index type in an unsigned sense (``add nuw``).
+ * The successive addition of the current address, truncated to the pointer
+   index type and interpreted as an unsigned number, and each offset, also
+   interpreted as an unsigned number, does not wrap the pointer index type
+   (``add nuw``).
+
+For ``inbounds`` all rules of the ``nusw`` attribute apply. Additionally,
+if the ``getelementptr`` has any non-zero indices, the following rules apply:
+
+ * The base pointer has an *in bounds* address of an allocated object, which
+   means that it points into an allocated object, or to its end. Note that the
+   object does not have to be live anymore; being in-bounds of a deallocated
+   object is sufficient.
+ * During the successive addition of offsets to the address, the resulting
+   pointer must remain *in bounds* of the allocated object at each step.
 
 Note that ``getelementptr`` with all-zero indices is always considered to be
 ``inbounds``, even if the base pointer does not point to an allocated object.
@@ -10961,26 +11096,19 @@ These rules are based on the assumption that no allocated object may cross
 the unsigned address space boundary, and no allocated object may be larger
 than half the pointer index type space.
 
-If the ``inbounds`` keyword is not present, the offsets are added to the
-base address with silently-wrapping two's complement arithmetic. If the
-offsets have a different width from the pointer's index type, they are
-sign-extended or truncated to the width of the pointer's index type. The result
-value of the ``getelementptr`` may be outside the object pointed to by the base
-pointer. The result value may not necessarily be used to access memory
-though, even if it happens to point into allocated storage. See the
-:ref:`Pointer Aliasing Rules <pointeraliasing>` section for more
-information.
+If ``inbounds`` is present on a ``getelementptr`` instruction, the ``nusw``
+attribute will be automatically set as well. For this reason, the ``nusw``
+will also not be printed in textual IR if ``inbounds`` is already present.
 
-If the ``inrange`` keyword is present before any index, loading from or
+If the ``inrange(Start, End)`` attribute is present, loading from or
 storing to any pointer derived from the ``getelementptr`` has undefined
-behavior if the load or store would access memory outside of the bounds of
-the element selected by the index marked as ``inrange``. The result of a
-pointer comparison or ``ptrtoint`` (including ``ptrtoint``-like operations
+behavior if the load or store would access memory outside the half-open range
+``[Start, End)`` from the ``getelementptr`` expression result. The result of
+a pointer comparison or ``ptrtoint`` (including ``ptrtoint``-like operations
 involving memory) involving a pointer derived from a ``getelementptr`` with
 the ``inrange`` keyword is undefined, with the exception of comparisons
-in the case where both operands are in the range of the element selected
-by the ``inrange`` keyword, inclusive of the address one past the end of
-that element. Note that the ``inrange`` keyword is currently only allowed
+in the case where both operands are in the closed range ``[Start, End]``.
+Note that the ``inrange`` keyword is currently only allowed
 in constant ``getelementptr`` expressions.
 
 The getelementptr instruction is often confusing. For some more insight
@@ -11070,6 +11198,9 @@ Syntax:
 ::
 
       <result> = trunc <ty> <value> to <ty2>             ; yields ty2
+      <result> = trunc nsw <ty> <value> to <ty2>         ; yields ty2
+      <result> = trunc nuw <ty> <value> to <ty2>         ; yields ty2
+      <result> = trunc nuw nsw <ty> <value> to <ty2>     ; yields ty2
 
 Overview:
 """""""""
@@ -11092,6 +11223,11 @@ The '``trunc``' instruction truncates the high order bits in ``value``
 and converts the remaining bits to ``ty2``. Since the source size must
 be larger than the destination size, ``trunc`` cannot be a *no-op cast*.
 It will always truncate bits.
+
+If the ``nuw`` keyword is present, and any of the truncated bits are zero,
+the result is a :ref:`poison value <poisonvalues>`. If the ``nsw`` keyword
+is present, and any of the truncated bits are not the same as the top bit
+of the truncation result, the result is a :ref:`poison value <poisonvalues>`.
 
 Example:
 """"""""
@@ -11120,6 +11256,10 @@ Overview:
 
 The '``zext``' instruction zero extends its operand to type ``ty2``.
 
+The ``nneg`` (non-negative) flag, if present, specifies that the operand is
+non-negative. This property may be used by optimization passes to later
+convert the ``zext`` into a ``sext``.
+
 Arguments:
 """"""""""
 
@@ -11136,6 +11276,9 @@ until it reaches the size of the destination type, ``ty2``.
 
 When zero extending from i1, the result will always be either 0 or 1.
 
+If the ``nneg`` flag is set, and the ``zext`` argument is negative, the result
+is a poison value.
+
 Example:
 """"""""
 
@@ -11144,6 +11287,9 @@ Example:
       %X = zext i32 257 to i64              ; yields i64:257
       %Y = zext i1 true to i32              ; yields i32:1
       %Z = zext <2 x i16> <i16 8, i16 7> to <2 x i32> ; yields <i32 8, i32 7>
+
+      %a = zext nneg i8 127 to i16 ; yields i16 127
+      %b = zext nneg i8 -1 to i16  ; yields i16 poison
 
 .. _i_sext:
 

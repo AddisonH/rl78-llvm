@@ -151,7 +151,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
 
   switch (opcode) {
   case RL78::ROTL16_rp_rp:
-    for (int i = 0; i < RdOpAmount; i++) {
+    for (unsigned i = 0; i < RdOpAmount; i++) {
       BuildMI(*BB, MI, DL, II->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
       LastInstruction =
           BuildMI(*BB, MI, DL, II->get(RL78::ROLWC_rp_1), RL78::RP0)
@@ -160,7 +160,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
     break;
 
   case RL78::ROTR16_rp_rp:
-    for (int i = 0; i < RdOpAmount; i++) {
+    for (unsigned i = 0; i < RdOpAmount; i++) {
       BuildMI(*BB, MI, DL, II->get(RL78::SHRW_rp_i), RL78::RP0)
           .addReg(RL78::RP0, RegState::Kill)
           .addImm(1);
@@ -171,7 +171,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
     break;
   case RL78::ROR_r_1:
   case RL78::ROL_r_1:
-    for (int i = 0; i < RdOpAmount; i++) {
+    for (unsigned i = 0; i < RdOpAmount; i++) {
       LastInstruction =
           BuildMI(*BB, MI, DL, II->get(opcode), Rd).addReg(Rd, RegState::Kill);
     }
@@ -412,7 +412,7 @@ static bool isUncondBranchOpcode(int Opc) { return Opc == RL78::BR; }
 
 static bool isCondBranchOpcode(int Opc) {
   return (Opc == RL78::BRCC) || (Opc == RL78::BTBF) || (Opc == RL78::BTBF_mem)
-      || (Opc == RL78::BTBF_sfr);
+      || (Opc == RL78::BTBF_sfr) || (Opc == RL78::BTBF_saddr);
 }
 
 static bool isIndirectBranchOpcode(int Opc) { return Opc == RL78::BR_AX; }
@@ -553,8 +553,6 @@ unsigned RL78InstrInfo::insertBranch(
 
 unsigned RL78InstrInfo::removeBranch(MachineBasicBlock &MBB,
                                      int *BytesRemoved) const {
-  // FIXME: we currently have our own 'branchexpand' pass
-  // Try and use BranchRelaxation at some point.
   assert(!BytesRemoved && "code size not handled");
   // MBB.dump();
   // MBB.getParent()->dump();
@@ -566,9 +564,9 @@ unsigned RL78InstrInfo::removeBranch(MachineBasicBlock &MBB,
     if (I->isDebugValue())
       continue;
 
-    if ((I->getOpcode() != RL78::BR) && (I->getOpcode() != RL78::BR_AX) &&
-        (I->getOpcode() != RL78::BTBF) && (I->getOpcode() != RL78::BTBF_mem) &&
-        (I->getOpcode() != RL78::BTBF_sfr) && (I->getOpcode() != RL78::BRCC))
+    if (!(isUncondBranchOpcode(I->getOpcode()) ||
+          isIndirectBranchOpcode(I->getOpcode()) ||
+          isCondBranchOpcode(I->getOpcode())))
       break; // Not a branch.
 
     I->eraseFromParent();
@@ -854,6 +852,7 @@ static unsigned getCallFrameSize(MachineInstr &MI) {
   else if (MI.getNumExplicitOperands() > 2 &&
            MI.getOperand(MI.getNumExplicitOperands() - 2).isImm())
     return MI.getOperand(MI.getNumExplicitOperands() - 2).getImm();
+  return 0;
 }
 
 /// Returns a \p outliner::OutlinedFunction struct containing target-specific
@@ -992,10 +991,6 @@ RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
       return outliner::InstrType::Illegal;
   }
 
-  MachineBasicBlock *MBB = MI.getParent();
-  const TargetRegisterInfo *TRI =
-      MBB->getParent()->getSubtarget().getRegisterInfo();
-
   switch (MI.getOpcode()) {
   case RL78::MOVW_sp_rp:
   case RL78::MOVW_rp_sp:
@@ -1115,14 +1110,17 @@ MachineBasicBlock::iterator RL78InstrInfo::insertOutlinedCall(
     Module &M, MachineBasicBlock &MBB, MachineBasicBlock::iterator &It,
     MachineFunction &MF, outliner::Candidate &C) const {
   // Is it a tail call?
+  unsigned AddrSpace = MF.getFunction().getAddressSpace();
   unsigned Opcode;
   if (C.CallConstructionID == MachineOutlinerTailCall) {
     // Yes, just insert a JMP.
-    Opcode = Subtarget.HasFarCodeModel() ? RL78::BR_addr20 : RL78::BR_addr16;
+    Opcode = (AddrSpace == RL78AS::FarCode || Subtarget.HasFarCodeModel()) 
+        ? RL78::BR_addr20 : RL78::BR_addr16;
   } else {
     // No, insert a call.
-    Opcode =
-        Subtarget.HasFarCodeModel() ? RL78::CALL_addr20 : RL78::CALL_addr16;
+    Opcode = (AddrSpace == RL78AS::FarCode || Subtarget.HasFarCodeModel())
+                 ? RL78::CALL_addr20
+                 : RL78::CALL_addr16;
   }
   It = MBB.insert(It, BuildMI(MF, DebugLoc(), get(Opcode))
                           .addGlobalAddress(M.getNamedValue(MF.getName())));
@@ -1157,7 +1155,7 @@ RL78InstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
   static const std::pair<unsigned, const char *> Flags[] = {
       {SPII::MO_OUTLINE_SP, "rl78_outline_sp"},
       {SPII::MO_NO_OUTLINE_SP, "rl78_no_outline_sp"}};
-  return makeArrayRef(Flags);
+  return llvm::ArrayRef(Flags);
 }
 
 MachineInstr *RL78InstrInfo::foldMemoryOperandImpl(
@@ -1278,7 +1276,7 @@ public:
   ///     other instruction is available, issue it first.
   ///  * NoopHazard: issuing this instruction would break the program.  If
   ///     some other instruction can be issued, do so, otherwise issue a noop.
-  HazardType getHazardType(SUnit *m, int Stalls = 0) {
+  HazardType getHazardType(SUnit *m, int Stalls = 0) override {
     switch (m->getInstr()->getOpcode()) {
     case RL78::BR_AX: {
       BitVector AX(2, true);

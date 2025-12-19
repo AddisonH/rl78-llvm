@@ -214,60 +214,51 @@ static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
 
   ErrorPlace errPlace = getErrorPlace(loc);
   uint32_t maaFlag = config->eflags & ELF::EF_RL78_MAA_1;
-  uint32_t cpuType = config->eflags & ELF::EF_RL78_CPU_16BIT;
 
-  uint32_t max;
-  uint32_t min;
-  uint32_t correction;
+  LinkerScript *linkerScript = script.get();
+  MapVector<llvm::StringRef, MemoryRegion*> memoryRegions = linkerScript->memoryRegions;
+  MemoryRegion *mirrorRegion = memoryRegions.lookup("MIRROR");
 
-  if (maaFlag == 0) {
-    // code should not depend on MAA mode, yet it does
+  if (!mirrorRegion) {
+    error(errPlace.loc + "memory region 'MIRROR' not declared");
+    return 0;
+  }
+
+  // Get FLASH MEMORY start/end address.
+  uint32_t start = mirrorRegion->getOrigin() & 0xFFFF;
+  uint32_t end = start + mirrorRegion->getLength();
+
+  if (!maaFlag) {
+    // We need to know if the maaFlag was correct beforehand.
     error(errPlace.loc + "relocation " + lld::toString(rel.type) +
           " is invalid when MAA mode flag in ELF is set to common!");
     return 0;
   }
-  if (cpuType == 0) {
-    // need to know CPU bitness, cause there are different mirror regions for S1
-    // and S2/S3
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          " is invalid when CPU bit flag in ELF is set to common!");
-    return 0;
+
+  if (maaFlag == EF_RL78_MAA_1) {
+    start += 0x10000;
+    end += 0x10000;
   }
-  if (cpuType == ELF::EF_RL78_CPU_8BIT && maaFlag == ELF::EF_RL78_MAA_1) {
-    // RL78-S1 core   MAA = 1: Setting prohibited.
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          "error: S1 cores can't have MAA set to 1!");
+
+  if (!(mirrorRegion->getOrigin() & 0xF0000) ||
+      mirrorRegion->getOrigin() < end) {
+    error(errPlace.loc + "memory region 'MIRROR' is not in a correct location");
     return 0;
   }
 
-  switch (maaFlag) {
-  case EF_RL78_MAA_0: // MAA = 0
-    min = 0;
-    max = cpuType == ELF::EF_RL78_CPU_8BIT ? 0x5EFF : 0xFFFF;
-    correction = cpuType == 1 ? 0xF8000 : 0xF0000;
-    break;
-  case EF_RL78_MAA_1: // MAA = 1
-    min = 0x10000;
-    max = 0x1FFFF;
-    correction = 0xE0000;
-    break;
-  default:
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          " invalid MAA flag value!");
-    return 0;
-    break;
-  }
+  // Get addend needed to put the the address in MIRROR.
+  uint32_t correction = mirrorRegion->getOrigin() - start;
 
-  if (val >= min && val <= max) {
+  if (val >= start && val <= end) {
     return val + correction;
   } else if (AllowOutOfRange) {
-    // return it unchanged, used for R_RL78_OPmir
+    // Return it unchanged, used for R_RL78_OPmir.
     return val;
   } else {
     errorOrWarn(errPlace.loc + "relocation " + lld::toString(rel.type) +
                 " out of MIRROR range: " + Twine::utohexstr(val).str() +
-                " is not in [" + Twine::utohexstr(min).str() + ", " +
-                Twine::utohexstr(max).str() + "]");
+                " is not in [" + Twine::utohexstr(start).str() + ", " +
+                Twine::utohexstr(end).str() + "]");
     return 0;
   }
 }
@@ -279,7 +270,7 @@ static uint8_t checkAndConvertSAddr(uint8_t *loc, const Relocation &rel,
   uint32_t min1 = 0xfe20;
   uint32_t max2 = 0xfff1f;
   uint32_t min2 = 0xffe20;
-  if (val >= min1 && val <= max1 || val >= min2 && val <= max2) {
+  if ((val >= min1 && val <= max1) || (val >= min2 && val <= max2)) {
     return val;
   } else {
     error(errPlace.loc + "relocation " + lld::toString(rel.type) +
@@ -294,20 +285,23 @@ static uint8_t checkAndConvertSAddr(uint8_t *loc, const Relocation &rel,
 uint16_t RL78::checkAndConvertRAM(uint8_t *loc, const Relocation &rel,
                                   uint64_t val) const {
   ErrorPlace errPlace = getErrorPlace(loc);
-  uint32_t max = 0xffeff;
-  uint32_t min = 0xfef00;
-
-  Symbol *minRamAddrSym = symtab.find("__data");
-  if (minRamAddrSym != nullptr) {
-    min = minRamAddrSym->getVA(0);
+  LinkerScript *linkerScript = script.get();
+  MapVector<StringRef, MemoryRegion*> memoryRegions = linkerScript->memoryRegions;
+  MemoryRegion *ramRegion = memoryRegions.lookup("RAM");
+  if (!ramRegion)
+  {
+    error(errPlace.loc + "memory region 'RAM' not declared");
+    return 0;
   }
+  uint32_t start = ramRegion->getOrigin();
+  uint32_t end = start + ramRegion->getLength();
 
-  if (val >= min && val <= max) {
+  if (val >= start && val <= end) {
     return val;
   } else {
     error(errPlace.loc + "relocation " + lld::toString(rel.type) +
           " out of RAM range: " + Twine::utohexstr(val).str() + " is not in [" +
-          Twine::utohexstr(min).str() + ", " + Twine::utohexstr(max).str() +
+          Twine::utohexstr(start).str() + ", " + Twine::utohexstr(end).str() +
           "]");
     return 0;
   }
@@ -489,9 +483,19 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     push(loc, (checkAndConvertMirrorAddr(loc, rel, val) & 0xFFFF0000) >> 16);
     break;
   case R_RL78_OPlowW_MIR:
-  case R_RL78_OPlowW_SMIR: // TODO this might be wrong PUSH (MIR(S)+ A) & 0xFFFF
     push(loc, checkAndConvertMirrorAddr(loc, rel, val) & 0xFFFF);
     break;
+  case R_RL78_OPlowW_SMIR: {
+    // For absolute symbols the value of the addend is passed from
+    // rellocateAlloc(), so it will be 0 here to not add it twice. Otherwise we
+    // get the addend here instead of taking it from rellocateAlloc().
+    uint64_t addend = 0;
+    if (rel.sym && rel.sym->isDefined())
+      addend = rel.addend;
+    // Only after we converted the address to mirror we will add the addend.
+    push(loc, (checkAndConvertMirrorAddr(loc, rel, val) + addend) & 0xFFFF);
+    break;
+  }
   case R_RL78_OPmir: {
     uint64_t T = checkAndPop(loc, rel);
     push(loc, checkAndConvertMirrorAddr(loc, rel, T, true));
@@ -516,13 +520,20 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
 void RL78::relocateAlloc(InputSectionBase &sec, uint8_t *buf) const {
   const unsigned bits = config->is64 ? 64 : 32;
   uint64_t secAddr = sec.getOutputSection()->addr;
+  uint64_t addend;
   if (auto *s = dyn_cast<InputSection>(&sec))
     secAddr += s->outSecOff;
   for (const Relocation &rel : sec.relocs()) {
     uint8_t *loc = buf + rel.offset;
+    addend = rel.addend;
+    // For R_RL78_OPlowW_SMIR without an absolute symbol the value will be 0,
+    // because conversion takes only the address to mirror, not the address with
+    // the addend.
+    if (rel.type == R_RL78_OPlowW_SMIR && rel.sym && rel.sym->isDefined())
+      addend = 0;
     const uint64_t val = SignExtend64(
-        sec.getRelocTargetVA(sec.file, rel.type, rel.addend,
-                             secAddr + rel.offset, *rel.sym, rel.expr),
+        sec.getRelocTargetVA(sec.file, rel.type, addend, secAddr + rel.offset,
+                             *rel.sym, rel.expr),
         bits);
     if (rel.sym->isInPlt()) {
       target->relocate(loc, rel, rel.sym->getPltVA());

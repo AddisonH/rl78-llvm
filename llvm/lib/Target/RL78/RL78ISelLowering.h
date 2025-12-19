@@ -56,7 +56,8 @@ enum NodeType : unsigned {
   XORMEM,
   MACHU,
   MACH,
-  INC
+  INC,
+  LOAD_SELECTCC
 };
 }
 
@@ -68,6 +69,11 @@ public:
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+
+  bool
+  splitValueIntoRegisterParts(SelectionDAG &DAG, const SDLoc &DL, SDValue Val,
+                              SDValue *Parts, unsigned NumParts, MVT PartVT,
+                              std::optional<CallingConv::ID> CC) const override;
 
   bool useSoftFloat() const override;
 
@@ -238,6 +244,13 @@ public:
 
   MVT getVectorIdxTy(const DataLayout &DL) const override { return MVT::i16; }
 
+  bool shouldPreservePtrArith(const Function &F, EVT PtrVT) const override {
+    return PtrVT.getSizeInBits() == 32;
+  }
+
+  SDValue lowerStackSlotForSRet(SDValue StackSlot, Type *&StackSlotPtrType,
+                                CallLoweringInfo &CLI) const override;
+
 private:
   // CC-RL calling convention specific operand allocator functions
   void
@@ -309,14 +322,21 @@ private:
   MachineBasicBlock *LowerAndOrXor16_rp_abs16(unsigned int opcode,
                                               MachineInstr &MI,
                                               MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerSignedCMP0(bool cmpw, MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerSignedCMP(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerSignedCMPW(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerSignedCMPWMem(MachineInstr &MI,
-                                        MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerSignedCMP0(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMP0(MachineInstr &MI, MachineBasicBlock *BB) const;
+
+  MachineBasicBlock *LowerSignedCMP(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMPOps(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMP(MachineInstr &MI, MachineBasicBlock *BB) const;
+
+  MachineBasicBlock *LowerSignedCMPW(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMPWOps(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMPW(MachineInstr &MI, MachineBasicBlock *BB) const;
+
+  MachineBasicBlock *LowerSignedCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMPWMemOps(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
+
   MachineBasicBlock *LowerRotate_r_imm(MachineInstr &MI, MachineBasicBlock *BB,
                                        bool rotl) const;
   MachineBasicBlock *LowerRotate16_rp_imm(MachineInstr &MI,
@@ -324,6 +344,8 @@ private:
                                           bool rotl) const;
   MachineBasicBlock *LowerSELECTCC(bool isI8, MachineInstr &MI,
                                    MachineBasicBlock *BB) const;
+  MachineBasicBlock *LowerLOAD_SELECTCC(MachineInstr &MI,
+                                        MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL8(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL16(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerShiftOrRotateForSpeed(MachineInstr &MI,

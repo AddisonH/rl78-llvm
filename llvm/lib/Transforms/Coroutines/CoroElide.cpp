@@ -164,8 +164,17 @@ void Lowerer::elideHeapAllocations(Function *F, uint64_t FrameSize,
   auto FrameTy = ArrayType::get(Type::getInt8Ty(C), FrameSize);
   auto *Frame = new AllocaInst(FrameTy, DL.getAllocaAddrSpace(), "", InsertPt);
   Frame->setAlignment(FrameAlign);
+
+  // RL78 far-data default addr space and alloca addr space pointers have
+  // different sizes and an addrspacecast is needed instead of a bit cast.
+  const auto AddrSpaceCast =
+      StringRef(F->getParent()->getTargetTriple()).startswith("rl78") &&
+      DL.getPointerSize() == 4;
   auto *FrameVoidPtr =
-      new BitCastInst(Frame, Type::getInt8PtrTy(C), "vFrame", InsertPt);
+      AddrSpaceCast ? static_cast<CastInst *>(new AddrSpaceCastInst(
+                          Frame, Type::getInt8PtrTy(C), "vFrame", InsertPt))
+                    : static_cast<CastInst *>(new BitCastInst(
+                          Frame, Type::getInt8PtrTy(C), "vFrame", InsertPt));
 
   for (auto *CB : CoroBegins) {
     CB->replaceAllUsesWith(FrameVoidPtr);

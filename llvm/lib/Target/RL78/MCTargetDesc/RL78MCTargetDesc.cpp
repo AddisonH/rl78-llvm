@@ -74,6 +74,13 @@ public:
     return true;
   }
 
+  static int64_t getsaddrRange(int64_t Imm) {
+    if ((Imm & 0xFF) < 0x20)
+      return (Imm & 0xFF) + 0xFFF00;
+    else
+      return (Imm & 0xFF) + 0xFFE00;
+  }
+
   std::optional<uint64_t>
   evaluateMemoryOperandAddress(const MCInst &Inst, const MCSubtargetInfo *STI,
                                uint64_t Addr, uint64_t Size) const override {
@@ -96,7 +103,7 @@ public:
     case RL78::ADDC_r_saddrabs:
     case RL78::ADD_r_saddr:
     case RL78::XCH_A_saddrabs:
-      return (Inst.getOperand(2).getImm() & 0xFF) + 0xFFE00;
+      return getsaddrRange(Inst.getOperand(2).getImm());
     case RL78::MOVW_saddrp_imm:
     case RL78::CLR1_saddr:
     case RL78::SET1_saddr:
@@ -123,13 +130,13 @@ public:
     case RL78::STORE16_saddrp_rp:
     case RL78::CLRB_saddr:
     case RL78::ONEB_saddr:
-      return (Inst.getOperand(0).getImm() & 0xFF) + 0xFFE00;
+      return getsaddrRange(Inst.getOperand(0).getImm());
     case RL78::CMPW_rp_saddr:
     case RL78::CMP_r_saddr:
     case RL78::MOV_es_saddr:
     case RL78::LOAD8_rlo_saddr:
     case RL78::LOAD16_rp_saddrp:
-      return (Inst.getOperand(1).getImm() & 0xFF) + 0xFFE00;
+      return getsaddrRange(Inst.getOperand(1).getImm());
     case RL78::LOAD8_r_abs16:
     case RL78::CMP_r_abs16:
       return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
@@ -176,6 +183,7 @@ public:
       return std::nullopt;
     }
   }
+
 };
 
 static MCAsmInfo *createRL78MCAsmInfo(const MCRegisterInfo &MRI,

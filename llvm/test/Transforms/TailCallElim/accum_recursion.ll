@@ -50,6 +50,27 @@ return:
 ; CHECK: ret i32 %accumulator.ret.tr
 
 define i64 @test3_fib(i64 %n) nounwind readnone {
+; CHECK-LABEL: define i64 @test3_fib(
+; CHECK-SAME: i64 [[N:%.*]]) #[[ATTR0:[0-9]+]] {
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br label [[TAILRECURSE:%.*]]
+; CHECK:       tailrecurse:
+; CHECK-NEXT:    [[ACCUMULATOR_TR:%.*]] = phi i64 [ 0, [[ENTRY:%.*]] ], [ [[ACCUMULATE:%.*]], [[BB1:%.*]] ]
+; CHECK-NEXT:    [[N_TR:%.*]] = phi i64 [ [[N]], [[ENTRY]] ], [ [[TMP1:%.*]], [[BB1]] ]
+; CHECK-NEXT:    switch i64 [[N_TR]], label [[BB1]] [
+; CHECK-NEXT:      i64 0, label [[BB2:%.*]]
+; CHECK-NEXT:      i64 1, label [[BB2]]
+; CHECK-NEXT:    ]
+; CHECK:       bb1:
+; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N_TR]], -1
+; CHECK-NEXT:    [[RECURSE1:%.*]] = tail call i64 @test3_fib(i64 [[TMP0]]) #[[ATTR2:[0-9]+]]
+; CHECK-NEXT:    [[TMP1]] = add i64 [[N_TR]], -2
+; CHECK-NEXT:    [[ACCUMULATE]] = add nsw i64 [[ACCUMULATOR_TR]], [[RECURSE1]]
+; CHECK-NEXT:    br label [[TAILRECURSE]]
+; CHECK:       bb2:
+; CHECK-NEXT:    [[ACCUMULATOR_RET_TR:%.*]] = add nsw i64 [[ACCUMULATOR_TR]], [[N_TR]]
+; CHECK-NEXT:    ret i64 [[ACCUMULATOR_RET_TR]]
+;
 entry:
   switch i64 %n, label %bb1 [
     i64 0, label %bb2
@@ -208,16 +229,40 @@ return:
   ret i32 %retval.0
 }
 
-; CHECK-LABEL: define i32 @test7_multiple_accumulators(
-; CHECK: tailrecurse:
-; CHECK: %accumulator.tr = phi i32 [ 0, %entry ], [ %accumulate1, %if.then2 ]
-; CHECK: if.then2:
-; CHECK-NOT: %recurse1
-; CHECK: %accumulate1 = add nsw i32 %accumulator.tr, 1
-; CHECK: if.end3:
-; CHECK: %recurse2
-; CHECK: %accumulator.ret.tr = add nsw i32 %accumulator.tr, %accumulate2
-; CHECK: ret i32 %accumulator.ret.tr
-; CHECK: return:
-; CHECK: %accumulator.ret.tr1 = add nsw i32 %accumulator.tr, 0
-; CHECK: ret i32 %accumulator.ret.tr1
+%struct.ListNode = type { i32, ptr }
+
+; We cannot TRE commutative, non-associative intrinsics
+define i32 @test_non_associative_sadd_sat(ptr %a) local_unnamed_addr {
+; CHECK-LABEL: define i32 @test_non_associative_sadd_sat(
+; CHECK-SAME: ptr [[A:%.*]]) local_unnamed_addr {
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[TOBOOL_NOT:%.*]] = icmp eq ptr [[A]], null
+; CHECK-NEXT:    br i1 [[TOBOOL_NOT]], label [[COMMON_RET6:%.*]], label [[IF_END:%.*]]
+; CHECK:       common.ret6:
+; CHECK-NEXT:    ret i32 -1
+; CHECK:       if.end:
+; CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[A]], align 4
+; CHECK-NEXT:    [[NEXT:%.*]] = getelementptr inbounds [[STRUCT_LISTNODE:%.*]], ptr [[A]], i64 0, i32 1
+; CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[NEXT]], align 8
+; CHECK-NEXT:    [[CALL:%.*]] = tail call i32 @test_non_associative_sadd_sat(ptr [[TMP1]])
+; CHECK-NEXT:    [[DOTSROA_SPECULATED:%.*]] = tail call i32 @llvm.sadd.sat.i32(i32 [[TMP0]], i32 [[CALL]])
+; CHECK-NEXT:    ret i32 [[DOTSROA_SPECULATED]]
+;
+entry:
+  %tobool.not = icmp eq ptr %a, null
+  br i1 %tobool.not, label %common.ret6, label %if.end
+
+common.ret6:                                      ; preds = %entry, %if.end
+  %common.ret6.op = phi i32 [ %.sroa.speculated, %if.end ], [ -1, %entry ]
+  ret i32 %common.ret6.op
+
+if.end:                                           ; preds = %entry
+  %0 = load i32, ptr %a
+  %next = getelementptr inbounds %struct.ListNode, ptr %a, i64 0, i32 1
+  %1 = load ptr, ptr %next
+  %call = tail call i32 @test_non_associative_sadd_sat(ptr %1)
+  %.sroa.speculated = tail call i32 @llvm.sadd.sat.i32(i32 %0, i32 %call)
+  br label %common.ret6
+}
+
+declare i32 @llvm.sadd.sat.i32(i32, i32)

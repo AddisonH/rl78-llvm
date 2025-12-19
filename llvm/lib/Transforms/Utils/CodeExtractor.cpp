@@ -919,6 +919,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::PresplitCoroutine:
       case Attribute::Memory:
       case Attribute::NoFPClass:
+      case Attribute::CoroDestroyOnlyWhenComplete:
         continue;
       // Those attributes should be safe to propagate to the extracted function.
       case Attribute::AlwaysInline:
@@ -940,6 +941,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::NoSanitizeBounds:
       case Attribute::NoSanitizeCoverage:
       case Attribute::NullPointerIsValid:
+      case Attribute::OptimizeForDebugging:
       case Attribute::OptForFuzzing:
       case Attribute::OptimizeNone:
       case Attribute::OptimizeForSize:
@@ -947,6 +949,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::ShadowCallStack:
       case Attribute::SanitizeAddress:
       case Attribute::SanitizeMemory:
+      case Attribute::SanitizeNumericalStability:
       case Attribute::SanitizeThread:
       case Attribute::SanitizeHWAddress:
       case Attribute::SanitizeMemTag:
@@ -990,6 +993,10 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::ImmArg:
       case Attribute::ByRef:
       case Attribute::WriteOnly:
+      case Attribute::Writable:
+      case Attribute::DeadOnUnwind:
+      case Attribute::Range:
+      case Attribute::Initializes:
       //  These are not really attributes.
       case Attribute::None:
       case Attribute::EndAttrKinds:

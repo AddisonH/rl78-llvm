@@ -796,13 +796,10 @@ def int_swift_async_context_addr : Intrinsic<[llvm_ptr_ty], [], []>;
 
 //===--------------------- Code Generator Intrinsics ----------------------===//
 //
-// RL78: the type of the ret value is llvm_anyptr_ty as it refers to a code address;
-// the arg type is llvm_i16_ty as it corresponds to the target int size
-// FIXME: can we make / use smth like a llvm_int_ty i.e. a target-specific integer type?
-def int_returnaddress : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [llvm_i16_ty],
+def int_returnaddress : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_i32_ty],
                                   [IntrNoMem, ImmArg<ArgIndex<0>>]>;
 def int_addressofreturnaddress : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [], [IntrNoMem]>;
-def int_frameaddress : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [llvm_i16_ty], // RL78: idem
+def int_frameaddress : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [llvm_i32_ty],
                                  [IntrNoMem, ImmArg<ArgIndex<0>>]>;
 def int_sponentry  : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [], [IntrNoMem]>;
 def int_read_register  : DefaultAttrsIntrinsic<[llvm_anyint_ty], [llvm_metadata_ty],

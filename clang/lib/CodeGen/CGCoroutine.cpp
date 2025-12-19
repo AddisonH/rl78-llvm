@@ -686,8 +686,14 @@ void CodeGenFunction::EmitCoroutineBody(const CoroutineBodyStmt &S) {
     EmitStmt(S.getPromiseDeclStmt());
 
     Address PromiseAddr = GetAddrOfLocalVar(S.getPromiseDecl());
+    // RL78 far-data default addr space and alloca addr space pointers have
+    // different sizes and an addrspacecast is needed instead of a bit cast.
     auto *PromiseAddrVoidPtr =
-        new llvm::BitCastInst(PromiseAddr.getPointer(), VoidPtrTy, "", CoroId);
+        CGM.getContext().getLangOpts().RenesasRL78DataModel
+            ? static_cast<llvm::CastInst *>(new llvm::AddrSpaceCastInst(
+                  PromiseAddr.getPointer(), VoidPtrTy, "", CoroId))
+            : static_cast<llvm::CastInst *>(new llvm::BitCastInst(
+                  PromiseAddr.getPointer(), VoidPtrTy, "", CoroId));
     // Update CoroId to refer to the promise. We could not do it earlier because
     // promise local variable was not emitted yet.
     CoroId->setArgOperand(1, PromiseAddrVoidPtr);
@@ -766,6 +772,10 @@ void CodeGenFunction::EmitCoroutineBody(const CoroutineBodyStmt &S) {
 
   // LLVM require the frontend to mark the coroutine.
   CurFn->setPresplitCoroutine();
+
+  if (CXXRecordDecl *RD = FnRetTy->getAsCXXRecordDecl();
+      RD && RD->hasAttr<CoroOnlyDestroyWhenCompleteAttr>())
+    CurFn->setCoroDestroyOnlyWhenComplete();
 }
 
 // Emit coroutine intrinsic and patch up arguments of the token type.
@@ -825,6 +835,18 @@ RValue CodeGenFunction::EmitCoroutineIntrinsic(const CallExpr *E,
     Args.push_back(EmitScalarExpr(Arg));
 
   llvm::Function *F = CGM.getIntrinsic(IID);
+  // RL78's integers are 16-bit but Builtin.def's 'int' is mapped to i32
+  // regardless of the target (e.g. the second arg of __builtin_coro_promise);
+  // zero-extend the i16 args to i32 here as a workaround.
+  if (CGM.getContext().getLangOpts().RenesasRL78) {
+    for (unsigned i = 0; i != Args.size(); ++i) {
+      assert(i < F->getFunctionType()->getNumParams());
+      if (F->getFunctionType()->getParamType(i) == Builder.getInt32Ty() &&
+          Args[i]->getType() == Builder.getInt16Ty()) {
+        Args[i] = Builder.CreateZExt(Args[i], Builder.getInt32Ty());
+      }
+    }
+  }
   llvm::CallInst *Call = Builder.CreateCall(F, Args);
 
   // Note: The following code is to enable to emit coro.id and coro.begin by

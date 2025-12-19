@@ -26,6 +26,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GEPNoWrapFlags.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/OperandTraits.h"
@@ -1110,12 +1111,25 @@ public:
   /// a constant offset between them.
   bool hasAllConstantIndices() const;
 
+  /// Set nowrap flags for GEP instruction.
+  void setNoWrapFlags(GEPNoWrapFlags NW);
+
   /// Set or clear the inbounds flag on this GEP instruction.
   /// See LangRef.html for the meaning of inbounds on a getelementptr.
+  /// TODO: Remove this method in favor of setNoWrapFlags().
   void setIsInBounds(bool b = true);
+
+  /// Get the nowrap flags for the GEP instruction.
+  GEPNoWrapFlags getNoWrapFlags() const;
 
   /// Determine whether the GEP has the inbounds flag.
   bool isInBounds() const;
+
+  /// Determine whether the GEP has the nusw flag.
+  bool hasNoUnsignedSignedWrap() const;
+
+  /// Determine whether the GEP has the nuw flag.
+  bool hasNoUnsignedWrap() const;
 
   /// Accumulate the constant address offset of this GEP if possible.
   ///
@@ -4833,6 +4847,8 @@ protected:
   TruncInst *cloneImpl() const;
 
 public:
+  enum { AnyWrap = 0, NoUnsignedWrap = (1 << 0), NoSignedWrap = (1 << 1) };
+
   /// Constructor with insert-before-instruction semantics
   TruncInst(
     Value *S,                           ///< The value to be truncated
@@ -4855,6 +4871,39 @@ public:
   }
   static bool classof(const Value *V) {
     return isa<Instruction>(V) && classof(cast<Instruction>(V));
+  }
+
+  void setHasNoUnsignedWrap(bool B) {
+    SubclassOptionalData =
+        (SubclassOptionalData & ~NoUnsignedWrap) | (B * NoUnsignedWrap);
+  }
+  void setHasNoSignedWrap(bool B) {
+    SubclassOptionalData =
+        (SubclassOptionalData & ~NoSignedWrap) | (B * NoSignedWrap);
+  }
+
+  /// Test whether this operation is known to never
+  /// undergo unsigned overflow, aka the nuw property.
+  bool hasNoUnsignedWrap() const {
+    return SubclassOptionalData & NoUnsignedWrap;
+  }
+
+  /// Test whether this operation is known to never
+  /// undergo signed overflow, aka the nsw property.
+  bool hasNoSignedWrap() const {
+    return (SubclassOptionalData & NoSignedWrap) != 0;
+  }
+
+  /// Returns the no-wrap kind of the operation.
+  unsigned getNoWrapKind() const {
+    unsigned NoWrapKind = 0;
+    if (hasNoUnsignedWrap())
+      NoWrapKind |= NoUnsignedWrap;
+
+    if (hasNoSignedWrap())
+      NoWrapKind |= NoSignedWrap;
+
+    return NoWrapKind;
   }
 };
 

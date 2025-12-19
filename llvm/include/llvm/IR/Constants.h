@@ -26,7 +26,10 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GEPNoWrapFlags.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/OperandTraits.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
@@ -1112,17 +1115,23 @@ public:
   static Constant *getExactLogBase2(Constant *C);
 
   /// Return the identity constant for a binary opcode.
-  /// The identity constant C is defined as X op C = X and C op X = X for every
-  /// X when the binary operation is commutative. If the binop is not
-  /// commutative, callers can acquire the operand 1 identity constant by
-  /// setting AllowRHSConstant to true. For example, any shift has a zero
-  /// identity constant for operand 1: X shift 0 = X.
-  /// If this is a fadd/fsub operation and we don't care about signed zeros,
-  /// then setting NSZ to true returns the identity +0.0 instead of -0.0.
-  /// Return nullptr if the operator does not have an identity constant.
+  /// If the binop is not commutative, callers can acquire the operand 1
+  /// identity constant by setting AllowRHSConstant to true. For example, any
+  /// shift has a zero identity constant for operand 1: X shift 0 = X. If this
+  /// is a fadd/fsub operation and we don't care about signed zeros, then
+  /// setting NSZ to true returns the identity +0.0 instead of -0.0. Return
+  /// nullptr if the operator does not have an identity constant.
   static Constant *getBinOpIdentity(unsigned Opcode, Type *Ty,
                                     bool AllowRHSConstant = false,
                                     bool NSZ = false);
+
+  static Constant *getIntrinsicIdentity(Intrinsic::ID, Type *Ty);
+
+  /// Return the identity constant for a binary or intrinsic Instruction.
+  /// The identity constant C is defined as X op C = X and C op X = X where C
+  /// and X are the first two operands, and the operation is commutative.
+  static Constant *getIdentity(Instruction *I, Type *Ty,
+                               bool AllowRHSConstant = false, bool NSZ = false);
 
   /// Return the absorbing element for the given binary
   /// operation, i.e. a constant C such that X op C = C and C op X = C for
@@ -1221,49 +1230,50 @@ public:
   /// Getelementptr form.  Value* is only accepted for convenience;
   /// all elements must be Constants.
   ///
-  /// \param InRangeIndex the inrange index if present or std::nullopt.
+  /// \param InRange the inrange range if present or std::nullopt.
   /// \param OnlyIfReducedTy see \a getWithOperands() docs.
   static Constant *
   getGetElementPtr(Type *Ty, Constant *C, ArrayRef<Constant *> IdxList,
-                   bool InBounds = false,
-                   std::optional<unsigned> InRangeIndex = std::nullopt,
+                   GEPNoWrapFlags NW = GEPNoWrapFlags::none(),
+                   std::optional<ConstantRange> InRange = std::nullopt,
                    Type *OnlyIfReducedTy = nullptr) {
     return getGetElementPtr(
-        Ty, C, ArrayRef((Value *const *)IdxList.data(), IdxList.size()),
-        InBounds, InRangeIndex, OnlyIfReducedTy);
+        Ty, C, ArrayRef((Value *const *)IdxList.data(), IdxList.size()), NW,
+        InRange, OnlyIfReducedTy);
   }
   static Constant *
-  getGetElementPtr(Type *Ty, Constant *C, Constant *Idx, bool InBounds = false,
-                   std::optional<unsigned> InRangeIndex = std::nullopt,
+  getGetElementPtr(Type *Ty, Constant *C, Constant *Idx,
+                   GEPNoWrapFlags NW = GEPNoWrapFlags::none(),
+                   std::optional<ConstantRange> InRange = std::nullopt,
                    Type *OnlyIfReducedTy = nullptr) {
     // This form of the function only exists to avoid ambiguous overload
     // warnings about whether to convert Idx to ArrayRef<Constant *> or
     // ArrayRef<Value *>.
-    return getGetElementPtr(Ty, C, cast<Value>(Idx), InBounds, InRangeIndex,
+    return getGetElementPtr(Ty, C, cast<Value>(Idx), NW, InRange,
                             OnlyIfReducedTy);
   }
   static Constant *
   getGetElementPtr(Type *Ty, Constant *C, ArrayRef<Value *> IdxList,
-                   bool InBounds = false,
-                   std::optional<unsigned> InRangeIndex = std::nullopt,
+                   GEPNoWrapFlags NW = GEPNoWrapFlags::none(),
+                   std::optional<ConstantRange> InRange = std::nullopt,
                    Type *OnlyIfReducedTy = nullptr);
 
   /// Create an "inbounds" getelementptr. See the documentation for the
   /// "inbounds" flag in LangRef.html for details.
   static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
                                             ArrayRef<Constant *> IdxList) {
-    return getGetElementPtr(Ty, C, IdxList, true);
+    return getGetElementPtr(Ty, C, IdxList, GEPNoWrapFlags::inBounds());
   }
   static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
                                             Constant *Idx) {
     // This form of the function only exists to avoid ambiguous overload
     // warnings about whether to convert Idx to ArrayRef<Constant *> or
     // ArrayRef<Value *>.
-    return getGetElementPtr(Ty, C, Idx, true);
+    return getGetElementPtr(Ty, C, Idx, GEPNoWrapFlags::inBounds());
   }
   static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
                                             ArrayRef<Value *> IdxList) {
-    return getGetElementPtr(Ty, C, IdxList, true);
+    return getGetElementPtr(Ty, C, IdxList, GEPNoWrapFlags::inBounds());
   }
 
   static Constant *getExtractElement(Constant *Vec, Constant *Idx,
@@ -1331,6 +1341,9 @@ public:
   /// Whether creating a constant expression for this binary operator is
   /// supported.
   static bool isSupportedBinOp(unsigned Opcode);
+
+  /// Whether creating a constant expression for this cast is desirable.
+  static bool isDesirableCastOp(unsigned Opcode);
 
   /// Whether creating a constant expression for this getelementptr type is
   /// supported.

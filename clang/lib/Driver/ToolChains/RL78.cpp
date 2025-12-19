@@ -264,6 +264,28 @@ static std::string GetStartObjectPath(const toolchains::RL78ToolChain &TC, std::
   return Dir.c_str();
 }
 
+static bool userProvidedPasses(const llvm::opt::ArgList &Args) {
+  for (StringRef WL : Args.getAllArgValues(options::OPT_Wl_COMMA)) {
+    SmallVector<StringRef, 8> Pieces;
+    WL.split(Pieces, ',');
+    for (StringRef P : Pieces)
+      if (P.startswith("lto-newpm-passes="))
+        return true;
+  }
+
+  return false;
+}
+
+static llvm::StringRef getOptmizationLevel(const llvm::opt::ArgList &Args) {
+  if (llvm::opt::Arg *A = Args.getLastArg(options::OPT_O_Group)) {
+    if (A->getOption().matches(options::OPT_O)) {
+      llvm::StringRef V = A->getValue();
+      return V;
+    }
+  }
+  return {};
+}
+
 void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                 const InputInfo &Output,
                                 const InputInfoList &Inputs,
@@ -272,6 +294,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const ToolChain &ToolChain = getToolChain();
   std::string Linker = ToolChain.GetProgramPath(getShortName());
+  const Driver &D = ToolChain.getDriver();
   ArgStringList CmdArgs;
 
   auto &TC = static_cast<const toolchains::RL78ToolChain &>(getToolChain());
@@ -295,6 +318,24 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
             Features.end());
       }
     }
+  }
+
+  bool hasExplicitMirrorFlag =
+    Args.getLastArg(options::OPT_mirror_source_0) ||
+    Args.getLastArg(options::OPT_mirror_source_1) ||
+    Args.getLastArg(options::OPT_mirror_source_common);
+  const Arg *mirrorSource = Args.getLastArg(options::OPT_mirror_source_EQ);
+  if (!hasExplicitMirrorFlag) {
+    // Handle feature corresponding to "-mirror-source=" option.
+    if (mirrorSource) {
+      if (mirrorSource->containsValue("0"))
+        Features.push_back("+mirror-source-0");
+      else if (mirrorSource->containsValue("1"))
+        Features.push_back("+mirror-source-1");
+      else if (mirrorSource->containsValue("common"))
+        Features.push_back("+mirror-source-common");
+    } else
+      Features.push_back("+mirror-source-0");
   }
 
   // Add features to mattr
@@ -321,6 +362,23 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   SmallString<128> Dir(TC.computeSysRoot());
   llvm::sys::path::append(Dir, "lib");
   CmdArgs.push_back(Args.MakeArgString("-L" + Dir));
+
+  if (D.isUsingLTO()) {
+    assert(!Inputs.empty() && "Must have at least one input.");
+    // Provide a default LTO pipeline tuned for code size (improves -Os/-Oz
+    // builds).
+    if (!userProvidedPasses(Args)) {
+      if (StringRef O = getOptmizationLevel(Args);
+          O.equals("s") || O.equals("z")) {
+        const char *lvl = O.equals("s") ? "Os" : "Oz";
+        CmdArgs.push_back(Args.MakeArgString(Twine("--lto-newpm-passes=lto<") +
+                                             lvl + ">,globalopt,mergefunc"));
+      }
+    }
+    rl78::addRL78PassTuneArgs(Args, CmdArgs);
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs[0],
+                  D.getLTOMode() == LTOK_Thin);
+  }
 
   // Adding default linker script if -T option not specified
   if (!Args.hasArg(options::OPT_T)) {
@@ -397,13 +455,6 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   //Disable multiple threads to avoid race when using the relocation "stack".
   //See ELF\Arch\RL78.cpp
   CmdArgs.push_back("--threads=1");
-
-  StringRef CPU;
-  if (const Arg *A = Args.getLastArg(clang::driver::options::OPT_mcpu_EQ)) {
-    CPU = A->getValue();
-  } else {
-    CPU = "s3";
-  }
 
   const Arg *mCode =
       Args.getLastArg(options::OPT_mnear_code, options::OPT_mfar_code);

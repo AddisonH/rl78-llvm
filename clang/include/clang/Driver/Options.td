@@ -4881,7 +4881,8 @@ foreach i = {0-7} in
 
 // RL78 options.
 def frenesas_extensions : Flag<["-"], "frenesas-extensions">, Group<f_Group>,
-  Flags<[CC1Option]>, HelpText<"Use Renesas CC Extensions.">;
+  Flags<[CC1Option]>, HelpText<"Use Renesas CC Extensions.">,
+  MarshallingInfoFlag<LangOpts<"RenesasExt">>;
 def fnewlib_nano : Flag<["-"], "fnewlib-nano">, Group<f_Group>,
   Flags<[CC1Option]>, HelpText<"Uses newlib nano optimized libc_nano.a instead of libc.a.">;
 def fno_renesas_extensions : Flag<["-"], "fno-renesas-extensions">, Group<f_Group>,
@@ -4895,19 +4896,24 @@ def mirror_source_1 : Joined<["-"], "mmirror-source-1">, Group<m_rl78_Features_G
 def mirror_source_common : Joined<["-"], "mmirror-source-common">, Group<m_rl78_Features_Group>,
   Flags<[CC1Option, HelpHidden]>, HelpText<"Set the mirror source to common.">;
 def mfar_code : Flag<["-"], "mfar-code">, Group<m_rl78_Features_Group>,
-  Flags<[CC1Option]>, HelpText<"Default function pointers are far.">;
+  Flags<[CC1Option]>, HelpText<"Default function pointers are far.">,
+  MarshallingInfoFlag<LangOpts<"RenesasRL78CodeModel">>;
 def mnear_code : Flag<["-"], "mnear-code">, Group<m_rl78_Features_Group>,
   Flags<[CC1Option]>, HelpText<"Default function pointers are near.">;
 def mfar_data : Flag<["-"], "mfar-data">, Group<m_rl78_Features_Group>,
-  Flags<[CC1Option]>, HelpText<"Default data pointers are far.">;
+  Flags<[CC1Option]>, HelpText<"Default data pointers are far.">,
+  MarshallingInfoFlag<LangOpts<"RenesasRL78DataModel">>;
 def mnear_data : Flag<["-"], "mnear-data">, Group<m_rl78_Features_Group>,
   Flags<[CC1Option]>, HelpText<"Default data pointers are near.">;
 def mfar_rom : Flag<["-"], "mfar-rom">, Group<m_rl78_Features_Group>,
-  Flags<[CC1Option]>, HelpText<"Default constant data pointers are far.">;
+  Flags<[CC1Option]>, HelpText<"Default constant data pointers are far.">,
+  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelFar">>;
 def mnear_rom : Flag<["-"], "mnear-rom">, Group<m_rl78_Features_Group>,
-  Flags<[CC1Option]>, HelpText<"Default constant data pointers are near.">;
+  Flags<[CC1Option]>, HelpText<"Default constant data pointers are near.">,
+  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelNear">>;
 def mcommon_rom : Flag<["-"], "mcommon-rom">, Group<m_rl78_Features_Group>,
-  Flags<[CC1Option]>;
+  Flags<[CC1Option]>,
+  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelCommon">>;
 def fsim : Flag<["-"], "fsim">, Group<f_Group>,
   Flags<[CC1Option]>, HelpText<"Specifies program will be run on the simulator.">;
 def m64bit_doubles : Flag<["-"], "m64bit-doubles">, Group<m_rl78_Features_Group>,

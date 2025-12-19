@@ -7082,42 +7082,247 @@ def RL78InterruptDocs : Documentation {
   let Category = DocCatFunction;
   let Heading = "interrupt (RL78)";
   let Content = [{
-Clang supports the GNU style ``__attribute__((interrupt))`` attribute on
+Clang supports the GNU style ``__attribute__((interrupt))`` or 
+``__attribute__((interrupt([interrupt-specification])))`` attribute on
 RL78 targets. This attribute may be attached to a function definition and
 instructs the backend to generate appropriate function entry/exit code so that
 it can be used directly as an interrupt service routine.
 
-For interrupt handlers intended to be used with the BRK opcode (i.e. those that 
-must end with RETB instead of RETI) please use ``__attribute__((brk_interrupt))``
-instead.
+This attribute indicates that the specified function is a hardware interrupt 
+handler. A code for returning with RETI is generated with the target function
+definition.
+
+The ``interrupt-specification`` can include the following:
+
+  - ``vect`` = address
+
+  Address: binary, octal, decimal, or hexadecimal constant. Only an even value 
+  within the range from 0x0 to 0x7c can be specified.
+
+  When specified, **___vector_** [address in hexadecimal] label will be emitted 
+  at the location of the interrupt handler function.
+  The emitted label can be used to place the handler at the correct memory 
+  location regardless of the name of the interrupt function.
+
+  The toolchain provided solution (implemented in crt0.S), is to reference these
+  labels in an array that will be placed at the interrupt vector memory 
+  location. This array and it's section avoids getting discarded by the 
+  ``-Wl,\-\-gc-sections`` link option due to the usage of the KEEP() linker 
+  script statement.
+
+  Example: **vect=0x12** results in emitting **___vector_12**
+
+  - ``bank`` = one of the following values: "RB0", "RB1", "RB2", "RB3"
+
+  Register bank for use by the interrupt handler.
+
+  Changing the register bank makes it unnecessary to save the values of general
+  registers on the stack.
+
+  Note that ES and CS are saved on the stack.
+
+  When this setting is omitted, the general registers are saved on the stack.
+
+  - ``enable`` = "true" or "false"
+
+  If set to true, enables nested interrupts at the entry to a function, 
+  resulting in the EI instruction being generated before the register saving 
+  code.
+
+  If set to false or omitted, the EI instruction is not generated.
+
+Example usage:
+
+.. code-block:: c
+
+  void __attribute__((interrupt)) test0(void);
+  void __attribute__((interrupt(vect=0x12,bank=RB2,enable=true))) test1(void);
+
+  void test0(void) {
+  /*Interrupt processing*/
+  }
+
+  void test1(void) {
+  /*Interrupt processing*/
+  }
+
+  }];
+}
+
+def RL78BRKInterruptDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "brk_interrupt";
+  let Content = [{
+Clang supports the GNU style ``__attribute__((brk_interrupt))`` or 
+``__attribute__((brk_interrupt([interrupt-specification])))`` attribute on 
+RL78 targets. This attribute may be attached to a function definition and
+instructs the backend to generate appropriate function entry/exit code so that
+it can be used directly as an interrupt service routine.
+
+This attribute indicates that the specified function is a software interrupt 
+handler. A code for returning with RETB is generated with the target function 
+definition.
+
+The ``interrupt-specification`` can include the following:
+
+  - ``bank`` = one of the following values: "RB0", "RB1", "RB2", "RB3"
+
+  Register bank for use by the interrupt handler.
+
+  Changing the register bank makes it unnecessary to save the values of general 
+  registers on the stack.
+
+  Note that ES and CS are saved on the stack.
+
+  When this setting is omitted, the general registers are saved on the stack.
+
+  - ``enable`` = "true" or "false"
+
+  If set to true, enables nested interrupts at the entry to a function, 
+  resulting in the EI instruction being generated before the register saving 
+  code.
+
+  If set to false or omitted, the EI instruction is not generated.
+  
+Example usage:
+
+.. code-block:: c
+
+  void __attribute__((brk_interrupt(bank=RB2,enable=true))) test(void);
+
+  void test(void) {
+  /*Interrupt processing*/
+  }
+
   }];
 }
 
 def RL78InlineASMDocs : Documentation {
   let Category = DocCatFunction;
-  let Heading = "inline_asm (RL78)";
+  let Heading = "inline_asm";
   let Content = [{
-Clang support the CCRL stype inline_asm pragma. This pragma allows the body of the 
-function to be assembly code. TODO: more
+Clang supports the ``__attribute__((inline_asm))`` attribute on RL78 targets.
+This attribute allows the body of the function to be assembly code.
+
+Example usage:
+
+.. code-block:: c
+
+  __attribute__((inline_asm)) int label(void) { movw ax, bc }
+  int main(void) {
+    label();
+    return 0;
+  }
+
+  }];
+}
+
+def RL78AddressDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "address";
+  let Content = [{
+Clang supports the ``__attribute__((address(<absolute-address>)))`` attribute
+on RL78 targets. This attribute allows the specification of the absolute address
+where the variable will be allocated.
+
+Example usage:
+
+.. code-block:: c
+
+  //io is allocated to address 0xffe00
+  __attribute__((address(0xffe00))) int io;
+  
   }];
 }
 
 def RL78SaddrDocs : Documentation {
   let Category = DocCatVariable;
-  let Heading = "Saddr (RL78)";
+  let Heading = "saddr";
   let Content = [{
-Clang supports the GNU style ``__attribute__((saddr))``attribute on
-RL78 targets. This attribute may be attached to a global variable definition and
-instructs the backed that this variable will be allocated to the saddr memory area.
+Clang supports the ``__attribute__((saddr))`` attribute on RL78 targets. This
+attribute may be attached to a global variable definition and instructs the 
+backend that this variable will be allocated to the saddr memory area.
+
+Note that ``__saddr`` keyword only has effect when -frenesas-extensions is 
+specified on the command line.
   }];
 }
 
-def RL78VectorDocs : Documentation {
-  let Category = DocCatVariable;
-  let Heading = "Saddr (RL78)";
+def RL78CalltDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "callt";
   let Content = [{
-Clang supports the GNU style ``__attribute__((vector))``attribute on
-RL78 targets. This attribute may be attached to a function definition and
-instructs the backed that this TODO.
+Clang supports the ``__attribute__((callt))`` attribute on RL78 targets. This
+attribute allows to specify the function should be called with the ``callt``
+instruction.
+
+Note that ``__callt`` keyword only has effect when -frenesas-extensions is 
+specified on the command line.
+  }];
+}
+
+def CoroOnlyDestroyWhenCompleteDocs : Documentation {
+  let Category = DocCatDecl;
+  let Content = [{
+The `coro_only_destroy_when_complete` attribute should be marked on a C++ class. The coroutines
+whose return type is marked with the attribute are assumed to be destroyed only after the coroutine has
+reached the final suspend point.
+
+This is helpful for the optimizers to reduce the size of the destroy function for the coroutines.
+
+For example,
+
+.. code-block:: c++
+
+  A foo() {
+    dtor d;
+    co_await something();
+    dtor d1;
+    co_await something();
+    dtor d2;
+    co_return 43;
+  }
+
+The compiler may generate the following pseudocode:
+
+.. code-block:: c++
+
+  void foo.destroy(foo.Frame *frame) {
+    switch(frame->suspend_index()) {
+      case 1:
+        frame->d.~dtor();
+        break;
+      case 2:
+        frame->d.~dtor();
+        frame->d1.~dtor();
+        break;
+      case 3:
+        frame->d.~dtor();
+        frame->d1.~dtor();
+        frame->d2.~dtor();
+        break;
+      default: // coroutine completed or haven't started
+        break;
+    }
+
+    frame->promise.~promise_type();
+    delete frame;
+  }
+
+The `foo.destroy()` function's purpose is to release all of the resources
+initialized for the coroutine when it is destroyed in a suspended state.
+However, if the coroutine is only ever destroyed at the final suspend state,
+the rest of the conditions are superfluous.
+
+The user can use the `coro_only_destroy_when_complete` attributo suppress
+generation of the other destruction cases, optimizing the above `foo.destroy` to:
+
+.. code-block:: c++
+
+  void foo.destroy(foo.Frame *frame) {
+    frame->promise.~promise_type();
+    delete frame;
+  }
+
   }];
 }

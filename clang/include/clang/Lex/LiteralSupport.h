@@ -181,7 +181,7 @@ private:
     // CC-RL permits only for binary numbers the _ as digit separator
     while (ptr != ThisTokEnd &&
            (*ptr == '0' || *ptr == '1' || isDigitSeparator(*ptr) ||
-            LangOpts.RenesasExt && *ptr == '_'))
+            (LangOpts.RenesasExt && *ptr == '_')))
       ptr++;
     return ptr;
   }

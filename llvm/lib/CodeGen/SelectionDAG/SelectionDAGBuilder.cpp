@@ -3258,6 +3258,8 @@ void SelectionDAGBuilder::visitBinary(const User &I, unsigned Opcode) {
   }
   if (auto *ExactOp = dyn_cast<PossiblyExactOperator>(&I))
     Flags.setExact(ExactOp->isExact());
+  if (auto *DisjointOp = dyn_cast<PossiblyDisjointInst>(&I))
+    Flags.setDisjoint(DisjointOp->isDisjoint());
   if (auto *FPOp = dyn_cast<FPMathOperator>(&I))
     Flags.copyFMF(*FPOp);
 
@@ -3522,9 +3524,23 @@ void SelectionDAGBuilder::visitZExt(const User &I) {
   // ZExt cannot be a no-op cast because sizeof(src) < sizeof(dest).
   // ZExt also can't be a cast to bool for same reason. So, nothing much to do
   SDValue N = getValue(I.getOperand(0));
-  EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
-                                                        I.getType());
-  setValue(&I, DAG.getNode(ISD::ZERO_EXTEND, getCurSDLoc(), DestVT, N));
+  auto &TLI = DAG.getTargetLoweringInfo();
+  EVT DestVT = TLI.getValueType(DAG.getDataLayout(), I.getType());
+
+  SDNodeFlags Flags;
+  if (auto *PNI = dyn_cast<PossiblyNonNegInst>(&I))
+    Flags.setNonNeg(PNI->hasNonNeg());
+
+  // Eagerly use nonneg information to canonicalize towards sign_extend if
+  // that is the target's preference.
+  // TODO: Let the target do this later.
+  if (Flags.hasNonNeg() &&
+      TLI.isSExtCheaperThanZExt(N.getValueType(), DestVT)) {
+    setValue(&I, DAG.getNode(ISD::SIGN_EXTEND, getCurSDLoc(), DestVT, N));
+    return;
+  }
+
+  setValue(&I, DAG.getNode(ISD::ZERO_EXTEND, getCurSDLoc(), DestVT, N, Flags));
 }
 
 void SelectionDAGBuilder::visitSExt(const User &I) {
@@ -3954,27 +3970,6 @@ void SelectionDAGBuilder::visitExtractValue(const ExtractValueInst &I) {
                            DAG.getVTList(ValValueVTs), Values));
 }
 
-static SDValue getAddOffsetNode(SelectionDAG &DAG, SDValue &N, SDLoc &dl,
-                         SDValue &OffsVal, SDNodeFlags &Flags) {
-  if (DAG.getTarget().getTargetTriple().isRL78() &&
-      N.getValueType().getSizeInBits() == 32) {
-    // Since for RL78 data alocation is prohibited accross segments,
-    // offsets are
-    // added to the lower 16bytes only
-    OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, MVT::i16);
-    SDValue LowAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
-                                     DAG.getConstant(0, dl, MVT::i16));
-    SDValue HighAddress = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, N,
-                                      DAG.getConstant(1, dl, MVT::i16));
-    SDValue LowAddressAndOffset = DAG.getNode(
-        ISD::ADD, dl, LowAddress.getValueType(), LowAddress, OffsVal, Flags);
-    return DAG.getNode(ISD::BUILD_PAIR, dl, N.getValueType(),
-                       LowAddressAndOffset, HighAddress, Flags);
-  } else {
-    return DAG.getNode(ISD::ADD, dl, N.getValueType(), N, OffsVal, Flags);
-  }
-}
-
 void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   Value *Op0 = I.getOperand(0);
   // Note that the pointer operand may be a vector of pointers. Take the scalar
@@ -3983,6 +3978,7 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   SDValue N = getValue(Op0);
   SDLoc dl = getCurSDLoc();
   auto &TLI = DAG.getTargetLoweringInfo();
+  GEPNoWrapFlags NW = cast<GEPOperator>(I).getNoWrapFlags();
 
   // Normalize Vector GEP - all scalar operands should be converted to the
   // splat vector.
@@ -4010,11 +4006,12 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         // In an inbounds GEP with an offset that is nonnegative even when
         // interpreted as signed, assume there is no unsigned overflow.
         SDNodeFlags Flags;
-        if (int64_t(Offset) >= 0 && cast<GEPOperator>(I).isInBounds())
-          Flags.setNoUnsignedWrap(true);
+        if (NW.hasNoUnsignedWrap() ||
+            (int64_t(Offset) >= 0 && NW.hasNoUnsignedSignedWrap()))
+          Flags |= SDNodeFlags::NoUnsignedWrap;
 
-        SDValue OffsVal = DAG.getConstant(Offset, dl, N.getValueType());
-        N = getAddOffsetNode(DAG, N, dl, OffsVal, Flags);
+        N = DAG.getMemBasePlusOffset(
+            N, DAG.getConstant(Offset, dl, N.getValueType()), dl, Flags);
       }
     } else {
       // IdxSize is the width of the arithmetic according to IR semantics.
@@ -4051,11 +4048,13 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         // In an inbounds GEP with an offset that is nonnegative even when
         // interpreted as signed, assume there is no unsigned overflow.
         SDNodeFlags Flags;
-        if (Offs.isNonNegative() && cast<GEPOperator>(I).isInBounds())
+        if (NW.hasNoUnsignedWrap() ||
+            (Offs.isNonNegative() && NW.hasNoUnsignedSignedWrap()))
           Flags.setNoUnsignedWrap(true);
 
         OffsVal = DAG.getSExtOrTrunc(OffsVal, dl, N.getValueType());
-        N = getAddOffsetNode(DAG, N, dl, OffsVal, Flags);
+
+        N = DAG.getMemBasePlusOffset(N, OffsVal, dl, Flags);
         continue;
       }
 
@@ -4098,8 +4097,14 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         }
       }
 
-      SDNodeFlags Flags;
-      N = getAddOffsetNode(DAG, N, dl, IdxN, Flags);
+      // The successive addition of the current address, truncated to the
+      // pointer index type and interpreted as an unsigned number, and each
+      // offset, also interpreted as an unsigned number, does not wrap the
+      // pointer index type (add nuw).
+      SDNodeFlags AddFlags;
+      AddFlags.setNoUnsignedWrap(NW.hasNoUnsignedWrap());
+
+      N = DAG.getMemBasePlusOffset(N, IdxN, dl, AddFlags);
     }
   }
 
@@ -4156,10 +4161,9 @@ void SelectionDAGBuilder::visitAlloca(const AllocaInst &I) {
   // Round the size of the allocation up to the stack alignment size
   // by add SA-1 to the size. This doesn't overflow because we're computing
   // an address inside an alloca.
-  SDNodeFlags Flags;
-  Flags.setNoUnsignedWrap(true);
   AllocSize = DAG.getNode(ISD::ADD, dl, AllocSize.getValueType(), AllocSize,
-                          DAG.getConstant(StackAlignMask, dl, IntPtr), Flags);
+                          DAG.getConstant(StackAlignMask, dl, IntPtr),
+                          SDNodeFlags::NoUnsignedWrap);
 
   // Mask out the low bits for alignment purposes.
   AllocSize = DAG.getNode(ISD::AND, dl, AllocSize.getValueType(), AllocSize,
@@ -5936,8 +5940,7 @@ void SelectionDAGBuilder::lowerCallToExternalSymbol(const CallInst &I,
   assert(FunctionName && "FunctionName must not be nullptr");
   SDValue Callee = DAG.getExternalSymbol(
       FunctionName,
-      DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout(), 
-      DAG.getDataLayout().getProgramAddressSpace()));
+      DAG.getTargetLoweringInfo().getProgramPointerTy(DAG.getDataLayout()));
   LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
@@ -7027,7 +7030,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     CLI.setDebugLoc(sdl).setChain(getRoot()).setLibCallee(
         CallingConv::C, I.getType(),
         DAG.getExternalSymbol(TrapFuncName.data(),
-                              TLI.getPointerTy(DAG.getDataLayout(), DAG.getDataLayout().getProgramAddressSpace())),
+                              TLI.getProgramPointerTy(DAG.getDataLayout())),
         std::move(Args));
 
     std::pair<SDValue, SDValue> Result = TLI.LowerCallTo(CLI);
@@ -8223,9 +8226,9 @@ static SDValue getMemCmpLoad(const Value *PtrVal, MVT LoadVT,
         Type::getIntNTy(PtrVal->getContext(), LoadVT.getScalarSizeInBits());
     if (LoadVT.isVector())
       LoadTy = FixedVectorType::get(LoadTy, LoadVT.getVectorNumElements());
-    // TODO: RL78 change: added address space too, since we need to handle far-rom.
+
     LoadInput = ConstantExpr::getBitCast(const_cast<Constant *>(LoadInput),
-                                         PointerType::get(LoadTy, LoadInput->getType()->getPointerAddressSpace()));
+                                         PointerType::getUnqual(LoadTy));
 
     if (const Constant *LoadCst =
             ConstantFoldLoadFromConstPtr(const_cast<Constant *>(LoadInput),
@@ -8418,8 +8421,7 @@ bool SelectionDAGBuilder::visitMemPCpyCall(const CallInst &I) {
   Size = DAG.getSExtOrTrunc(Size, sdl, Dst.getValueType());
 
   // Adjust return pointer to point just past the last dst byte.
-  SDValue DstPlusSize = DAG.getNode(ISD::ADD, sdl, Dst.getValueType(),
-                                    Dst, Size);
+  SDValue DstPlusSize = DAG.getMemBasePlusOffset(Dst, Size, sdl);
   setValue(&I, DstPlusSize);
   return true;
 }
@@ -9201,14 +9203,8 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
 
   // Remember the HasSideEffect, AlignStack, AsmDialect, MayLoad and MayStore
   // bits as operand 3.
-  // RL78: use the frame index type instead of the plain ptr type to get
-  // a 16-bit constant also for -mfar-data
-  const auto RL78FarData = DAG.getSubtarget().getTargetTriple().isRL78() &&
-                           DAG.getDataLayout().getPointerSizeInBits() == 32;
-  const auto PointerTy = RL78FarData ? TLI.getFrameIndexTy(DAG.getDataLayout())
-                                     : TLI.getPointerTy(DAG.getDataLayout());
   AsmNodeOperands.push_back(DAG.getTargetConstant(
-      ExtraInfo.get(), getCurSDLoc(), PointerTy));
+      ExtraInfo.get(), getCurSDLoc(), TLI.getPointerTy(DAG.getDataLayout())));
 
   // Third pass: Loop over operands to prepare DAG-level operands.. As part of
   // this, assign virtual and physical registers for inputs and otput.
@@ -9343,11 +9339,7 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
         OpFlag = InlineAsm::convertMemFlagWordToMatchingFlagWord(OpFlag);
         OpFlag = InlineAsm::getFlagWordForMatchingOp(OpFlag,
                                                     OpInfo.getMatchedOperand());
-        if(llvm::isUInt<32>(OpFlag) && (TLI.getPointerTy(DAG.getDataLayout()).getSizeInBits() < 32))
-          AsmNodeOperands.push_back(DAG.getTargetConstant(
-            OpFlag, getCurSDLoc(), MVT::i32));
-        else
-          AsmNodeOperands.push_back(DAG.getTargetConstant(
+        AsmNodeOperands.push_back(DAG.getTargetConstant(
             OpFlag, getCurSDLoc(), TLI.getPointerTy(DAG.getDataLayout())));
         AsmNodeOperands.push_back(AsmNodeOperands[CurOp+1]);
         break;
@@ -9390,14 +9382,9 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
         assert((OpInfo.isIndirect ||
                 OpInfo.ConstraintType != TargetLowering::C_Memory) &&
                "Operand must be indirect to be a mem!");
-        // RL78: stack ptrs are near, even with -mfar-data
-        auto PtrType = TLI.getPointerTy(
-            DAG.getDataLayout(),
-            DAG.getSubtarget().getTargetTriple().isRL78() &&
-                    InOperandVal.getNode()->getOpcode() == ISD::FrameIndex);
-        assert(InOperandVal.getValueType() == PtrType &&
+        assert(InOperandVal.getValueType() ==
+                   TLI.getPointerTy(DAG.getDataLayout()) &&
                "Memory operands expect pointer values");
-
         unsigned ConstraintID =
             TLI.getInlineAsmMemConstraint(OpInfo.ConstraintCode);
         assert(ConstraintID != InlineAsm::Constraint_Unknown &&
@@ -10135,21 +10122,11 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         MF.getFrameInfo().CreateStackObject(TySize, Alignment, false);
     Type *StackSlotPtrType = PointerType::get(CLI.RetTy,
                                               DL.getAllocaAddrSpace());
-
     DemoteStackSlot = CLI.DAG.getFrameIndex(DemoteStackIdx, getFrameIndexTy(DL));
-    SDValue DemoteStackSlotRL78;
-    // RL78: an addrspacecast is needed here if -mfar-data
-    // NOTE: we use another SDValue for the Entry.Node, as the original one will be used
-    // later (after the function is invoked); StackSlotPtrType is overwritten as its only
-    // use in the Entry.Ty assignment below
-    if (CLI.DAG.getTarget().getTargetTriple().isRL78() && DL.getPointerSizeInBits() == 32) {
-      SDLoc dl(DemoteStackSlot);
-      DemoteStackSlotRL78 = CLI.DAG.getAddrSpaceCast(dl, getPointerTy(DL),
-                                DemoteStackSlot, DL.getAllocaAddrSpace(), 0);
-      StackSlotPtrType = PointerType::get(CLI.RetTy, 0);
-    }
+    SDValue LoweredStackSlot =
+        lowerStackSlotForSRet(DemoteStackSlot, StackSlotPtrType, CLI);
     ArgListEntry Entry;
-    Entry.Node = DemoteStackSlotRL78 ? DemoteStackSlotRL78 : DemoteStackSlot;
+    Entry.Node = LoweredStackSlot ? LoweredStackSlot : DemoteStackSlot;
     Entry.Ty = StackSlotPtrType;
     Entry.IsSExt = false;
     Entry.IsZExt = false;
@@ -10438,15 +10415,12 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
 
     // An aggregate return value cannot wrap around the address space, so
     // offsets to its parts don't wrap either.
-    SDNodeFlags Flags;
-    Flags.setNoUnsignedWrap(true);
-
     MachineFunction &MF = CLI.DAG.getMachineFunction();
     Align HiddenSRetAlign = MF.getFrameInfo().getObjectAlign(DemoteStackIdx);
     for (unsigned i = 0; i < NumValues; ++i) {
-      SDValue Add = CLI.DAG.getNode(ISD::ADD, CLI.DL, PtrVT, DemoteStackSlot,
-                                    CLI.DAG.getConstant(Offsets[i], CLI.DL,
-                                                        PtrVT), Flags);
+      SDValue Add = CLI.DAG.getMemBasePlusOffset(
+          DemoteStackSlot, CLI.DAG.getConstant(Offsets[i], CLI.DL, PtrVT),
+          CLI.DL, SDNodeFlags::NoUnsignedWrap);
       SDValue L = CLI.DAG.getLoad(
           RetTys[i], CLI.DL, CLI.Chain, Add,
           MachinePointerInfo::getFixedStack(CLI.DAG.getMachineFunction(),

@@ -1144,7 +1144,7 @@ std::string Triple::normalize(StringRef Str) {
   }
 
   // Normalize RL78 to rl78-unknown-elf
-  if(Arch == Triple::RL78) {
+  if(Arch == Triple::RL78 && Components.size() == 1) {
       Components.resize(3);
       Components[1] = "unknown";
       Components[2] = "elf";
