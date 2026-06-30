@@ -1,0 +1,103 @@
+; RUN: llc -mtriple=rl78 < %s | FileCheck %s 
+
+target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
+target triple = "rl78-unknown-unknown-elf"
+
+; Registers used for passing arguments: AX, BC, DE.
+; CHECK-LABEL: _test_formal_regs
+; CHECK: addw ax, bc
+; CHECK-NEXT: addw ax, de
+define dso_local i16 @test_formal_regs(i16 noundef %0, i16 noundef %1, i16 noundef %2) local_unnamed_addr {
+  %4 = add i16 %0, %1
+  %5 = add i16 %4, %2
+  ret i16 %5
+}
+
+; If no registers available, arguments will go to stack. 
+; CHECK-LABEL: _test_formal_stack
+; CHECK: addw ax, bc
+; CHECK-NEXT: addw ax, de
+; CHECK-NEXT: movw bc, ax
+; CHECK-NEXT: movw ax, [sp+4]
+; CHECK-NEXT: addw ax, bc
+; CHECK-NEXT: movw bc, ax
+; CHECK-NEXT: movw ax, [sp+6]
+; CHECK-NEXT: addw ax, bc
+define dso_local i16 @test_formal_stack(i16 noundef %0, i16 noundef %1, i16 noundef %2, i16 noundef %3, i16 noundef %4) local_unnamed_addr {
+  %6 = add i16 %0, %1
+  %7 = add i16 %6, %2
+  %8 = add i16 %7, %3
+  %9 = add i16 %8, %4
+  ret i16 %9
+}
+
+; Unsigned long lower 2 bytes go to AX and upper 2 bytes to BC.
+; CHECK-LABEL: _test_formal_4byte
+; CHECK:	addw ax
+; CHECK:	incw bc
+define dso_local i32 @test_formal_4byte(i32 noundef %0) local_unnamed_addr #0 {
+  %2 = add i32 %0, 1
+  ret i32 %2
+}
+
+; Struct ≤ 4 bytes arguments go to registers.
+; CHECK-LABEL: _test_formal_struct4
+; CHECK: addw ax, bc
+define dso_local i16 @test_formal_struct4([2 x i16] %0) local_unnamed_addr {
+  %2 = extractvalue [2 x i16] %0, 0
+  %3 = extractvalue [2 x i16] %0, 1
+  %4 = add i16 %2, %3
+  ret i16 %4
+}
+
+; Struct ≥ 5 bytes arguments go to stack.
+; CHECK-LABEL: _test_formal_struct5
+; CHECK: mov a, [sp+4]
+define dso_local i8 @test_formal_struct5([5 x i8] %0) local_unnamed_addr {
+  %2 = extractvalue [5 x i8] %0, 0
+  ret i8 %2
+}
+
+; 8-byte arguments go to stack.
+; Caller allocates space for the return value and passes pointer as first argument (%0)
+; Callee writes writes to that allocated space.
+; This sequence illustrates how i64 is split into 4 16-bit stores.
+; CHECK-LABEL: _test_formal_ll
+; CHECK: movw hl, ax
+; CHECK-NEXT: movw ax, [sp+10]
+; CHECK-NEXT: movw [hl+6], ax
+; CHECK-NEXT: movw ax, [sp+8]
+; CHECK-NEXT: movw [hl+4], ax
+; CHECK-NEXT: movw ax, [sp+6]
+; CHECK-NEXT: movw [hl+2], ax
+; CHECK-NEXT: movw ax, [sp+4]
+; CHECK-NEXT: movw [hl], ax
+define dso_local void @test_formal_ll(ptr noalias nocapture writeonly sret(i64) align 2 %0, i64 noundef %1) local_unnamed_addr {
+  store i64 %1, ptr %0, align 2
+  ret void
+}
+
+; Variable arguments go to stack.
+; CHECK-LABEL: test_formal_var
+; CHECK: push ax
+; CHECK-NEXT: movw ax, [sp+6]
+; CHECK-NEXT: pop hl
+
+define dso_local i16 @test_formal_var(i16 noundef %0, ...) local_unnamed_addr  {
+  %2 = alloca ptr, align 2
+  call void @llvm.lifetime.start.p0(i64 2, ptr nonnull %2) #3
+  call void @llvm.va_start.p0(ptr nonnull %2)
+  %3 = load ptr, ptr %2, align 2
+  %4 = getelementptr inbounds i8, ptr %3, i16 2
+  store ptr %4, ptr %2, align 2
+  %5 = load i16, ptr %3, align 2
+  call void @llvm.va_end.p0(ptr nonnull %2)
+  call void @llvm.lifetime.end.p0(i64 2, ptr nonnull %2) 
+  ret i16 %5
+}
+
+declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) 
+declare void @llvm.va_start.p0(ptr) #2
+declare void @llvm.va_end.p0(ptr) #2
+declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
+

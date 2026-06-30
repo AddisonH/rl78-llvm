@@ -1798,6 +1798,9 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   if (!config->relocatable && config->emachine == EM_RISCV)
     riscvFinalizeRelax(pass);
 
+  if (!config->relocatable && config->emachine == EM_RL78)
+    rl78FinalizeRelax(pass);
+
   if (config->emachine == EM_RL78)
     static_cast<RL78PltSection &>(*in.plt).finiAllocSize();
 

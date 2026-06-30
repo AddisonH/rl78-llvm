@@ -1107,6 +1107,17 @@ public:
       LangAS destAS = E->getType()->getPointeeType().getAddressSpace();
       LangAS srcAS = subExpr->getType()->getPointeeType().getAddressSpace();
       llvm::Type *destTy = ConvertType(E->getType());
+      if (CGM.getLangOpts().RenesasRL78 &&
+          srcAS == LangAS::Default && destAS == LangAS::__far_data &&
+          subExpr->getType()->getPointeeType()->isFunctionType()) {
+        if (const auto *CE = dyn_cast<llvm::ConstantExpr>(C);
+            CE && CE->getOpcode() == llvm::Instruction::IntToPtr &&
+            isa<llvm::ConstantInt>(CE->getOperand(0))) {
+          C = llvm::ConstantExpr::getPointerCast(C, llvm::PointerType::get(VMContext,
+              CGM.getContext().getTargetAddressSpace(LangAS::__far_code)));
+          srcAS = LangAS::__far_code;
+        }
+      }
       return CGM.getTargetCodeGenInfo().performAddrSpaceCast(CGM, C, srcAS,
                                                              destAS, destTy);
     }

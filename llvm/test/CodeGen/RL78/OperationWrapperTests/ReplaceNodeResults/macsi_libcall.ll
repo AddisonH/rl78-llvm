@@ -1,0 +1,14 @@
+; This test verifies for the presence of the __COM_macsi libcall.
+
+; RUN: llc %s -o - | FileCheck %s
+
+; CHECK: _test__macsi:
+; CHECK: ; %bb.0:
+; CHECK: 	call !__COM_macsi
+
+define dso_local i32 @test__macsi(i16 noundef %0, i16 noundef %1, i32 noundef %2) local_unnamed_addr #0 {
+  %4 = tail call i32 @llvm.rl78.macsi(i16 %0, i16 %1, i32 %2)
+  ret i32 %4
+}
+
+declare i32 @llvm.rl78.macsi(i16, i16, i32) #1

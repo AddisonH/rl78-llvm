@@ -52,7 +52,8 @@ MCAsmBackend *createRL78AsmBackend(const Target &T, const MCSubtargetInfo &STI,
                                    const MCRegisterInfo &MRI,
                                    const MCTargetOptions &Options);
 std::unique_ptr<MCObjectTargetWriter> createRL78ELFObjectWriter(bool Is64Bit,
-                                                                uint8_t OSABI);
+                                                                uint8_t OSABI,
+                                                                bool ForceRelaxRelocs);
 } // end namespace llvm
 
 // Defines symbolic names for RL78 registers.  This defines a mapping from

@@ -510,7 +510,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               // Erase the MOVW instruction.
               MI.eraseFromParent();
             } else if (MI.getOperand(1).getImm() == 1) {
-              // Build the CLRW instruction.
+              // Build the ONEW instruction.
               BuildMI(MBB, MI, DL, TII->get(RL78::ONEW_rp))
                   .add(MI.getOperand(0));
               // Erase the MOVW instruction.
@@ -555,7 +555,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         }
         break;
       case RL78::SHL_r_imm:
-        // Replace MOV R1, R0 + SHL R2/R3, #imm with SHL R2/R3, #imm.
+        // Replace MOV R1, (R2/R3) + SHL R2/R3, #imm + MOV (R2/R3), R1 with SHL R2/R3, #imm.
         if ( MI.getOperand(0).getReg() == RL78::R1 &&
             (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
             (MachineBasicBlock::iterator(MI) != MBB.end()) &&
@@ -587,6 +587,16 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       case RL78::SHLW_rp_imm:
         RemoveMOVWs(MI, MBB, Next, RL78::RP2);
         break;
+      case RL78::SUBW_rp_rp: {
+        // SUBW ax, ax is not permitted.
+        if (MI.getOperand(2).getReg() == RL78::RP0 &&
+            MI.getOperand(1).getReg() == MI.getOperand(2).getReg()) {
+          BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp))
+              .addReg(MI.getOperand(0).getReg());
+          MI.eraseFromParent();
+        }
+        break;
+      }
       case RL78::AND_r_r: // Generated during lowering of AND16_rp_rp.
       case RL78::OR_r_r:  // Generated during lowering of OR16_rp_rp.
       case RL78::XOR_r_r: // Generated during lowering of XOR16_rp_rp.
@@ -767,7 +777,14 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // see gcc.c_torture\scal-to-vec1.c.
         if (MI.getOperand(0).getReg() == MI.getOperand(1).getReg()) {
           // Remove or replace branch with unconditional branch.
-          // OBS. if next MI is not BRCC we don't know what this is
+          // OBS. We only handle the cases where a BRCC appears immediately
+          // after the CMP/CMPW, or after non-branch instruction(s):
+          //   CMPW rp0, rp0
+          //   BRCC
+          // or:
+          //   CMPW rp0, rp0
+          //   <one or more non-branch instructions> e.g. rp0 = MOVW_AX_rp rp2
+          //   BRCC
           // we can't have XOR1 instructions since this is not
           // caused by the DAGCombiner.
           while (Next != MBB.end() && Next->isDebugInstr())
@@ -779,16 +796,24 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           auto handled = false;
 
           if (Next != MBB.end()) {
-            MachineInstr &MI2 = *Next++;
-            if (MI2.getOpcode() == RL78::BRCC) {
-                // If the condition is true.
-                if ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
-                    (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH) ||
-                    (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NC))
+            while (Next->getOpcode() != RL78::BRCC &&
+                   Next->getOpcode() != RL78::LowCMPW_rp_rp)
+              ++Next;
+
+            // We don't handle LowCMPW_rp_rp here.
+            if (Next->getOpcode() == RL78::LowCMPW_rp_rp)
+              Next = OrgNext;
+            if (Next->getOpcode() == RL78::BRCC) {
+              MachineInstr &MI2 = *Next++;
+
+              // If the condition is true.
+              if ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
+                  (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH) ||
+                  (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NC))
                 BuildMI(MBB, MI2, DL, TII->get(RL78::BR)).add(MI2.getOperand(0));
-                MI2.eraseFromParent();
-                MI.eraseFromParent();
-                handled = true;
+              MI2.eraseFromParent();
+              MI.eraseFromParent();
+              handled = true;
             }
           }
 

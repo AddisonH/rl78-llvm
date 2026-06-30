@@ -31,8 +31,8 @@ ArrayRef<Builtin::Info> RL78TargetInfo::getTargetBuiltins() const {
 }
 
 const char *const RL78TargetInfo::GCCRegNames[] = {
-    "rp0", "rp2", "rp4", "rp6", "r0", "r1",  "r2", "r3", "r4",
-    "r5",  "r6",  "r7",  "sp",  "ap", "psw", "es", "cs"};
+    "ax", "bc", "de", "hl", "x", "a",  "c", "b", "e",
+    "d",  "l",  "h",  "sp",  "ap", "psw", "es", "cs"};
 
 const LangASMap RL78TargetInfo::RL78AddrSpaceMap = {  
   0, // Default
@@ -66,9 +66,9 @@ ArrayRef<const char *> RL78TargetInfo::getGCCRegNames() const {
 }
 
 const TargetInfo::GCCRegAlias RL78TargetInfo::GCCRegAliases[] = {
-    {{"ax"}, "rp0"}, {{"bc"}, "rp2"}, {{"de"}, "rp4"}, {{"hl"}, "rp6"},
-    {{"a"}, "r1"},   {{"x"}, "r0"},   {{"b"}, "r3"},   {{"c"}, "r2"},
-    {{"d"}, "r5"},   {{"e"}, "r4"},   {{"h"}, "r7"},   {{"l"}, "r6"}};
+    {{"rp0"}, "ax"}, {{"rp2"}, "bc"}, {{"rp4"}, "de"}, {{"rp4"}, "hl"},
+    {{"r1"}, "a"},   {{"r0"}, "x"},   {{"r3"}, "b"},   {{"r2"}, "c"},
+    {{"r5"}, "d"},   {{"r4"}, "e"},   {{"r7"}, "h"},   {{"r6"}, "l"}};
 
 ArrayRef<TargetInfo::GCCRegAlias> RL78TargetInfo::getGCCRegAliases() const {
   return llvm::ArrayRef(GCCRegAliases);

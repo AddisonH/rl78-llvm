@@ -348,6 +348,11 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Features.empty())
     CmdArgs.push_back(Args.MakeArgString(MAttrString));
 
+  if (Args.hasFlag(options::OPT_mrelax, options::OPT_mno_relax, true))
+    CmdArgs.push_back("--relax");
+  else
+    CmdArgs.push_back("--no-relax");
+
   AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
 
   CmdArgs.push_back("-Bstatic");

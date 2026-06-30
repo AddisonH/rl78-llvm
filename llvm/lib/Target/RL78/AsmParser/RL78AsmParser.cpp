@@ -5,14 +5,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+#include "MCTargetDesc/RL78AsmBackend.h"
 #include "MCTargetDesc/RL78MCExpr.h"
 #include "MCTargetDesc/RL78MCTargetDesc.h"
+#include "MCTargetDesc/RL78TargetStreamer.h"
 #include "RL78.h"
 #include "TargetInfo/RL78TargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSection.h"
@@ -229,6 +232,11 @@ private:
   bool parseDirectiveLineTopEnd();
   bool parseDirectiveStack();
   bool parseDirectiveType();
+
+  RL78TargetStreamer *getTargetStreamerPtr() {
+    MCTargetStreamer *TS = getParser().getStreamer().getTargetStreamer();
+    return static_cast<RL78TargetStreamer *>(TS);
+  }
 
 public:
   RL78AsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
@@ -2425,6 +2433,20 @@ bool RL78AsmParser::ParseDirective(AsmToken DirectiveID) {
 
 bool RL78AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
                                      SMLoc NameLoc, OperandVector &Operands) {
+  // Ensure that if the instruction occurs when relaxation is enabled,
+  // relocations are forced for the file. Ideally this would be done when there
+  // is enough information to reliably determine if the instruction itself may
+  // cause relaxations. Unfortunately instruction processing stage occurs in the
+  // same pass as relocation emission, so it's too late to set a 'sticky bit'
+  // for the entire file.
+  if (getSTI().hasFeature(RL78::FeatureRelax) && getTargetStreamerPtr()) {
+    auto *Assembler = getTargetStreamerPtr()->getStreamer().getAssemblerPtr();
+    if (Assembler != nullptr) {
+      RL78AsmBackend &MAB =
+          static_cast<RL78AsmBackend &>(Assembler->getBackend());
+      MAB.setForceRelocs();
+    }
+  }
 
   // First verify if b_cc or s_cc.
   // If not, single mnemonic - push operand.

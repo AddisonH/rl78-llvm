@@ -2168,14 +2168,17 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     // ADDW  AX, HL          07
     Bits += (MI.getOperand(2).getReg() - RL78::RP0) * 2;
     break;
-  case RL78::SUBW_rp_rp:
+  case RL78::SUBW_rp_rp: {
     RL78ReportError(MI.getOperand(0).getReg() == RL78::RP0,
+                    "Instruction using illegal register.");
+    RL78ReportError(MI.getOperand(2).getReg() != RL78::RP0,
                     "Instruction using illegal register.");
     // SUBW AX, BC           23
     // SUBW AX, DE           25
     // SUBW AX, HL           27
     Bits += (MI.getOperand(2).getReg() - RL78::RP2) * 2;
     break;
+  }
   case RL78::ADDW_rp_abs16:
   case RL78::SUBW_rp_abs16: {
     // ADDW  AX, !addr16     02 adrl adrh
@@ -2753,6 +2756,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     Bits += (MI.getOperand(0).getReg() - RL78::RP0) << 4;
     break;
   case RL78::CALL_addr16: {
+    // call !addr16
     unsigned int addressValue = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16U);
     unsigned int laddr = (0x00FF & addressValue) << 8;
@@ -2771,7 +2775,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
     break;
   }
   case RL78::CALL_addr16rel: {
-    // call $addr16
+    // call $!addr20
     unsigned int addressValue = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16S_PCREL);
     unsigned int laddr = (0x00FF & addressValue) << 8;
@@ -3294,8 +3298,9 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
     return getMachineOpValue(MI, MO, Fixups, STI);
 
   unsigned valueSize;
-  // Deduce the expected expression's result value size
-  switch (static_cast<RL78::Fixups>(fixup1))
+  // Deduce the expected expression's result value size.
+  const auto rl78Fixup = static_cast<RL78::Fixups>(fixup1);
+  switch (rl78Fixup)
   {
   default: 
       // The missing fixups are doing pushes/pops on the relocation "stack",
@@ -3336,10 +3341,26 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
       fixup1 != static_cast<MCFixupKind>(RL78::fixup_RL78_DIR_CALLT)) {
     RL78MCExpr::createFixupsForExpression(MO.getExpr(), offset, valueSize,
                                           Fixups, true, fixup1, Ctx, MI.getLoc());
-    return 0;
-  } 
+  } else {
+    Fixups.push_back(MCFixup::create(offset, MO.getExpr(), fixup1));
+  }
 
-  Fixups.push_back(MCFixup::create(offset, MO.getExpr(), fixup1));
+  // Ensure an R_RL78_RELAX relocation will be emitted if linker relaxation
+  // is enabled and the current fixup will result in a relocation that may
+  // be relaxed.
+  if (STI.hasFeature(RL78::FeatureRelax)) {
+    switch (rl78Fixup) {
+    case RL78::fixup_RL78_DIR20U:
+    case RL78::fixup_RL78_DIR16U:
+    case RL78::fixup_RL78_DIR16S_PCREL:
+      Fixups.push_back(MCFixup::create(offset, MCConstantExpr::create(0, Ctx),
+                                       MCFixupKind(RL78::fixup_RL78_RELAX),
+                                       MI.getLoc()));
+      break;
+    default:
+      break;
+    }
+  }
 
   return 0;
 }

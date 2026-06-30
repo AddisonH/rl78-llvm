@@ -101,7 +101,8 @@ llvm::RL78GenSet1Clr1IntrinPass::run(Function &F, FunctionAnalysisManager &AM) {
             continue;
 
           // Last check: the start of the sequence is a matching load.
-          auto *Load = dyn_cast<LoadInst>(J->getNextNode());
+          Instruction *MaybeLoad = (J == EI) ? &BB.front() : J->getNextNode();
+          auto *Load = dyn_cast<LoadInst>(MaybeLoad);
           if (!(Load && Load->isVolatile() && Load->getType()->isIntegerTy(8) &&
                 Load->getPointerOperand() == Addr))
             continue;

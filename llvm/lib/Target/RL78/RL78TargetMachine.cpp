@@ -157,6 +157,16 @@ void RL78TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         FPM.addPass(RL78GenSet1Clr1IntrinPass());
         MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
       });
+
+  PB.registerPipelineParsingCallback(
+      [](StringRef PassName, FunctionPassManager &PM,
+         ArrayRef<PassBuilder::PipelineElement>) {
+        if (PassName == "rl78-gen-set1-clr1-intrin") {
+          PM.addPass(RL78GenSet1Clr1IntrinPass());
+          return true;
+        }
+        return false;
+      });
 }
 
 namespace {
@@ -209,6 +219,7 @@ void RL78PassConfig::addPreEmitPass() {
   if (!InsertNOPWithLabel.empty()) {
     addPass(createRL78InsertNOPWithLabelPass());
   }
+  addPass(createRL78InsertInstsForDelayCyclesPass());
 }
 
 // Use the optimized reg also on -O0

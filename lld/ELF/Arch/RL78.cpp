@@ -17,6 +17,8 @@
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/TimeProfiler.h"
+#include "llvm/Support/Format.h"
 #include <stack>
 
 using namespace llvm;
@@ -75,7 +77,7 @@ public:
                      const uint8_t *loc) const override;
   void writePlt(uint8_t *buf, const Symbol &sym,
                 uint64_t pltEntryAddr) const override;
-
+  bool relaxOnce(int pass) const override;
 private:
   std::stack<uint64_t> relocationStack;
   uint64_t checkAndPop(uint8_t *loc, const Relocation &rel, char bitSize = 0,
@@ -87,6 +89,80 @@ private:
 } // namespace
 
 RL78::RL78() { pltEntrySize = 4; }
+
+namespace {
+struct SymbolAnchor {
+  uint64_t offset;
+  Defined *d;
+  bool end; // This is set for the anchor of st_value+st_size.
+};
+} // namespace
+
+struct elf::RL78RelaxAux {
+  // This records symbol start and end offsets which will be adjusted according
+  // to the nearest relocDeltas element.
+  SmallVector<SymbolAnchor, 0> anchors;
+  // For relocations[i], the actual offset is r_offset - (i ? relocDeltas[i-1] :
+  // 0).
+  std::unique_ptr<uint32_t[]> relocDeltas;
+  // For relocations[i], the actual type is relocTypes[i].
+  std::unique_ptr<RelType[]> relocTypes;
+  SmallVector<uint32_t, 0> writes;
+};
+
+static void initSymbolAnchors() {
+  SmallVector<InputSection *, 0> storage;
+  for (OutputSection *osec : outputSections) {
+    if (!(osec->flags & SHF_EXECINSTR))
+      continue;
+    for (InputSection *sec : getInputSections(*osec, storage)) {
+      sec->rl78RelaxAux = make<RL78RelaxAux>();
+      if (sec->relocs().size()) {
+        sec->rl78RelaxAux->relocDeltas =
+            std::make_unique<uint32_t[]>(sec->relocs().size());
+        sec->rl78RelaxAux->relocTypes =
+            std::make_unique<RelType[]>(sec->relocs().size());
+      }
+    }
+  }
+  // Store anchors (st_value and st_value+st_size) for symbols relative to text
+  // sections.
+  //
+  // For a defined symbol foo, we may have `d->file != file` with --wrap=foo.
+  // We should process foo, as the defining object file's symbol table may not
+  // contain foo after redirectSymbols changed the foo entry to __wrap_foo. To
+  // avoid adding a Defined that is undefined in one object file, use
+  // `!d->scriptDefined` to exclude symbols that are definitely not wrapped.
+  //
+  // `relaxAux->anchors` may contain duplicate symbols, but that is fine.
+  for (InputFile *file : ctx.objectFiles)
+    for (Symbol *sym : file->getSymbols()) {
+      auto *d = dyn_cast<Defined>(sym);
+      if (!d || (d->file != file && !d->scriptDefined) || d->isSection())
+        continue;
+      if (auto *sec = dyn_cast_or_null<InputSection>(d->section))
+        if (sec->flags & SHF_EXECINSTR && sec->rl78RelaxAux) {
+          // If sec is discarded, relaxAux will be nullptr.
+          sec->rl78RelaxAux->anchors.push_back({d->value, d, false});
+          if (d->size)
+            sec->rl78RelaxAux->anchors.push_back({d->value + d->size, d, true});
+        }
+    }
+  // Sort anchors by offset so that we can find the closest relocation
+  // efficiently. For a zero size symbol, ensure that its start anchor precedes
+  // its end anchor. For two symbols with anchors at the same offset, their
+  // order does not matter.
+  for (OutputSection *osec : outputSections) {
+    if (!(osec->flags & SHF_EXECINSTR))
+      continue;
+    for (InputSection *sec : getInputSections(*osec, storage)) {
+      llvm::sort(sec->rl78RelaxAux->anchors, [](auto &a, auto &b) {
+        return std::make_pair(a.offset, a.end) <
+               std::make_pair(b.offset, b.end);
+      });
+    }
+  }
+}
 
 static uint32_t getEFlags(InputFile *file) {
   return cast<ObjFile<ELF32LE>>(file)->getObj().getHeader().e_flags;
@@ -164,17 +240,23 @@ uint32_t RL78::calcEFlags() const {
   return mergeSucceeded ? mergedFlags : 0;
 }
 
-RelExpr RL78::getRelExpr(RelType Type, const Symbol &S,
-                         const uint8_t *loc) const {
+static RelExpr getRelExpr(RelType Type) {
   switch (Type) {
   case R_RL78_DIR8S_PCREL:
   case R_RL78_DIR16S_PCREL:
   case R_RL78_ABS8S_PCREL:
   case R_RL78_ABS16S_PCREL:
     return R_PC;
+  case R_RL78_RELAX:
+    return config->relax ? R_RELAX_HINT : R_NONE;
   default:
     return R_ABS;
   }
+}
+
+RelExpr RL78::getRelExpr(RelType Type, const Symbol &S,
+                         const uint8_t *loc) const {
+  return ::getRelExpr(Type);
 }
 
 void RL78::writePlt(uint8_t *buf, const Symbol &sym,
@@ -193,6 +275,258 @@ inline void write8le(void *P, uint8_t V) {
 
 inline void write24le(void *P, uint64_t V) {
   write32le(P, (read32le(P) & 0xff00'0000) | (V & ~0xff00'0000));
+}
+
+static void relaxDIR20U(const InputSection &sec, size_t i, uint64_t loc,
+                        Relocation &r, uint32_t &remove) {
+  // Handle only br/call !!addr20.
+  const auto opc = sec.content().data()[r.offset - 1];
+  if (opc != 0xEC && opc != 0xFC)
+    return;
+
+  const auto brVA = loc - 1; // Note that 'loc' is the VA of the relocation (= brVA + 1).
+  const auto tgtVA = sec.getRelocTargetVA(sec.file, r.type, r.addend, loc, *r.sym, R_ABS);
+
+  // If the branch target is in the same input section after the branch, relaxing the branch
+  // will affect its address; if we don't consider this we fail to relax some branches that
+  // are just "at the boundary" e.g. at +127 bytes (max. 8-bit signed value).
+  const auto adjTgtVA = isa<Defined>(r.sym) &&
+                        cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
+
+  // Relative distance between the instructions.
+  const auto deltaVA = int64_t(tgtVA - brVA);
+
+  // For branches, try first to relax to br $addr20.
+  const auto disp8 = (deltaVA - 2)           // PC will be brVA+2 when relaxing to 2-byte
+                       - (adjTgtVA ? 2 : 0); // and adjusted tgtVA will be at -2.
+  if (opc == 0xEC && isInt<8>(disp8)) {
+    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
+    sec.rl78RelaxAux->writes.push_back(0xEF); // BR $addr20.
+    remove = 2;
+    return;
+  }
+
+  // Then, try br/call !addr16.
+  if (isUInt<16>(tgtVA)) {
+    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR16U;
+    sec.rl78RelaxAux->writes.push_back(opc + 1); // I.e. 0xED and 0xFD, resp.
+    remove = 1;
+    return;
+  }
+
+  // Lastly, try br/call $!addr20.
+  const auto disp16 = (deltaVA - 3)          // PC will be brVA+3 when relaxing to 3-byte
+                       - (adjTgtVA ? 1 : 0); // and adjusted tgtVA will be at -1.
+  if (isInt<16>(disp16)) {
+    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR16S_PCREL;
+    sec.rl78RelaxAux->writes.push_back(opc + 2); // I.e. 0xEE and 0xFE, respectively.
+    remove = 1;
+  }
+}
+
+template <bool PCRel>
+static void relaxDIR16(const InputSection &sec, size_t i, uint64_t loc,
+                       Relocation &r, uint32_t &remove) {
+  // Handle only the branches:
+  //   br !addr16   (PCRel = false)
+  //   br $!addr20  (PCRel = true)
+  // as the calls (call !addr16, resp. call $!addr20) cannot be relaxed further.
+  const auto opc = sec.content().data()[r.offset - 1];
+  if (opc != (PCRel ? 0xEE : 0xED))
+    return;
+
+  const auto brVA = loc - 1; // Note that 'loc' is the VA of the relocation (= brVA + 1).
+  const auto tgtVA = sec.getRelocTargetVA(sec.file, r.type, r.addend, loc, *r.sym, R_ABS);
+
+  // If the branch target is in the same input section after the branch,
+  // relaxing the branch will affect its address; if we don't consider this we
+  // fail to relax some branches that are just "at the boundary" e.g. at +127
+  // bytes (max. 8-bit signed value).
+  const auto adjTgtVA = isa<Defined>(r.sym) &&
+                        cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
+
+  // Relative distance between the instructions.
+  const auto deltaVA = int64_t(tgtVA - brVA);
+
+  // Displacement if relaxation would be applied.
+  const auto disp8 = (deltaVA - 2)           // PC will be brVA+2 when relaxing to 2-byte
+                       - (adjTgtVA ? 1 : 0); // and adjusted tgtVA will be at -1.
+  if (isInt<8>(disp8)) {
+    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
+    sec.rl78RelaxAux->writes.push_back(0xEF); // BR $addr20.
+    remove = 1;
+  }
+}
+
+static bool relax(InputSection &sec) {
+  if (sec.relocs().empty())
+    return false;
+
+  const uint64_t secAddr = sec.getVA();
+  auto &aux = *sec.rl78RelaxAux;
+  bool changed = false;
+
+  ArrayRef<SymbolAnchor> sa = aux.anchors;
+  uint64_t delta = 0;
+
+  auto updateAnchor = [&](const SymbolAnchor &a) {
+    if (a.end)
+      a.d->size = a.offset - delta - a.d->value;
+    else
+      a.d->value = a.offset - delta;
+  };
+
+  std::fill_n(aux.relocTypes.get(), sec.relocs().size(), R_RL78_NONE);
+  aux.writes.clear();
+
+  for (auto [i, r] : llvm::enumerate(sec.relocs())) {
+    const uint64_t loc = secAddr + r.offset - delta;
+    uint32_t &cur = aux.relocDeltas[i], remove = 0;
+
+    switch (r.type) {
+    case R_RL78_DIR20U:
+      if (i + 1 != sec.relocs().size() &&
+          sec.relocs()[i + 1].type == R_RL78_RELAX)
+        relaxDIR20U(sec, i, loc, r, remove);
+      break;
+    case R_RL78_DIR16U:
+      if (i + 1 != sec.relocs().size() &&
+          sec.relocs()[i + 1].type == R_RL78_RELAX)
+        relaxDIR16<0>(sec, i, loc, r, remove);
+      break;
+    case R_RL78_DIR16S_PCREL:
+      if (i + 1 != sec.relocs().size() &&
+          sec.relocs()[i + 1].type == R_RL78_RELAX)
+        relaxDIR16<1>(sec, i, loc, r, remove);
+      break;
+    default:
+      break;
+    }
+
+    // For all anchors whose offsets are <= r.offset, they are preceded by
+    // the previous relocation whose `relocDeltas` value equals `delta`.
+    // Decrease their st_value and update their st_size.
+    for (; sa.size() && sa[0].offset <= r.offset; sa = sa.slice(1))
+      updateAnchor(sa[0]);
+
+    delta += remove;
+    if (delta != cur) {
+      cur = delta;
+      changed = true;
+    }
+  }
+
+  for (const auto &a : sa)
+    updateAnchor(a);
+
+  sec.bytesDropped = delta;
+  return changed;
+}
+
+bool RL78::relaxOnce(int pass) const {
+  if (!config->relax)
+    return false;
+
+  llvm::TimeTraceScope timeScope("RL78 relaxOnce");
+  if (config->relocatable)
+    return false;
+
+  if (pass == 0)
+    initSymbolAnchors();
+
+  SmallVector<InputSection *, 0> storage;
+  bool changed = false;
+  for (OutputSection *osec : outputSections) {
+    if (!(osec->flags & SHF_EXECINSTR))
+      continue;
+    for (InputSection *sec : getInputSections(*osec, storage))
+      changed |= relax(*sec);
+  }
+  return changed;
+}
+
+void elf::rl78FinalizeRelax(int passes) {
+  if (!config->relax)
+    return;
+
+  llvm::TimeTraceScope timeScope("Finalize RL78 relaxation");
+  log("relaxation passes: " + Twine(passes));
+  SmallVector<InputSection *, 0> storage;
+
+  for (OutputSection *osec : outputSections) {
+    if (!(osec->flags & SHF_EXECINSTR))
+      continue;
+
+    for (InputSection *sec : getInputSections(*osec, storage)) {
+      RL78RelaxAux &aux = *sec->rl78RelaxAux;
+      if (!aux.relocDeltas)
+        continue;
+
+      MutableArrayRef<Relocation> rels = sec->relocs();
+      ArrayRef<uint8_t> old = sec->content();
+      size_t newSize = old.size() - aux.relocDeltas[rels.size() - 1];
+      size_t writesIdx = 0;
+      uint8_t *p = context().bAlloc.Allocate<uint8_t>(newSize);
+      uint64_t offset = 0;
+      int64_t delta = 0;
+      sec->content_ = p;
+      sec->size = newSize;
+      sec->bytesDropped = 0;
+
+      for (size_t i = 0, e = rels.size(); i != e; ++i) {
+        uint32_t remove = aux.relocDeltas[i] - delta;
+        delta = aux.relocDeltas[i];
+        if (remove == 0 && aux.relocTypes[i] == R_RL78_NONE)
+          continue;
+
+        // Copy from last location to the current relocated location.
+        const Relocation &r = rels[i];
+        uint64_t size = r.offset - offset;
+        memcpy(p, old.data() + offset, size);
+        p += size;
+
+        int64_t skip = 0;
+        if (RelType newType = aux.relocTypes[i]) {
+          switch (newType) {
+          case R_RL78_DIR16U:
+          case R_RL78_DIR16S_PCREL: {
+            uint32_t val = aux.writes[writesIdx++];
+            write24le(p - 1, val);
+            skip = 2;
+            break;
+          }
+          case R_RL78_DIR8S_PCREL: {
+            write16le(p - 1, aux.writes[writesIdx++]);
+            skip = 1;
+            break;
+          }
+          default:
+            llvm_unreachable("unsupported type");
+          }
+        }
+
+        p += skip;
+        offset = r.offset + skip + remove;
+      }
+
+      memcpy(p, old.data() + offset, old.size() - offset);
+
+      // Adjust the relocation offsets.
+      delta = 0;
+      for (size_t i = 0, e = rels.size(); i != e;) {
+        uint64_t cur = rels[i].offset;
+        do {
+          rels[i].offset -= delta;
+          if (aux.relocTypes[i] != R_RL78_NONE) {
+            rels[i].type = aux.relocTypes[i];
+            rels[i].expr = getRelExpr(rels[i].type);
+          }
+        }
+        while (++i != e && rels[i].offset == cur);
+        delta = aux.relocDeltas[i - 1];
+      }
+    }
+  }
 }
 
 static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
@@ -512,6 +846,8 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   case R_RL78_OPABSlowW:
     push(loc, checkAndPop(loc, rel) & 0xFFFF);
     break;
+  case R_RL78_RELAX:
+    break;
   default:
     error(getErrorLocation(loc) + "unrecognized relocation " + Twine(rel.type));
   }
@@ -535,7 +871,23 @@ void RL78::relocateAlloc(InputSectionBase &sec, uint8_t *buf) const {
         sec.getRelocTargetVA(sec.file, rel.type, addend, secAddr + rel.offset,
                              *rel.sym, rel.expr),
         bits);
-    if (rel.sym->isInPlt()) {
+    if (rel.sym->isInPlt() && (rel.type == R_RL78_DIR16U ||
+        // The original check here was: sym in plt (a function) and reloc type
+        // is DIR16U, normally used by the 16-bit calls / branches.
+        // DIR16U was previously used also for function symbols appearing
+        // in data sections, but with the changes in the RL78AsmPrinter to use
+        // same types of relocations as CC-RL, we now generate R_RL78_OPlowW
+        // there... so, extended the check accordingly
+        // NOTE: R_RL78_OPhighW was included to prevent situations where the
+        // function symbol is in plt (the inclusion criterion in
+        // RelocationScanner::processAux() uses R_RL78_OPlowW), but the high part
+        // is used as well, and this seems to happen for -mfar-data, which does
+        // not have a setting similar to config->rl78FarCode that inhibits the
+        // plt altogether.
+        // TODO: rename config->rl78FarCode to config->rl78DisablePlt and
+        //       make it consider both -mfar-data and -mfar-code.
+        (!(sec.getOutputSection()->flags & SHF_EXECINSTR) &&
+         (rel.type == R_RL78_OPlowW || rel.type == R_RL78_OPhighW)))) {
       target->relocate(loc, rel, rel.sym->getPltVA());
     } else {
       switch (rel.type) {

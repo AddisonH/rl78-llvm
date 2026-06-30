@@ -57,7 +57,10 @@ enum NodeType : unsigned {
   MACHU,
   MACH,
   INC,
-  LOAD_SELECTCC
+  LOAD_SELECTCC,
+  DELAY_CYCLES_1_4,
+  DELAY_CYCLES_5,
+  DELAY_CYCLES_6_1279,
 };
 }
 
@@ -100,9 +103,6 @@ public:
   const char *getTargetNodeName(unsigned Opcode) const override;
 
   ConstraintType getConstraintType(StringRef Constraint) const override;
-  ConstraintWeight
-  getSingleConstraintMatchWeight(AsmOperandInfo &info,
-                                 const char *constraint) const override;
 
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
@@ -270,6 +270,9 @@ private:
   SDValue LowerLibCall(SDValue Op, SelectionDAG &DAG,
                        const char *libFunctionName, bool IsSigned,
                        ArrayRef<SDValue> Ops) const;
+  SDValue LowerLibCallVoid(SDValue Op, SelectionDAG &DAG,
+                           const char *libFunctionName, bool OpsIsSigned,
+                           ArrayRef<SDValue> Ops) const;
 
   SDValue LowerMul(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerAndOrXor(SDValue Op, SelectionDAG &DAG,
@@ -293,7 +296,6 @@ private:
   SDValue PerformTruncateCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformANDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
-  SDValue PerformXORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformSHLCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   MachineBasicBlock *LowerEXTEND(bool sext, MachineInstr &MI,

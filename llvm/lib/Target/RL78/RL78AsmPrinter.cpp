@@ -23,6 +23,7 @@
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/SaveAndRestore.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -32,6 +33,13 @@ class RL78AsmPrinter : public AsmPrinter {
   RL78TargetStreamer &getTargetStreamer() {
     return static_cast<RL78TargetStreamer &>(*OutStreamer->getTargetStreamer());
   }
+
+  // This flag controls if the overridden lowerConstant() simply calls the base
+  // implementation or not. By default it is set as lowerConstant() could be called
+  // from another context than from emitGlobalVariable() which we (can) override
+  // (e.g. it is called from emitGlobalAlias() that does an emitAssignment() with
+  // the returned expression => use base implementation by default).
+  bool useBaseLowerConstant = true;
 
 public:
   explicit RL78AsmPrinter(TargetMachine &TM,
@@ -48,6 +56,8 @@ public:
   void emitFunctionBodyStart() override;
   void emitFunctionBodyEnd() override;
   void emitInstruction(const MachineInstr *MI) override;
+  void emitGlobalVariable(const GlobalVariable *GV) override;
+
   const MCExpr *lowerConstant(const Constant *CV) override;
 
   static const char *getRegisterName(unsigned RegNo) {
@@ -56,11 +66,12 @@ public:
 
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        const char *ExtraCode, raw_ostream &O) override;
-  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                             const char *ExtraCode, raw_ostream &O) override;
 
 private:
   void emitInterruptVectorSymbol(uint64_t Specs);
+  const MCExpr *lowerConstantGV(const GlobalValue *GV, int DstAS = -1,
+                                const MCExpr *BaseExpr = nullptr) const;
+  const MCExpr *baseLowerConstant(const Constant *CV);
 };
 } // end of anonymous namespace
 
@@ -260,103 +271,154 @@ void RL78AsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
 ///
 bool RL78AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                                      const char *ExtraCode, raw_ostream &O) {
-  if (ExtraCode && ExtraCode[0]) {
-    if (ExtraCode[1] != 0)
-      return true; // Unknown modifier.
-                   // TODO:
-    switch (ExtraCode[0]) {
-    default:
-      // See if this is a generic print operand.
-      return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
-    case 'f':
-    case 'r':
-      break;
-    }
-  }
+  // Currently only register operands are supported (without any modifiers).
+  if ((ExtraCode && ExtraCode[0]) ||
+      (MI->getOperand(OpNo).getType() != MachineOperand::MO_Register))
+    return true;
 
   printOperand(MI, OpNo, O);
-
   return false;
 }
 
-bool RL78AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
-                                           unsigned OpNo, const char *ExtraCode,
-                                           raw_ostream &O) {
-  if (ExtraCode && ExtraCode[0])
-    return true; // Unknown modifier.
-  // TODO:
-  O << '[';
-  printMemOperand(MI, OpNo, O);
-  O << ']';
+// When a global variable is emitted, we want the specialized behavior of
+// lowerConstant(), so clear the 'useBaseLowerConstant' flag.
+void RL78AsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
+  llvm::SaveAndRestore<bool> SAR(useBaseLowerConstant, false);
+  AsmPrinter::emitGlobalVariable(GV);
+}
 
-  return false;
+// This is used from the specialized lowerConstant() when it needs the
+// expression constructed by the base implementation (possibly recursively).
+const MCExpr *RL78AsmPrinter::baseLowerConstant(const Constant *CV) {
+  llvm::SaveAndRestore<bool> SAR(useBaseLowerConstant, true);
+  return AsmPrinter::lowerConstant(CV);
+}
+
+enum class ConstType : uint8_t {
+  DATA, RODATA, CODE
+};
+
+static ConstType getConstGVType(const GlobalValue *GV) {
+  if (GV->getValueType()->isFunctionTy())
+    return ConstType::CODE;
+
+  if (const auto V = dyn_cast<GlobalVariable>(GV); V->isConstant())
+    return ConstType::RODATA;
+
+  return ConstType::DATA;
+}
+
+const MCExpr *RL78AsmPrinter::lowerConstantGV(const GlobalValue *GV, int DstAS,
+                                              const MCExpr *BaseExpr) const {
+  auto &Ctx = OutContext;
+  if (!BaseExpr)
+    BaseExpr = MCSymbolRefExpr::create(getSymbol(GV), Ctx);
+
+  const auto &DL = GV->getParent()->getDataLayout();
+  const auto SrcSize = DL.getPointerSize(GV->getType()->getAddressSpace());
+  const auto DstSize = DstAS < 0 ? SrcSize : DL.getPointerSize(DstAS);
+  const auto GVType = getConstGVType(GV);
+  const auto lowPart = RL78MCExpr::create(GVType == ConstType::RODATA
+                         && SrcSize == 2
+                                ? RL78MCExpr::VK_RL78_SMRLW
+                                : RL78MCExpr::VK_RL78_LOWW,
+                            BaseExpr, Ctx);
+  if (DstSize == 2)
+    return lowPart;
+
+  if (DstSize != 4)
+    llvm_unreachable("Unexpected pointer size.");
+
+  // Near -> far address space cast here.
+  OutStreamer->emitValue(lowPart, 2);
+  const MCExpr *segPart = nullptr;
+  if (SrcSize == 4) {
+    segPart = RL78MCExpr::create(
+        RL78MCExpr::VK_RL78_LOW,
+        RL78MCExpr::create(RL78MCExpr::VK_RL78_HIGHW, BaseExpr, Ctx), Ctx);
+  } else {
+    segPart = MCConstantExpr::create(GVType == ConstType::CODE ? 0x0 : 0xF, Ctx);
+  }
+  OutStreamer->emitValue(segPart, 1);
+  OutStreamer->emitValue(MCConstantExpr::create(0, Ctx), 1);
+
+  // Note: As a convention, returning a null MCExpr from lowerConstant()
+  //       indicates that it already emitted the lowered value(s),
+  //       so its caller shouldn't do anything else.
+  return nullptr;
 }
 
 const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV) {
-  const ConstantExpr *CE = dyn_cast<ConstantExpr>(CV);
-  if (!CE || CE->getOpcode() != Instruction::AddrSpaceCast) {
+  if (useBaseLowerConstant)
     return AsmPrinter::lowerConstant(CV);
-  }
 
-  const Constant *Op = CE->getOperand(0);
-  unsigned DstAS = CE->getType()->getPointerAddressSpace();
-  unsigned SrcAS = Op->getType()->getPointerAddressSpace();
-  if (TM.isNoopAddrSpaceCast(SrcAS, DstAS))
-    return AsmPrinter::lowerConstant(Op);
+  const Constant *Op = nullptr;
+  unsigned DstAS = 0;
+  unsigned SrcAS = 0;
+  const MCExpr *BaseExpr = nullptr;
 
-  // Handle the absolute address case.
-  int64_t Constant;
-  const MCExpr *ConstExpr = AsmPrinter::lowerConstant(Op);
-  if (ConstExpr->evaluateAsAbsolute(Constant)) {
-    Constant = Constant & 0xFF'FFFF;
-    switch (DstAS) {
-    case RL78AS::Default:
-    case RL78AS::Near:
-      return MCConstantExpr::create(Constant & 0xFFFF, OutContext);
-    case RL78AS::FarCode:
-      assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
-      return MCConstantExpr::create(Constant, OutContext);
-    case RL78AS::FarData:
-      assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
-      assert(Constant <= 0xFFFF);
-      return MCConstantExpr::create((Constant & 0xFFFF) | 0x0F'0000,
-                                    OutContext);
-    default:
-      llvm_unreachable("Unexpected RL78 address space");
+  if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(CV)) {
+    switch (CE->getOpcode()) {
+    case Instruction::AddrSpaceCast:
+      Op = CE->getOperand(0);
+      DstAS = CE->getType()->getPointerAddressSpace();
+      SrcAS = Op->getType()->getPointerAddressSpace();
+      if (TM.isNoopAddrSpaceCast(SrcAS, DstAS))
+        return lowerConstant(Op);
       break;
+    case Instruction::IntToPtr:
+      Op = CE->getOperand(0);
+      break;
+    case Instruction::GetElementPtr:
+      BaseExpr = baseLowerConstant(CV);
+      return lowerConstantGV(cast<GlobalValue>(CE->getOperand(0)), -1, BaseExpr);
+    case Instruction::PtrToInt:
+      if (auto CE0 = dyn_cast<ConstantExpr>(CE->getOperand(0));
+          CE0 && CE0->getOpcode() == Instruction::AddrSpaceCast)
+        return baseLowerConstant(CE0->getOperand(0));
     }
   }
 
-  // Handle the relocatable address case.
-  const MCExpr *RelExpr =
-      RL78MCExpr::create(RL78MCExpr::VK_RL78_LOWW, ConstExpr, OutContext);
-  switch (DstAS) {
-  case RL78AS::Default:
-  case RL78AS::Near:
-    return RelExpr;
-  case RL78AS::FarCode: {
-    assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
-    // TODO: this is not how CC-RL does it, nor is it correct, but no idea how to replicate it for
-    // now. Should we error out?
-    return ConstExpr;
-  }
-  case RL78AS::FarData: {
-    assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
-    // TODO: this is not how CC-RL does it, nor is it correct, but no idea how to replicate it for
-    // now. Should we error out?   
-    return ConstExpr;
-  }
-  default:
-    llvm_unreachable("Unexpected RL78 address space");
-    break;
+  if (const auto GV = dyn_cast<GlobalValue>(CV))
+    return lowerConstantGV(GV, -1);
+
+  // If a no-op addr space cast.
+  if (Op) {
+    // Handle the absolute address case.
+    int64_t Constant;
+    BaseExpr = baseLowerConstant(Op);
+    if (DstAS != SrcAS && BaseExpr->evaluateAsAbsolute(Constant)) {
+      Constant = Constant & 0xFF'FFFF;
+      switch (DstAS) {
+      case RL78AS::Default:
+      case RL78AS::Near:
+        return MCConstantExpr::create(Constant & 0xFFFF, OutContext);
+      case RL78AS::FarCode:
+        assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
+        return MCConstantExpr::create(Constant, OutContext);
+      case RL78AS::FarData:
+        assert(SrcAS == RL78AS::Near || SrcAS == RL78AS::Default);
+        assert(Constant <= 0xFFFF);
+        return MCConstantExpr::create((Constant & 0xFFFF) | 0x0F'0000,
+                                      OutContext);
+      default:
+        llvm_unreachable("Unexpected RL78 address space");
+        break;
+      }
+    }
+    // Handle the relocatable address case.
+    if (const auto GV = dyn_cast<GlobalValue>(Op)) {
+      return lowerConstantGV(GV, DstAS);
+    }
+    else if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(Op);
+             CE && CE->getOpcode() == Instruction::GetElementPtr) {
+      return lowerConstantGV(cast<GlobalValue>(CE->getOperand(0)),
+                             DstAS, BaseExpr);
+    }
   }
 
-  std::string S;
-  raw_string_ostream OS(S);
-  OS << "Unsupported expression in static initializer: ";
-  CE->printAsOperand(OS, /*PrintType=*/false,
-                     !MF ? nullptr : MF->getFunction().getParent());
-  report_fatal_error(Twine(OS.str()));
+  // Otherwise, default to base implementation (might be already calculated).
+  return BaseExpr ? BaseExpr : baseLowerConstant(CV);
 }
 
 // Force static initialization.

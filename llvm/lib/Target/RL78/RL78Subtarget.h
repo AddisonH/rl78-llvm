@@ -49,6 +49,7 @@ private:
   bool hasFarDataModel;
   unsigned char romModel;
   bool disableMDA;
+  bool linkerRelax;
 
   RL78InstrInfo InstrInfo;
   RL78TargetLowering TLInfo;

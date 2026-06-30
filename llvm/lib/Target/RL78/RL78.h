@@ -46,6 +46,7 @@ FunctionPass *createRL78InstructionSpecializationPass();
 FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
+FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 
 void initializeRL78DAGToDAGISelPass(PassRegistry &);
 

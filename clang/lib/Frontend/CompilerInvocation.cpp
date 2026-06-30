@@ -3522,6 +3522,12 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
 
   if (!Opts.RandstructSeed.empty())
     GenerateArg(Args, OPT_frandomize_layout_seed_EQ, Opts.RandstructSeed, SA);
+
+  if (!Opts.InputCharset.empty())
+    GenerateArg(Args, OPT_finput_charset, Opts.InputCharset, SA);
+
+  if (!Opts.ExecCharset.empty())
+    GenerateArg(Args, OPT_fexec_charset, Opts.ExecCharset, SA);
 }
 
 bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,

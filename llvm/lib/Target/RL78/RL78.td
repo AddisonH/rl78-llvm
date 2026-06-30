@@ -64,6 +64,9 @@ def FeatureCommonRom : SubtargetFeature<"common-rom", "romModel", "2",
 def FeatureDisableMDA : SubtargetFeature<"disable-mda", "disableMDA", "true",
                                       "Disable usage of Mul/Div/Mac accelerator (S2 only).">;
 
+def FeatureRelax : SubtargetFeature<"relax", "linkerRelax", "true",
+                                    "Enable linker relaxation.">;
+
 //===----------------------------------------------------------------------===//
 // RL78 processors supported.
 //===----------------------------------------------------------------------===//

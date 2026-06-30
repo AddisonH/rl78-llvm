@@ -62,6 +62,8 @@ extern const MCInstrDesc RL78Insts[];
 
 } // end namespace llvm
 
+#define PREFIX 0x11
+
 struct SBP {
   static const unsigned int adr = 0x101;
   static const unsigned int adrh = 0x102;
@@ -1835,8 +1837,6 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     {0xC4U, {RL78::POP_rp, {}, {RL78::RP4}}},
     // POP HL
     {0xC6U, {RL78::POP_rp, {}, {RL78::RP6}}},
-    // PREFIX nan
-    {0x11U, {RL78::PREFIX, {}, {}}},
     // PUSH PSW
     {0x61U, {RL78::PUSH_cc, {0xDDU}, {}}},
     // PUSH AX
@@ -2949,7 +2949,7 @@ DecodeStatus RL78Disassembler::getInstruction(MCInst &Instr, uint64_t &Size,
              it = instructions.begin(),
              e = instructions.end();
          it != e; ++it)
-      if (it->second.OpCode == RL78::PREFIX)
+      if (it->second.OpCode == PREFIX)
         return handleMatch(Address, it->second, Instr, Size, Bytes, this);
   }
 

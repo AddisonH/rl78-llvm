@@ -43,4 +43,7 @@ def int_rl78_remul : Intrinsic<[llvm_i16_ty], [llvm_i32_ty, llvm_i16_ty], [IntrN
 def int_rl78_macui : Intrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
 def int_rl78_macsi : Intrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
 
+// Miscellaneous.
+def int_rl78_delay_cycles : Intrinsic<[], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
+
 }

@@ -17,9 +17,6 @@ using namespace llvm;
 void RL78ELFMCAsmInfo::anchor() {}
 
 RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple) {
-
-  Data16bitsDirective = "\t.short\t";
-  Data32bitsDirective = "\t.long\t";
   Data64bitsDirective = nullptr;
   ZeroDirective = "\t.skip\t";
   CommentString = ";";
@@ -31,23 +28,13 @@ RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple) {
 
   UseIntegratedAssembler = true;
 
-  CodePointerSize = 4;
+  CodePointerSize = 4; // 32 bit considering far pointers.
 
-  CalleeSaveStackSlotSize = 2;
+  CalleeSaveStackSlotSize = 2; // A saved register is always 2 byte.
 
   HasRL78Expressions = true;
 
   AllowAtInName = true;
-}
 
-const MCExpr *RL78ELFMCAsmInfo::getExprForPersonalitySymbol(
-    const MCSymbol *Sym, unsigned Encoding, MCStreamer &Streamer) const {
-
-  return MCAsmInfo::getExprForPersonalitySymbol(Sym, Encoding, Streamer);
-}
-
-const MCExpr *
-RL78ELFMCAsmInfo::getExprForFDESymbol(const MCSymbol *Sym, unsigned Encoding,
-                                      MCStreamer &Streamer) const {
-  return MCAsmInfo::getExprForFDESymbol(Sym, Encoding, Streamer);
+  MaxInstLength = 5; // mov (es:word[b], imm:8) and so on.
 }

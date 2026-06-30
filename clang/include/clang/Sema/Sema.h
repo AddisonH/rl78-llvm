@@ -3724,6 +3724,8 @@ public:
                                 StringRef Name);
   CodeSegAttr *mergeCodeSegAttr(Decl *D, const AttributeCommonInfo &CI,
                                 StringRef Name);
+  RL78AddressAttr *mergeRL78AddressAttr(Decl *D, const AttributeCommonInfo &CI,
+                                        unsigned Address);
   AlwaysInlineAttr *mergeAlwaysInlineAttr(Decl *D,
                                           const AttributeCommonInfo &CI,
                                           const IdentifierInfo *Ident);
@@ -13667,6 +13669,8 @@ private:
                                            CallExpr *TheCall);
   bool CheckNVPTXBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                      CallExpr *TheCall);
+  bool CheckRL78BuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
+                                    CallExpr *TheCall);
 
   bool SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall);
   bool SemaBuiltinVAStartARMMicrosoft(CallExpr *Call);

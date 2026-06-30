@@ -2032,6 +2032,8 @@ bool Sema::CheckTSBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
   case llvm::Triple::nvptx:
   case llvm::Triple::nvptx64:
     return CheckNVPTXBuiltinFunctionCall(TI, BuiltinID, TheCall);
+  case llvm::Triple::RL78:
+    return CheckRL78BuiltinFunctionCall(TI, BuiltinID, TheCall);
   }
 }
 
@@ -2203,6 +2205,16 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   case Builtin::BI__builtin_alloca_uninitialized:
     Diag(TheCall->getBeginLoc(), diag::warn_alloca)
         << TheCall->getDirectCallee();
+    // RL78 unsupported dynamic stack allocation.
+    if (Context.getTargetInfo().getTriple().isRL78()) {
+      Expr *SizeExpr = TheCall->getArg(0);
+
+      Expr::EvalResult Result;
+      if (!SizeExpr->EvaluateAsInt(Result, Context)) {
+        Diag(SizeExpr->getExprLoc(), diag::err_rl78_dynamic_alloca_unsupported);
+        return ExprError();
+      }
+    }
     break;
   case Builtin::BI__arithmetic_fence:
     if (SemaBuiltinArithmeticFence(TheCall))
@@ -5450,6 +5462,15 @@ bool Sema::CheckNVPTXBuiltinFunctionCall(const TargetInfo &TI,
     return checkArgCountAtMost(*this, TheCall, 3);
   }
 
+  return false;
+}
+
+bool Sema::CheckRL78BuiltinFunctionCall(const TargetInfo &TI,
+                                        unsigned BuiltinID, CallExpr *TheCall) {
+  switch (BuiltinID) {
+  case RL78::BI__delay_cycles:
+    return SemaBuiltinConstantArgRange(TheCall, 0, 1, 83886097);
+  }
   return false;
 }
 

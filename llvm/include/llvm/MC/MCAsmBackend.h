@@ -51,7 +51,7 @@ public:
 
   const support::endianness Endian;
 
-  /// Fixup kind used for linker relaxation. Currently only used by RISC-V.
+  /// Fixup kind used for linker relaxation. Currently only used by RISC-V and RL78.
   const unsigned RelaxFixupKind;
 
   /// Return true if this target might automatically pad instructions and thus

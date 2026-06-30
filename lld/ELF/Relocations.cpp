@@ -1056,9 +1056,11 @@ void RelocationScanner::processAux(RelExpr expr, RelType type, uint64_t offset,
   // We add here entries for all of them and remove the ones below 64KB limit later.
   if ((config->emachine == EM_RL78) && (!config->rl78FarCode) &&
       (sym.hasNoType() || sym.isFunc() || sym.isSection()) &&
-      (sym.getOutputSection() &&
-       sym.getOutputSection()->flags & SHF_EXECINSTR) &&
-      !sym.isInPlt() && (type == R_RL78_DIR16U)) {
+      (sym.getOutputSection() && sym.getOutputSection()->flags & SHF_EXECINSTR) &&
+      !sym.isInPlt() && (type == R_RL78_DIR16U ||
+       (type == R_RL78_OPlowW &&
+         // FIXME: Is there a better way to handle test in ticket_2677?
+         (!sym.isDefined() || cast<Defined>(sym).section->name.startswith(".text"))))) {
     sym.allocateAux();
     in.plt->addEntry(sym);
   }

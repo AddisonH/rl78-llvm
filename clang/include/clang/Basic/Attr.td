@@ -4254,7 +4254,7 @@ def RL78InlineASM : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Documentation = [RL78InlineASMDocs];
 }
 
-def RL78Address : Attr, TargetSpecificAttr<TargetRL78> {
+def RL78Address : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Spellings = [GCC<"address">];
   let Subjects = SubjectList<[GlobalVar]>;
   let Args = [UnsignedArgument<"Address">];

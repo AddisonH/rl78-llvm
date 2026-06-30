@@ -15,10 +15,12 @@ using namespace llvm;
 
 namespace {
 class RL78ELFObjectWriter : public MCELFObjectTargetWriter {
+  bool ForceRelaxRelocs;
 public:
-  RL78ELFObjectWriter(bool Is64Bit, uint8_t OSABI)
+  RL78ELFObjectWriter(bool Is64Bit, uint8_t OSABI, bool ForceRelaxRelocs)
       : MCELFObjectTargetWriter(Is64Bit, OSABI, ELF::EM_RL78,
-                                /*HasRelocationAddend*/ true) {}
+                                /*HasRelocationAddend*/ true),
+        ForceRelaxRelocs(ForceRelaxRelocs) {}
 
   ~RL78ELFObjectWriter() override {}
 
@@ -131,6 +133,8 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
     return ELF::R_RL78_ABS20U;
   case RL78::fixup_RL78_ABS32U:
     return ELF::R_RL78_ABS32U;
+  case RL78::fixup_RL78_RELAX:
+    return ELF::R_RL78_RELAX;
   }
 
   return ELF::R_RL78_NONE;
@@ -138,10 +142,17 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
 
 bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
                                                   unsigned Type) const {
+  if (ForceRelaxRelocs) {
+    // TODO: this is very conservative; return true only for types used for
+    // code locations (whose symbols are needed for the linker relaxation).
+    return true;
+  }
+
   switch (Type) {
   default:
     return false;
   case ELF::R_RL78_SYM:
+  case ELF::R_RL78_OPlowW_SMIR:
     return true;
   case ELF::R_RL78_DIR16U: {
     auto &ElfSym = static_cast<const MCSymbolELF &>(Sym);
@@ -152,6 +163,7 @@ bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
 }
 
 std::unique_ptr<MCObjectTargetWriter>
-llvm::createRL78ELFObjectWriter(bool Is64Bit, uint8_t OSABI) {
-  return std::make_unique<RL78ELFObjectWriter>(Is64Bit, OSABI);
+llvm::createRL78ELFObjectWriter(bool Is64Bit, uint8_t OSABI,
+                                bool ForceRelaxRelocs) {
+  return std::make_unique<RL78ELFObjectWriter>(Is64Bit, OSABI, ForceRelaxRelocs);
 }

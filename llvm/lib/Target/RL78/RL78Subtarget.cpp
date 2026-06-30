@@ -33,6 +33,7 @@ RL78Subtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,
   hasFarDataModel = false;
   romModel = (unsigned char)RL78RomModel::Near;
   disableMDA = false;
+  linkerRelax = false;
 
   // Determine default and user specified characteristics.
   if (CPU.empty())

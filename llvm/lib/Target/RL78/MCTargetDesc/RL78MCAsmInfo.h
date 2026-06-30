@@ -24,12 +24,6 @@ class RL78ELFMCAsmInfo : public MCAsmInfoELF {
 
 public:
   explicit RL78ELFMCAsmInfo(const Triple &TheTriple);
-
-  const MCExpr *
-  getExprForPersonalitySymbol(const MCSymbol *Sym, unsigned Encoding,
-                              MCStreamer &Streamer) const override;
-  const MCExpr *getExprForFDESymbol(const MCSymbol *Sym, unsigned Encoding,
-                                    MCStreamer &Streamer) const override;
 };
 
 } // end namespace llvm

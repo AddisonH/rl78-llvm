@@ -102,6 +102,7 @@ protected:
 };
 
 struct RISCVRelaxAux;
+struct RL78RelaxAux;
 
 // This corresponds to a section of an input file.
 class InputSectionBase : public SectionBase {
@@ -225,6 +226,7 @@ public:
     // Auxiliary information for RISC-V linker relaxation. RISC-V does not use
     // jumpInstrMod.
     RISCVRelaxAux *relaxAux;
+    RL78RelaxAux *rl78RelaxAux;
 
     // The compressed content size when `compressed` is true.
     size_t compressedSize;

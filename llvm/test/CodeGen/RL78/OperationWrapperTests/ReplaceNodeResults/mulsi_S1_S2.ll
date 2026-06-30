@@ -1,0 +1,18 @@
+; This test verifies for the presence of the __COM_mulsi libcall on S1/S2 cores.
+
+; RUN: llc %s -o - | FileCheck %s
+
+declare i32 @llvm.rl78.mulsi(i16, i16) #1
+
+; CHECK: _main:
+; CHECK: ; %bb.0:
+; CHECK: 	movw bc, #4
+; CHECK: 	movw ax, #32767
+; CHECK: 	call !__COM_mulsi
+
+define dso_local i32 @main() local_unnamed_addr #0 {
+  %1 = tail call i32 @llvm.rl78.mulsi(i16 32767, i16 4)
+  ret i32 %1
+}
+
+attributes #0 = { "target-cpu"="RL78_S1" }

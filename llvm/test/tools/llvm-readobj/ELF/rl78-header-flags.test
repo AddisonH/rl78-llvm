@@ -1,0 +1,81 @@
+## Check that we are able to dump EF_RL78_* flags correctly.
+
+# RUN: yaml2obj %s --docnum=1 -o %t.set1
+# RUN: llvm-readobj -S --file-headers %t.set1 | FileCheck %s --check-prefix=SET1
+
+# RUN: yaml2obj %s --docnum=2 -o %t.set2
+# RUN: llvm-readobj -S --file-headers %t.set2 | FileCheck %s --check-prefix=SET2
+
+# RUN: yaml2obj %s --docnum=3 -o %t.single
+# RUN: llvm-readelf --file-headers --elf-output-style=GNU %t.single | FileCheck %s --check-prefix=ELF
+
+## Check first set of data
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_EXEC
+  Machine: EM_RL78
+  Flags: [
+    EF_RL78_FU_EXIST,
+    EF_RL78_EI_EXIST,
+    EF_RL78_MAA_1,
+    EF_RL78_CPU_16BIT,
+    EF_RL78_DOUBLE_8,
+    EF_RL78_TEXT_FAR,
+    EF_RL78_DATA_FAR,
+    EF_RL78_RODATA_FAR
+  ]
+
+# SET1: Flags [
+# SET1-DAG: EF_RL78_FU_EXIST (0x1)
+# SET1-DAG: EF_RL78_EI_EXIST (0x8)
+# SET1-DAG: EF_RL78_MAA_1 (0xC0)
+# SET1-DAG: EF_RL78_CPU_16BIT (0x300)
+# SET1-DAG: EF_RL78_DOUBLE_8 (0xC00)
+# SET1-DAG: EF_RL78_TEXT_FAR (0x3000)
+# SET1-DAG: EF_RL78_DATA_FAR (0xC000)
+# SET1-DAG: EF_RL78_RODATA_FAR (0x30000)
+# SET1: ]
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_EXEC
+  Machine: EM_RL78
+  Flags: [
+    EF_RL78_FU_EXIST,
+    EF_RL78_EI_EXIST,
+    EF_RL78_MAA_0,
+    EF_RL78_CPU_8BIT,
+    EF_RL78_DOUBLE_4,
+    EF_RL78_TEXT_NEAR,
+    EF_RL78_DATA_NEAR,
+    EF_RL78_RODATA_NEAR
+  ]
+
+## Check second set of data
+# SET2: Flags [
+# SET2-DAG: EF_RL78_FU_EXIST (0x1)
+# SET2-DAG: EF_RL78_EI_EXIST (0x8)
+# SET2-DAG: EF_RL78_MAA_0 (0x40)
+# SET2-DAG: EF_RL78_CPU_8BIT (0x100)
+# SET2-DAG: EF_RL78_DOUBLE_4 (0x400)
+# SET2-DAG: EF_RL78_TEXT_NEAR (0x1000)
+# SET2-DAG: EF_RL78_DATA_NEAR (0x4000)
+# SET2-DAG: EF_RL78_RODATA_NEAR (0x10000)
+# SET2: ]
+
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_EXEC
+  Machine: EM_RL78
+  Flags: [ EF_RL78_FU_EXIST ]
+
+## Check read-elf data
+# ELF: Flags:
+# ELF-SAME: EF_RL78_FU_EXIST

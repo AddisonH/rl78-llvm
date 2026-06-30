@@ -50,6 +50,7 @@ enum Fixups {
   fixup_RL78_ABS16UW,
   fixup_RL78_ABS20U,
   fixup_RL78_ABS32U,
+  fixup_RL78_RELAX,
 
   // Marker
   LastTargetFixupKind,

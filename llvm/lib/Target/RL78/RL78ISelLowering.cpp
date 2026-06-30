@@ -17,8 +17,11 @@
 #include "RL78TargetMachine.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/CallingConvLower.h"
-#include "llvm/CodeGen/MachineJumpTableInfo.h"
+#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineJumpTableInfo.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/IntrinsicsRL78.h"
 #include "llvm/Support/Debug.h"
@@ -1145,6 +1148,8 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::i32, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::i64, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::i32, Custom);
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::i64, Custom);
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
 
@@ -1490,6 +1495,9 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::MACHU)
     MAKE_CASE(RL78ISD::INC)
     MAKE_CASE(RL78ISD::LOAD_SELECTCC)
+    MAKE_CASE(RL78ISD::DELAY_CYCLES_1_4)
+    MAKE_CASE(RL78ISD::DELAY_CYCLES_5)
+    MAKE_CASE(RL78ISD::DELAY_CYCLES_6_1279)
   }
 #undef MAKE_CASE
   return nullptr;
@@ -2001,6 +2009,34 @@ SDValue RL78TargetLowering::LowerLibCall(SDValue Op, SelectionDAG &DAG,
     SDValue Ops[] = {CallResult.first, CallResult.second};
     return DAG.getMergeValues(Ops, dl);
   }
+}
+
+SDValue RL78TargetLowering::LowerLibCallVoid(SDValue Op, SelectionDAG &DAG,
+                                             const char *libFunctionName,
+                                             bool OpsIsSigned,
+                                             ArrayRef<SDValue> Ops) const {
+  SDLoc dl(Op);
+  TargetLowering::ArgListTy Args;
+
+  for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
+    TargetLowering::ArgListEntry Entry;
+    Entry.Ty = Ops[i].getValueType().getTypeForEVT(*DAG.getContext());
+    Entry.Node = Ops[i];
+    Entry.IsSExt = OpsIsSigned;
+    Entry.IsZExt = !Entry.IsSExt;
+    Args.push_back(Entry);
+  }
+  SDValue Chain = Op.getOperand(0);
+  TargetLowering::CallLoweringInfo CLI(DAG);
+  CLI.setDebugLoc(dl).setChain(Chain).setLibCallee(
+      CallingConv::C, Type::getVoidTy(*DAG.getContext()),
+      DAG.getExternalSymbol(
+          libFunctionName,
+          getPointerTy(DAG.getDataLayout(),
+                       DAG.getDataLayout().getProgramAddressSpace())),
+      std::move(Args));
+
+  return LowerCallTo(CLI).second;
 }
 
 SDValue RL78TargetLowering::LowerMULO(SDValue Op, SelectionDAG &DAG) const {
@@ -2574,6 +2610,33 @@ SDValue RL78TargetLowering::LowerIntrinsicVoid(SDValue Op,
                     orPSW);
 
     return setPSW;
+  }
+  case Intrinsic::rl78_delay_cycles: {
+    auto *CyclesOpe = cast<ConstantSDNode>(Op.getOperand(2));
+    const uint32_t Cycles = static_cast<uint32_t>(CyclesOpe->getZExtValue());
+    if (Cycles <= 4) {
+      SDValue CyclesI16 = DAG.getConstant(Cycles, DL, MVT::i16);
+      return DAG.getNode(RL78ISD::DELAY_CYCLES_1_4, DL, MVT::Other,
+                         /*chain*/ Op.getOperand(0), CyclesI16);
+    }
+    if (Cycles == 5) {
+      return DAG.getNode(RL78ISD::DELAY_CYCLES_5, DL, MVT::Other,
+                         /*chain*/ Op.getOperand(0));
+    }
+    if (Cycles <= 1279) {
+      SDValue CyclesI16 = DAG.getConstant(Cycles, DL, MVT::i16);
+      return DAG.getNode(RL78ISD::DELAY_CYCLES_6_1279, DL, MVT::Other,
+                         /*chain*/ Op.getOperand(0), CyclesI16);
+    }
+    // Lower to runtime routine call.
+    const uint32_t CallAndRetCycles = Subtarget->isRL78S1CoreType() ? 11 : 9;
+    const uint32_t LoopCount = (Cycles + 1 - CallAndRetCycles) / 10;
+    const uint32_t AInit = ((LoopCount >> 16) + 128) & 0xff;
+    const uint32_t XInit = ((LoopCount >> 8) + 1) & 0xff;
+    const uint32_t CInit = (LoopCount + 1) & 0xff;
+    SDValue AX = DAG.getConstant((AInit << 8) + XInit, DL, MVT::i16);
+    SDValue C = DAG.getConstant(CInit, DL, MVT::i8);
+    return LowerLibCallVoid(Op, DAG, "_REL_delay_cycles_24bit", false, {AX, C});
   }
   }
   return SDValue();
@@ -3203,14 +3266,6 @@ SDValue RL78TargetLowering::PerformORCombine(SDNode *N,
     return SDValue();
 }
 
-
-SDValue RL78TargetLowering::PerformXORCombine(SDNode *N,
-                                              DAGCombinerInfo &DCI) const {
-    assert(N->getOpcode() == ISD::XOR);
-
-    return SDValue();
-}
-
 SDValue RL78TargetLowering::PerformSHLCombine(SDNode *N,
                                               DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SHL);
@@ -3314,8 +3369,6 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
       return PerformANDCombine(N, DCI);
   case ISD::OR:
       return PerformORCombine(N, DCI);
-  case ISD::XOR:
-      return PerformXORCombine(N, DCI);
   default:
       return SDValue();
   }
@@ -6057,28 +6110,6 @@ RL78TargetLowering::getConstraintType(StringRef Constraint) const {
     return TargetLowering::getConstraintType(Constraint);
 }
 
-TargetLowering::ConstraintWeight
-RL78TargetLowering::getSingleConstraintMatchWeight(
-    AsmOperandInfo &info, const char *constraint) const {
-  ConstraintWeight weight = CW_Invalid;
-  Value *CallOperandVal = info.CallOperandVal;
-  // If we don't have a value, we can't do a match,
-  // but allow it at the lowest weight.
-  if (!CallOperandVal)
-    return CW_Default;
-
-  // Look at the constraint type.
-  switch (*constraint) {
-  default:
-    weight = TargetLowering::getSingleConstraintMatchWeight(info, constraint);
-    break;
-  case 'r':
-    weight = CW_Register;
-    break;
-  }
-  return weight;
-}
-
 std::pair<unsigned, const TargetRegisterClass *>
 RL78TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                  StringRef Constraint,
@@ -6097,8 +6128,38 @@ RL78TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
     // Default return if VT is not i16 or i8:
     return std::make_pair(0u, static_cast<TargetRegisterClass *>(nullptr));
   } else {
-    return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+    StringRef RegName(Constraint.data() + 1, Constraint.size() - 2);
+    // 16 Bit.
+    if (RegName == "ax")
+      return {RL78::RP0, &RL78::RL78RPRegsRegClass};
+    else if (RegName == "bc")
+      return {RL78::RP2, &RL78::RL78RPRegsRegClass};
+    else if (RegName == "de")
+      return {RL78::RP4, &RL78::RL78RPRegsRegClass};
+    else if (RegName == "hl")
+      return {RL78::RP6, &RL78::RL78RPRegsRegClass};
+
+    switch (RegName[0]) {
+    // 8 bit.
+    case 'x':
+      return {RL78::R0, &RL78::RL78RegRegClass};
+    case 'a':
+      return {RL78::R1, &RL78::RL78RegRegClass};
+    case 'c':
+      return {RL78::R2, &RL78::RL78RegRegClass};
+    case 'b':
+      return {RL78::R3, &RL78::RL78RegRegClass};
+    case 'e':
+      return {RL78::R4, &RL78::RL78RegRegClass};
+    case 'd':
+      return {RL78::R5, &RL78::RL78RegRegClass};
+    case 'l':
+      return {RL78::R6, &RL78::RL78RegRegClass};
+    case 'h':
+      return {RL78::R7, &RL78::RL78RegRegClass};
+    }
   }
+  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }
 
 static SDValue createBSWAPNodes(SDValue node, EVT VT, SelectionDAG &DAG,
@@ -6449,9 +6510,29 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
       SDValue ZExt =
           DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, N->getOperand(2));
 
-      if (Subtarget->isRL78S3CoreType())
-        Results.push_back(
-            DAG.getNode(ISD::UDIV, dl, MVT::i32, N->getOperand(1), ZExt));
+      if (Subtarget->isRL78S3CoreType()) {
+        SDValue Op0 = N->getOperand(1);
+
+        SDValue Op0Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Op0,
+                                    DAG.getConstant(0, dl, MVT::i16));
+        SDValue Op0Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, Op0,
+                                    DAG.getConstant(1, dl, MVT::i16));
+
+        SDValue Op1Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, ZExt,
+                                    DAG.getConstant(0, dl, MVT::i16));
+        SDValue Op1Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, ZExt,
+                                    DAG.getConstant(1, dl, MVT::i16));
+
+        SDVTList VTs = DAG.getVTList(MVT::i16, MVT::i16, MVT::i16, MVT::i16);
+
+        SDValue Div =
+            DAG.getNode(RL78ISD::DIVWU, dl, VTs, Op0Lo, Op0Hi, Op1Lo, Op1Hi);
+
+        SDValue Result = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32,
+                                     Div.getValue(0), Div.getValue(1));
+
+        Results.push_back(Result);
+      }
       else
         Results.push_back(LowerLibCall(SDValue(N, 0), DAG,
                                        getLibcallName(RTLIB::UDIV_I32), false,
@@ -6594,6 +6675,10 @@ void RL78TargetLowering::LowerOperationWrapper(
       llvm_unreachable("Unexpected intrinsic with chain!");
       break;
     }
+    return;
+  }
+  case ISD::INTRINSIC_VOID: {
+    Results.push_back(LowerIntrinsicVoid(SDValue(N, 0), DAG));
     return;
   }
   case ISD::ADDRSPACECAST: {

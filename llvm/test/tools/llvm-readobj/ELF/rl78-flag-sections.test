@@ -1,0 +1,19 @@
+# RUN: yaml2obj %s -o %t-rl78.o
+# RUN: llvm-readobj -S -r %t-rl78.o | FileCheck %s
+
+# CHECK:   SHF_RENESAS_ABS (0x80000000)
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: EM_RL78
+
+Sections:
+  - Name:    .absdata
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_RENESAS_ABS ]
+    Address: 0x0
+    Size:    4
+    Content: "00000000"

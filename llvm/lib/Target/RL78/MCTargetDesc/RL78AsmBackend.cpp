@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/RL78FixupKinds.h"
-#include "MCTargetDesc/RL78MCTargetDesc.h"
+#include "MCTargetDesc/RL78AsmBackend.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCELFObjectWriter.h"
@@ -18,7 +17,7 @@
 using namespace llvm;
 
 static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
-                                 MCContext &Ctx) {
+                                 bool ForceRelaxRelocs, MCContext &Ctx) {
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
@@ -52,6 +51,7 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
   case RL78::fixup_RL78_ABS16UW:
   case RL78::fixup_RL78_ABS20U:
   case RL78::fixup_RL78_ABS32U:
+  case RL78::fixup_RL78_RELAX:
     if (Value)
       llvm_unreachable("Unknown fixup kind!");
     else
@@ -86,12 +86,12 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
   case RL78::fixup_RL78_DIR8S_PCREL:
     RL78ReportError(Value >= -128 && Value <= 0xFF,
                     "Instruction using illegal Value.", &Ctx, Loc);
-	return Value - 1;
+    return ForceRelaxRelocs ? Value : Value - 1;
 
   case RL78::fixup_RL78_DIR16S_PCREL:
     RL78ReportError(Value >= -32768 && Value <= 0xFFFF,
                     "Instruction using illegal Value.", &Ctx, Loc);
-    return Value - 2;
+    return ForceRelaxRelocs ? Value : Value - 2;
 
   case RL78::fixup_RL78_DIR8U:
   case RL78::fixup_RL78_DIR8U_SAD:
@@ -111,20 +111,9 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
   }
 }
 
-namespace {
-class RL78AsmBackend : public MCAsmBackend {
-protected:
-  const Target &TheTarget;
+namespace llvm {
 
-public:
-  RL78AsmBackend(const Target &T)
-      : MCAsmBackend(support::little), TheTarget(T) {}
-
-  unsigned getNumFixupKinds() const override {
-    return RL78::NumTargetFixupKinds;
-  }
-
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
+  const MCFixupKindInfo &RL78AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     const static MCFixupKindInfo Infos[RL78::NumTargetFixupKinds] = {
         // Name                    Offset Bits  Flags.
         {"fixup_RL78_DIR8S_PCREL", 0, 8, MCFixupKindInfo::FKF_IsPCRel},
@@ -162,7 +151,8 @@ public:
         {"fixup_RL78_ABS16U", 0, 16, 0},
         {"fixup_RL78_ABS16UW", 0, 16, 0},
         {"fixup_RL78_ABS20U", 0, 20, 0},
-        {"fixup_RL78_ABS32U", 0, 32, 0}
+        {"fixup_RL78_ABS32U", 0, 32, 0},
+        {"fixup_RL78_RELAX", 0, 0, 0},
     };
 
     if (Kind < FirstTargetFixupKind)
@@ -173,8 +163,9 @@ public:
     return Infos[Kind - FirstTargetFixupKind];
   }
 
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override {
+  bool RL78AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
+                                             const MCFixup &Fixup,
+                                             const MCValue &Target) {
     switch ((RL78::Fixups)Fixup.getKind()) {
     default:
       return false;
@@ -201,18 +192,22 @@ public:
     case RL78::fixup_RL78_ABS20U:
     case RL78::fixup_RL78_ABS32U:
       return true;
+    case RL78::fixup_RL78_DIR16S_PCREL:
+    case RL78::fixup_RL78_DIR8S_PCREL:
+    case RL78::fixup_RL78_RELAX:
+      return forceRelaxRelocs();
     }
   }
 
-  bool fixupNeedsRelaxationAdvanced(
+  bool RL78AsmBackend::fixupNeedsRelaxationAdvanced(
       const MCFixup& Fixup, bool Resolved, uint64_t Value,
       const MCRelaxableFragment* DF, const MCAsmLayout& Layout,
-      const bool WasForced) const override {
+      const bool WasForced) const {
     return fixupNeedsRelaxation(Fixup, Value, DF, Layout);
   }
 
-  bool mayNeedRelaxation(const MCInst &Inst,
-                         const MCSubtargetInfo &STI) const override {
+  bool RL78AsmBackend::mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const {
     switch (Inst.getOpcode()) {
     case RL78::BR_rel16:
       return true;
@@ -223,9 +218,10 @@ public:
 
   /// fixupNeedsRelaxation - Target specific predicate for whether a given
   /// fixup requires the associated instruction to be relaxed.
-  bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
-                            const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const override {
+  bool RL78AsmBackend::fixupNeedsRelaxation(
+      const MCFixup &Fixup, uint64_t Value,
+      const MCRelaxableFragment *DF,
+      const MCAsmLayout &Layout) const {
     int64_t Offset = int64_t(Value);
 
     switch ((unsigned)Fixup.getKind()) {
@@ -236,8 +232,8 @@ public:
     }
   }
 
-  void relaxInstruction(MCInst &Inst,
-                        const MCSubtargetInfo &STI) const override {
+  void RL78AsmBackend::relaxInstruction(MCInst &Inst,
+                                        const MCSubtargetInfo &STI) const {
     MCInst Res;
 
     switch (Inst.getOpcode()) {
@@ -256,20 +252,24 @@ public:
     Inst = std::move(Res);
   }
 
-  bool writeNopData(raw_ostream &OS, uint64_t Count, const MCSubtargetInfo *STI) const override {
+  bool RL78AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
+                                    const MCSubtargetInfo *STI) const {
 
     for (uint64_t i = 0; i != Count; ++i)
       support::endian::write<uint8_t>(OS, 0x00, support::little);
 
     return true;
   }
-};
 
-class ELFRL78AsmBackend : public RL78AsmBackend {
+} // end namespace llvm
+
+namespace {
+
+class ELFRL78AsmBackend : public llvm::RL78AsmBackend {
 
 public:
-  ELFRL78AsmBackend(const Target &T, Triple::OSType OSType)
-      : RL78AsmBackend(T) {}
+  ELFRL78AsmBackend(const Target &T, const MCSubtargetInfo &STI)
+      : RL78AsmBackend(T, STI) {}
 
   void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                   const MCValue &Target, MutableArrayRef<char> Data,
@@ -277,7 +277,7 @@ public:
                   const MCSubtargetInfo *STI) const override {
     MCContext &Ctx = Asm.getContext();
     Value = adjustFixupValue(Fixup.getKind(), static_cast<int64_t>(Value),
-                             Fixup.getLoc(), Ctx);
+                             Fixup.getLoc(), forceRelaxRelocs(), Ctx);
     if (!Value)
       return; // Doesn't change encoding.
 
@@ -293,14 +293,16 @@ public:
 
   std::unique_ptr<MCObjectTargetWriter>
   createObjectTargetWriter() const override {
-    return createRL78ELFObjectWriter(false, ELF::ELFOSABI_NONE);
+    return createRL78ELFObjectWriter(false, ELF::ELFOSABI_NONE,
+                                     forceRelaxRelocs());
   }
 };
 
 } // end anonymous namespace
+
 MCAsmBackend *llvm::createRL78AsmBackend(const Target &T,
                                          const MCSubtargetInfo &STI,
                                          const MCRegisterInfo &MRI,
                                          const MCTargetOptions &Options) {
-  return new ELFRL78AsmBackend(T, STI.getTargetTriple().getOS());
+  return new ELFRL78AsmBackend(T, STI);
 }

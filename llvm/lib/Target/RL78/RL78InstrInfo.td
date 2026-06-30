@@ -47,9 +47,10 @@ def AEXT_8_16 : Pseudo<
 // Address types
 //===----------------------------------------------------------------------===//
 
-//TODO: this is int, shouldn't be iptr or something?
-def RL78Low16    : SDNode<"RL78ISD::LOW16", SDTIntUnaryOp>;
-def RL78Low8     : SDNode<"RL78ISD::LOW8", SDTIntUnaryOp>;
+def SDTPtr : SDTypeProfile<1, 1, [SDTCisVT<0, i16>, SDTCisPtrTy<1>]>;
+
+def RL78Low16    : SDNode<"RL78ISD::LOW16", SDTPtr>;
+def RL78Low8     : SDNode<"RL78ISD::LOW8", SDTPtr>;
 
 def SDTRL78FarOp : SDTypeProfile<1, 2, [SDTCisVT<0, i16>, SDTCisVT<1, i16>,SDTCisVT<2, i16>]>;
 def RL78Hi16     : SDNode<"RL78ISD::HI16", SDTRL78FarOp>;
@@ -415,7 +416,7 @@ def MOV_cs_imm : InstRL78_24bit<0xcefc00,
 //MOV A, L          66
 //MOV A, H          67
 def MOV_A_r : InstRL78_8bit<0x60,
-        (outs RL78AReg:$rd), (ins RL78Reg:$rsrc),
+        (outs RL78AReg:$rd), (ins RL78XBCEDHLReg:$rsrc),
         "mov $rd, $rsrc",
         []>;
 
@@ -428,7 +429,7 @@ def MOV_A_r : InstRL78_8bit<0x60,
 //MOV L, A          76
 //MOV H, A          77
 def MOV_r_A : InstRL78_8bit<0x70,
-        (outs RL78Reg:$rd), (ins RL78AReg:$rsrc),
+        (outs RL78XBCEDHLReg:$rd), (ins RL78AReg:$rsrc),
         "mov $rd, $rsrc",
         []>;
 
@@ -439,7 +440,6 @@ def MOV_r_A : InstRL78_8bit<0x70,
 //MOV X, saddr      D8 saddr
 //MOV B, saddr      E8 saddr
 //MOV C, saddr      F8 saddr
-//TODO: reg class change
 def LOAD8_rlo_saddr : InstRL78_16bit<0x8D00,
         (outs RL78Reg:$rd), (ins ABS8:$addr),
         "mov $rd, $addr",
@@ -877,7 +877,7 @@ let Constraints = "$rsrc = $rd, $rsrc2 = $rd2" in
 {
 //XCH A, r          61 8X (C..H -> A..F)
 def XCH_A_r  : InstRL78_16bit<0x618A,
-        (outs RL78AReg:$rd, RL78Reg:$rd2), (ins RL78AReg:$rsrc, RL78Reg:$rsrc2),
+        (outs RL78AReg:$rd, RL78XBCEDHLReg:$rd2), (ins RL78AReg:$rsrc, RL78XBCEDHLReg:$rsrc2),
         "xch $rd, $rsrc2",
         []>;
 }
@@ -1498,7 +1498,7 @@ let Constraints = "$rsrc = $rd, $rsrc2 = $rd2" in
 //XCHW AX, HL   37
 let mayLoad = 0, mayStore = 0 in
 def XCHW_AX_rp  : InstRL78_8bit<0x33,
-        (outs RL78AXRP:$rd, RL78RPRegs:$rd2), (ins RL78AXRP:$rsrc, RL78RPRegs:$rsrc2),
+        (outs RL78AXRP:$rd, RL78BCDEHL:$rd2), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
         "xchw $rd, $rsrc2",
         []>;
 
@@ -4939,19 +4939,6 @@ def BRK : InstRL78_16bit<0x61CC,
 } // hasSideEffects = 1, mayLoad = 0, mayStore = 0
 
 //===----------------------------------------------------------------------===//
-// PREFIX instruction
-//===----------------------------------------------------------------------===//
-def SDTPREFIX : SDTypeProfile<0, 0, []>;
-
-def prefix : SDNode<"RL78ISD::PREFIX", SDTPREFIX, [SDNPHasChain, SDNPSideEffect]>;
-
-let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in
-def PREFIX : InstRL78_8bit<0x11,
-        (outs), (ins),
-        "prefix",
-        []>;
-
-//===----------------------------------------------------------------------===//
 // ATOMIC support
 //===----------------------------------------------------------------------===//
 
@@ -4970,4 +4957,34 @@ def HI16_rp_rp : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$low),
          ";movw $rd, $rsrc",
         [(set i16:$rd, (RL78Hi16 i16:$rsrc, i16:$low))]>;
+}
+
+
+//===----------------------------------------------------------------------===//
+// __delay_cycles pseudo instruction
+//===----------------------------------------------------------------------===//
+def RL78delay_cycles_1_4 :
+    SDNode<"RL78ISD::DELAY_CYCLES_1_4",
+           SDTypeProfile<0, 1, [SDTCisInt<0>]>, [SDNPSideEffect, SDNPHasChain]>;
+def RL78delay_cycles_5 :
+    SDNode<"RL78ISD::DELAY_CYCLES_5",
+           SDTypeProfile<0, 0, []>, [SDNPSideEffect, SDNPHasChain]>;
+def RL78delay_cycles_6_1279 :
+    SDNode<"RL78ISD::DELAY_CYCLES_6_1279",
+           SDTypeProfile<0, 1, [SDTCisInt<0>]>, [SDNPSideEffect, SDNPHasChain]>;
+
+let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
+  def DELAY_CYCLES_1_4 :
+      Pseudo<(outs), (ins i16imm:$cycles), ";__delay_cycles_1_4 $cycles",
+             [(RL78delay_cycles_1_4(i16 imm:$cycles))]>;
+}
+let Defs = [CCreg], hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
+  def DELAY_CYCLES_5 :
+      Pseudo<(outs), (ins),
+             ";__delay_cycles_5", [(RL78delay_cycles_5)]>;
+}
+let Defs = [R1, CCreg], hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
+  def DELAY_CYCLES_6_1279 :
+      Pseudo<(outs), (ins i16imm:$cycles), ";__delay_cycles_6_1279 $cycles",
+             [(RL78delay_cycles_6_1279(i16 imm:$cycles))]>;
 }

@@ -141,3 +141,7 @@ BUILTIN(__macui, "ULiUiUiULi", "")
 
 //CCRL: signed long __macsi(signed int x, signed int y, signed long z);
 BUILTIN(__macsi, "LiiiLi", "")
+
+//Wait for the specified number of cycles. Only constants are allowed.
+//CCRL: void __delay_cycles(unsigned long cycles);
+BUILTIN(__delay_cycles, "vULi", "n")

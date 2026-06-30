@@ -879,6 +879,7 @@ set(ASM_RL78_SOURCES
   rl78/COM_sldiv.S
   rl78/COM_sidiv.S
   rl78/COM_uidiv.S
+  rl78/REL_delay_cycles_24bit.S
 )
 
 set_property(SOURCE ${ASM_RL78_SOURCES} PROPERTY COMPILE_FLAGS -frenesas-extensions)

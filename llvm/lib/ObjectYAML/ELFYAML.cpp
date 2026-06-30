@@ -795,6 +795,9 @@ void ScalarBitSetTraits<ELFYAML::ELF_SHF>::bitset(IO &IO,
   case ELF::EM_X86_64:
     BCase(SHF_X86_64_LARGE);
     break;
+  case ELF::EM_RL78:
+    BCase(SHF_RENESAS_ABS);
+    break;
   default:
     // Nothing to do.
     break;
@@ -933,6 +936,9 @@ void ScalarEnumerationTraits<ELFYAML::ELF_REL>::enumeration(
     break;
   case ELF::EM_XTENSA:
 #include "llvm/BinaryFormat/ELFRelocs/Xtensa.def"
+    break;
+  case ELF::EM_RL78:
+#include "llvm/BinaryFormat/ELFRelocs/RL78.def"
     break;
   default:
     // Nothing to do.

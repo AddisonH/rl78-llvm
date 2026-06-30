@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RL78.h"
+#include "../Clang.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/DriverDiagnostic.h"
@@ -108,6 +109,19 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
             << mirrorSource->getOption().getName();
     } else
       Features.push_back("+mirror-source-0");
+  }
+
+  // -mrelax is default, unless -mno-relax is specified.
+  if (Args.hasFlag(options::OPT_mrelax, options::OPT_mno_relax, true)) {
+    Features.push_back("+relax");
+    // -gsplit-dwarf -mrelax requires DW_AT_high_pc/DW_AT_ranges/... indexing
+    // into .debug_addr, which is currently not implemented.
+    Arg *A;
+    if (getDebugFissionKind(D, Args, A) != DwarfFissionKind::None)
+      D.Diag(clang::diag::err_drv_riscv_unsupported_with_linker_relaxation)
+          << A->getAsString(Args);
+  } else {
+    Features.push_back("-relax");
   }
 }
 

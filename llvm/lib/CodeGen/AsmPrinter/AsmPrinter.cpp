@@ -3586,6 +3586,8 @@ static void emitGlobalConstantImpl(const DataLayout &DL, const Constant *CV,
   // Otherwise, it must be a ConstantExpr.  Lower it to an MCExpr, then emit it
   // thread the streamer with EmitValue.
   const MCExpr *ME = AP.lowerConstant(CV);
+  if (!ME)
+    return; // AsmPrinter handled the emission also.
 
   // Since lowerConstant already folded and got rid of all IR pointer and
   // integer casts, detect GOT equivalent accesses by looking into the MCExpr

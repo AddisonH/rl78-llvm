@@ -48,11 +48,11 @@
 #include "llvm/IR/IntrinsicsPowerPC.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
+#include "llvm/IR/IntrinsicsRL78.h"
 #include "llvm/IR/IntrinsicsS390.h"
 #include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/IntrinsicsX86.h"
-#include "llvm/IR/IntrinsicsRL78.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/MatrixBuilder.h"
 #include "llvm/Support/ConvertUTF.h"
@@ -20768,6 +20768,11 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
     default:
       llvm_unreachable("unexpected builtin ID");
     }
+  }
+  case RL78::BI__delay_cycles: {
+    Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
+    return Builder.CreateCall(CGM.getIntrinsic(Intrinsic::rl78_delay_cycles),
+                              {ArgValue0});
   }
   default:
     llvm_unreachable("unexpected builtin ID");

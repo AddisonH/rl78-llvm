@@ -137,7 +137,27 @@ public:
   StringRef getABI() const override { return ABI; }
 
   bool validateAsmConstraint(const char *&Name,
-                             TargetInfo::ConstraintInfo &info) const override {
+                             TargetInfo::ConstraintInfo &Info) const override {
+    if ((Name[0] == 'a' && Name[1] == 'x') ||
+        (Name[0] == 'b' && Name[1] == 'c') ||
+        (Name[0] == 'd' && Name[1] == 'e') ||
+        (Name[0] == 'h' && Name[1] == 'l')) {
+      Info.setAllowsRegister();
+      ++Name;
+      return true;
+    }
+
+    switch (*Name) {
+    case 'a':
+    case 'x':
+    case 'b':
+    case 'c':
+    case 'd':
+    case 'e':
+    case 'h':
+    case 'l':
+      Info.setAllowsRegister();
+    }
     return true;
   }
 

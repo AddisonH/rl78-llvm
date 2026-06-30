@@ -97,7 +97,7 @@ void RL78ExpandPseudoInsts::buildBBOffsetMap(MachineFunction &MF,
 bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
                                          MachineBasicBlock &MBB,
                                          const TargetInstrInfo *TII) {
-  // Return if not BRCC/BR/BTBF/BTCLR.
+  // Return if not BRCC/BR/BTBF.
   if ((MI.getOpcode() != RL78::BRCC) && (MI.getOpcode() != RL78::BR) &&
       (MI.getOpcode() != RL78::BTBF) && (MI.getOpcode() != RL78::BTBF_mem) &&
       (MI.getOpcode() != RL78::BTBF_sfr))
@@ -105,10 +105,12 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
   // MI.dump();
   MachineFunction::iterator MBBI = MBB.getIterator();
   MachineBasicBlock &targetMBB = *MI.getOperand(0).getMBB();
+  MachineFunction::iterator NextMBBI = std::next(MBBI);
   // if this is the last instruction in MBB and the next (fall-through) block
   // has only 1 instruction.
   if ((MI.getOpcode() == RL78::BRCC) && (MI == MBB.getLastNonDebugInstr()) &&
-      isSingleInstructionBB(*++MBBI) && ((++MBBI) == targetMBB.getIterator())) {
+      isSingleInstructionBB(*NextMBBI) && !NextMBBI->begin()->isPseudo() &&
+      (std::next(NextMBBI) == targetMBB.getIterator())) {
     // Insert a conditional skip instruction.
     BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SK_cc))
         .add(MI.getOperand(0))
@@ -116,14 +118,14 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
   } else {
     // First check if the jump is in range [-128 + size(instruction), +127]
     // bytes size(instruction) = { BC, BNC, BZ, BNZ = 2 bytes, BH, BNH = 3
-    // bytes, BT, BF, BTCLR = 3/4}.
+    // bytes, BT, BF = 3/4}.
     unsigned jumpSize = 0;
     unsigned range = 0;
     unsigned sourceOff = bbOffsetMap[&MBB];
     unsigned targetOff = bbOffsetMap[&targetMBB];
     unsigned sourceBBSize = bbSizeMap[&MBB];
     // size(instruction) = { BC, BNC, BZ, BNZ = 2 bytes, BH, BNH = 3 bytes,
-    // BR = 2, BT, BF, BTCLR = 3/4}.
+    // BR = 2, BT, BF = 3/4}.
     unsigned instrSize = 4;
     // Find jump distance, if the target BB is the same as the source BB
     // then the jump distance will be size of the source BB.

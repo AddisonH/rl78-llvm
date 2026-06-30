@@ -2924,6 +2924,8 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
     NewAttr = S.mergeSectionAttr(D, *SA, SA->getName());
   else if (const auto *CSA = dyn_cast<CodeSegAttr>(Attr))
     NewAttr = S.mergeCodeSegAttr(D, *CSA, CSA->getName());
+  else if (const auto *RAA = dyn_cast<RL78AddressAttr>(Attr))
+    NewAttr = S.mergeRL78AddressAttr(D, *RAA, RAA->getAddress());
   else if (const auto *IA = dyn_cast<MSInheritanceAttr>(Attr))
     NewAttr = S.mergeMSInheritanceAttr(D, *IA, IA->getBestCase(),
                                        IA->getInheritanceModel());
