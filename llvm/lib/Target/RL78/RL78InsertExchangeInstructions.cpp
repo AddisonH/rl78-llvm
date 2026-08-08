@@ -10,6 +10,8 @@
 //===----------------------------------------------------------------------===//
 // TODO: Revisit this whole file, maybe move some of xch to ISelLowering
 #include "RL78TargetMachine.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 
 using namespace llvm;
 
@@ -121,19 +123,19 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
   // MI.dump();
 
   unsigned Reg = MI.getOperand(opIndex).getReg();
+  bool IsDef = MI.getOperand(opIndex).isDef();
+  bool IsTied = MI.getOperand(opIndex).isTied();
   // if dest is NOT A register we need to exchange the value to A and back
   if (Reg != RL78::RP0) {
-    // if the operand is "Kill"
-    if ((!isAXLive) && MI.getOperand(opIndex).isKill()) {
-      if (RL78::RL78BCDEHLRegClass.contains(Reg))
-        BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-            .addReg(Reg, RegState::Kill);
-      else
-        BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-            .addReg(Reg, RegState::Kill);
+    // Pure use and AX dead: the old AX need not come back, so copying in is
+    // enough. MOVW leaves Reg intact, so a kill flag is not required here.
+    if ((!isAXLive) && !IsDef) {
+      BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
+          .addReg(Reg, getKillRegState(MI.getOperand(opIndex).isKill()));
     }
-    // if register is "Def"
-    else if ((!isAXLive) && MI.getOperand(opIndex).isDef()) {
+    // Pure def and AX dead: copy out only. A tied operand is read as well, so
+    // it needs both directions and falls through to the exchange below.
+    else if ((!isAXLive) && IsDef && !IsTied) {
       BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOVW_rp_AX),
               Reg)
           .addReg(RL78::RP0, RegState::Kill);
@@ -445,10 +447,24 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   LLVM_DEBUG(MF.dump());
   // first step remove pseudos and insert real intructions and XCH instructions
   // where necesarry
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.empty())
       continue;
-    //
+
+    // Exact A/X liveness before each instruction; updateAAXLiveness() below is
+    // a forward def-tracking walk and cannot prove deadness. See CODEGEN.md.
+    DenseMap<const MachineInstr *, std::pair<bool, bool>> LiveBeforeMI;
+    {
+      LivePhysRegs LPR(*TRI);
+      LPR.addLiveOuts(MBB);
+      for (MachineInstr &MI : llvm::reverse(MBB)) {
+        LPR.stepBackward(MI);
+        LiveBeforeMI[&MI] = {LPR.contains(RL78::R1), LPR.contains(RL78::R0)};
+      }
+    }
+
     bool isALive = MBB.isLiveIn(RL78::R1) || MBB.isLiveIn(RL78::RP0);
     bool isXLive = MBB.isLiveIn(RL78::R0) || MBB.isLiveIn(RL78::RP0);
 
@@ -458,6 +474,13 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       DebugLoc DL = MI.getDebugLoc();
       ++Next;
       updateAAXLiveness(MI, isALive, isXLive);
+      // Instructions inserted below are absent from the map and keep the
+      // conservative answer.
+      auto LB = LiveBeforeMI.find(&MI);
+      if (LB != LiveBeforeMI.end()) {
+        isALive = LB->second.first;
+        isXLive = LB->second.second;
+      }
       // MI.dump();
       switch (MI.getOpcode()) {
       case RL78::MOV_r_imm:
