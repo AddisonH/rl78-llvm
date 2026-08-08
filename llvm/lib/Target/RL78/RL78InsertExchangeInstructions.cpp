@@ -63,10 +63,12 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
 
   // if dest is NOT A register we need to exchange the value to A and back
   if (!RL78::RL78ARegRegClass.contains(MI.getOperand(opIndex).getReg())) {
-    // if the operand is "Kill"
-    if ((!isALive) && MI.getOperand(opIndex).isKill()) {
+    // Pure use and A dead: MOV leaves the source intact and the old A is not
+    // needed back, so a kill flag is not required to copy in.
+    if ((!isALive) && !MI.getOperand(opIndex).isDef()) {
       BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r), RL78::R1)
-          .addReg(MI.getOperand(opIndex).getReg(), RegState::Kill);
+          .addReg(MI.getOperand(opIndex).getReg(),
+                  getKillRegState(MI.getOperand(opIndex).isKill()));
     }
     // if register is "Def"
     else if ((!isALive) && MI.getOperand(opIndex).isDef()) {
