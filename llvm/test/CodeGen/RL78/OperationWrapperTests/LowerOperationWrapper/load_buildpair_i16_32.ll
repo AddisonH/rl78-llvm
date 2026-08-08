@@ -1,4 +1,4 @@
-; RUN: llc -mattr=+far-data %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -mattr=+far-data %s -o - | FileCheck %s
 
 ; CHECK: _test_load:
 ; CHECK: 	mov es, #HIGHW(_global_ptr)

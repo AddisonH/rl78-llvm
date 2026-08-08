@@ -1,7 +1,7 @@
 ; This tests verifies the lowering of an i32 TargetGlobalAddress. The result should be a build pair
 ; containing the low and high parts of the TargetGlobalAddress.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _main:
 ; CHECK: 	br !!_atexit

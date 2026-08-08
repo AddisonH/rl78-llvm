@@ -1,4 +1,4 @@
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_constraint_r_u8:
 ; CHECK: 	;APP

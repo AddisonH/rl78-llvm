@@ -4,7 +4,7 @@
 ; There is one more function (LowerAndOrXor16_rp_rp) which is tested in
 ; "xor.ll" (instruction XOR16_rp_rp).
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 @xb = dso_local local_unnamed_addr global i16 0, align 2
 

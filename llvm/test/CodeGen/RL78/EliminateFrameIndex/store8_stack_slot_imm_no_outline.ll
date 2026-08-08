@@ -2,7 +2,7 @@
 ; the stack offset, along with the 4 bytes from the CALL instruction, does not
 ; fit in the 8 bit displacement limit.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _store8_sequence_a:
 ; CHECK: 	mov [sp+252], #-86

@@ -1,7 +1,7 @@
 ; Test the LowerShiftOrRotateForSpeed function.
 ; Ensure the SHLW_rp_rp instruction is lowered correctly when -O3 is used.
 
-; RUN: llc -O3 %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -O3 %s -o - | FileCheck %s
 
 ; CHECK: _ab:
 ; CHECK:  shl b, 5

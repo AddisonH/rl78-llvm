@@ -1,7 +1,7 @@
 ; This test verifies the MOVW_rp_stack_slot instruction when the Frame Register is RP4,
 ; with a stack offset that can fit in the 8 bit displacement limit.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_16bit_movw_rp_stack_slot:
 ; CHECK: 	movw ax, sp

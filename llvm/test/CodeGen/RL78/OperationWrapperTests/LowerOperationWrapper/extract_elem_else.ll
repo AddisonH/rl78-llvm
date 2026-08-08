@@ -2,7 +2,7 @@
 ; This test illustrates the second else branch in the case of an i32 EXTRACT_ELEMENT.
 ; The branch just modifies the i32 constant extract index to an i16 index.
 
-; RUN: llc -mattr=+far-data %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -mattr=+far-data %s -o - | FileCheck %s
 
 define dso_local i16 @test_smulll(i64 noundef %0, i64 noundef %1, ptr nocapture noundef writeonly %2) local_unnamed_addr #0 {
   ret i16 0

@@ -1,7 +1,7 @@
 ; This test verifies the STORE8_stack_slot_imm instruction when stack offset is too large ( > 255 )
 ; for a direct addressing MOV, so an indirect store is performed then the value is restored back into BC. 
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _store8_large_offset:
 ; CHECK:	push bc

@@ -1,7 +1,7 @@
 ; This test verifies for the presence of the SMUL_LOHI instruction
 ; when lowering a mulsi instruction on an S3 core.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 declare i32 @llvm.rl78.mulsi(i16, i16) #1
 

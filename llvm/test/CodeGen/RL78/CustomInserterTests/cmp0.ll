@@ -1,7 +1,7 @@
 ; Test the LowerCMP0 function.
 ; Ensure the CMP0_r instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: ; %bb.0:

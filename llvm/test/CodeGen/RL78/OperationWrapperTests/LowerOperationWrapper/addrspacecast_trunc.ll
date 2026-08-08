@@ -1,6 +1,6 @@
 ; This test verifies the presence of the TRUNC operation performed on the ADDRSPACECAST node.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_cast:
 ; CHECK-NEXT: 	.cfi_startproc

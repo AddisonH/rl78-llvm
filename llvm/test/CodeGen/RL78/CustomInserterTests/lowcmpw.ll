@@ -1,7 +1,7 @@
 ; Test the LowCMPW_rp_imm switch case.
 ; Ensure the instruction is lowered correctly by the custom inserter.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 @y = dso_local addrspace(2) global i8 0, section ".bssf_ATEFFFF", align 1 #0
 

@@ -1,7 +1,7 @@
 ; Test the Lower8bitADst, LowerToHLByteOrWordBC functions.
 ; Ensure the LOAD8_r_esrpi instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 @p = dso_local local_unnamed_addr global i8 0, align 1
 

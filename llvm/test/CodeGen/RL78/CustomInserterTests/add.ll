@@ -1,7 +1,7 @@
 ; Test the Lower8BitOpAA and Lower16BitOpAXAX functions.
 ; Ensure ADD_r_memri and ADDW_rp_imm instructions are lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _ab:
 ; CHECK: 	add a, [hl+3]

@@ -1,7 +1,7 @@
 ; Test the LowerAndOrXor16_rp_rp function.
 ; Ensure the XOR16_rp_rp instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: 	xor a, b

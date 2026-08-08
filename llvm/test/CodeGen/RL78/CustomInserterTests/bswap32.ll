@@ -3,7 +3,7 @@
 
 ; This file tests the LowerBSWAP32 function using the BSWAP32_rp instruction.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _ap:
 ; CHECK: 	xch a, x

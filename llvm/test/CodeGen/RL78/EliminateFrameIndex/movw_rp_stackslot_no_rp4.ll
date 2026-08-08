@@ -1,7 +1,7 @@
 ; This test verifies the MOVW_rp_sp emitted when a MOVW_rp_stack_slot instruction does
 ; not have RP4 as its FrameReg.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_movw_rp_sp:
 ; CHECK: 	movw ax, sp

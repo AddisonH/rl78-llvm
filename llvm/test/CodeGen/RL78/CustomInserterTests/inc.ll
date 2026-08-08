@@ -1,7 +1,7 @@
 ; Test the Lower16bitAXSrc, LowerESSrc functions.
 ; Ensure INC_memri, INC_esaddr16 instructions are lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 @xa = dso_local local_unnamed_addr addrspace(2) global [1 x i8] zeroinitializer, align 1
 

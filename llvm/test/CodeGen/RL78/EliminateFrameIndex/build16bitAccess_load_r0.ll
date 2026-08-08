@@ -1,7 +1,7 @@
 ; This test verifies the build16bitAccess function when the instruction is a LOAD8_r_stack_slot
 ; with its main register being R0.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_8bit_load_from_R0:
 ; CHECK: 	push de

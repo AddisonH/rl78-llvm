@@ -1,7 +1,7 @@
 ; Test the LowerRotate_r_imm and LowerRotate16_rp_imm functions.
 ; Ensure ROTL_r_imm and ROTL16_r_imm instructions are lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _ac:
 ; CHECK: 	ror a, 1

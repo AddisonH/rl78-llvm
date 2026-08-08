@@ -1,4 +1,4 @@
-; RUN: not llc %s 2>&1 -o - | FileCheck %s
+; RUN: not llc -mtriple=rl78 %s 2>&1 -o - | FileCheck %s
 
 ; CHECK: error: couldn't allocate input reg for constraint 'x'
 define dso_local i8 @test_constraint_r_unknown(i8 noundef %0) local_unnamed_addr #0 {

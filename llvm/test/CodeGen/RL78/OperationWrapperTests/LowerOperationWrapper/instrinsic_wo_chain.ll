@@ -1,6 +1,6 @@
 ; This test verifies the presence of the __COM_remul libcall of an intrinsic without a chain.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test__remul:
 ; CHECK: ; %bb.0:

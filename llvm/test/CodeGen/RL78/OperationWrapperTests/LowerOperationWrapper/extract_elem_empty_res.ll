@@ -1,6 +1,6 @@
 ; This test verifies the EXTRACT_ELEMENT with empty OpResults.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_add:
 ; CHECK: ; %bb.0:

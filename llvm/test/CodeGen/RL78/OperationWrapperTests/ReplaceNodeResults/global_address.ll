@@ -1,7 +1,7 @@
 ; This test checks a global address of type i32.
 ; It breaks down the address into two i16 parts, producing LOWW and HIGHW instructions.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _main:
 ; CHECK: ; %bb.0:

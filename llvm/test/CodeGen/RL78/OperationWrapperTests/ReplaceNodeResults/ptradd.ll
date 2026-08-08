@@ -1,7 +1,7 @@
 ; This test verifies the i32 PTRADD, which returns the unchanged high part and the sum consisting of the
 ; pointer's low part and its offset.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _foo:
 ; CHECK: ; %bb.0:

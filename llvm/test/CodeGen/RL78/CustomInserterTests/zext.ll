@@ -1,7 +1,7 @@
 ; Test the LowerEXTEND function.
 ; Ensure the ZEXT_8_16 instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _shift_right_by_x_places:
 ; CHECK: 	mov x, a

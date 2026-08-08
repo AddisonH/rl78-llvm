@@ -1,6 +1,6 @@
 ; This test verifies the presence of the MUL_I32 libcall (_COM_lmul).
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 @wk_slDATA = dso_local local_unnamed_addr global i32 -4096, align 2
 @wk_slANS = dso_local global i32 0, align 2

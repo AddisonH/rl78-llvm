@@ -1,6 +1,6 @@
 ; This test verifies for the presence of the __COM_mulsi libcall on S1/S2 cores.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 declare i32 @llvm.rl78.mulsi(i16, i16) #1
 

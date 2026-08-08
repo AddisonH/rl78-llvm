@@ -1,7 +1,7 @@
 ; This test verifies the instructions added when the Frame Register is RP4 in the case
 ; of LOAD / STORE instructions.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_load_RP4:
 ; CHECK: 	push hl

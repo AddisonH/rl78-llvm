@@ -1,4 +1,4 @@
-; RUN: not llc %s 2>&1 -o - | FileCheck %s
+; RUN: not llc -mtriple=rl78 %s 2>&1 -o - | FileCheck %s
 
 ; CHECK: error: couldn't allocate output register for constraint 'r'
 define dso_local i32 @test_weight_eerr(i32 noundef returned %0) local_unnamed_addr #0 {

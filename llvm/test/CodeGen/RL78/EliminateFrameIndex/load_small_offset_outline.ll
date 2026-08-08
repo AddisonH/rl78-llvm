@@ -1,7 +1,7 @@
 ; This test verifies that LOAD / STORE instructions from the stack into an register
 ; will be outlined if their offsets fit inside a MOV instruction.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _OUTLINED_FUNCTION_0:
 ; CHECK: 	call !_sink

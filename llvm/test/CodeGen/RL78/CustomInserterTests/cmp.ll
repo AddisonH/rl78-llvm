@@ -1,7 +1,7 @@
 ; Test the LowerCMP function.
 ; Ensure the CMP_r_imm instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _ad:
 ; CHECK: ; %bb.0:

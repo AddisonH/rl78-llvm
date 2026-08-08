@@ -3,7 +3,7 @@
 
 ; This file tests the LowerCallCSRP function using the CALL_cs_rp instruction.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: 	mov cs, a

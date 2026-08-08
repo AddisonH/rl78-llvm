@@ -1,6 +1,6 @@
 ; This test verifies for the presence of the __COM_mului libcall for S1 cores.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test__mului:
 ; CHECK: ; %bb.0:

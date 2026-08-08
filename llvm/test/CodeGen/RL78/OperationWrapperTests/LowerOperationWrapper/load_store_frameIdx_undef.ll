@@ -1,7 +1,7 @@
 ; This test verifies the lowering of STORE and LOAD instructions with i16 FrameIndex pointers paired with
 ; i32 UNDEF offsets.
 
-; RUN: llc -mattr=+far-data %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -mattr=+far-data %s -o - | FileCheck %s
 
 ; CHECK: _test_store_and_load:
 ; CHECK: 	movw ax, #5

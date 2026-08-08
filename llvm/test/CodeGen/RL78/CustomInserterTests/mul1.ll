@@ -1,7 +1,7 @@
 ; Test the LowerMULDIV16, LowerMUL8Zext16, LowerMUL8 functions.
 ; Ensure MUL32_zext_r_r, MULU_zext_16_r_r, MUL8_r_r, MACH_CG instructions are lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: 	mulhu ;ax, bc, ax, bc

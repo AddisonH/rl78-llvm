@@ -2,7 +2,7 @@
 ; its stack offset, adjusted for the 4 extra bytes added by the CALL instruction,
 ; can fit in the 8 bit displacement limit.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _store8_stack_slot_imm_outline_a:
 ; CHECK: 	subw sp, #4

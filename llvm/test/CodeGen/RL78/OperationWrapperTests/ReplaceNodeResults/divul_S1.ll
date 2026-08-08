@@ -1,7 +1,7 @@
 ; The divul_1 test searches for the same libcall as this one (__COM_uldiv) but
 ; this one gets emitted immediately because it has target CPU set to S1.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test__divul:
 ; CHECK: ; %bb.0:

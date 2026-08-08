@@ -1,7 +1,7 @@
 ; Test the LowerShift_Or_LowerRotate_rp_rp function.
 ; Ensure the SHLW_rp_rp instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _ab:
 ; CHECK: 	mov a, [de]

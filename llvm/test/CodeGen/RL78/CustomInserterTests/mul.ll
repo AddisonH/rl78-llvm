@@ -1,7 +1,7 @@
 ; Test the LowerMUL16 function.
 ; Ensure MUL16_rp_rp_S1_S2 instruction is lowered correctly.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: 	xch a, c

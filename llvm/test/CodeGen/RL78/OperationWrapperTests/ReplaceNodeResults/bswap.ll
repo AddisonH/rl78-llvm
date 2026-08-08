@@ -2,7 +2,7 @@
 ; The i64 variant recursively emits EXTRACT_ELEMENTs as it performs swaps on each half before recombining them.
 ; The i32 variant just swaps the high part with the low part of the node. 
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: ; %bb.0:

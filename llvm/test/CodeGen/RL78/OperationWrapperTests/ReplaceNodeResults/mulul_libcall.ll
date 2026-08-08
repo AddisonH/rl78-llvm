@@ -1,6 +1,6 @@
 ; This test verifies for the presence of the __COM_mulul libcall.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test__mulul:
 ; CHECK: ; %bb.0:

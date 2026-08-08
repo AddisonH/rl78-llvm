@@ -1,4 +1,4 @@
-; RUN: not llc %s 2>&1 -o - | FileCheck %s
+; RUN: not llc -mtriple=rl78 %s 2>&1 -o - | FileCheck %s
 
 ; CHECK: <inline asm>:1:2: error: invalid instruction mnemonic
 ; CHECK:         foo

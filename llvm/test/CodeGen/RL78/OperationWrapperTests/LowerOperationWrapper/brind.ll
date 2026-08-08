@@ -1,6 +1,6 @@
 ; This test verifies the lowering of an i32 BRIND.
 
-; RUN: llc -mattr=+far-data %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -mattr=+far-data %s -o - | FileCheck %s
 
 @main.b = internal global [2 x ptr] [ptr blockaddress(@main, %3), ptr blockaddress(@main, %2)], align 2
 

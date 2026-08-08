@@ -2,7 +2,7 @@
 ; and when the stack offset, along with the 4 bytes from the CALL instruction, fit in
 ; the 16 bit displacement limit.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_16bit_movw_RP4_stack_slot:
 ; CHECK: 	push bc

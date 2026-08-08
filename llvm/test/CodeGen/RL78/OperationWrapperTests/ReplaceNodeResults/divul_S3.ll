@@ -1,6 +1,6 @@
 ; This test verifies the lowering of the DIVUL intrinsic to the DIVWU instruction for S3 cores.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test__divul:
 ; CHECK: 	movw hl, #0

@@ -1,7 +1,7 @@
 ; This test verifies that the HighValue for an i32 ADDRSPACECAST is 0 when IsSrcAddress is true.
 ; The outcome should be an i32 BUILD_PAIR made out of the low address of the function and 0.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 define dso_local void @target_function() #0 {
   ret void

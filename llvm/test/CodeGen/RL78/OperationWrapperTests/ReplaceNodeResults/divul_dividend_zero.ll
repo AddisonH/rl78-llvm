@@ -1,6 +1,6 @@
 ; This test verifies that -1 is returned when __divul is called with 0 as a dividend.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _main:
 ; CHECK: ; %bb.0:

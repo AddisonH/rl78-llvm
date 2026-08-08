@@ -1,6 +1,6 @@
 ; This test verifies the default implementation inside ReplaceOperand.
 
-; RUN: llc -mattr=+far-data %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 -mattr=+far-data %s -o - | FileCheck %s
 
 ; CHECK: _test_load:
 ; CHECK: 	movw ax, es:[hl]

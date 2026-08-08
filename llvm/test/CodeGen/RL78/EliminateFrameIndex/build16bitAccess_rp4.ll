@@ -1,6 +1,6 @@
 ; This test verifies the build16bitAccess function when the main register is RP4.
 
-; RUN: llc %s -o - | FileCheck %s
+; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_build16bitAccess_RP4:
 ; CHECK: 	xchw ax, de
