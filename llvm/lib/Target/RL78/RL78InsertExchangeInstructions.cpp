@@ -458,10 +458,17 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
     // Exact A/X liveness before each instruction; updateAAXLiveness() below is
     // a forward def-tracking walk and cannot prove deadness. See CODEGEN.md.
     DenseMap<const MachineInstr *, std::pair<bool, bool>> LiveBeforeMI;
+    // A liveness *after* each instruction. Kill flags on physreg uses are not
+    // reliable this late, so transforms that need "A is dead afterwards" ask
+    // here instead of trusting isKill().
+    DenseMap<const MachineInstr *, bool> ALiveAfterMI;
+    bool CCLiveOut;
     {
       LivePhysRegs LPR(*TRI);
       LPR.addLiveOuts(MBB);
+      CCLiveOut = LPR.contains(RL78::CCreg);
       for (MachineInstr &MI : llvm::reverse(MBB)) {
+        ALiveAfterMI[&MI] = LPR.contains(RL78::R1);
         LPR.stepBackward(MI);
         LiveBeforeMI[&MI] = {LPR.contains(RL78::R1), LPR.contains(RL78::R0)};
       }
@@ -655,37 +662,42 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         assert(MI.getOperand(0).getReg() == RL78::R1);
         assert(MI.getOperand(4).getReg() == RL78::CCreg);
         // MI.getOperand(4).dump();
-        // Replace COPY A, X + CMP A(isKill), [HL+byte] with CMPS X, [HL+byte]
-        if (MI.getOperand(0).isKill() &&
-            (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
-            (!MI.getOperand(4).isDead())) {
-          MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
-          if ((MI2.getOpcode() == RL78::COPY) &&
-              (MI2.getOperand(1).getReg() == RL78::R0) &&
-              (MI2.getOperand(0).getReg() == RL78::R1)) {
-            MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
-            // The last instructin should be a branch otherwise the CMP
-            // instruciton should be eliminated as dead code. Also there's no
-            // posiblity for the branch instruction to use the CC value from a
-            // different instruciton since we checked that CCReg is not dead
-            // which means the branch uses the CCReg def from this instruction.
-            assert(I->isBranch());
-            // I->dump();
-            // We can only use CMPS only when using Z flag, the CY flag has a
-            // different meaning.
-            if ((I->getNumOperands() > 1) &&
-                ((I->getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
-                 (I->getOperand(1).getImm() == RL78CC::RL78CC_NZ))) {
-              // Build the CMPS instruction.
-              BuildMI(MBB, MI, DL, TII->get(RL78::CMPS_r_memri))
-                  .add(MI2.getOperand(1))
-                  .add(MI.getOperand(1))
-                  .add(MI.getOperand(2))
-                  .add(MI.getOperand(3));
-              // Erase the COPY and CMP instructions.
-              MI.eraseFromParent();
-              MI2.eraseFromParent();
-              // MBB.dump();
+        // Replace MOV A, X + CMP A, [HL+byte] with CMPS X, [HL+byte].
+        //
+        // This runs after ExpandPostRAPseudos, so the copy feeding A is already
+        // a real MOV_A_r; matching RL78::COPY here would never fire. A is dead
+        // afterwards per ALiveAfterMI rather than per the CMP's kill flag,
+        // which physreg uses do not reliably carry this late.
+        {
+          auto AAfter = ALiveAfterMI.find(&MI);
+          bool ADeadAfter =
+              (AAfter != ALiveAfterMI.end()) ? !AAfter->second : false;
+          if (ADeadAfter && (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
+              (!MI.getOperand(4).isDead()) && !CCLiveOut) {
+            MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
+            if ((MI2.getOpcode() == RL78::MOV_A_r) &&
+                (MI2.getOperand(1).getReg() == RL78::R0) &&
+                (MI2.getOperand(0).getReg() == RL78::R1)) {
+              MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
+              // CCreg is def'd here, not dead, and does not leave the block, so
+              // its consumer is a branch in this same block.
+              // We can only use CMPS when the consumer tests the Z flag; CY has
+              // a different meaning for CMPS.
+              if ((I != MBB.end()) && I->isBranch() &&
+                  (I->getNumOperands() > 1) && I->getOperand(1).isImm() &&
+                  ((I->getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
+                   (I->getOperand(1).getImm() == RL78CC::RL78CC_NZ))) {
+                // Build the CMPS instruction.
+                BuildMI(MBB, MI, DL, TII->get(RL78::CMPS_r_memri))
+                    .add(MI2.getOperand(1))
+                    .add(MI.getOperand(1))
+                    .add(MI.getOperand(2))
+                    .add(MI.getOperand(3));
+                // Erase the MOV and CMP instructions.
+                MI.eraseFromParent();
+                MI2.eraseFromParent();
+                // MBB.dump();
+              }
             }
           }
         }
