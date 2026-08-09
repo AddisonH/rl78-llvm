@@ -5,9 +5,9 @@
 ; for the multiply. Without narrowing it becomes an out-of-line call to
 ; __COM_lmul; with it, a single MULHU.
 ;
-; InstCombine and AggressiveInstCombine both decline this case because the
-; expression DAG reaches a loop PHI, which TruncInstCombine does not narrow
-; through -- hence the dedicated pass.
+; InstCombine and AggressiveInstCombine both decline this case -- verified with
+; opt on this function -- hence the dedicated pass. Note TruncInstCombine does
+; handle PHIs, so that is not the reason.
 ;
 ; RUN: llc -O2 -mtriple=rl78 -rl78-narrow-demanded-ops=false < %s \
 ; RUN:   | FileCheck %s --check-prefix=NONARROW
