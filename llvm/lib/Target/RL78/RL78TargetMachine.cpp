@@ -214,7 +214,8 @@ bool RL78PassConfig::addInstSelector() {
 
 void RL78PassConfig::addPreEmitPass() {
   addPass(createRL78InsertExchangeInstructionsPass());
-  addPass(&MachineCopyPropagationID);
+  // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
+  addPass(createMachineCopyPropagationPass(true));
   addPass(createRL78CMPWithZeroElimPass());
   addPass(createRL78InstructionSpecializationPass());
   addPass(createRL78ExpandPseudoInstsPass());

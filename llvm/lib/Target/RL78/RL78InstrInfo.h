@@ -29,6 +29,10 @@ class RL78InstrInfo : public RL78GenInstrInfo {
   const RL78Subtarget &Subtarget;
   virtual void anchor();
 
+protected:
+  std::optional<DestSourcePair>
+  isCopyInstrImpl(const MachineInstr &MI) const override;
+
 public:
   explicit RL78InstrInfo(RL78Subtarget &ST);
 

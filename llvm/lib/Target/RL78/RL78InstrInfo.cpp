@@ -583,6 +583,22 @@ bool RL78InstrInfo::reverseBranchCondition(
   return false;
 }
 
+// Lets MachineCopyPropagation see the moves this target emits: by the time the
+// pre-emit passes run there are no COPY pseudos left for it to match.
+// The 8-bit MOV_A_r/MOV_r_A are deliberately not listed. Their register classes
+// span A and X, which are the two halves of AX, and propagating across that
+// miscompiles CoreMark (wrong crclist and crcstate).
+std::optional<DestSourcePair>
+RL78InstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case RL78::MOVW_AX_rp:
+  case RL78::MOVW_rp_AX:
+    return DestSourcePair{MI.getOperand(0), MI.getOperand(1)};
+  default:
+    return std::nullopt;
+  }
+}
+
 void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I,
                                 const DebugLoc &DL, MCRegister DestReg,
