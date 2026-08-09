@@ -18,9 +18,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "insert-exchange"
 
-// Attribution for the two-instruction exchange paths. Used to bound what a
-// pre-RA scheduling change could remove before writing one. This build has
-// LLVM_ENABLE_STATS off, so these are local counters rather than STATISTIC.
+// Plain counters rather than STATISTIC: this build has LLVM_ENABLE_STATS off.
 static cl::opt<bool>
     RL78XchgStats("rl78-xchg-stats", cl::Hidden, cl::init(false),
                   cl::desc("Print why each RL78 exchange took the "
@@ -92,8 +90,7 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
 
   // if dest is NOT A register we need to exchange the value to A and back
   if (!RL78::RL78ARegRegClass.contains(MI.getOperand(opIndex).getReg())) {
-    // Pure use and A dead: MOV leaves the source intact and the old A is not
-    // needed back, so a kill flag is not required to copy in.
+    // Pure use and A dead: MOV leaves the source intact, so no kill needed.
     if ((!isALive) && !MI.getOperand(opIndex).isDef()) {
       BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r), RL78::R1)
           .addReg(MI.getOperand(opIndex).getReg(),
@@ -162,21 +159,19 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
   bool IsTied = MI.getOperand(opIndex).isTied();
   // if dest is NOT A register we need to exchange the value to A and back
   if (Reg != RL78::RP0) {
-    // Pure use and AX dead: the old AX need not come back, so copying in is
-    // enough. MOVW leaves Reg intact, so a kill flag is not required here.
+    // Pure use and AX dead: copying in is enough, and MOVW leaves Reg intact.
     if ((!isAXLive) && !IsDef) {
       BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
           .addReg(Reg, getKillRegState(MI.getOperand(opIndex).isKill()));
     }
-    // Pure def and AX dead: copy out only. A tied operand is read as well, so
-    // it needs both directions and falls through to the exchange below.
+    // Pure def and AX dead: copy out only. A tied operand is also read, so it
+    // falls through to the exchange below.
     else if ((!isAXLive) && IsDef && !IsTied) {
       BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOVW_rp_AX),
               Reg)
           .addReg(RL78::RP0, RegState::Kill);
     } else {
-      // Why did we land on the two-instruction path? Categories are ordered so
-      // each exchange is attributed to exactly one cause.
+      // Ordered so each exchange is attributed to exactly one cause.
       if (isAXLive && IsTied)
         ++NumXchg16AXLiveTied;
       else if (isAXLive)
@@ -479,39 +474,19 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
 }
 
 
-// Accumulator-aware reordering, run before exchanges are inserted.
-//
-// A stack-slot load into a non-AX pair has to stage through AX, because the
-// 0xA8 encoding can only target AX. When AX is live at that point the exchange
-// pass must pay two instructions to save and restore it:
-//
-//     movw ax, [sp+M]     ; some value lands in AX and stays live
-//     xchw ax, bc         ; \.
-//     movw ax, [sp+N]     ;  |- three instructions to get [sp+N] into BC
-//     xchw ax, bc         ; /
-//
-// Loading the BC-destined value first needs only two, because AX is free then:
-//
-//     movw ax, [sp+N]
-//     movw bc, ax
-//     movw ax, [sp+M]
-//
-// So move such a load back to the nearest point where AX is dead. This runs
-// after register allocation, so the motion is legal exactly when no skipped
-// instruction touches the loaded register, nothing may store (the load could
-// alias a spill of the same slot), and SP does not move.
+// A stack slot can only be loaded into AX, so loading one into another pair
+// while AX is live costs an xchw pair. Move the load back to where AX is dead
+// and a single MOVW AX + MOVW rp, AX will do instead.
 static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
                                     const TargetRegisterInfo *TRI) {
-  // Keep the extension of the destination's live range short, and the pass
-  // linear.
+  // Bounds both the pass and how far the destination's live range stretches.
   const unsigned WindowSize = 8;
   bool ChangedAny = false;
 
   for (bool Changed = true; Changed;) {
     Changed = false;
 
-    // AX liveness before each instruction, recomputed because a move
-    // invalidates it.
+    // Recomputed each round because a move invalidates it.
     DenseMap<const MachineInstr *, bool> AXLiveBefore;
     {
       LivePhysRegs LPR(*TRI);
@@ -535,18 +510,16 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
       for (unsigned N = 0; N != WindowSize && It != MBB.begin(); ++N) {
         --It;
         MachineInstr &Prev = *It;
-        // A store may write the very slot being loaded; a call clobbers and may
-        // write memory; anything moving SP changes what [sp+N] means.
+        // A store may write the slot being loaded, and moving SP changes what
+        // [sp+N] means.
         if (Prev.mayStore() || Prev.isCall() || Prev.isTerminator() ||
             Prev.isInlineAsm() || Prev.hasUnmodeledSideEffects() ||
             Prev.modifiesRegister(RL78::SPreg, TRI))
           break;
-        // Crossing anything that touches the destination would change what it
-        // holds, or lose the value this load is about to overwrite.
         if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
           break;
         if (!AXLiveBefore.lookup(&Prev))
-          Target = It; // AX is free here; keep looking for an earlier spot.
+          Target = It; // Keep looking for an earlier free spot.
       }
 
       if (Target != MBB.end()) {
@@ -572,8 +545,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   // where necesarry
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
-  // Reorder before measuring liveness below: this changes which exchanges are
-  // needed at all.
+  // Before the liveness below: this changes which exchanges are needed.
   if (RL78AccumSched)
     for (MachineBasicBlock &MBB : MF)
       if (!MBB.empty())
@@ -583,12 +555,11 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
     if (MBB.empty())
       continue;
 
-    // Exact A/X liveness before each instruction; updateAAXLiveness() below is
-    // a forward def-tracking walk and cannot prove deadness. See CODEGEN.md.
+    // updateAAXLiveness() below is a forward def-tracking walk and cannot
+    // prove deadness, so use real liveness instead.
     DenseMap<const MachineInstr *, std::pair<bool, bool>> LiveBeforeMI;
-    // A liveness *after* each instruction. Kill flags on physreg uses are not
-    // reliable this late, so transforms that need "A is dead afterwards" ask
-    // here instead of trusting isKill().
+    // Physreg kill flags are unreliable this late, so "A dead afterwards" is
+    // answered from here rather than from isKill().
     DenseMap<const MachineInstr *, bool> ALiveAfterMI;
     bool CCLiveOut;
     {
@@ -611,8 +582,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       DebugLoc DL = MI.getDebugLoc();
       ++Next;
       updateAAXLiveness(MI, isALive, isXLive);
-      // Instructions inserted below are absent from the map and keep the
-      // conservative answer.
+      // Instructions inserted below are absent and keep the conservative answer.
       auto LB = LiveBeforeMI.find(&MI);
       if (LB != LiveBeforeMI.end()) {
         isALive = LB->second.first;
@@ -792,10 +762,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // MI.getOperand(4).dump();
         // Replace MOV A, X + CMP A, [HL+byte] with CMPS X, [HL+byte].
         //
-        // This runs after ExpandPostRAPseudos, so the copy feeding A is already
-        // a real MOV_A_r; matching RL78::COPY here would never fire. A is dead
-        // afterwards per ALiveAfterMI rather than per the CMP's kill flag,
-        // which physreg uses do not reliably carry this late.
+        // ExpandPostRAPseudos has already turned the copy feeding A into a real
+        // MOV_A_r, so matching RL78::COPY here would never fire.
         {
           auto AAfter = ALiveAfterMI.find(&MI);
           bool ADeadAfter =
@@ -807,10 +775,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                 (MI2.getOperand(1).getReg() == RL78::R0) &&
                 (MI2.getOperand(0).getReg() == RL78::R1)) {
               MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
-              // CCreg is def'd here, not dead, and does not leave the block, so
-              // its consumer is a branch in this same block.
-              // We can only use CMPS when the consumer tests the Z flag; CY has
-              // a different meaning for CMPS.
+              // CCreg is live and block-local, so its consumer is this branch.
+              // CMPS is only usable when that tests Z; CY means something else.
               if ((I != MBB.end()) && I->isBranch() &&
                   (I->getNumOperands() > 1) && I->getOperand(1).isImm() &&
                   ((I->getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
