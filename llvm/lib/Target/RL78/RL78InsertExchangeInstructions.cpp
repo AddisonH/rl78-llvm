@@ -528,6 +528,47 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         break; // Liveness is stale now; recompute.
       }
     }
+
+    if (Changed)
+      continue;
+
+    // Hoisting a copy out of AX to just after the value was produced ends AX's
+    // live range early, which lets the stores in between take the one
+    // instruction path. This is the prologue shape: parameters arriving in
+    // BC/DE are spilled while AX still holds another one.
+    for (MachineInstr &MI : MBB) {
+      if (MI.getOpcode() != RL78::MOVW_rp_AX)
+        continue;
+      Register Dst = MI.getOperand(0).getReg();
+      if (Dst == RL78::RP0 || !AXLiveBefore.lookup(&MI))
+        continue;
+
+      MachineBasicBlock::iterator Target = MBB.end();
+      MachineBasicBlock::iterator It(MI);
+      bool SawStore = false;
+      for (unsigned N = 0; N != WindowSize && It != MBB.begin(); ++N) {
+        --It;
+        MachineInstr &Prev = *It;
+        if (Prev.isCall() || Prev.isTerminator() || Prev.isInlineAsm() ||
+            Prev.hasUnmodeledSideEffects())
+          break;
+        // Stop at whatever produced the value being copied.
+        if (Prev.modifiesRegister(RL78::RP0, TRI))
+          break;
+        if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
+          break;
+        if (Prev.mayStore())
+          SawStore = true;
+        Target = It;
+      }
+
+      // Only worth it if it frees AX for a store that would otherwise exchange.
+      if (Target != MBB.end() && SawStore) {
+        MBB.splice(Target, &MBB, MachineBasicBlock::iterator(MI));
+        Changed = ChangedAny = true;
+        break;
+      }
+    }
   }
   return ChangedAny;
 }

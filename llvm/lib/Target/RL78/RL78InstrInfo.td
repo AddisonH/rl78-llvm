@@ -2575,6 +2575,9 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 //ADDW  AX, BC          03
 //ADDW  AX, DE          05
 //ADDW  AX, HL          07
+  // Commutable so TwoAddressInstructionPass can pick whichever source is
+  // already in the tied register.
+  let isCommutable = 1 in
   def ADDW_rp_rp : InstRL78_8bit<0x01,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         "addw $rd, $rsrc2",
