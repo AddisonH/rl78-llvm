@@ -11,11 +11,27 @@
 // TODO: Revisit this whole file, maybe move some of xch to ISelLowering
 #include "RL78TargetMachine.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "insert-exchange"
+
+// Attribution for the two-instruction exchange paths. Used to bound what a
+// pre-RA scheduling change could remove before writing one. This build has
+// LLVM_ENABLE_STATS off, so these are local counters rather than STATISTIC.
+static cl::opt<bool>
+    RL78XchgStats("rl78-xchg-stats", cl::Hidden, cl::init(false),
+                  cl::desc("Print why each RL78 exchange took the "
+                           "two-instruction path"));
+static unsigned NumXchg16AXLiveTied, NumXchg16AXLive, NumXchg16TiedOnly,
+    NumXchg8AXLive, NumXchg8DefOnly;
+
+static cl::opt<bool> RL78AccumSched(
+    "rl78-accum-sched", cl::Hidden, cl::init(true),
+    cl::desc("Move stack-slot loads to where AX is dead before inserting "
+             "exchanges"));
 
 namespace {
 class RL78InsertExchangeInstructionsPass : public MachineFunctionPass {
@@ -27,6 +43,19 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
+
+  bool doFinalization(Module &M) override {
+    if (RL78XchgStats) {
+      unsigned Tot = NumXchg16AXLiveTied + NumXchg16AXLive + NumXchg16TiedOnly +
+                     NumXchg8AXLive + NumXchg8DefOnly;
+      errs() << "rl78-xchg-stats: 16bit AXlive+tied " << NumXchg16AXLiveTied
+             << ", 16bit AXlive " << NumXchg16AXLive << ", 16bit tied-only "
+             << NumXchg16TiedOnly << ", 8bit Alive " << NumXchg8AXLive
+             << ", 8bit def-only " << NumXchg8DefOnly << ", total " << Tot
+             << "\n";
+    }
+    return false;
+  }
 
   // private:
   static char ID;
@@ -76,6 +105,10 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
               MI.getOperand(opIndex).getReg())
           .addReg(RL78::R1, RegState::Kill);
     } else {
+      if (isALive)
+        ++NumXchg8AXLive;
+      else
+        ++NumXchg8DefOnly;
       // generate the following sequence:
       // xch A, Rx
       // op A, <...>
@@ -142,6 +175,14 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
               Reg)
           .addReg(RL78::RP0, RegState::Kill);
     } else {
+      // Why did we land on the two-instruction path? Categories are ordered so
+      // each exchange is attributed to exactly one cause.
+      if (isAXLive && IsTied)
+        ++NumXchg16AXLiveTied;
+      else if (isAXLive)
+        ++NumXchg16AXLive;
+      else
+        ++NumXchg16TiedOnly;
       // generate the following sequence:
       // xchw AX, Rx
       // op AX, <...>
@@ -438,6 +479,86 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
 }
 
 
+// Accumulator-aware reordering, run before exchanges are inserted.
+//
+// A stack-slot load into a non-AX pair has to stage through AX, because the
+// 0xA8 encoding can only target AX. When AX is live at that point the exchange
+// pass must pay two instructions to save and restore it:
+//
+//     movw ax, [sp+M]     ; some value lands in AX and stays live
+//     xchw ax, bc         ; \.
+//     movw ax, [sp+N]     ;  |- three instructions to get [sp+N] into BC
+//     xchw ax, bc         ; /
+//
+// Loading the BC-destined value first needs only two, because AX is free then:
+//
+//     movw ax, [sp+N]
+//     movw bc, ax
+//     movw ax, [sp+M]
+//
+// So move such a load back to the nearest point where AX is dead. This runs
+// after register allocation, so the motion is legal exactly when no skipped
+// instruction touches the loaded register, nothing may store (the load could
+// alias a spill of the same slot), and SP does not move.
+static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
+                                    const TargetRegisterInfo *TRI) {
+  // Keep the extension of the destination's live range short, and the pass
+  // linear.
+  const unsigned WindowSize = 8;
+  bool ChangedAny = false;
+
+  for (bool Changed = true; Changed;) {
+    Changed = false;
+
+    // AX liveness before each instruction, recomputed because a move
+    // invalidates it.
+    DenseMap<const MachineInstr *, bool> AXLiveBefore;
+    {
+      LivePhysRegs LPR(*TRI);
+      LPR.addLiveOuts(MBB);
+      for (MachineInstr &MI : llvm::reverse(MBB)) {
+        LPR.stepBackward(MI);
+        AXLiveBefore[&MI] =
+            LPR.contains(RL78::R1) || LPR.contains(RL78::R0);
+      }
+    }
+
+    for (MachineInstr &MI : MBB) {
+      if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot)
+        continue;
+      Register Dst = MI.getOperand(0).getReg();
+      if (Dst == RL78::RP0 || !AXLiveBefore.lookup(&MI))
+        continue;
+
+      MachineBasicBlock::iterator Target = MBB.end();
+      MachineBasicBlock::iterator It(MI);
+      for (unsigned N = 0; N != WindowSize && It != MBB.begin(); ++N) {
+        --It;
+        MachineInstr &Prev = *It;
+        // A store may write the very slot being loaded; a call clobbers and may
+        // write memory; anything moving SP changes what [sp+N] means.
+        if (Prev.mayStore() || Prev.isCall() || Prev.isTerminator() ||
+            Prev.isInlineAsm() || Prev.hasUnmodeledSideEffects() ||
+            Prev.modifiesRegister(RL78::SPreg, TRI))
+          break;
+        // Crossing anything that touches the destination would change what it
+        // holds, or lose the value this load is about to overwrite.
+        if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
+          break;
+        if (!AXLiveBefore.lookup(&Prev))
+          Target = It; // AX is free here; keep looking for an earlier spot.
+      }
+
+      if (Target != MBB.end()) {
+        MBB.splice(Target, &MBB, MachineBasicBlock::iterator(MI));
+        Changed = ChangedAny = true;
+        break; // Liveness is stale now; recompute.
+      }
+    }
+  }
+  return ChangedAny;
+}
+
 bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
     MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();
@@ -450,6 +571,13 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   // first step remove pseudos and insert real intructions and XCH instructions
   // where necesarry
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
+  // Reorder before measuring liveness below: this changes which exchanges are
+  // needed at all.
+  if (RL78AccumSched)
+    for (MachineBasicBlock &MBB : MF)
+      if (!MBB.empty())
+        moveLoadToWhereAXIsDead(MBB, TRI);
 
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.empty())

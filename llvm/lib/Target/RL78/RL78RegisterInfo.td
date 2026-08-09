@@ -101,6 +101,10 @@ def RP2 : RL78RPReg<"BC", 2, [R2, R3], []>, DwarfRegNum<[39]>;
 def RP4 : RL78RPReg<"DE", 4, [R4, R5], []>, DwarfRegNum<[40]>;
 def RP6 : RL78RPReg<"HL", 6, [R6, R7], []>, DwarfRegNum<[41]>;
 
+// NOTE: allocating RP0 (AX) *last* was tried and is measurably worse: 3,619 ->
+// 3,712 instructions on the CoreMark kernels, exchange sites 182 -> 193. Most
+// values are both produced in AX (loads) and consumed in AX (ALU), so demoting
+// it just buys moves back. Keep AX first.
 def RL78RPRegs : RegisterClass<"RL78", [i16], 16, (add RP0, RP2, RP4, RP6)>;
 
 def RL78AXRP : RegisterClass<"RL78", [i16], 16, (add RP0)>;
