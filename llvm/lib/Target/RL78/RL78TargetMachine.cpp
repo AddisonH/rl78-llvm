@@ -21,6 +21,7 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/Debug.h"
@@ -201,6 +202,14 @@ bool RL78PassConfig::addPreISel() {
 void RL78PassConfig::addIRPasses() {
   addPass(createNaryReassociatePass());
   addPass(createSinkingPass());
+  if (getOptLevel() != CodeGenOpt::None) {
+    // Redo 32-bit arithmetic in 16 bits where only the low half is demanded.
+    // This turns index computations that would otherwise call __COM_lmul into
+    // a single MULHU. The pass cleans up its own trunc/zext pairs -- running a
+    // general InstCombine here instead perturbs codegen across the whole
+    // target and breaks nine unrelated CodeGen tests.
+    addPass(createRL78NarrowDemandedOpsPass());
+  }
   TargetPassConfig::addIRPasses();
 }
 

@@ -38,6 +38,7 @@ add_llvm_target(RL78CodeGen
   RL78AdjustMemRefsPass.cpp
   RL78ESOptPass.cpp
   RL78InsertInstsForDelayCycles.cpp
+  RL78NarrowDemandedOps.cpp
 
   LINK_COMPONENTS
   Analysis

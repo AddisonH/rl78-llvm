@@ -47,8 +47,10 @@ FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
+FunctionPass *createRL78NarrowDemandedOpsPass();
 
 void initializeRL78DAGToDAGISelPass(PassRegistry &);
+void initializeRL78NarrowDemandedOpsPass(PassRegistry &);
 
 void LowerRL78MachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                    AsmPrinter &AP);
