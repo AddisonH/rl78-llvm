@@ -598,7 +598,9 @@ Value *MemCmpExpansion::getMemCmpOneBlock() {
 
   // The i8 and i16 cases don't need compares. We zext the loaded values and
   // subtract them to get the suitable negative, zero, or positive i32 result.
-  if (Size < 4) {
+  // That needs the result to be wider than the loads, or the difference can
+  // overflow into the sign bit (RL78: 16-bit int with a 2-byte load).
+  if (Size < 4 && Size * 8 < IntBits) {
     const LoadPair Loads =
         getLoadPair(LoadSizeType, NeedsBSwap, Builder.getIntNTy(IntBits),
                     /*Offset*/ 0);
