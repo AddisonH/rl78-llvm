@@ -37,6 +37,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   auto *PR = PassRegistry::getPassRegistry();
   initializeRL78DAGToDAGISelLegacyPass(*PR);
   initializeRL78ExpandInlineAsmPass(*PR);
+  initializeRL78NarrowDemandedOpsPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {

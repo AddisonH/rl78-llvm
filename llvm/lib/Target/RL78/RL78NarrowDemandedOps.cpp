@@ -104,6 +104,14 @@ bool RL78NarrowDemandedOps::runOnFunction(Function &F) {
         continue;
       if (DB.getDemandedBits(BO).getActiveBits() > 16)
         continue;
+      // Leave induction steps (x = phi(..., x op y)) alone: as zext of a
+      // 16-bit op the recurrence is no longer an AddRec, and LSR, which
+      // strength-reduces 32-bit IVs on RL78, would no longer see it.
+      if (any_of(BO->operands(), [BO](Value *Op) {
+            auto *P = dyn_cast<PHINode>(Op);
+            return P && is_contained(P->incoming_values(), BO);
+          }))
+        continue;
       Worklist.push_back(BO);
     }
 
