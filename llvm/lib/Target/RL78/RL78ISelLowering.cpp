@@ -2780,8 +2780,8 @@ static SDValue AsMULHCandidate(SDValue op, ISD::NodeType opcode,
     if (opcode == ISD::SIGN_EXTEND &&
         cast<ConstantSDNode>(op)->getSExtValue() >= INT16_MIN &&
         cast<ConstantSDNode>(op)->getSExtValue() <= INT16_MAX)
-      return DAG.getConstant(cast<ConstantSDNode>(op)->getSExtValue(), dl,
-                             MVT::i16);
+      return DAG.getSignedConstant(cast<ConstantSDNode>(op)->getSExtValue(), dl,
+                                   MVT::i16);
   }
   if (op->getOpcode() == opcode &&
       op.getOperand(0).getValueType() == MVT::i16) {
@@ -6190,6 +6190,9 @@ static void ReplaceOperand(const SDValue &N, SmallVectorImpl<SDValue> &Results,
       SDValue Hi16, Low16;
       unsigned int offset = 0;
       if (WalkAddOffsetChain(N, &offset, Hi16, Low16, DAG, dl)) {
+        // Only the low 16 bits are added (no carry into the high part);
+        // negative offsets arrive here as 32-bit two's complement.
+        offset &= 0xFFFF;
         if (offset > 0)
           Low16 = DAG.getNode(ISD::ADD, dl, MVT::i16, Low16,
                               DAG.getConstant(offset, dl, MVT::i16));

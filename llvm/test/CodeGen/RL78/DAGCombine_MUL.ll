@@ -23,3 +23,15 @@ define dso_local i32 @test_DAGCombine_MULH(i16 %a, i16 %b) {
   %mul = mul i32 %sa, %sb
   ret i32 %mul
 }
+
+; A negative constant operand must be built as a signed i16 constant
+; (asserted in SelectionDAG::getConstant).
+; CHECK-LABEL: _test_DAGCombine_MULH_negconst
+; CHECK: movw bc, #-3
+; CHECK-NEXT: mulh ;ax, bc, ax, bc
+define dso_local i32 @test_DAGCombine_MULH_negconst(i16 %a) {
+entry:
+  %conv = sext i16 %a to i32
+  %mul = mul nsw i32 %conv, -3
+  ret i32 %mul
+}
