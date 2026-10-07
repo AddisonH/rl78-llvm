@@ -1,14 +1,9 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsCodeGens
-  AllTargetsDescs
-  AllTargetsInfos
   DebugInfoDWARF
   DWP
-  MC
   Object
   Option
   Support
-  TargetParser
   )
 
 set(LLVM_TARGET_DEFINITIONS Opts.td)
@@ -21,6 +16,7 @@ add_llvm_tool(llvm-dwp
   DEPENDS
   intrinsics_gen
   DwpOptsTableGen
+  GENERATE_DRIVER
   )
 
 if(LLVM_INSTALL_BINUTILS_SYMLINKS)

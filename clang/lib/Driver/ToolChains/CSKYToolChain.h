@@ -22,7 +22,7 @@ public:
                 const llvm::opt::ArgList &Args);
 
   void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                             llvm::opt::ArgStringList &CC1Args,
+                             llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                              Action::OffloadKind) const override;
   RuntimeLibType GetDefaultRuntimeLibType() const override;
   UnwindLibType GetUnwindLibType(const llvm::opt::ArgList &Args) const override;
@@ -44,7 +44,7 @@ private:
 
 namespace tools {
 namespace CSKY {
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker final : public Tool {
 public:
   Linker(const ToolChain &TC) : Tool("CSKY::Linker", "ld", TC) {}
   bool hasIntegratedCPP() const override { return false; }

@@ -183,6 +183,16 @@ class PythonSynthDataFormatterTestCase(TestBase):
         self.assertEqual(foo_var.GetChildAtIndex(1).GetName(), "fake_a")
         self.assertEqual(foo_var.GetChildAtIndex(2).GetName(), "r")
 
+        # Test the `child` accessor with indexes of hidden children: those with
+        # indexes beyond num_children. wrapfooSynthProvider has a hidden child
+        # at index=num_children, access by the name "$$dereference$$".
+        hidden_index = wrapper_var.GetIndexOfChildWithName("$$dereference$$")
+        self.assertNotEqual(hidden_index, lldb.LLDB_INVALID_INDEX32)
+        self.assertGreaterEqual(hidden_index, wrapper_var.num_children)
+        hidden_child = wrapper_var.child[hidden_index]
+        self.assertIsNotNone(hidden_child)
+        self.assertGreater(hidden_child.num_children, 0)
+
         # now delete the synth and add the filter
         self.runCmd("type synth delete foo")
         self.runCmd("type synth delete wrapfoo")
@@ -315,11 +325,13 @@ class PythonSynthDataFormatterTestCase(TestBase):
         if self.TraceOn():
             print(str_cast)
 
-        self.assertTrue(str_cast.find("A") != -1, "could not find A in output")
-        self.assertTrue(str_cast.find("B") != -1, "could not find B in output")
-        self.assertTrue(str_cast.find("C") != -1, "could not find C in output")
-        self.assertTrue(str_cast.find("D") != -1, "could not find D in output")
-        self.assertTrue(str_cast.find("4 = '\\0'") != -1, "could not find item 4 == 0")
+        self.assertNotEqual(str_cast.find("A"), -1, "could not find A in output")
+        self.assertNotEqual(str_cast.find("B"), -1, "could not find B in output")
+        self.assertNotEqual(str_cast.find("C"), -1, "could not find C in output")
+        self.assertNotEqual(str_cast.find("D"), -1, "could not find D in output")
+        self.assertNotEqual(
+            str_cast.find("4 = '\\0'"), -1, "could not find item 4 == 0"
+        )
 
         self.dbg.GetSelectedTarget().GetProcess().GetSelectedThread().StepOver()
 
@@ -331,8 +343,10 @@ class PythonSynthDataFormatterTestCase(TestBase):
         # we detect that all the values of the child objects have changed - but the counter-generated item
         # is still fixed at 0 because it is cached - this would fail if update(self): in ftsp returned False
         # or if synthetic children were not being preserved
-        self.assertTrue(str_cast.find("Q") != -1, "could not find Q in output")
-        self.assertTrue(str_cast.find("X") != -1, "could not find X in output")
-        self.assertTrue(str_cast.find("T") != -1, "could not find T in output")
-        self.assertTrue(str_cast.find("F") != -1, "could not find F in output")
-        self.assertTrue(str_cast.find("4 = '\\0'") != -1, "could not find item 4 == 0")
+        self.assertNotEqual(str_cast.find("Q"), -1, "could not find Q in output")
+        self.assertNotEqual(str_cast.find("X"), -1, "could not find X in output")
+        self.assertNotEqual(str_cast.find("T"), -1, "could not find T in output")
+        self.assertNotEqual(str_cast.find("F"), -1, "could not find F in output")
+        self.assertNotEqual(
+            str_cast.find("4 = '\\0'"), -1, "could not find item 4 == 0"
+        )

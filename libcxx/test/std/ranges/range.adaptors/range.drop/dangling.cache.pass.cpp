@@ -14,6 +14,7 @@
 
 #include <ranges>
 
+#include <cassert>
 #include <cstddef>
 #include <cstring>
 
@@ -29,6 +30,9 @@ struct ZeroOnDestroy : std::ranges::view_base {
   constexpr ForwardIter end() { return ForwardIter(buff + 8); }
   constexpr ForwardIter end() const { return ForwardIter(); }
 
+  ZeroOnDestroy() = default;
+  ZeroOnDestroy(const ZeroOnDestroy&) = default;
+  ZeroOnDestroy& operator=(const ZeroOnDestroy&) = default;
   ~ZeroOnDestroy() {
     std::memset(buff, 0, sizeof(buff));
   }
@@ -45,10 +49,10 @@ struct ZeroOnDestroy : std::ranges::view_base {
 };
 
 int main(int, char**) {
-  auto noDanlingCache = ZeroOnDestroy::dropFirstFour();
+  auto noDanglingCache = ZeroOnDestroy::dropFirstFour();
   // If we use the cached version, it will reference the copied-from view.
   // Worst case this is a segfault, best case it's an assertion fired.
-  assert(*noDanlingCache.begin() == 5);
+  assert(*noDanglingCache.begin() == 5);
 
   return 0;
 }

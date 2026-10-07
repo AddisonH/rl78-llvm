@@ -34,7 +34,7 @@ RL78TTIImpl::enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const {
   return Options;
 }
 
-bool RL78TTIImpl::hasDivRemOp(Type *DataType, bool IsSigned) {
+bool RL78TTIImpl::hasDivRemOp(Type *DataType, bool IsSigned) const {
   EVT VT = TLI->getValueType(DL, DataType);
   return !IsSigned && ST->isRL78S3CoreType() &&
          (VT == MVT::i16 || VT == MVT::i32);

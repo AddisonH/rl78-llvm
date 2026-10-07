@@ -68,7 +68,7 @@ DumpOutputStyle::DumpOutputStyle(InputFile &File)
     RefTracker.reset(new TypeReferenceTracker(File));
 }
 
-DumpOutputStyle::~DumpOutputStyle() {}
+DumpOutputStyle::~DumpOutputStyle() = default;
 
 PDBFile &DumpOutputStyle::getPdb() { return File.pdb(); }
 object::COFFObjectFile &DumpOutputStyle::getObj() { return File.obj(); }
@@ -96,6 +96,12 @@ Error DumpOutputStyle::dump() {
 
   if (opts::dump::DumpStreams) {
     if (auto EC = dumpStreamSummary())
+      return EC;
+    P.NewLine();
+  }
+
+  if (opts::dump::DumpDXContainer) {
+    if (auto EC = dumpDXContainer())
       return EC;
     P.NewLine();
   }
@@ -363,16 +369,16 @@ Error DumpOutputStyle::dumpStreamSummary() {
   for (uint32_t StreamIdx = 0; StreamIdx < StreamCount; ++StreamIdx) {
     P.formatLine(
         "Stream {0} ({1} bytes): [{2}]",
-        fmt_align(StreamIdx, AlignStyle::Right, NumDigits(StreamCount)),
+        fmt_align(StreamIdx, AlignStyle::Right, NumDigitsBase10(StreamCount)),
         fmt_align(getPdb().getStreamByteSize(StreamIdx), AlignStyle::Right,
-                  NumDigits(MaxStreamSize)),
+                  NumDigitsBase10(MaxStreamSize)),
         StreamPurposes[StreamIdx].getLongName());
 
     if (opts::dump::DumpStreamBlocks) {
       auto Blocks = getPdb().getStreamBlockList(StreamIdx);
       std::vector<uint32_t> BV(Blocks.begin(), Blocks.end());
       P.formatLine("       {0}  Blocks: [{1}]",
-                   fmt_repeat(' ', NumDigits(StreamCount)),
+                   fmt_repeat(' ', NumDigitsBase10(StreamCount)),
                    make_range(BV.begin(), BV.end()));
     }
   }
@@ -572,7 +578,7 @@ Error DumpOutputStyle::dumpSymbolStats() {
             if (StreamIdx == kInvalidStreamIndex) {
               P.formatLine(
                   "Mod {0} (debug info not present): [{1}]",
-                  fmt_align(Modi, AlignStyle::Right, NumDigits(ModCount)),
+                  fmt_align(Modi, AlignStyle::Right, NumDigitsBase10(ModCount)),
                   Desc.getModuleName());
               return Error::success();
             }
@@ -749,11 +755,11 @@ Error DumpOutputStyle::dumpUdtStats() {
   // separators.
   StringRef CountHeader("Count");
   StringRef SizeHeader("Size");
-  size_t CD = NumDigits(UdtStats.Totals.Count);
+  size_t CD = NumDigitsBase10(UdtStats.Totals.Count);
   CD += (CD - 1) / 3;
   CD = std::max(CD, CountHeader.size());
 
-  size_t SD = NumDigits(UdtStats.Totals.Size);
+  size_t SD = NumDigitsBase10(UdtStats.Totals.Size);
   SD += (SD - 1) / 3;
   SD = std::max(SD, SizeHeader.size());
 
@@ -1070,9 +1076,8 @@ Error DumpOutputStyle::dumpStringTableFromPdb() {
     if (IS->name_ids().empty())
       P.formatLine("Empty");
     else {
-      auto MaxID =
-          std::max_element(IS->name_ids().begin(), IS->name_ids().end());
-      uint32_t Digits = NumDigits(*MaxID);
+      auto MaxID = llvm::max_element(IS->name_ids());
+      uint32_t Digits = NumDigitsBase10(*MaxID);
 
       P.formatLine("{0} | {1}", fmt_align("ID", AlignStyle::Right, Digits),
                    "String");
@@ -1206,7 +1211,8 @@ dumpFullTypeStream(LinePrinter &Printer, LazyRandomTypeCollection &Types,
                    TpiStream *Stream, bool Bytes, bool Extras) {
 
   Printer.formatLine("Showing {0:N} records", NumTypeRecords);
-  uint32_t Width = NumDigits(TypeIndex::FirstNonSimpleIndex + NumTypeRecords);
+  uint32_t Width =
+      NumDigitsBase10(TypeIndex::FirstNonSimpleIndex + NumTypeRecords);
 
   MinimalTypeDumpVisitor V(Printer, Width + 2, Bytes, Extras, Types, RefTracker,
                            NumHashBuckets, HashValues, Stream);
@@ -1222,8 +1228,8 @@ static void dumpPartialTypeStream(LinePrinter &Printer,
                                   TypeReferenceTracker *RefTracker,
                                   TpiStream &Stream, ArrayRef<TypeIndex> TiList,
                                   bool Bytes, bool Extras, bool Deps) {
-  uint32_t Width =
-      NumDigits(TypeIndex::FirstNonSimpleIndex + Stream.getNumTypeRecords());
+  uint32_t Width = NumDigitsBase10(TypeIndex::FirstNonSimpleIndex +
+                                   Stream.getNumTypeRecords());
 
   MinimalTypeDumpVisitor V(Printer, Width + 2, Bytes, Extras, Types, RefTracker,
                            Stream.getNumHashBuckets(), Stream.getHashValues(),
@@ -1286,7 +1292,7 @@ Error DumpOutputStyle::dumpTypesFromObjectFile() {
       return ContentsOrErr.takeError();
 
     uint32_t Magic;
-    BinaryStreamReader Reader(*ContentsOrErr, llvm::support::little);
+    BinaryStreamReader Reader(*ContentsOrErr, llvm::endianness::little);
     if (auto EC = Reader.readInteger(Magic))
       return EC;
     if (Magic != COFF::DEBUG_SECTION_MAGIC)
@@ -1495,13 +1501,13 @@ Error DumpOutputStyle::dumpModuleSymsForPdb() {
           if (auto EC = Visitor.visitSymbolStreamFiltered(ModS.getSymbolArray(),
                                                           Filter)) {
             P.formatLine("Error while processing symbol records.  {0}",
-                         toString(std::move(EC)));
+                         toStringWithoutConsuming(EC));
             return EC;
           }
         } else if (auto EC = Visitor.visitSymbolStream(ModS.getSymbolArray(),
                                                        SS.Offset)) {
           P.formatLine("Error while processing symbol records.  {0}",
-                       toString(std::move(EC)));
+                       toStringWithoutConsuming(EC));
           return EC;
         }
         return Error::success();
@@ -1836,9 +1842,9 @@ Error DumpOutputStyle::dumpSectionContribs() {
   class Visitor : public ISectionContribVisitor {
   public:
     Visitor(LinePrinter &P, ArrayRef<std::string> Names) : P(P), Names(Names) {
-      auto Max = std::max_element(
-          Names.begin(), Names.end(),
-          [](StringRef S1, StringRef S2) { return S1.size() < S2.size(); });
+      auto Max = llvm::max_element(Names, [](StringRef S1, StringRef S2) {
+        return S1.size() < S2.size();
+      });
       MaxNameLen = (Max == Names.end() ? 0 : Max->size());
     }
     void visit(const SectionContrib &SC) override {
@@ -1893,6 +1899,42 @@ Error DumpOutputStyle::dumpSectionMap() {
                      P.getIndentLevel() + 13,
                      static_cast<OMFSegDescFlags>(uint16_t(M.Flags))));
     ++I;
+  }
+  return Error::success();
+}
+
+Error DumpOutputStyle::dumpDXContainer() {
+  printHeader(P, "DirectX Container");
+  if (File.isObj()) {
+    printStreamNotValidForObj();
+    return Error::success();
+  }
+
+  AutoIndent Indent(P);
+  auto Dxc = getPdb().getDXContainerStream();
+  if (!Dxc) {
+    P.formatLine("Not present in file");
+    consumeError(Dxc.takeError());
+    return Error::success();
+  }
+
+  auto Header = Dxc->getHeader();
+  P.formatLine("Hash: ");
+  P << format_bytes(Header.FileHash.Digest, std::nullopt,
+                    sizeof(Header.FileHash), sizeof(Header.FileHash), 0, true);
+  P.formatLine("Version:");
+  {
+    AutoIndent Indent(P);
+    P.formatLine("Major: {0}", Header.Version.Major);
+    P.formatLine("Minor: {0}", Header.Version.Minor);
+  }
+  P.formatLine("FileSize: {0}", Header.FileSize);
+  P.formatLine("PartCount: {0}", Header.PartCount);
+  P.formatLine("Parts:");
+  for (auto &part : *Dxc) {
+    AutoIndent Indent(P);
+    P.formatLine("{0} | offset = {1}, size = {2}", part.Part.getName(),
+                 part.Offset, part.Part.Size);
   }
   return Error::success();
 }

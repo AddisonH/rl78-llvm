@@ -21,6 +21,8 @@
 #include "lldb/DataFormatters/FormattersContainer.h"
 #include "lldb/DataFormatters/TypeCategory.h"
 
+#include "llvm/ADT/StringMap.h"
+
 namespace lldb_private {
 class TypeCategoryMap {
 private:
@@ -28,12 +30,9 @@ private:
   typedef ActiveCategoriesList::iterator ActiveCategoriesIterator;
 
 public:
-  typedef ConstString KeyType;
-  typedef TypeCategoryImpl ValueType;
-  typedef ValueType::SharedPointer ValueSP;
-  typedef std::map<KeyType, ValueSP> MapType;
+  typedef llvm::StringMap<lldb::TypeCategoryImplSP> MapType;
   typedef MapType::iterator MapIterator;
-  typedef std::function<bool(const ValueSP &)> ForEachCallback;
+  typedef std::function<bool(const lldb::TypeCategoryImplSP &)> ForEachCallback;
 
   typedef uint32_t Position;
 
@@ -43,17 +42,17 @@ public:
 
   TypeCategoryMap(IFormatChangeListener *lst);
 
-  void Add(KeyType name, const ValueSP &entry);
+  void Add(llvm::StringRef name, const lldb::TypeCategoryImplSP &entry);
 
-  bool Delete(KeyType name);
+  bool Delete(llvm::StringRef name);
 
-  bool Enable(KeyType category_name, Position pos = Default);
+  bool Enable(llvm::StringRef category_name, Position pos = Default);
 
-  bool Disable(KeyType category_name);
+  bool Disable(llvm::StringRef category_name);
 
-  bool Enable(ValueSP category, Position pos = Default);
+  bool Enable(lldb::TypeCategoryImplSP category, Position pos = Default);
 
-  bool Disable(ValueSP category);
+  bool Disable(lldb::TypeCategoryImplSP category);
 
   void EnableAllCategories();
 
@@ -61,20 +60,11 @@ public:
 
   void Clear();
 
-  bool Get(KeyType name, ValueSP &entry);
-
-  bool Get(uint32_t pos, ValueSP &entry);
+  bool Get(llvm::StringRef name, lldb::TypeCategoryImplSP &entry);
 
   void ForEach(ForEachCallback callback);
 
   lldb::TypeCategoryImplSP GetAtIndex(uint32_t);
-
-  bool
-  AnyMatches(const FormattersMatchCandidate &candidate_type,
-             TypeCategoryImpl::FormatCategoryItems items =
-                 TypeCategoryImpl::ALL_ITEM_TYPES,
-             bool only_enabled = true, const char **matching_category = nullptr,
-             TypeCategoryImpl::FormatCategoryItems *matching_type = nullptr);
 
   uint32_t GetCount() { return m_map.size(); }
 
@@ -98,12 +88,6 @@ private:
 
   MapType m_map;
   ActiveCategoriesList m_active_categories;
-
-  MapType &map() { return m_map; }
-
-  ActiveCategoriesList &active_list() { return m_active_categories; }
-
-  std::recursive_mutex &mutex() { return m_map_mutex; }
 };
 } // namespace lldb_private
 

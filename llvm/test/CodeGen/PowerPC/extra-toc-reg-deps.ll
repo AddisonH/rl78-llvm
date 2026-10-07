@@ -70,14 +70,14 @@ entry:
 ; CHECK: addis [[REG1:[0-9]+]], 2, .LC0@toc@ha
 ; CHECK: std 2, 40(1)
 ; CHECK: ld {{[0-9]+}}, .LC0@toc@l([[REG1]])
-; CHECK: {{mr|ld}} 2,
 ; CHECK: mtctr
+; CHECK: {{mr|ld}} 3,
 ; CHECK: bctrl
 ; CHECK: ld 2, 40(1)
 
 ; CHECK: std 2, 40(1)
-; CHECK: {{mr|ld}} 2,
 ; CHECK: mtctr
+; CHECK: {{mr|ld}} 3,
 ; CHECK: bctrl
 ; CHECK: ld 2, 40(1)
 
@@ -419,8 +419,8 @@ declare void @_ZN4Foam11regIOobjectD2Ev() #0
 
 declare void @_ZN4Foam6reduceIiNS_5sumOpIiEEEEvRKNS_4ListINS_8UPstream11commsStructEEERT_RKT0_ii() #0
 
-attributes #0 = { "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { inlinehint "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "use-soft-float"="false" }
+attributes #1 = { inlinehint "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "use-soft-float"="false" }
 
 !llvm.module.flags = !{!0}
 

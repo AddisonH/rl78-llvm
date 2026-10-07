@@ -17,14 +17,32 @@
 
 using namespace mlir;
 
+static std::pair<int64_t, int64_t>
+getLineAndColStart(const llvm::SourceMgr &sourceMgr) {
+  unsigned lastFileID = sourceMgr.getNumBuffers();
+  if (lastFileID == 1)
+    return {0, 0};
+
+  auto bufferID = sourceMgr.getMainFileID();
+  const llvm::MemoryBuffer *main = sourceMgr.getMemoryBuffer(bufferID);
+  const llvm::MemoryBuffer *last = sourceMgr.getMemoryBuffer(lastFileID);
+  // Exclude same start.
+  if (main->getBufferStart() < last->getBufferStart() &&
+      main->getBufferEnd() >= last->getBufferEnd()) {
+    return sourceMgr.getLineAndColumn(
+        llvm::SMLoc::getFromPointer(last->getBufferStart()), bufferID);
+  }
+  return {0, 0};
+}
+
 LogicalResult mlir::parseSourceFile(const llvm::SourceMgr &sourceMgr,
                                     Block *block, const ParserConfig &config,
                                     LocationAttr *sourceFileLoc) {
   const auto *sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   if (sourceFileLoc) {
-    *sourceFileLoc = FileLineColLoc::get(config.getContext(),
-                                         sourceBuf->getBufferIdentifier(),
-                                         /*line=*/0, /*column=*/0);
+    auto [line, column] = getLineAndColStart(sourceMgr);
+    *sourceFileLoc = FileLineColLoc::get(
+        config.getContext(), sourceBuf->getBufferIdentifier(), line, column);
   }
   if (isBytecode(*sourceBuf))
     return readBytecodeFile(*sourceBuf, block, config);
@@ -37,9 +55,9 @@ mlir::parseSourceFile(const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
   const auto *sourceBuf =
       sourceMgr->getMemoryBuffer(sourceMgr->getMainFileID());
   if (sourceFileLoc) {
-    *sourceFileLoc = FileLineColLoc::get(config.getContext(),
-                                         sourceBuf->getBufferIdentifier(),
-                                         /*line=*/0, /*column=*/0);
+    auto [line, column] = getLineAndColStart(*sourceMgr);
+    *sourceFileLoc = FileLineColLoc::get(
+        config.getContext(), sourceBuf->getBufferIdentifier(), line, column);
   }
   if (isBytecode(*sourceBuf))
     return readBytecodeFile(sourceMgr, block, config);
@@ -62,7 +80,7 @@ static LogicalResult loadSourceFileBuffer(llvm::StringRef filename,
                      "only main buffer parsed at the moment");
   }
   auto fileOrErr = llvm::MemoryBuffer::getFileOrSTDIN(filename);
-  if (std::error_code error = fileOrErr.getError())
+  if (fileOrErr.getError())
     return emitError(mlir::UnknownLoc::get(ctx),
                      "could not open input file " + filename);
 
@@ -91,7 +109,9 @@ LogicalResult mlir::parseSourceString(llvm::StringRef sourceStr, Block *block,
                                       const ParserConfig &config,
                                       StringRef sourceName,
                                       LocationAttr *sourceFileLoc) {
-  auto memBuffer = llvm::MemoryBuffer::getMemBuffer(sourceStr, sourceName);
+  auto memBuffer =
+      llvm::MemoryBuffer::getMemBuffer(sourceStr, sourceName,
+                                       /*RequiresNullTerminator=*/false);
   if (!memBuffer)
     return failure();
 

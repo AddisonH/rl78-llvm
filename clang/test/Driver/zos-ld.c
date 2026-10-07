@@ -14,7 +14,7 @@
 // C-LD-SAME: "-S" "//'SYS1.CSSLIB'"
 // C-LD-SAME: "//'CEE.SCEELIB(CELQS001)'"
 // C-LD-SAME: "//'CEE.SCEELIB(CELQS003)'"
-// C-LD-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// C-LD-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
 
 // 2. General C link for dll
 // RUN: %clang -### --shared --target=s390x-ibm-zos %s 2>&1 \
@@ -22,15 +22,15 @@
 
 // C-LD-DLL: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // C-LD-DLL: "AMODE=64,LIST,DYNAM=DLL,MSGLEVEL=4,CASE=MIXED,REUS=RENT"
-// C-LD-DLL-NOT: "-e" "CELQSTRT"
-// C-LD-DLL-NOT: "-O" "CELQSTRT"
+// C-LD-DLL-SAME: "-e" "CELQSTRT"
+// C-LD-DLL-SAME: "-O" "CELQSTRT"
 // C-LD-DLL-NOT: "-u" "CELQMAIN"
 // C-LD-DLL-SAME: "-x" "{{.*}}.x"
 // C-LD-DLL-SAME: "-S" "//'CEE.SCEEBND2'"
 // C-LD-DLL-SAME: "-S" "//'SYS1.CSSLIB'"
 // C-LD-DLL-SAME: "//'CEE.SCEELIB(CELQS001)'"
 // C-LD-DLL-SAME: "//'CEE.SCEELIB(CELQS003)'"
-// C-LD-DLL-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// C-LD-DLL-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
 
 // 3. General C++ link for executable
 // RUN: %clangxx -### --target=s390x-ibm-zos %s 2>&1 \
@@ -52,7 +52,7 @@
 // CXX-LD-SAME: "//'CEE.SCEELIB(CRTDQCXA)'"
 // CXX-LD-SAME: "//'CEE.SCEELIB(CRTDQXLA)'"
 // CXX-LD-SAME: "//'CEE.SCEELIB(CRTDQUNW)'"
-// CXX-LD-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// CXX-LD-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
 
 // 4. General C++ link for dll
 // RUN: %clangxx -### --shared --target=s390x-ibm-zos %s 2>&1 \
@@ -60,8 +60,8 @@
 
 // CXX-LD-DLL: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // CXX-LD-DLL: "AMODE=64,LIST,DYNAM=DLL,MSGLEVEL=4,CASE=MIXED,REUS=RENT"
-// CXX-LD-DLL-NOT: "-e" "CELQSTRT"
-// CXX-LD-DLL-NOT: "-O" "CELQSTRT"
+// CXX-LD-DLL-SAME: "-e" "CELQSTRT"
+// CXX-LD-DLL-SAME: "-O" "CELQSTRT"
 // CXX-LD-DLL-NOT: "-u" "CELQMAIN"
 // CXX-LD-DLL-SAME: "-x" "{{.*}}.x"
 // CXX-LD-DLL-SAME: "-S" "//'CEE.SCEEBND2'"
@@ -74,7 +74,7 @@
 // CXX-LD-DLL-SAME: "//'CEE.SCEELIB(CRTDQCXA)'"
 // CXX-LD-DLL-SAME: "//'CEE.SCEELIB(CRTDQXLA)'"
 // CXX-LD-DLL-SAME: "//'CEE.SCEELIB(CRTDQUNW)'"
-// CXX-LD-DLL-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// CXX-LD-DLL-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
 
 // 5. C++ link for executable w/ -mzos-hlq-le=, -mzos-hlq-csslib=
 // RUN: %clangxx -### --target=s390x-ibm-zos %s 2>&1 \
@@ -97,7 +97,7 @@
 // CXX-LD5-SAME: "//'AAAA.SCEELIB(CRTDQCXA)'"
 // CXX-LD5-SAME: "//'AAAA.SCEELIB(CRTDQXLA)'"
 // CXX-LD5-SAME: "//'AAAA.SCEELIB(CRTDQUNW)'"
-// CXX-LD5-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// CXX-LD5-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
 
 // 6. C++ link for executable w/ -mzos-hlq-clang=
 // RUN: %clangxx -### --target=s390x-ibm-zos %s 2>&1 \
@@ -120,4 +120,18 @@
 // CXX-LD6-SAME: "//'AAAA.SCEELIB(CRTDQCXA)'"
 // CXX-LD6-SAME: "//'AAAA.SCEELIB(CRTDQXLA)'"
 // CXX-LD6-SAME: "//'AAAA.SCEELIB(CRTDQUNW)'"
-// CXX-LD6-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}zos{{/|\\\\}}libclang_rt.builtins-s390x.a"
+// CXX-LD6-SAME: "[[RESOURCE_DIR]]{{/|\\\\}}lib{{/|\\\\}}s390x-ibm-zos{{/|\\\\}}libclang_rt.builtins.a"
+
+// 7. C link for USS shared library with user-specified -Wl,-x option
+// RUN: %clang -### --shared --target=s390x-ibm-zos -Wl,-x,custom.x -o libtest.so %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=C-LD-DLL-USER-X %s
+
+// C-LD-DLL-USER-X: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
+// C-LD-DLL-USER-X: "AMODE=64,LIST,DYNAM=DLL,MSGLEVEL=4,CASE=MIXED,REUS=RENT"
+// C-LD-DLL-USER-X-SAME: "-e" "CELQSTRT"
+// C-LD-DLL-USER-X-SAME: "-O" "CELQSTRT"
+// C-LD-DLL-USER-X-NOT: "-u" "CELQMAIN"
+// C-LD-DLL-USER-X-SAME: "-x" "custom.x"
+// C-LD-DLL-USER-X-NOT: "-x" "{{.*}}.x"
+// C-LD-DLL-USER-X-SAME: "-S" "//'{{.*}}.SCEEBND2'"
+

@@ -14,20 +14,15 @@
 #ifndef MLIR_INITALLEXTENSIONS_H_
 #define MLIR_INITALLEXTENSIONS_H_
 
-#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
-
-#include <cstdlib>
-
 namespace mlir {
+class DialectRegistry;
 
 /// This function may be called to register all MLIR dialect extensions with the
 /// provided registry.
 /// If you're building a compiler, you generally shouldn't use this: you would
 /// individually register the specific extensions that are useful for the
 /// pipelines and transformations you are using.
-inline void registerAllExtensions(DialectRegistry &registry) {
-  func::registerAllExtensions(registry);
-}
+void registerAllExtensions(DialectRegistry &registry);
 
 } // namespace mlir
 

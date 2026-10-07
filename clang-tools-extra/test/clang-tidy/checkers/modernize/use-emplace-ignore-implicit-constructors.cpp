@@ -1,32 +1,8 @@
 // RUN: %check_clang_tidy %s modernize-use-emplace %t -- \
 // RUN:   -config="{CheckOptions: \
-// RUN:             [{key: modernize-use-emplace.IgnoreImplicitConstructors, \
-// RUN:               value: true}] \
-// RUN:             }"
-
-namespace std {
-template <typename>
-class initializer_list
-{
-public:
-  initializer_list() noexcept {}
-};
-
-template <typename T>
-class vector {
-public:
-  vector() = default;
-  vector(initializer_list<T>) {}
-
-  void push_back(const T &) {}
-  void push_back(T &&) {}
-
-  template <typename... Args>
-  void emplace_back(Args &&... args){};
-  ~vector();
-};
-
-} // namespace std
+// RUN:             {modernize-use-emplace.IgnoreImplicitConstructors: \
+// RUN:                true}}"
+#include <vector>
 
 void testInts() {
   std::vector<int> v;

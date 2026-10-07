@@ -1,3 +1,5 @@
+// RUN: %clang_cc1 -triple=x86_64-unknown-unknown -o - %s -std=gnu++17 -fsyntax-only -verify -fexperimental-new-constant-interpreter
+// RUN: %clang_cc1 -triple=x86_64-unknown-unknown -o - %s -std=gnu++20 -fsyntax-only -verify -fexperimental-new-constant-interpreter
 // RUN: %clang_cc1 -triple=x86_64-unknown-unknown -o - %s -std=gnu++17 -fsyntax-only -verify
 // RUN: %clang_cc1 -triple=x86_64-unknown-unknown -o - %s -std=gnu++20 -fsyntax-only -verify
 
@@ -183,3 +185,17 @@ A<int, int> foo() { // expected-error {{implicit instantiation of undefined temp
   return A<int, int>(1); // expected-error 2{{implicit instantiation of undefined template}}
 }
 }
+
+namespace GH186656 {
+template <template <int> typename> struct S;
+template <int, int = (foo<void, void>())> struct T; // expected-error {{use of undeclared identifier 'foo'}}
+template <typename...> struct U;
+using V = U<S<T>>;
+} // namespace GH186656
+
+namespace GH202117 {
+template<template<decltype(foo())> typename T> struct S {}; // expected-error {{use of undeclared identifier 'foo'}}
+template<int*> struct P;
+S<P> s;
+} // namespace GH202117
+

@@ -12,7 +12,6 @@ add_clang_library(clangIndex
   IndexingContext.cpp
   IndexSymbol.cpp
   IndexTypeSourceInfo.cpp
-  USRGeneration.cpp
 
   ADDITIONAL_HEADERS
   IndexingContext.h
@@ -23,9 +22,12 @@ add_clang_library(clangIndex
   clangFormat
   clangFrontend
   clangLex
+  clangSema
   clangSerialization
   clangToolingCore
+  clangUnifiedSymbolResolution
 
   DEPENDS
   omp_gen
+  ClangDriverOptions
   )

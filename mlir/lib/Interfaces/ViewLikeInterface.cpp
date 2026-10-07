@@ -27,17 +27,99 @@ LogicalResult mlir::verifyListOfOperandsOrIntegers(Operation *op,
     return op->emitError("expected ") << numElements << " " << name
                                       << " values, got " << staticVals.size();
   unsigned expectedNumDynamicEntries =
-      llvm::count_if(staticVals, [&](int64_t staticVal) {
-        return ShapedType::isDynamic(staticVal);
-      });
+      llvm::count_if(staticVals, ShapedType::isDynamic);
   if (values.size() != expectedNumDynamicEntries)
     return op->emitError("expected ")
            << expectedNumDynamicEntries << " dynamic " << name << " values";
   return success();
 }
 
+SliceBoundsVerificationResult mlir::verifyInBoundsSlice(
+    ArrayRef<int64_t> shape, ArrayRef<int64_t> staticOffsets,
+    ArrayRef<int64_t> staticSizes, ArrayRef<int64_t> staticStrides,
+    bool generateErrorMessage) {
+  SliceBoundsVerificationResult result;
+  result.isValid = true;
+  for (int64_t i = 0, e = shape.size(); i < e; ++i) {
+    // Nothing to verify for dynamic source dims.
+    if (ShapedType::isDynamic(shape[i]))
+      continue;
+    // Nothing to verify if the offset is dynamic.
+    if (ShapedType::isDynamic(staticOffsets[i]))
+      continue;
+    if (staticOffsets[i] >= shape[i]) {
+      result.errorMessage =
+          std::string("offset ") + std::to_string(i) +
+          " is out-of-bounds: " + std::to_string(staticOffsets[i]) +
+          " >= " + std::to_string(shape[i]);
+      result.isValid = false;
+      return result;
+    }
+    if (ShapedType::isDynamic(staticSizes[i]) ||
+        ShapedType::isDynamic(staticStrides[i]))
+      continue;
+    int64_t lastPos =
+        staticOffsets[i] + (staticSizes[i] - 1) * staticStrides[i];
+    if (lastPos >= shape[i]) {
+      result.errorMessage = std::string("slice along dimension ") +
+                            std::to_string(i) +
+                            " runs out-of-bounds: " + std::to_string(lastPos) +
+                            " >= " + std::to_string(shape[i]);
+      result.isValid = false;
+      return result;
+    }
+  }
+  return result;
+}
+
+SliceBoundsVerificationResult mlir::verifyInBoundsSlice(
+    ArrayRef<int64_t> shape, ArrayRef<OpFoldResult> mixedOffsets,
+    ArrayRef<OpFoldResult> mixedSizes, ArrayRef<OpFoldResult> mixedStrides,
+    bool generateErrorMessage) {
+  auto getStaticValues = [](ArrayRef<OpFoldResult> ofrs) {
+    SmallVector<int64_t> staticValues;
+    for (OpFoldResult ofr : ofrs) {
+      if (auto attr = dyn_cast<Attribute>(ofr)) {
+        staticValues.push_back(cast<IntegerAttr>(attr).getInt());
+      } else {
+        staticValues.push_back(ShapedType::kDynamic);
+      }
+    }
+    return staticValues;
+  };
+  return verifyInBoundsSlice(
+      shape, getStaticValues(mixedOffsets), getStaticValues(mixedSizes),
+      getStaticValues(mixedStrides), generateErrorMessage);
+}
+
 LogicalResult
 mlir::detail::verifyOffsetSizeAndStrideOp(OffsetSizeAndStrideOpInterface op) {
+  // A dynamic size is represented as ShapedType::kDynamic in `static_sizes`.
+  // Its corresponding Value appears in `sizes`. Thus, the number of dynamic
+  // dimensions in `static_sizes` must equal the rank of `sizes`.
+  // The same applies to strides and offsets.
+  size_t numDynamicDims =
+      llvm::count_if(op.getStaticSizes(), ShapedType::isDynamic);
+  if (op.getSizes().size() != numDynamicDims) {
+    return op->emitError("expected the number of 'sizes' to match the number "
+                         "of dynamic entries in 'static_sizes' (")
+           << op.getSizes().size() << " vs " << numDynamicDims << ")";
+  }
+  size_t numDynamicStrides =
+      llvm::count_if(op.getStaticStrides(), ShapedType::isDynamic);
+  if (op.getStrides().size() != numDynamicStrides) {
+    return op->emitError("expected the number of 'strides' to match the number "
+                         "of dynamic entries in 'static_strides' (")
+           << op.getStrides().size() << " vs " << numDynamicStrides << ")";
+  }
+  size_t numDynamicOffsets =
+      llvm::count_if(op.getStaticOffsets(), ShapedType::isDynamic);
+  if (op.getOffsets().size() != numDynamicOffsets) {
+    return op->emitError("expected the number of 'offsets' to match the number "
+                         "of dynamic entries in 'static_offsets' (")
+           << op.getOffsets().size() << " vs " << numDynamicOffsets << ")";
+  }
+
   std::array<unsigned, 3> maxRanks = op.getArrayAttrMaxRanks();
   // Offsets can come in 2 flavors:
   //   1. Either single entry (when maxRanks == 1).
@@ -57,15 +139,26 @@ mlir::detail::verifyOffsetSizeAndStrideOp(OffsetSizeAndStrideOpInterface op) {
            << op.getMixedSizes().size() << " vs " << op.getMixedStrides().size()
            << ") so the rank of the result type is well-formed.";
 
-  if (failed(verifyListOfOperandsOrIntegers(op, "offset", maxRanks[0],
-                                            op.static_offsets(), op.offsets())))
+  if (failed(verifyListOfOperandsOrIntegers(
+          op, "offset", maxRanks[0], op.getStaticOffsets(), op.getOffsets())))
     return failure();
-  if (failed(verifyListOfOperandsOrIntegers(op, "size", maxRanks[1],
-                                            op.static_sizes(), op.sizes())))
+  if (failed(verifyListOfOperandsOrIntegers(
+          op, "size", maxRanks[1], op.getStaticSizes(), op.getSizes())))
     return failure();
-  if (failed(verifyListOfOperandsOrIntegers(op, "stride", maxRanks[2],
-                                            op.static_strides(), op.strides())))
+  if (failed(verifyListOfOperandsOrIntegers(
+          op, "stride", maxRanks[2], op.getStaticStrides(), op.getStrides())))
     return failure();
+
+  for (int64_t offset : op.getStaticOffsets()) {
+    if (offset < 0 && ShapedType::isStatic(offset))
+      return op->emitError("expected offsets to be non-negative, but got ")
+             << offset;
+  }
+  for (int64_t size : op.getStaticSizes()) {
+    if (size < 0 && ShapedType::isStatic(size))
+      return op->emitError("expected sizes to be non-negative, but got ")
+             << size;
+  }
   return success();
 }
 
@@ -102,7 +195,8 @@ static char getRightDelimiter(AsmParser::Delimiter delimiter) {
 void mlir::printDynamicIndexList(OpAsmPrinter &printer, Operation *op,
                                  OperandRange values,
                                  ArrayRef<int64_t> integers,
-                                 TypeRange valueTypes, ArrayRef<bool> scalables,
+                                 ArrayRef<bool> scalableFlags,
+                                 TypeRange valueTypes,
                                  AsmParser::Delimiter delimiter) {
   char leftDelimiter = getLeftDelimiter(delimiter);
   char rightDelimiter = getRightDelimiter(delimiter);
@@ -115,7 +209,7 @@ void mlir::printDynamicIndexList(OpAsmPrinter &printer, Operation *op,
   unsigned dynamicValIdx = 0;
   unsigned scalableIndexIdx = 0;
   llvm::interleaveComma(integers, printer, [&](int64_t integer) {
-    if (!scalables.empty() && scalables[scalableIndexIdx])
+    if (!scalableFlags.empty() && scalableFlags[scalableIndexIdx])
       printer << "[";
     if (ShapedType::isDynamic(integer)) {
       printer << values[dynamicValIdx];
@@ -125,7 +219,7 @@ void mlir::printDynamicIndexList(OpAsmPrinter &printer, Operation *op,
     } else {
       printer << integer;
     }
-    if (!scalables.empty() && scalables[scalableIndexIdx])
+    if (!scalableFlags.empty() && scalableFlags[scalableIndexIdx])
       printer << "]";
 
     scalableIndexIdx++;
@@ -137,7 +231,7 @@ void mlir::printDynamicIndexList(OpAsmPrinter &printer, Operation *op,
 ParseResult mlir::parseDynamicIndexList(
     OpAsmParser &parser,
     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &values,
-    DenseI64ArrayAttr &integers, DenseBoolArrayAttr &scalables,
+    DenseI64ArrayAttr &integers, DenseBoolArrayAttr &scalableFlags,
     SmallVectorImpl<Type> *valueTypes, AsmParser::Delimiter delimiter) {
 
   SmallVector<int64_t, 4> integerVals;
@@ -172,18 +266,18 @@ ParseResult mlir::parseDynamicIndexList(
     return parser.emitError(parser.getNameLoc())
            << "expected SSA value or integer";
   integers = parser.getBuilder().getDenseI64ArrayAttr(integerVals);
-  scalables = parser.getBuilder().getDenseBoolArrayAttr(scalableVals);
+  scalableFlags = parser.getBuilder().getDenseBoolArrayAttr(scalableVals);
   return success();
 }
 
 bool mlir::detail::sameOffsetsSizesAndStrides(
     OffsetSizeAndStrideOpInterface a, OffsetSizeAndStrideOpInterface b,
     llvm::function_ref<bool(OpFoldResult, OpFoldResult)> cmp) {
-  if (a.static_offsets().size() != b.static_offsets().size())
+  if (a.getStaticOffsets().size() != b.getStaticOffsets().size())
     return false;
-  if (a.static_sizes().size() != b.static_sizes().size())
+  if (a.getStaticSizes().size() != b.getStaticSizes().size())
     return false;
-  if (a.static_strides().size() != b.static_strides().size())
+  if (a.getStaticStrides().size() != b.getStaticStrides().size())
     return false;
   for (auto it : llvm::zip(a.getMixedOffsets(), b.getMixedOffsets()))
     if (!cmp(std::get<0>(it), std::get<1>(it)))
@@ -195,4 +289,10 @@ bool mlir::detail::sameOffsetsSizesAndStrides(
     if (!cmp(std::get<0>(it), std::get<1>(it)))
       return false;
   return true;
+}
+
+unsigned mlir::detail::getNumDynamicEntriesUpToIdx(ArrayRef<int64_t> staticVals,
+                                                   unsigned idx) {
+  return std::count_if(staticVals.begin(), staticVals.begin() + idx,
+                       ShapedType::isDynamic);
 }

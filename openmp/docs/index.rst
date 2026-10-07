@@ -11,7 +11,27 @@
    :maxdepth: 1
 
    LLVM/OpenMP Documentation <self>
+   Building
 
+
+Getting Started
+===============
+
+Building LLVM/OpenMP is fully documented on the
+:doc:`Building` page. For a quick start, we recommend the following template
+for building OpenMP with offloading support.
+
+.. code-block:: console
+
+  $ git clone https://github.com/llvm/llvm-project.git
+  $ cd llvm-project
+  $ mkdir build
+  $ cd build
+  $ cmake ../llvm -G Ninja                      \
+       -C ../offload/cmake/caches/Offload.cmake \
+       -DCMAKE_BUILD_TYPE=Release               \
+       -DCMAKE_INSTALL_PREFIX=<PATH>
+  $ ninja install    # Builds all files and installs files to <PATH>/bin, <PATH>/lib, etc
 
 LLVM/OpenMP Design & Overview
 =============================
@@ -91,6 +111,21 @@ please refer to :doc:`remarks/OptimizationRemarks`.
 
    remarks/OptimizationRemarks
 
+OpenMP Command-Line Argument Reference
+======================================
+In addition to the 
+`Clang command-line argument reference <https://clang.llvm.org/docs/ClangCommandLineReference.html>`_ 
+we also recommend the OpenMP 
+:doc:`command-line argument reference <CommandLineArgumentReference>` 
+page that offers a detailed overview of options specific to OpenMP. It also 
+contains a list of OpenMP offloading related command-line arguments.
+
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   CommandLineArgumentReference
 
 Support, Getting Involved, and Frequently Asked Questions (FAQ)
 ===============================================================

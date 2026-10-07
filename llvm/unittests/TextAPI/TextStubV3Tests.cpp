@@ -17,24 +17,24 @@ using namespace llvm;
 using namespace llvm::MachO;
 
 static ExportedSymbol TBDv3Symbols[] = {
-    {SymbolKind::GlobalSymbol, "$ld$hide$os9.0$_sym1", false, false},
-    {SymbolKind::GlobalSymbol, "_sym1", false, false},
-    {SymbolKind::GlobalSymbol, "_sym2", false, false},
-    {SymbolKind::GlobalSymbol, "_sym3", false, false},
-    {SymbolKind::GlobalSymbol, "_sym4", false, false},
-    {SymbolKind::GlobalSymbol, "_sym5", false, false},
-    {SymbolKind::GlobalSymbol, "_tlv1", false, true},
-    {SymbolKind::GlobalSymbol, "_tlv3", false, true},
-    {SymbolKind::GlobalSymbol, "_weak1", true, false},
-    {SymbolKind::GlobalSymbol, "_weak2", true, false},
-    {SymbolKind::GlobalSymbol, "_weak3", true, false},
-    {SymbolKind::ObjectiveCClass, "class1", false, false},
-    {SymbolKind::ObjectiveCClass, "class2", false, false},
-    {SymbolKind::ObjectiveCClass, "class3", false, false},
-    {SymbolKind::ObjectiveCClassEHType, "class1", false, false},
-    {SymbolKind::ObjectiveCInstanceVariable, "class1._ivar1", false, false},
-    {SymbolKind::ObjectiveCInstanceVariable, "class1._ivar2", false, false},
-    {SymbolKind::ObjectiveCInstanceVariable, "class1._ivar3", false, false},
+    {EncodeKind::GlobalSymbol, "$ld$hide$os9.0$_sym1", false, false},
+    {EncodeKind::GlobalSymbol, "_sym1", false, false},
+    {EncodeKind::GlobalSymbol, "_sym2", false, false},
+    {EncodeKind::GlobalSymbol, "_sym3", false, false},
+    {EncodeKind::GlobalSymbol, "_sym4", false, false},
+    {EncodeKind::GlobalSymbol, "_sym5", false, false},
+    {EncodeKind::GlobalSymbol, "_tlv1", false, true},
+    {EncodeKind::GlobalSymbol, "_tlv3", false, true},
+    {EncodeKind::GlobalSymbol, "_weak1", true, false},
+    {EncodeKind::GlobalSymbol, "_weak2", true, false},
+    {EncodeKind::GlobalSymbol, "_weak3", true, false},
+    {EncodeKind::ObjectiveCClass, "class1", false, false},
+    {EncodeKind::ObjectiveCClass, "class2", false, false},
+    {EncodeKind::ObjectiveCClass, "class3", false, false},
+    {EncodeKind::ObjectiveCClassEHType, "class1", false, false},
+    {EncodeKind::ObjectiveCInstanceVariable, "class1._ivar1", false, false},
+    {EncodeKind::ObjectiveCInstanceVariable, "class1._ivar2", false, false},
+    {EncodeKind::ObjectiveCInstanceVariable, "class1._ivar3", false, false},
 };
 
 namespace TBDv3 {
@@ -81,10 +81,6 @@ TEST(TBDv3, ReadFile) {
   for (auto &&arch : Archs)
     Targets.emplace_back(Target(arch, Platform));
   EXPECT_EQ(Archs, File->getArchitectures());
-  TargetToAttr Uuids = {{Target(AK_armv7, PLATFORM_UNKNOWN),
-                         "00000000-0000-0000-0000-000000000000"},
-                        {Target(AK_arm64, PLATFORM_UNKNOWN),
-                         "11111111-1111-1111-1111-111111111111"}};
   EXPECT_EQ(File->getPlatforms().size(), 1U);
   EXPECT_EQ(Platform, *File->getPlatforms().begin());
   EXPECT_EQ(std::string("Test.dylib"), File->getInstallName());
@@ -165,10 +161,6 @@ TEST(TBDv3, ReadMultipleDocuments) {
   for (auto &&arch : Archs)
     Targets.emplace_back(Target(arch, Platform));
   EXPECT_EQ(Archs, File->getArchitectures());
-  TargetToAttr Uuids = {{Target(AK_armv7, PLATFORM_UNKNOWN),
-                         "00000000-0000-0000-0000-000000000000"},
-                        {Target(AK_arm64, PLATFORM_UNKNOWN),
-                         "11111111-1111-1111-1111-111111111111"}};
   EXPECT_EQ(File->getPlatforms().size(), 1U);
   EXPECT_EQ(Platform, *File->getPlatforms().begin());
   EXPECT_EQ(std::string("Test.dylib"), File->getInstallName());
@@ -222,8 +214,8 @@ TEST(TBDv3, ReadMultipleDocuments) {
   llvm::sort(Exports);
 
   ExportedSymbolSeq DocumentSymbols{
-      {SymbolKind::GlobalSymbol, "_sym5", false, false},
-      {SymbolKind::GlobalSymbol, "_sym6", false, false},
+      {EncodeKind::GlobalSymbol, "_sym5", false, false},
+      {EncodeKind::GlobalSymbol, "_sym6", false, false},
   };
 
   EXPECT_EQ(DocumentSymbols.size(), Exports.size());
@@ -268,14 +260,14 @@ TEST(TBDv3, WriteFile) {
   File.setObjCConstraint(ObjCConstraintType::Retain_Release);
   File.addAllowableClient("clientA", Targets[1]);
   File.addReexportedLibrary("/usr/lib/libfoo.dylib", Targets[1]);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym1", {Targets[0]});
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym2", {Targets[0]},
+  File.addSymbol(EncodeKind::GlobalSymbol, "_sym1", {Targets[0]});
+  File.addSymbol(EncodeKind::GlobalSymbol, "_sym2", {Targets[0]},
                  SymbolFlags::WeakDefined);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym3", {Targets[0]},
+  File.addSymbol(EncodeKind::GlobalSymbol, "_sym3", {Targets[0]},
                  SymbolFlags::ThreadLocalValue);
-  File.addSymbol(SymbolKind::ObjectiveCClass, "Class1", {Targets[1]});
-  File.addSymbol(SymbolKind::ObjectiveCClassEHType, "Class1", {Targets[1]});
-  File.addSymbol(SymbolKind::ObjectiveCInstanceVariable, "Class1._ivar1",
+  File.addSymbol(EncodeKind::ObjectiveCClass, "Class1", {Targets[1]});
+  File.addSymbol(EncodeKind::ObjectiveCClassEHType, "Class1", {Targets[1]});
+  File.addSymbol(EncodeKind::ObjectiveCInstanceVariable, "Class1._ivar1",
                  {Targets[1]});
 
   SmallString<4096> Buffer;
@@ -335,14 +327,14 @@ TEST(TBDv3, WriteMultipleDocuments) {
   File.setObjCConstraint(ObjCConstraintType::Retain_Release);
   File.addAllowableClient("clientA", Targets[2]);
   File.addReexportedLibrary("/usr/lib/libbar.dylib", Targets[2]);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym1", Targets);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym2", Targets,
+  File.addSymbol(EncodeKind::GlobalSymbol, "_sym1", Targets);
+  File.addSymbol(EncodeKind::GlobalSymbol, "_sym2", Targets,
                  SymbolFlags::WeakDefined);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_symA", Targets,
+  File.addSymbol(EncodeKind::GlobalSymbol, "_symA", Targets,
                  SymbolFlags::ThreadLocalValue);
-  File.addSymbol(SymbolKind::ObjectiveCClass, "Class1", Targets);
-  File.addSymbol(SymbolKind::ObjectiveCClassEHType, "Class1", Targets);
-  File.addSymbol(SymbolKind::ObjectiveCInstanceVariable, "Class1._ivar1",
+  File.addSymbol(EncodeKind::ObjectiveCClass, "Class1", Targets);
+  File.addSymbol(EncodeKind::ObjectiveCClassEHType, "Class1", Targets);
+  File.addSymbol(EncodeKind::ObjectiveCInstanceVariable, "Class1._ivar1",
                  Targets);
 
   // Inline document
@@ -355,10 +347,10 @@ TEST(TBDv3, WriteMultipleDocuments) {
   Document.setTwoLevelNamespace();
   Document.setApplicationExtensionSafe();
   Document.setSwiftABIVersion(5);
-  Document.addSymbol(SymbolKind::GlobalSymbol, "_sym3", Targets);
-  Document.addSymbol(SymbolKind::GlobalSymbol, "_sym4", Targets);
+  Document.addSymbol(EncodeKind::GlobalSymbol, "_sym3", Targets);
+  Document.addSymbol(EncodeKind::GlobalSymbol, "_sym4", Targets);
   File.addDocument(std::make_shared<InterfaceFile>(std::move(Document)));
-  
+
   SmallString<4096> Buffer;
   raw_svector_ostream OS(Buffer);
   Error Result = TextAPIWriter::writeToStream(OS, File);
@@ -924,7 +916,7 @@ TEST(TBDv3, InterfaceInequality) {
                                Target(AK_armv7, PLATFORM_IOS));
   }));
   EXPECT_TRUE(checkEqualityOnTransform(FileA, FileB, [](InterfaceFile *File) {
-    File->addSymbol(SymbolKind::GlobalSymbol, "_symA",
+    File->addSymbol(EncodeKind::GlobalSymbol, "_symA",
                     {Target(AK_arm64, PLATFORM_IOS)});
   }));
   EXPECT_TRUE(checkEqualityOnTransform(FileA, FileB, [](InterfaceFile *File) {
@@ -935,6 +927,54 @@ TEST(TBDv3, InterfaceInequality) {
     Document.setInstallName("/System/Library/Frameworks/A.framework/A");
     File->addDocument(std::make_shared<InterfaceFile>(std::move(Document)));
   }));
+}
+
+TEST(TBDv3, SkipUnknownArch) {
+  static const char TBDv3WithUnknownArch[] = "--- !tapi-tbd-v3\n"
+                                             "archs: [ arm64, foo ]\n"
+                                             "platform: ios\n"
+                                             "install-name: Test.dylib\n"
+                                             "exports:\n"
+                                             "  - archs: [ arm64 ]\n"
+                                             "    symbols: [ _knownSym ]\n"
+                                             "  - archs: [ foo ]\n"
+                                             "    symbols: [ _unknownSym ]\n"
+                                             "  - archs: [ arm64, foo ]\n"
+                                             "    symbols: [ _mixedSym ]\n"
+                                             "...\n";
+
+  Expected<TBDFile> Result =
+      TextAPIReader::get(MemoryBufferRef(TBDv3WithUnknownArch, "Test.tbd"),
+                         /*SkipUnknownTriples=*/true);
+  EXPECT_TRUE(!!Result);
+  TBDFile File = std::move(Result.get());
+
+  EXPECT_EQ(ArchitectureSet(AK_arm64), File->getArchitectures());
+
+  llvm::DenseSet<StringRef> SymbolNames;
+  for (const auto *Sym : File->exports())
+    SymbolNames.insert(Sym->getName());
+
+  EXPECT_TRUE(SymbolNames.count("_knownSym"));
+  EXPECT_TRUE(SymbolNames.count("_mixedSym"));
+  EXPECT_FALSE(SymbolNames.count("_unknownSym"));
+}
+
+TEST(TBDv3, SkipAllUnknownArchs) {
+  static const char TBDv3AllUnknown[] = "--- !tapi-tbd-v3\n"
+                                        "archs: [ foo, bar ]\n"
+                                        "platform: ios\n"
+                                        "install-name: Test.dylib\n"
+                                        "...\n";
+
+  Expected<TBDFile> Result =
+      TextAPIReader::get(MemoryBufferRef(TBDv3AllUnknown, "Test.tbd"),
+                         /*SkipUnknownTriples=*/true);
+  EXPECT_TRUE(!!Result);
+  TBDFile File = std::move(Result.get());
+
+  EXPECT_TRUE(File->getArchitectures().empty());
+  EXPECT_EQ(File->symbolsCount(), 0U);
 }
 
 } // namespace TBDv3

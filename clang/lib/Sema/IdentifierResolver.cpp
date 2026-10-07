@@ -60,6 +60,9 @@ public:
     }
   }
 
+  IdDeclInfoMap(const IdDeclInfoMap &) = delete;
+  IdDeclInfoMap &operator=(const IdDeclInfoMap &) = delete;
+
   /// Returns the IdDeclInfo associated to the DeclarationName.
   /// It creates a new IdDeclInfo if one was not created before for this id.
   IdDeclInfo &operator[](DeclarationName Name);
@@ -96,6 +99,8 @@ IdentifierResolver::~IdentifierResolver() {
 /// isDeclInScope - If 'Ctx' is a function/method, isDeclInScope returns true
 /// if 'D' is in Scope 'S', otherwise 'S' is ignored and isDeclInScope returns
 /// true if 'D' belongs to the given declaration context.
+///
+/// If 'Ctx' is an expansion statement, we use its enclosing function instead.
 bool IdentifierResolver::isDeclInScope(Decl *D, DeclContext *Ctx, Scope *S,
                                        bool AllowInlineNamespace) const {
   Ctx = Ctx->getRedeclContext();
@@ -104,9 +109,14 @@ bool IdentifierResolver::isDeclInScope(Decl *D, DeclContext *Ctx, Scope *S,
   // conflict with other Decls.
   if (LangOpt.HLSL && isa<HLSLBufferDecl>(D))
     return false;
-  if (Ctx->isFunctionOrMethod() || (S && S->isFunctionPrototypeScope())) {
+  if (Ctx->getEnclosingNonExpansionStatementContext()
+          ->getRedeclContext()
+          ->isFunctionOrMethod() ||
+      (S && S->isFunctionPrototypeScope())) {
     // Ignore the scopes associated within transparent declaration contexts.
-    while (S->getEntity() && S->getEntity()->isTransparentContext())
+    while (S->getEntity() &&
+           (S->getEntity()->isTransparentContext() ||
+            (!LangOpt.CPlusPlus && isa<RecordDecl>(S->getEntity()))))
       S = S->getParent();
 
     if (S->isDeclScope(D))

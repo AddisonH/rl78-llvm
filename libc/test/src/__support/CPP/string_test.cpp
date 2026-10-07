@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "hdr/func/free.h"
 #include "src/__support/CPP/string.h"
 #include "test/UnitTest/Test.h"
 
-using __llvm_libc::cpp::string;
-using __llvm_libc::cpp::string_view;
-using __llvm_libc::cpp::to_string;
+using LIBC_NAMESPACE::cpp::string;
+using LIBC_NAMESPACE::cpp::string_view;
+using LIBC_NAMESPACE::cpp::to_string;
 
 TEST(LlvmLibcStringTest, InitializeEmpty) {
   const string s;
@@ -62,12 +63,22 @@ TEST(LlvmLibcStringTest, InitializeCStringWithSize) {
   ASSERT_EQ(s.back(), 'b');
 }
 
+TEST(LlvmLibcStringTest, InitializeStringView) {
+  const string_view str = "ab";
+  const string s(str);
+  ASSERT_EQ(s.size(), size_t(2));
+  ASSERT_EQ(s[0], 'a');
+  ASSERT_EQ(s[1], 'b');
+  ASSERT_EQ(s.front(), 'a');
+  ASSERT_EQ(s.back(), 'b');
+}
+
 TEST(LlvmLibcStringTest, InitializeRepeatedChar) {
   const string s(4, '1');
   ASSERT_EQ(string_view(s), string_view("1111"));
 }
 
-TEST(LlvmLibcStringTest, InitializeZeorChar) {
+TEST(LlvmLibcStringTest, InitializeZeroChar) {
   const string s(0, '1');
   ASSERT_TRUE(s.empty());
 }
@@ -112,6 +123,24 @@ TEST(LlvmLibcStringTest, MoveAssign) {
   b = move(a);
   ASSERT_STREQ(b.c_str(), str);
   ASSERT_STREQ(a.c_str(), "");
+}
+
+TEST(LlvmLibcStringTest, StringViewAssign) {
+  const string_view str = "ab";
+  string s;
+  s = str;
+  ASSERT_EQ(s.size(), size_t(2));
+  ASSERT_EQ(s[0], 'a');
+  ASSERT_EQ(s[1], 'b');
+  ASSERT_EQ(s.front(), 'a');
+  ASSERT_EQ(s.back(), 'b');
+}
+
+TEST(LlvmLibcStringTest, CharacterAssign) {
+  string s("abc");
+  s = 'a';
+  ASSERT_EQ(s.size(), size_t(1));
+  ASSERT_STREQ(s.c_str(), "a");
 }
 
 TEST(LlvmLibcStringTest, Concat) {
@@ -159,10 +188,38 @@ TEST(LlvmLibcStringTest, ResizeCapacityAndNullTermination) {
     ASSERT_EQ(a[i], '\0');
 }
 
+TEST(LlvmLibcStringTest, ResizeWithCapacityPlus1) {
+  string a;
+  a.resize(32);
+
+  size_t previous_capacity = a.capacity();
+  a.resize(previous_capacity);
+  ASSERT_GT(a.capacity(), previous_capacity);
+}
+
 TEST(LlvmLibcStringTest, ConcatWithCString) {
   ASSERT_STREQ((string("a") + string("b")).c_str(), "ab");
   ASSERT_STREQ((string("a") + "b").c_str(), "ab");
   ASSERT_STREQ(("a" + string("b")).c_str(), "ab");
+}
+
+TEST(LlvmLibcStringTest, ReleaseCStrResetsString) {
+  string s("abc");
+
+  char *cstr = s.release_c_str();
+  ASSERT_STREQ(cstr, "abc");
+  ASSERT_STREQ(s.c_str(), "");
+  free(cstr);
+}
+
+TEST(LlvmLibcStringTest, ReleaseCStrOnDefaultString) {
+  string s;
+
+  char *cstr = s.release_c_str();
+  ASSERT_STREQ(cstr, "");
+  ASSERT_STREQ(s.c_str(), "");
+  ASSERT_NE(cstr, s.data()); // Different pointers.
+  free(cstr);
 }
 
 TEST(LlvmLibcStringTest, Comparison) {

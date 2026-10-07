@@ -43,8 +43,6 @@ void handle_assign_of_condition(int x) {
   }
 }
 
-// From <rdar://problem/6619921>
-//
 // In this test case, 'needsAnArray' is a signed char.  The analyzer tracks
 // a symbolic value for this variable, but in the branch condition it is
 // promoted to 'int'.  Currently the analyzer doesn't reason well about
@@ -82,7 +80,6 @@ void pr3836(int *a, int *b) {
 
 
 //===---------------------------------------------------------------------===//
-// <rdar://problem/7342806>
 // This false positive occurred because the symbolic constraint on a short was
 // not maintained via sign extension.  The analyzer doesn't properly handle
 // the sign extension, but now tracks the constraint.  This particular
@@ -123,19 +120,8 @@ void rdar7342806(void) {
     rdar7342806_aux(*Pointer); // no-warning
 }
 
-//===---------------------------------------------------------------------===//
 // PR 5627 - http://llvm.org/bugs/show_bug.cgi?id=5627
-//  This test case depends on using -analyzer-config eagerly-assume=true.
-//  The 'eagerly-assume=true' causes the path
-//  to bifurcate when evaluating the function call argument, and a state
-//  caching bug in ExprEngine::CheckerVisit (and friends) caused the store
-//  to 'p' to not be evaluated along one path, but then an autotransition caused
-//  the path to keep on propagating with 'p' still set to an undefined value.
-//  We would then get a bogus report of returning uninitialized memory.
-//  Note: CheckerVisit mistakenly cleared an existing node, and the cleared
-//  node was resurrected by GRStmtNodeBuilder::~GRStmtNodeBuilder(), where
-//  'p' was not assigned.
-//===---------------------------------------------------------------------===//
+// The engine internals that were responsible for this bug no longer exist.
 
 float *pr5627_f(int y);
 

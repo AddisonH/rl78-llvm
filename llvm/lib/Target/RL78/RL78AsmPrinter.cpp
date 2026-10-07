@@ -24,6 +24,8 @@
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/Support/Compiler.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -58,7 +60,9 @@ public:
   void emitInstruction(const MachineInstr *MI) override;
   void emitGlobalVariable(const GlobalVariable *GV) override;
 
-  const MCExpr *lowerConstant(const Constant *CV) override;
+  const MCExpr *lowerConstant(const Constant *CV,
+                              const Constant *BaseCV = nullptr,
+                              uint64_t Offset = 0) override;
 
   static const char *getRegisterName(unsigned RegNo) {
     return RL78InstPrinter::getRegisterName(RegNo);
@@ -102,7 +106,7 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     EmitToStreamer(*OutStreamer, TmpInst);
   }
 
-if (MF->getMMI().hasDebugInfo()) {
+if (hasDebugInfo()) {
     switch (MI->getOpcode()) {
     default:
       break;
@@ -249,8 +253,7 @@ void RL78AsmPrinter::printOperand(const MachineInstr *MI, int opNum,
     O << MO.getSymbolName();
     break;
   case MachineOperand::MO_ConstantPoolIndex:
-    O << DL.getPrivateGlobalPrefix() << "CPI" << getFunctionNumber() << "_"
-      << MO.getIndex();
+    GetCPISymbol(MO.getIndex())->print(O, MAI);
     break;
   case MachineOperand::MO_Metadata:
     MO.getMetadata()->printAsOperand(O, MMI->getModule());
@@ -348,9 +351,11 @@ const MCExpr *RL78AsmPrinter::lowerConstantGV(const GlobalValue *GV, int DstAS,
   return nullptr;
 }
 
-const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV) {
+const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV,
+                                             const Constant *BaseCV,
+                                             uint64_t Offset) {
   if (useBaseLowerConstant)
-    return AsmPrinter::lowerConstant(CV);
+    return AsmPrinter::lowerConstant(CV, BaseCV, Offset);
 
   const Constant *Op = nullptr;
   unsigned DstAS = 0;
@@ -364,7 +369,7 @@ const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV) {
       DstAS = CE->getType()->getPointerAddressSpace();
       SrcAS = Op->getType()->getPointerAddressSpace();
       if (TM.isNoopAddrSpaceCast(SrcAS, DstAS))
-        return lowerConstant(Op);
+        return lowerConstant(Op, BaseCV, Offset);
       break;
     case Instruction::IntToPtr:
       Op = CE->getOperand(0);
@@ -422,6 +427,6 @@ const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV) {
 }
 
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78AsmPrinter() {
+extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78AsmPrinter() {
   RegisterAsmPrinter<RL78AsmPrinter> X(getTheRL78Target());
 }

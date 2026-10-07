@@ -10,9 +10,8 @@ from lldbsuite.test.lldbutil import symbol_type_to_str
 
 
 class ModuleAndSectionAPIsTestCase(TestBase):
-    # Py3 asserts due to a bug in SWIG.  A fix for this was upstreamed into
-    # SWIG 3.0.8.
-    @skipIf(py_version=[">=", (3, 0)], swig_version=["<", (3, 0, 8)])
+    SHARED_BUILD_TESTCASE = False
+
     def test_module_and_section(self):
         """Test module and section APIs."""
         self.build()
@@ -20,7 +19,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
-        self.assertTrue(target.GetNumModules() > 0)
+        self.assertGreater(target.GetNumModules(), 0)
 
         # Hide stdout if not running with '-t' option.
         if not self.TraceOn():
@@ -65,7 +64,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
-        self.assertTrue(target.GetNumModules() > 0)
+        self.assertGreater(target.GetNumModules(), 0)
 
         # Hide stdout if not running with '-t' option.
         if not self.TraceOn():
@@ -105,7 +104,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
-        self.assertTrue(target.GetNumModules() > 0)
+        self.assertGreater(target.GetNumModules(), 0)
 
         # Hide stdout if not running with '-t' option.
         if not self.TraceOn():

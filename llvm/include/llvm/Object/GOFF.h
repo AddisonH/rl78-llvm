@@ -30,8 +30,9 @@ namespace object {
 /// be called from deriving classes to change values as that record specifies.
 class Record {
 public:
-  static Error getContinuousData(const uint8_t *Record, uint16_t DataLength,
-                                 int DataIndex, SmallString<256> &CompleteData);
+  LLVM_ABI static Error getContinuousData(const uint8_t *Record,
+                                          uint16_t DataLength, int DataIndex,
+                                          SmallString<256> &CompleteData);
 
   static bool isContinued(const uint8_t *Record) {
     uint8_t IsContinued;
@@ -69,14 +70,35 @@ protected:
   static void get(const uint8_t *Bytes, uint8_t ByteIndex, T &Value) {
     assert(ByteIndex + sizeof(T) <= GOFF::RecordLength &&
            "Byte index out of bounds!");
-    Value = support::endian::read<T, support::big, support::unaligned>(
-        &Bytes[ByteIndex]);
+    Value = support::endian::read<T, llvm::endianness::big>(&Bytes[ByteIndex]);
+  }
+};
+
+class TXTRecord : public Record {
+public:
+  /// \brief Maximum length of data; any more must go in continuation.
+  static const uint8_t TXTMaxDataLength = 56;
+
+  LLVM_ABI static Error getData(const uint8_t *Record,
+                                SmallString<256> &CompleteData);
+
+  static void getElementEsdId(const uint8_t *Record, uint32_t &EsdId) {
+    get<uint32_t>(Record, 4, EsdId);
+  }
+
+  static void getOffset(const uint8_t *Record, uint32_t &Offset) {
+    get<uint32_t>(Record, 12, Offset);
+  }
+
+  static void getDataLength(const uint8_t *Record, uint16_t &Length) {
+    get<uint16_t>(Record, 22, Length);
   }
 };
 
 class HDRRecord : public Record {
 public:
-  static Error getData(const uint8_t *Record, SmallString<256> &CompleteData);
+  LLVM_ABI static Error getData(const uint8_t *Record,
+                                SmallString<256> &CompleteData);
 
   static uint16_t getPropertyModuleLength(const uint8_t *Record) {
     uint16_t Length;
@@ -99,7 +121,8 @@ public:
   static const uint16_t MaxNameLength = 32 * 1024;
 
 public:
-  static Error getData(const uint8_t *Record, SmallString<256> &CompleteData);
+  LLVM_ABI static Error getData(const uint8_t *Record,
+                                SmallString<256> &CompleteData);
 
   // ESD Get routines.
   static void getSymbolType(const uint8_t *Record,
@@ -269,7 +292,8 @@ public:
 
 class ENDRecord : public Record {
 public:
-  static Error getData(const uint8_t *Record, SmallString<256> &CompleteData);
+  LLVM_ABI static Error getData(const uint8_t *Record,
+                                SmallString<256> &CompleteData);
 
   static uint16_t getNameLength(const uint8_t *Record) {
     uint16_t Length;

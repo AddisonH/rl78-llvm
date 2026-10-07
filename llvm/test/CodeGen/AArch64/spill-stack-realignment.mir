@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=aarch64-none-linux-gnu -run-pass=prologepilog %s -o - | FileCheck %s
+# RUN: llc -mtriple=aarch64-none-linux-gnu -run-pass=prolog-epilog %s -o - | FileCheck %s
 
 # Ensure references to scavenged stack slots in the CSR area use the
 # FP as a base when the stack pointer must be aligned to something
@@ -21,7 +21,7 @@ stack:
   - { id: 1, size: 4, alignment: 4, local-offset: -68 }
 
 # CHECK: body:
-# CHECK:   $sp = ANDXri killed ${{x[0-9]+}}, 7865
+# CHECK:   $sp = frame-setup ANDXri killed ${{x[0-9]+}}, 7865
 # CHECK:   STRSui $s0, $sp, 0
 # CHECK:   STRSui $s0, $fp, 7
 body:             |

@@ -1,4 +1,4 @@
-; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck %s
 
 declare float @llvm.amdgcn.fdiv.fast(float, float) #0
 

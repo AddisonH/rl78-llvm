@@ -69,12 +69,10 @@ using namespace llvm;
 
 namespace {
 
-class AMDGPURewriteUndefForPHI : public FunctionPass {
+class AMDGPURewriteUndefForPHILegacy : public FunctionPass {
 public:
   static char ID;
-  AMDGPURewriteUndefForPHI() : FunctionPass(ID) {
-    initializeAMDGPURewriteUndefForPHIPass(*PassRegistry::getPassRegistry());
-  }
+  AMDGPURewriteUndefForPHILegacy() : FunctionPass(ID) {}
   bool runOnFunction(Function &F) override;
   StringRef getPassName() const override {
     return "AMDGPU Rewrite Undef for PHI";
@@ -85,19 +83,18 @@ public:
     AU.addRequired<DominatorTreeWrapperPass>();
 
     AU.addPreserved<DominatorTreeWrapperPass>();
-    AU.addPreserved<UniformityInfoWrapperPass>();
     AU.setPreservesCFG();
   }
 };
 
 } // end anonymous namespace
-char AMDGPURewriteUndefForPHI::ID = 0;
+char AMDGPURewriteUndefForPHILegacy::ID = 0;
 
-INITIALIZE_PASS_BEGIN(AMDGPURewriteUndefForPHI, DEBUG_TYPE,
+INITIALIZE_PASS_BEGIN(AMDGPURewriteUndefForPHILegacy, DEBUG_TYPE,
                       "Rewrite undef for PHI", false, false)
 INITIALIZE_PASS_DEPENDENCY(UniformityInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
-INITIALIZE_PASS_END(AMDGPURewriteUndefForPHI, DEBUG_TYPE,
+INITIALIZE_PASS_END(AMDGPURewriteUndefForPHILegacy, DEBUG_TYPE,
                     "Rewrite undef for PHI", false, false)
 
 bool rewritePHIs(Function &F, UniformityInfo &UA, DominatorTree *DT) {
@@ -105,7 +102,7 @@ bool rewritePHIs(Function &F, UniformityInfo &UA, DominatorTree *DT) {
   SmallVector<PHINode *> ToBeDeleted;
   for (auto &BB : F) {
     for (auto &PHI : BB.phis()) {
-      if (UA.isDivergent(&PHI))
+      if (UA.isDivergentAtDef(&PHI))
         continue;
 
       // The unique incoming value except undef/poison for the PHI node.
@@ -147,7 +144,7 @@ bool rewritePHIs(Function &F, UniformityInfo &UA, DominatorTree *DT) {
       // TODO: We should still be able to replace undef value if the unique
       // value is a Constant.
       if (!UniqueDefinedIncoming || Undefs.empty() ||
-          !UA.isDivergent(DominateBB->getTerminator()))
+          UA.isUniformTerminator(DominateBB->getTerminator()))
         continue;
 
       // We only replace the undef when DominateBB truly dominates all the
@@ -170,13 +167,27 @@ bool rewritePHIs(Function &F, UniformityInfo &UA, DominatorTree *DT) {
   return Changed;
 }
 
-bool AMDGPURewriteUndefForPHI::runOnFunction(Function &F) {
+bool AMDGPURewriteUndefForPHILegacy::runOnFunction(Function &F) {
   UniformityInfo &UA =
       getAnalysis<UniformityInfoWrapperPass>().getUniformityInfo();
   DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   return rewritePHIs(F, UA, DT);
 }
 
-FunctionPass *llvm::createAMDGPURewriteUndefForPHIPass() {
-  return new AMDGPURewriteUndefForPHI();
+PreservedAnalyses
+AMDGPURewriteUndefForPHIPass::run(Function &F, FunctionAnalysisManager &AM) {
+  UniformityInfo &UA = AM.getResult<UniformityInfoAnalysis>(F);
+  DominatorTree *DT = &AM.getResult<DominatorTreeAnalysis>(F);
+  bool Changed = rewritePHIs(F, UA, DT);
+  if (Changed) {
+    PreservedAnalyses PA;
+    PA.preserveSet<CFGAnalyses>();
+    return PA;
+  }
+
+  return PreservedAnalyses::all();
+}
+
+FunctionPass *llvm::createAMDGPURewriteUndefForPHILegacyPass() {
+  return new AMDGPURewriteUndefForPHILegacy();
 }

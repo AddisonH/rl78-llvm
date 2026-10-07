@@ -32,7 +32,6 @@ public:
                                 MachineBasicBlock::iterator I) const override;
 
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
-  bool hasFP(const MachineFunction &MF) const override;
 
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
                              Register &FrameReg) const override;
@@ -50,6 +49,8 @@ private:
   // Returns true if MF is a leaf procedure.
   bool isLeafProc(MachineFunction &MF) const;
   uint32_t calculateCSRegisterMask(MachineFunction &MF) const;
+protected:
+  bool hasFPImpl(const MachineFunction &MF) const override;
 };
 
 } // end namespace llvm

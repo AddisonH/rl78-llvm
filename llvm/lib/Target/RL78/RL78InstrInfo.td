@@ -4245,8 +4245,11 @@ def callt : SDNode<"RL78ISD::CALLT", SDTRL78Call,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
 
+// A call like CALL_addr16 (argument registers, register mask and stack size
+// as variable operands). The vendor definition lacked variable_ops and isCall.
+let isCall = 1, Defs = [SPreg], Uses = [SPreg] in
 def CALLT_addr5 : InstRL78_16bit<0x6184,
-        (outs), (ins ABS5:$addr5),
+        (outs), (ins ABS5:$addr5, variable_ops),
         "callt $addr5",
         [(callt (i16 tglobaladdr:$addr5))]>;
 

@@ -33,7 +33,7 @@ public:
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const override;
   void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                             llvm::opt::ArgStringList &CC1Args,
+                             llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                              Action::OffloadKind) const override;
 
   bool isPICDefault() const override { return false; }
@@ -59,7 +59,7 @@ private:
 namespace tools {
 namespace msp430 {
 
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker final : public Tool {
 public:
   Linker(const ToolChain &TC) : Tool("MSP430::Linker", "msp430-elf-ld", TC) {}
   bool hasIntegratedCPP() const override { return false; }

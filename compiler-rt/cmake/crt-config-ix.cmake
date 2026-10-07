@@ -48,7 +48,7 @@ if(NOT APPLE)
   message(STATUS "Supported architectures for crt: ${CRT_SUPPORTED_ARCH}")
 endif()
 
-if (CRT_SUPPORTED_ARCH AND OS_NAME MATCHES "Linux" AND NOT LLVM_USE_SANITIZER OR
+if (CRT_SUPPORTED_ARCH AND OS_NAME MATCHES "Linux|SerenityOS" AND NOT LLVM_USE_SANITIZER OR
     "${arch}" MATCHES "rl78")
   set(COMPILER_RT_HAS_CRT TRUE)
 else()

@@ -11,10 +11,10 @@
 #include "clang/Basic/CharInfo.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/DriverDiagnostic.h"
-#include "clang/Driver/Options.h"
+#include "clang/Options/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/raw_ostream.h"
-#include "ToolChains/CommonArgs.h"
+#include "clang/Driver/CommonArgs.h"
 
 using namespace clang::driver;
 using namespace clang::driver::tools;
@@ -118,8 +118,8 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
     // into .debug_addr, which is currently not implemented.
     Arg *A;
     if (getDebugFissionKind(D, Args, A) != DwarfFissionKind::None)
-      D.Diag(clang::diag::err_drv_riscv_unsupported_with_linker_relaxation)
-          << A->getAsString(Args);
+      D.Diag(clang::diag::err_drv_unsupported_opt_for_target)
+          << A->getAsString(Args) << "rl78 with -mrelax";
   } else {
     Features.push_back("-relax");
   }
@@ -256,7 +256,8 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-disable-machine-cse=true");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-enable-pre=false");
+  // LLVM 23 renamed GVN's -enable-pre to -enable-scalar-pre.
+  CmdArgs.push_back("-enable-scalar-pre=false");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-sched-height=true");

@@ -57,7 +57,7 @@ public:
 
   void EnableCategory(ConstString category_name,
                       TypeCategoryMap::Position pos, lldb::LanguageType lang) {
-    TypeCategoryMap::ValueSP category_sp;
+    lldb::TypeCategoryImplSP category_sp;
     if (m_categories_map.Get(category_name, category_sp) && category_sp) {
       m_categories_map.Enable(category_sp, pos);
       category_sp->AddLanguage(lang);
@@ -96,13 +96,6 @@ public:
 
   void ForEachCategory(TypeCategoryMap::ForEachCallback callback);
 
-  lldb::TypeCategoryImplSP GetCategory(const char *category_name = nullptr,
-                                       bool can_create = true) {
-    if (!category_name)
-      return GetCategory(m_default_category_name);
-    return GetCategory(ConstString(category_name));
-  }
-
   lldb::TypeCategoryImplSP GetCategory(ConstString category_name,
                                        bool can_create = true);
 
@@ -127,18 +120,8 @@ public:
   lldb::SyntheticChildrenSP
   GetSyntheticChildren(ValueObject &valobj, lldb::DynamicValueType use_dynamic);
 
-  bool
-  AnyMatches(const FormattersMatchCandidate &candidate_type,
-             TypeCategoryImpl::FormatCategoryItems items =
-                 TypeCategoryImpl::ALL_ITEM_TYPES,
-             bool only_enabled = true, const char **matching_category = nullptr,
-             TypeCategoryImpl::FormatCategoryItems *matching_type = nullptr) {
-    return m_categories_map.AnyMatches(candidate_type, items, only_enabled,
-                                       matching_category, matching_type);
-  }
-
   static bool GetFormatFromCString(const char *format_cstr,
-                                   bool partial_match_ok, lldb::Format &format);
+                                   lldb::Format &format);
 
   static char GetFormatAsFormatChar(lldb::Format format);
 
@@ -180,7 +163,8 @@ private:
                                  lldb::DynamicValueType use_dynamic,
                                  FormattersMatchVector &entries,
                                  FormattersMatchCandidate::Flags current_flags,
-                                 bool root_level = false);
+                                 bool root_level = false,
+                                 uint32_t ptr_stripped_depth = 0);
 
   std::atomic<uint32_t> m_last_revision;
   FormatCache m_format_cache;

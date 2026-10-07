@@ -21,7 +21,6 @@
 #include "flang/Lower/Support/Utils.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/HLFIRTools.h"
-#include "flang/Optimizer/Dialect/FIRDialect.h"
 
 namespace mlir {
 class Location;
@@ -41,12 +40,11 @@ convertExprToHLFIR(mlir::Location loc, Fortran::lower::AbstractConverter &,
                    const Fortran::lower::SomeExpr &, Fortran::lower::SymMap &,
                    Fortran::lower::StatementContext &);
 
-inline fir::ExtendedValue
-translateToExtendedValue(mlir::Location loc, fir::FirOpBuilder &builder,
-                         hlfir::Entity entity,
-                         Fortran::lower::StatementContext &context) {
+inline fir::ExtendedValue translateToExtendedValue(
+    mlir::Location loc, fir::FirOpBuilder &builder, hlfir::Entity entity,
+    Fortran::lower::StatementContext &context, bool contiguityHint = false) {
   auto [exv, exvCleanup] =
-      hlfir::translateToExtendedValue(loc, builder, entity);
+      hlfir::translateToExtendedValue(loc, builder, entity, contiguityHint);
   if (exvCleanup)
     context.attachCleanup(*exvCleanup);
   return exv;
@@ -63,7 +61,7 @@ fir::ExtendedValue convertToBox(mlir::Location loc,
                                 Fortran::lower::AbstractConverter &,
                                 hlfir::Entity entity,
                                 Fortran::lower::StatementContext &,
-                                mlir::Type fortranType);
+                                mlir::Type fortranType, unsigned corank = 0);
 
 /// Lower an evaluate::Expr to fir::ExtendedValue address.
 /// The address may be a raw fir.ref<T>, or a fir.box<T>/fir.class<T>, or a
@@ -112,6 +110,12 @@ fir::ExtendedValue convertToValue(mlir::Location loc,
                                   hlfir::Entity entity,
                                   Fortran::lower::StatementContext &);
 
+fir::ExtendedValue convertDataRefToValue(mlir::Location loc,
+                                         Fortran::lower::AbstractConverter &,
+                                         const Fortran::evaluate::DataRef &,
+                                         Fortran::lower::SymMap &,
+                                         Fortran::lower::StatementContext &);
+
 /// Lower an evaluate::Expr to a fir::MutableBoxValue value.
 /// This can only be called if the Expr is a POINTER or ALLOCATABLE,
 /// otherwise, this will crash.
@@ -131,6 +135,15 @@ hlfir::ElementalAddrOp convertVectorSubscriptedExprToElementalAddr(
     mlir::Location loc, Fortran::lower::AbstractConverter &,
     const Fortran::lower::SomeExpr &, Fortran::lower::SymMap &,
     Fortran::lower::StatementContext &);
+
+/// Lower a designator containing vector subscripts, creating a hlfir::Entity
+/// representing the first element in the vector subscripted array. This is a
+/// helper which calls convertVectorSubscriptedExprToElementalAddr and lowers
+/// the hlfir::ElementalAddrOp.
+hlfir::Entity genVectorSubscriptedDesignatorFirstElementAddress(
+    mlir::Location loc, Fortran::lower::AbstractConverter &converter,
+    const Fortran::lower::SomeExpr &expr, Fortran::lower::SymMap &symMap,
+    Fortran::lower::StatementContext &stmtCtx);
 
 } // namespace Fortran::lower
 

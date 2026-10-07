@@ -25,7 +25,8 @@ private:
   ABIArgInfo classifyReturnType(QualType RetTy) const;
   ABIArgInfo classifyArgumentType(QualType ArgTy, bool IsVarArg) const;
   void computeInfo(CGFunctionInfo &FI) const override;
-  Address EmitVAArg(CodeGenFunction &CGF, Address VAListAddr, QualType Ty) const override;
+  RValue EmitVAArg(CodeGenFunction &CGF, Address VAListAddr, QualType Ty,
+                   AggValueSlot Slot) const override;
 };
 } // end anonymous namespace
 
@@ -50,7 +51,9 @@ ABIArgInfo RL78ABIInfo::classifyReturnType(QualType Ty) const {
   uint64_t Size = getContext().getTypeSize(Ty);
   // If it doesn't fit in 4 bytes place it on the stack.
   if (Size > 32) {
-    return getNaturalAlignIndirect(Ty, true);
+    // Indirect pointers are in the default address space, as in 17.
+    return getNaturalAlignIndirect(
+        Ty, getContext().getTargetAddressSpace(LangAS::Default), true);
   } else {
      if (isAggregateTypeForABI(Ty)) {
       return coerceStructToIntArray(Ty,getContext(), getVMContext());
@@ -70,8 +73,9 @@ ABIArgInfo RL78ABIInfo::classifyArgumentType(QualType ArgTy, bool IsVarArg) cons
     // Records with non-trivial destructors/copy-constructors should not be
     // passed by value.
     if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(ArgTy, getCXXABI()))
-      return getNaturalAlignIndirect(ArgTy,
-                                     RAA == CGCXXABI::RAA_DirectInMemory);
+      return getNaturalAlignIndirect(
+          ArgTy, getContext().getTargetAddressSpace(LangAS::Default),
+          RAA == CGCXXABI::RAA_DirectInMemory);
     return coerceStructToIntArray(ArgTy, getContext(), getVMContext(), IsVarArg);
   } else {
     return ABIArgInfo::getDirect();
@@ -89,8 +93,8 @@ void RL78ABIInfo::computeInfo(CGFunctionInfo &FI) const {
  }
 }
 
-Address RL78ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
-                               QualType Ty) const {
+RValue RL78ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
+                              QualType Ty, AggValueSlot Slot) const {
 
   // Emit va_arg using the common void* representation,
   // where arguments are simply emitted in an array of slots on the stack.
@@ -101,7 +105,7 @@ Address RL78ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
 
   return emitVoidPtrVAArg(CGF, VAListAddr, Ty, /*Indirect*/ false, TypeInfo,
                           CharUnits::fromQuantity(2),
-                          /*AllowHigherAlign*/ false);
+                          /*AllowHigherAlign*/ false, Slot);
 }
 
 #include "llvm/IR/Constants.h"
@@ -185,17 +189,16 @@ public:
       if (const auto *Attr = FD->getAttr<RL78InlineASMAttr>()) {
         Fn->addFnAttr("inline_asm");
       }
-      if (CGM.getLangOpts().RenesasExt &&
-          Fn->hasFnAttribute("implicit-section-name") &&
-          FD->hasAttr<PragmaClangTextSectionAttr>()) {
-        std::string section =
-            Fn->getFnAttribute("implicit-section-name").getValueAsString().str();
-        Fn->removeFnAttr("implicit-section-name");
-        // TODO: getAddressSpace doesn't seem to work yet for far functions
-        section =
-            replaceSectionNamePlaceholder(section, isFar ? ".textf" : ".text");
-        Fn->addFnAttr("implicit-section-name", section + (isFar ? "_f" : "_n"));
-      } 
+      // CC-RL #pragma section: resolve the placeholder and add the near/far
+      // suffix. (Clang 23 sets the pragma section directly on the function;
+      // 17 used the "implicit-section-name" attribute.)
+      if (CGM.getLangOpts().RenesasExt && Fn->hasSection() &&
+          FD->hasAttr<PragmaClangTextSectionAttr>() &&
+          !FD->hasAttr<SectionAttr>()) {
+        std::string section = replaceSectionNamePlaceholder(
+            Fn->getSection().str(), isFar ? ".textf" : ".text");
+        Fn->setSection(section + (isFar ? "_f" : "_n"));
+      }
     }
 
     if (const auto *VD = dyn_cast_or_null<VarDecl>(D)) {

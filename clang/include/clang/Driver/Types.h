@@ -43,7 +43,7 @@ namespace types {
 
   /// getTypeTempSuffix - Return the suffix to use when creating a
   /// temp file of this type, or null if unspecified.
-  const char *getTypeTempSuffix(ID Id, bool CLMode = false);
+  const char *getTypeTempSuffix(ID Id, bool CLStyle = false);
 
   /// onlyPrecompileType - Should this type only be precompiled.
   bool onlyPrecompileType(ID Id);
@@ -128,6 +128,13 @@ namespace types {
   ID lookupHeaderTypeForSourceType(ID Id);
 
 } // end namespace types
+
+/// A list of inputs and their types for the given arguments.
+using InputTy = std::pair<types::ID, const llvm::opt::Arg *>;
+
+/// A list of inputs and their types for the given arguments.
+using InputList = llvm::SmallVector<InputTy, 16>;
+
 } // end namespace driver
 } // end namespace clang
 

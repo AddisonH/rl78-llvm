@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fobjc-runtime=macosx-fragile-10.5 -emit-llvm -fobjc-exceptions -mllvm -simplifycfg-sink-common=false -O2 -o - %s | FileCheck %s
 //
-// <rdar://problem/7471679> [irgen] [eh] Exception code built with clang (x86_64) crashes
+// [irgen] [eh] Exception code built with clang (x86_64) crashes
 
 // Just check that we don't emit any dead blocks.
 @interface NSArray @end
@@ -37,7 +37,7 @@ void f1(void) {
 }
 
 // Test that modifications to local variables are respected under
-// optimization.  rdar://problem/8160285
+// optimization.
 
 // CHECK-LABEL: define{{.*}} i32 @f2()
 int f2(void) {
@@ -73,13 +73,13 @@ int f2(void) {
 }
 
 // Test that the cleanup destination is saved when entering a finally
-// block.  rdar://problem/8293901
+// block.
 // CHECK-LABEL: define{{.*}} void @f3()
 void f3(void) {
   extern void f3_helper(int, int*);
 
   // CHECK:      [[X:%.*]] = alloca i32
-  // CHECK:      call void @llvm.lifetime.start.p0(i64 4, ptr nonnull [[X]])
+  // CHECK:      call void @llvm.lifetime.start.p0(ptr nonnull [[X]])
   // CHECK:      store i32 0, ptr [[X]]
   int x = 0;
 
@@ -120,12 +120,11 @@ void f3(void) {
   }
 
   // CHECK:      call void @f3_helper(i32 noundef 4, ptr noundef nonnull [[X]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 4, ptr nonnull [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr nonnull [[X]])
   // CHECK-NEXT: ret void
   f3_helper(4, &x);
 }
 
-// rdar://problem/8440970
 void f4(void) {
   extern void f4_help(int);
 
@@ -145,18 +144,17 @@ void f4(void) {
   // CHECK-NEXT: br label
   //   -> rethrow
 
-  // finally.call-exit:  Predecessors are the @try and @catch fallthroughs
-  // as well as the no-match case in the catch mechanism.  The i1 is whether
-  // to rethrow and should be true only in the last case.
-  // CHECK:      phi ptr
-  // CHECK-NEXT: phi i1
-  // CHECK-NEXT: call void @objc_exception_try_exit(ptr nonnull [[EXNDATA]])
+  // finally.call-exit:  Predecessor is the no-match case in the catch mechanism
+  // which rethrows.
+  // CHECK:      call void @objc_exception_try_exit(ptr nonnull [[EXNDATA]])
   // CHECK-NEXT: call void @f4_help(i32 noundef 2)
-  // CHECK-NEXT: br i1
-  //   -> ret, rethrow
+  // CHECK-NEXT: br label
+  //   -> rethrow
 
-  // ret:
-  // CHECK:      ret void
+  // finally.end.critedge:  Predecessors are the @try and @catch fallthroughs.
+  // CHECK:      call void @objc_exception_try_exit(ptr nonnull [[EXNDATA]])
+  // CHECK-NEXT: call void @f4_help(i32 noundef 2)
+  // CHECK-NEXT: ret void
 
   // Catch mechanism:
   // CHECK:      call ptr @objc_exception_extract(ptr nonnull [[EXNDATA]])

@@ -26,15 +26,14 @@ class PatchEntries : public BinaryFunctionPass {
   struct Patch {
     const MCSymbol *Symbol;
     uint64_t Address;
-    uint64_t FileOffset;
-    BinarySection *Section;
+    uint32_t PaddingAfter = 0;
   };
 
 public:
   explicit PatchEntries() : BinaryFunctionPass(false) {}
 
   const char *getName() const override { return "patch-entries"; }
-  void runOnFunctions(BinaryContext &BC) override;
+  Error runOnFunctions(BinaryContext &BC) override;
 };
 
 } // namespace bolt

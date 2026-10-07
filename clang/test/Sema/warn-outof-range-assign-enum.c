@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wassign-enum %s
-// rdar://11824807
 
 typedef enum CCTestEnum
 {
@@ -51,6 +50,18 @@ void f(void)
   x += 1; // expected-warning {{integer constant not in range of enumerated type}}
 }
 
+typedef enum OutOfOrderTestEnum {
+  OO1 = 100,
+  OO2 = 50,
+  OO3 = 75,
+  OO4 = 9,
+  OO5 = 99
+} OutOfOrderTestEnum;
+
+OutOfOrderTestEnum t1 = 75;
+OutOfOrderTestEnum t2 = 9;
+OutOfOrderTestEnum t3 = 76; // expected-warning {{integer constant not in range of enumerated type 'OutOfOrderTestEnum'}}
+
 int main(void) {
   CCTestEnum test = 1; // expected-warning {{integer constant not in range of enumerated type 'CCTestEnum'}}
   test = 600; // expected-warning {{integer constant not in range of enumerated type 'CCTestEnum'}}
@@ -59,4 +70,3 @@ int main(void) {
   foo(4);
   foo(Two+1);
 }
-

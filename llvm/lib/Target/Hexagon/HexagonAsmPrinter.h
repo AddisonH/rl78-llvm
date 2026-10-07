@@ -27,12 +27,18 @@ class raw_ostream;
 class TargetMachine;
 
   class HexagonAsmPrinter : public AsmPrinter {
+  public:
+    static char ID;
+
+  private:
     const HexagonSubtarget *Subtarget = nullptr;
+
+    void emitAttributes();
 
   public:
     explicit HexagonAsmPrinter(TargetMachine &TM,
                                std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)) {}
+        : AsmPrinter(TM, std::move(Streamer), ID) {}
 
     bool runOnMachineFunction(MachineFunction &Fn) override {
       Subtarget = &Fn.getSubtarget<HexagonSubtarget>();
@@ -59,7 +65,11 @@ class TargetMachine;
     void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI);
     void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
     void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
+    void LowerPATCHABLE_EVENT_CALL(const MachineInstr &MI, bool Typed);
     void EmitSled(const MachineInstr &MI, SledKind Kind);
+
+    // KCFI check lowering.
+    void LowerKCFI_CHECK(const MachineInstr &MI);
 
     void HexagonProcessInstruction(MCInst &Inst, const MachineInstr &MBB);
 
@@ -68,6 +78,8 @@ class TargetMachine;
                          const char *ExtraCode, raw_ostream &OS) override;
     bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
                                const char *ExtraCode, raw_ostream &OS) override;
+    void emitStartOfAsmFile(Module &M) override;
+    void emitEndOfAsmFile(Module &M) override;
   };
 
 } // end namespace llvm

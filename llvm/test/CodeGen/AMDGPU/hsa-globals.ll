@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=amdgcn--amdhsa -mcpu=kaveri | FileCheck --check-prefix=ASM %s
+; RUN: llc < %s -mtriple=amdgpu7.00--amdhsa | FileCheck --check-prefix=ASM %s
 
 @linkonce_odr_global_program = linkonce_odr addrspace(1) global i32 0
 @linkonce_global_program = linkonce addrspace(1) global i32 0
@@ -16,7 +16,7 @@ define amdgpu_kernel void @test() {
 @weak_global = extern_weak addrspace(1) global i32
 
 ; ASM: .type linkonce_odr_global_program,@object
-; ASM: .section .bss,#alloc,#write
+; ASM: .section .bss,"aw"
 ; ASM: .weak linkonce_odr_global_program
 ; ASM: linkonce_odr_global_program:
 ; ASM: .long 0

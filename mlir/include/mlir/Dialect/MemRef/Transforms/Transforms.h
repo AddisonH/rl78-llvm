@@ -14,7 +14,8 @@
 #ifndef MLIR_DIALECT_MEMREF_TRANSFORMS_TRANSFORMS_H
 #define MLIR_DIALECT_MEMREF_TRANSFORMS_TRANSFORMS_H
 
-#include "mlir/Support/LogicalResult.h"
+#include "mlir/Support/LLVM.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 
 namespace mlir {
 class OpBuilder;
@@ -22,6 +23,7 @@ class RewritePatternSet;
 class RewriterBase;
 class Value;
 class ValueRange;
+class ReifyRankedShapedTypeOpInterface;
 
 namespace arith {
 class WideIntEmulationConverter;
@@ -31,10 +33,15 @@ class NarrowTypeEmulationConverter;
 namespace memref {
 class AllocOp;
 class AllocaOp;
+class DeallocOp;
 
 //===----------------------------------------------------------------------===//
 // Patterns
 //===----------------------------------------------------------------------===//
+
+/// Collects a set of patterns that bypass memref.reinterpet_cast Ops. This
+/// simplifies the IR in the context of lowering to EmitC.
+void populateElideReinterpretCastPatterns(RewritePatternSet &patterns);
 
 /// Collects a set of patterns to rewrite ops within the memref dialect.
 void populateExpandOpsPatterns(RewritePatternSet &patterns);
@@ -63,10 +70,14 @@ void populateExpandStridedMetadataPatterns(RewritePatternSet &patterns);
 /// `memref.extract_strided_metadata` of its source.
 void populateResolveExtractStridedMetadataPatterns(RewritePatternSet &patterns);
 
+/// Appends patterns for expanding `memref.realloc` operations.
+void populateExpandReallocPatterns(RewritePatternSet &patterns,
+                                   bool emitDeallocs = true);
+
 /// Appends patterns for emulating wide integer memref operations with ops over
 /// narrower integer types.
 void populateMemRefWideIntEmulationPatterns(
-    arith::WideIntEmulationConverter &typeConverter,
+    const arith::WideIntEmulationConverter &typeConverter,
     RewritePatternSet &patterns);
 
 /// Appends type conversions for emulating wide integer memref operations with
@@ -76,9 +87,17 @@ void populateMemRefWideIntEmulationConversions(
 
 /// Appends patterns for emulating memref operations over narrow types with ops
 /// over wider types.
+/// When `disableAtomicRMW` is true, the store patterns generate non-atomic
+/// read-modify-write sequences instead of atomic operations.
+/// When `assumeAligned` is true, `memref.subview` and
+/// `memref.reinterpret_cast` patterns accept dynamic offsets under the
+/// alignment contract that the caller guarantees those offsets are a multiple
+/// of `dstBits / srcBits`. When false (the default), dynamic offsets are
+/// rejected to preserve soundness for callers that cannot prove divisibility.
 void populateMemRefNarrowTypeEmulationPatterns(
-    arith::NarrowTypeEmulationConverter &typeConverter,
-    RewritePatternSet &patterns);
+    const arith::NarrowTypeEmulationConverter &typeConverter,
+    RewritePatternSet &patterns, bool disableAtomicRMW = false,
+    bool assumeAligned = false);
 
 /// Appends type conversions for emulating memref operations over narrow types
 /// with ops over wider types.
@@ -122,9 +141,13 @@ FailureOr<memref::AllocOp> multiBuffer(memref::AllocOp allocOp,
                                        unsigned multiplier,
                                        bool skipOverrideAnalysis = false);
 
-/// Appends patterns for extracting address computations from the instructions
-/// with memory accesses such that these memory accesses use only a base
-/// pointer.
+/// Appends patterns for extracting address computations from memory access
+/// operations such that these accesses use only a base pointer.
+///
+/// The patterns match memref::IndexedAccessOpInterface and
+/// VectorTransferOpInterface generically. Callers that rely on external models
+/// should register the appropriate dialect extensions, such as the NVGPU, GPU
+/// and Vector indexed-access models registered by RegisterAllDialects.
 ///
 /// For instance,
 /// ```mlir
@@ -137,6 +160,10 @@ FailureOr<memref::AllocOp> multiBuffer(memref::AllocOp allocOp,
 /// memref.load %new_base[%c0,...]
 /// ```
 void populateExtractAddressComputationsPatterns(RewritePatternSet &patterns);
+
+/// Patterns for flattening all supported multi-dimensional memref operations
+/// into one-dimensional memref operations.
+void populateFlattenMemrefsPatterns(RewritePatternSet &patterns);
 
 /// Build a new memref::AllocaOp whose dynamic sizes are independent of all
 /// given independencies. If the op is already independent of all
@@ -192,6 +219,14 @@ FailureOr<Value> replaceWithIndependentOp(RewriterBase &rewriter,
                                           memref::AllocaOp allocaOp,
                                           ValueRange independencies);
 
+/// Replaces the given `alloc` with the corresponding `alloca` and returns it if
+/// the following conditions are met:
+///   - the corresponding dealloc is available in the same block as the alloc;
+///   - the filter, if provided, succeeds on the alloc/dealloc pair.
+/// Otherwise returns nullptr and leaves the IR unchanged.
+memref::AllocaOp allocToAlloca(
+    RewriterBase &rewriter, memref::AllocOp alloc,
+    function_ref<bool(memref::AllocOp, memref::DeallocOp)> filter = nullptr);
 } // namespace memref
 } // namespace mlir
 

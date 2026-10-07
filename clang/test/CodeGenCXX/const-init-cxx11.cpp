@@ -1,6 +1,9 @@
 // RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++11 | FileCheck %s
 // RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++20 | FileCheck -check-prefix=CHECK20 %s
 
+// RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++11 -fexperimental-new-constant-interpreter | FileCheck %s
+// RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++20 -fexperimental-new-constant-interpreter | FileCheck -check-prefix=CHECK20 %s
+
 // FIXME: The padding in all these objects should be zero-initialized.
 namespace StructUnion {
   struct A {
@@ -226,8 +229,7 @@ namespace LiteralReference {
     int n;
   };
 
-  // This creates a non-const temporary and binds a reference to it.
-  // CHECK: @[[TEMP:.*]] = internal global {{.*}} { i32 5 }, align 4
+  // CHECK: @[[TEMP:.*]] = internal constant {{.*}} { i32 5 }, align 4
   // CHECK: @_ZN16LiteralReference3litE ={{.*}} constant {{.*}} @[[TEMP]], align 8
   const Lit &lit = Lit();
 
@@ -424,6 +426,8 @@ namespace DR2126 {
 // CHECK: @_ZN33ClassTemplateWithStaticDataMember3useE ={{.*}} constant ptr @_ZGRN33ClassTemplateWithStaticDataMember1SIvE1aE_
 // CHECK: @_ZGRN39ClassTemplateWithHiddenStaticDataMember1SIvE1aE_ = linkonce_odr hidden constant i32 5, comdat
 // CHECK: @_ZN39ClassTemplateWithHiddenStaticDataMember3useE ={{.*}} constant ptr @_ZGRN39ClassTemplateWithHiddenStaticDataMember1SIvE1aE_
+// CHECK: @.str.[[STR:[0-9]+]] ={{.*}} constant [9 x i8] c"12345678\00"
+// CHECK-NEXT: @e = global %struct.PR69979 { ptr @.str.[[STR]] }
 // CHECK: @_ZGRZN20InlineStaticConstRef3funEvE1i_ = linkonce_odr constant i32 10, comdat
 // CHECK20: @_ZZN12LocalVarInit4dtorEvE1a = internal constant {{.*}} i32 103
 
@@ -630,6 +634,19 @@ struct X {
 
 // CHECK: @_ZGRN34ClassWithStaticConstexprDataMember1X1pE_
 const char *f() { return &X::p; }
+}
+
+struct PR69979 {
+  const char (&d)[9];
+} e {"12345678"};
+
+namespace GH147949 {
+  struct Coordinate {};
+  Coordinate Make();
+  void TestBody() {
+    // CHECK: call {{.*}} @_ZN8GH1479494MakeEv
+    const Coordinate x{Make()};
+  }
 }
 
 // VirtualMembers::TemplateClass::templateMethod() must be defined in this TU,

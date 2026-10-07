@@ -80,12 +80,13 @@ public:
 
   bool useSoftFloat() const override;
 
-  bool ExpandInlineAsm(CallInst *) const override;
+  // Not a TargetLowering hook any more (removed upstream); see PORT-23.md.
+  bool ExpandInlineAsm(CallInst *) const;
 
   unsigned getJumpTableEncoding() const override;
 
-  bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
-                          MachineFunction &MF,
+  void getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
+                          const CallBase &I, MachineFunction &MF,
                           unsigned Intrinsic) const override;
 
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
@@ -129,7 +130,7 @@ public:
   bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
                       bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
-                      LLVMContext &Context) const override;
+                      LLVMContext &Context, const Type *RetTy) const override;
 
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                bool isVarArg,
@@ -186,40 +187,8 @@ public:
     return true;
   }
 
-  bool shouldSinkOperands(Instruction *I,
-                          SmallVectorImpl<Use *> &Ops) const override {
-
-    if (!I->getFunction()->hasOptSize())
-      return false;
-
-    for (unsigned i = 0; i < I->getNumOperands(); ++i) {
-      bool operandValid = true;
-      if (auto UI = dyn_cast<Instruction>(I->getOperandUse(i))) {
-
-        if (UI->getOpcode() == Instruction::Call ||
-            UI->getOpcode() == Instruction::Load ||
-            UI->getOpcode() == Instruction::Store ||
-            UI->getOpcode() == Instruction::Alloca)
-          operandValid = false;
-
-        if (UI->isTerminator() || isa<PHINode>(UI) || UI->isEHPad() ||
-            UI->mayThrow())
-          operandValid = false;
-
-        for (unsigned j = 0; (j < UI->getNumOperands()) && operandValid; ++j) {
-          if (auto UI2 = dyn_cast<Instruction>(UI->getOperandUse(j)))
-            operandValid = false;
-        }
-
-        if (operandValid && !UI->hasNUsesOrMore(2))
-          Ops.push_back(&I->getOperandUse(i));
-      }
-    }
-    return !Ops.empty();
-  }
-
   // It's always profitable to narrow on RL78.
-  bool isNarrowingProfitable(EVT VT1, EVT VT2) const override {
+  bool isNarrowingProfitable(SDNode *N, EVT VT1, EVT VT2) const override {
     return true;
   }
 
@@ -242,7 +211,7 @@ public:
   bool isDesirableToCommuteWithShift(const SDNode *N,
                                              CombineLevel Level) const override;
 
-  MVT getVectorIdxTy(const DataLayout &DL) const override { return MVT::i16; }
+  MVT getVectorIdxTy(const DataLayout &DL) const { return MVT::i16; }
 
   bool shouldPreservePtrArith(const Function &F, EVT PtrVT) const override {
     return PtrVT.getSizeInBits() == 32;

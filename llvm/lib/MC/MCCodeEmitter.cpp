@@ -7,7 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include <string>
 
 using namespace llvm;
 
@@ -15,10 +18,17 @@ MCCodeEmitter::MCCodeEmitter() = default;
 
 MCCodeEmitter::~MCCodeEmitter() = default;
 
-void MCCodeEmitter::encodeInstruction(const MCInst &Inst,
-                                      SmallVectorImpl<char> &CB,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const {
-  raw_svector_ostream OS(CB);
-  encodeInstruction(Inst, OS, Fixups, STI);
+void MCCodeEmitter::reportUnsupportedInst(const MCInst &Inst) {
+  std::string Msg;
+  raw_string_ostream OS(Msg);
+  OS << "Unsupported instruction : " << Inst;
+  reportFatalInternalError(Msg.c_str());
+}
+
+void MCCodeEmitter::reportUnsupportedOperand(const MCInst &Inst,
+                                             unsigned OpNum) {
+  std::string Msg;
+  raw_string_ostream OS(Msg);
+  OS << "Unsupported instruction operand : \"" << Inst << "\"[" << OpNum << "]";
+  reportFatalInternalError(Msg.c_str());
 }

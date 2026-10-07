@@ -7,8 +7,8 @@ define void @pass_va(i32 %count, ...) nounwind {
 ; CHECK-NEXT:    str x30, [sp, #-80]! // 8-byte Folded Spill
 ; CHECK-NEXT:    add x8, sp, #24
 ; CHECK-NEXT:    add x0, sp, #24
-; CHECK-NEXT:    stp x3, x4, [sp, #40]
 ; CHECK-NEXT:    stp x1, x2, [sp, #24]
+; CHECK-NEXT:    stp x3, x4, [sp, #40]
 ; CHECK-NEXT:    stp x5, x6, [sp, #56]
 ; CHECK-NEXT:    str x7, [sp, #72]
 ; CHECK-NEXT:    str x8, [sp, #8]
@@ -82,8 +82,8 @@ define void @copy1(i64 %a0, ...) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    sub sp, sp, #80
 ; CHECK-NEXT:    add x8, sp, #24
-; CHECK-NEXT:    stp x3, x4, [sp, #40]
 ; CHECK-NEXT:    stp x1, x2, [sp, #24]
+; CHECK-NEXT:    stp x3, x4, [sp, #40]
 ; CHECK-NEXT:    stp x5, x6, [sp, #56]
 ; CHECK-NEXT:    str x7, [sp, #72]
 ; CHECK-NEXT:    stp x8, x8, [sp], #80
@@ -109,7 +109,7 @@ define i32 @fp(ptr, i64, ptr, ...) local_unnamed_addr #6 {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    stp x19, x20, [sp, #-96]! // 16-byte Folded Spill
 ; CHECK-NEXT:    .seh_save_regp_x x19, 96
-; CHECK-NEXT:    str x21, [sp, #16] // 8-byte Folded Spill
+; CHECK-NEXT:    str x21, [sp, #16] // 8-byte Spill
 ; CHECK-NEXT:    .seh_save_reg x21, 16
 ; CHECK-NEXT:    stp x29, x30, [sp, #24] // 16-byte Folded Spill
 ; CHECK-NEXT:    .seh_save_fplr 24
@@ -133,12 +133,12 @@ define i32 @fp(ptr, i64, ptr, ...) local_unnamed_addr #6 {
 ; CHECK-NEXT:    mov x4, xzr
 ; CHECK-NEXT:    orr x0, x8, #0x2
 ; CHECK-NEXT:    bl __stdio_common_vsprintf
-; CHECK-NEXT:    cmp w0, #0
-; CHECK-NEXT:    csinv w0, w0, wzr, ge
+; CHECK-NEXT:    cmn w0, #1
+; CHECK-NEXT:    csinv w0, w0, wzr, gt
 ; CHECK-NEXT:    .seh_startepilogue
 ; CHECK-NEXT:    ldp x29, x30, [sp, #24] // 16-byte Folded Reload
 ; CHECK-NEXT:    .seh_save_fplr 24
-; CHECK-NEXT:    ldr x21, [sp, #16] // 8-byte Folded Reload
+; CHECK-NEXT:    ldr x21, [sp, #16] // 8-byte Reload
 ; CHECK-NEXT:    .seh_save_reg x21, 16
 ; CHECK-NEXT:    ldp x19, x20, [sp], #96 // 16-byte Folded Reload
 ; CHECK-NEXT:    .seh_save_regp_x x19, 96
@@ -171,24 +171,24 @@ define void @vla(i32, ptr, ...) local_unnamed_addr {
 ; CHECK-NEXT:    .seh_save_regp_x x19, 112
 ; CHECK-NEXT:    stp x21, x22, [sp, #16] // 16-byte Folded Spill
 ; CHECK-NEXT:    .seh_save_regp x21, 16
-; CHECK-NEXT:    str x23, [sp, #32] // 8-byte Folded Spill
+; CHECK-NEXT:    str x23, [sp, #32] // 8-byte Spill
 ; CHECK-NEXT:    .seh_save_reg x23, 32
 ; CHECK-NEXT:    stp x29, x30, [sp, #40] // 16-byte Folded Spill
 ; CHECK-NEXT:    .seh_save_fplr 40
 ; CHECK-NEXT:    add x29, sp, #40
 ; CHECK-NEXT:    .seh_add_fp 40
 ; CHECK-NEXT:    .seh_endprologue
-; CHECK-NEXT:    add x8, x29, #24
 ; CHECK-NEXT:    // kill: def $w0 killed $w0 def $x0
+; CHECK-NEXT:    add x8, x29, #24
 ; CHECK-NEXT:    mov w9, w0
 ; CHECK-NEXT:    mov x19, x1
-; CHECK-NEXT:    mov x23, sp
-; CHECK-NEXT:    stp x3, x4, [x29, #32]
-; CHECK-NEXT:    stp x8, x2, [x29, #16]
+; CHECK-NEXT:    str x8, [x29, #16]
 ; CHECK-NEXT:    add x8, x9, #15
+; CHECK-NEXT:    mov x23, sp
 ; CHECK-NEXT:    lsr x15, x8, #4
-; CHECK-NEXT:    stp x5, x6, [x29, #48]
-; CHECK-NEXT:    str x7, [x29, #64]
+; CHECK-NEXT:    stp x2, x3, [x29, #24]
+; CHECK-NEXT:    stp x4, x5, [x29, #40]
+; CHECK-NEXT:    stp x6, x7, [x29, #56]
 ; CHECK-NEXT:    bl __chkstk
 ; CHECK-NEXT:    sub x20, sp, x15, lsl #4
 ; CHECK-NEXT:    mov sp, x20
@@ -209,7 +209,7 @@ define void @vla(i32, ptr, ...) local_unnamed_addr {
 ; CHECK-NEXT:    .seh_add_fp 40
 ; CHECK-NEXT:    ldp x29, x30, [sp, #40] // 16-byte Folded Reload
 ; CHECK-NEXT:    .seh_save_fplr 40
-; CHECK-NEXT:    ldr x23, [sp, #32] // 8-byte Folded Reload
+; CHECK-NEXT:    ldr x23, [sp, #32] // 8-byte Reload
 ; CHECK-NEXT:    .seh_save_reg x23, 32
 ; CHECK-NEXT:    ldp x21, x22, [sp, #16] // 16-byte Folded Reload
 ; CHECK-NEXT:    .seh_save_regp x21, 16
@@ -268,8 +268,8 @@ define i32 @snprintf(ptr, i64, ptr, ...) local_unnamed_addr #5 {
 ; CHECK-NEXT:    mov x4, xzr
 ; CHECK-NEXT:    orr x0, x8, #0x2
 ; CHECK-NEXT:    bl __stdio_common_vsprintf
-; CHECK-NEXT:    cmp w0, #0
-; CHECK-NEXT:    csinv w0, w0, wzr, ge
+; CHECK-NEXT:    cmn w0, #1
+; CHECK-NEXT:    csinv w0, w0, wzr, gt
 ; CHECK-NEXT:    .seh_startepilogue
 ; CHECK-NEXT:    ldp x21, x30, [sp, #32] // 16-byte Folded Reload
 ; CHECK-NEXT:    .seh_save_lrpair x21, 32
@@ -308,11 +308,11 @@ define void @fixed_params(i32, double, i32, double, i32, double, i32, double, i3
 ; CHECK-NEXT:    fmov x3, d1
 ; CHECK-NEXT:    fmov x5, d2
 ; CHECK-NEXT:    fmov x7, d3
-; CHECK-NEXT:    str x30, [sp, #16] // 8-byte Folded Spill
+; CHECK-NEXT:    str x30, [sp, #16] // 8-byte Spill
 ; CHECK-NEXT:    str d4, [sp, #8]
 ; CHECK-NEXT:    str w8, [sp]
 ; CHECK-NEXT:    bl varargs
-; CHECK-NEXT:    ldr x30, [sp, #16] // 8-byte Folded Reload
+; CHECK-NEXT:    ldr x30, [sp, #16] // 8-byte Reload
 ; CHECK-NEXT:    add sp, sp, #32
 ; CHECK-NEXT:    ret
   tail call void (i32, ...) @varargs(i32 %0, double %1, i32 %2, double %3, i32 %4, double %5, i32 %6, double %7, i32 %8, double %9)

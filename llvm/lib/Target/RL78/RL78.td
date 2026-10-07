@@ -23,6 +23,10 @@ include "llvm/Target/Target.td"
 include "RL78Schedule.td"
 include "RL78InstrInfo.td"
 
+// Generic pseudos with pointer operands (LOAD_STACK_GUARD, ...) use 16-bit
+// register pairs.
+defm : RemapAllTargetPseudoPointerOperands<RL78RPRegs>;
+
 def RL78InstrInfo : InstrInfo {
   // this will be the default behavior in the future, so better to be prepared
   let guessInstructionProperties = 0;

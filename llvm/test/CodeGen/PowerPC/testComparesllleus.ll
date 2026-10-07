@@ -53,9 +53,8 @@ entry:
 define i64 @test_llleus_sext_z(i16 zeroext %a) {
 ; CHECK-LABEL: test_llleus_sext_z:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    cntlzw r3, r3
-; CHECK-NEXT:    srwi r3, r3, 5
-; CHECK-NEXT:    neg r3, r3
+; CHECK-NEXT:    addic r3, r3, -1
+; CHECK-NEXT:    subfe r3, r3, r3
 ; CHECK-NEXT:    blr
 entry:
   %cmp = icmp ule i16 %a, 0
@@ -68,10 +67,10 @@ define dso_local void @test_llleus_store(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: test_llleus_store:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    sub r3, r4, r3
-; CHECK-NEXT:    addis r5, r2, glob@toc@ha
+; CHECK-NEXT:    addis r4, r2, glob@toc@ha
 ; CHECK-NEXT:    not r3, r3
 ; CHECK-NEXT:    rldicl r3, r3, 1, 63
-; CHECK-NEXT:    sth r3, glob@toc@l(r5)
+; CHECK-NEXT:    sth r3, glob@toc@l(r4)
 ; CHECK-NEXT:    blr
 entry:
   %cmp = icmp ule i16 %a, %b
@@ -85,10 +84,10 @@ define dso_local void @test_llleus_sext_store(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: test_llleus_sext_store:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    sub r3, r4, r3
-; CHECK-NEXT:    addis r5, r2, glob@toc@ha
+; CHECK-NEXT:    addis r4, r2, glob@toc@ha
 ; CHECK-NEXT:    rldicl r3, r3, 1, 63
 ; CHECK-NEXT:    addi r3, r3, -1
-; CHECK-NEXT:    sth r3, glob@toc@l(r5)
+; CHECK-NEXT:    sth r3, glob@toc@l(r4)
 ; CHECK-NEXT:    blr
 entry:
   %cmp = icmp ule i16 %a, %b
@@ -117,10 +116,9 @@ entry:
 define dso_local void @test_llleus_sext_z_store(i16 zeroext %a) {
 ; CHECK-LABEL: test_llleus_sext_z_store:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    cntlzw r3, r3
+; CHECK-NEXT:    addic r3, r3, -1
 ; CHECK-NEXT:    addis r4, r2, glob@toc@ha
-; CHECK-NEXT:    srwi r3, r3, 5
-; CHECK-NEXT:    neg r3, r3
+; CHECK-NEXT:    subfe r3, r3, r3
 ; CHECK-NEXT:    sth r3, glob@toc@l(r4)
 ; CHECK-NEXT:    blr
 entry:

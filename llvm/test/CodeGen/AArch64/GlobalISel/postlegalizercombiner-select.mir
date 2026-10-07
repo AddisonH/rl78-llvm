@@ -8,12 +8,14 @@ body:             |
   bb.1:
     liveins: $x0, $x1
     ; CHECK-LABEL: name: test_combine_select_same_res
-    ; CHECK: [[COPY:%[0-9]+]]:_(s64) = COPY $x0
-    ; CHECK: $x0 = COPY [[COPY]](s64)
-    %0:_(s64) = COPY $x0
-    %1:_(s1) = G_TRUNC %0
-    %2:_(s64) = G_SELECT %1, %0, %0
-    $x0 = COPY %2(s64)
+    ; CHECK: liveins: $x0, $x1
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: [[COPY:%[0-9]+]]:_(i64) = COPY $x0
+    ; CHECK-NEXT: $x0 = COPY [[COPY]](i64)
+    %0:_(i64) = COPY $x0
+    %1:_(i1) = G_TRUNC %0
+    %2:_(i64) = G_SELECT %1, %0, %0
+    $x0 = COPY %2(i64)
 ...
 ---
 # select (undef, x, y) -> y
@@ -23,13 +25,15 @@ body:             |
   bb.1:
     liveins: $x0, $x1
     ; CHECK-LABEL: name: test_combine_select_undef_res0_res1
-    ; CHECK: [[COPY:%[0-9]+]]:_(s64) = COPY $x0
-    ; CHECK: $x0 = COPY [[COPY]](s64)
-    %0:_(s64) = COPY $x0
-    %1:_(s64) = COPY $x1
-    %2:_(s1) = G_IMPLICIT_DEF
-    %3:_(s64) = G_SELECT %2, %0, %1
-    $x0 = COPY %3(s64)
+    ; CHECK: liveins: $x0, $x1
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: [[COPY:%[0-9]+]]:_(i64) = COPY $x1
+    ; CHECK-NEXT: $x0 = COPY [[COPY]](i64)
+    %0:_(i64) = COPY $x0
+    %1:_(i64) = COPY $x1
+    %2:_(i1) = G_IMPLICIT_DEF
+    %3:_(i64) = G_SELECT %2, %0, %1
+    $x0 = COPY %3(i64)
 ...
 ---
 # select (false, x, y) -> y
@@ -39,13 +43,15 @@ body:             |
   bb.1:
     liveins: $x0, $x1
     ; CHECK-LABEL: name: test_combine_select_false_res0_res1
-    ; CHECK: [[COPY:%[0-9]+]]:_(s64) = COPY $x1
-    ; CHECK: $x0 = COPY [[COPY]](s64)
-    %0:_(s64) = COPY $x0
-    %1:_(s64) = COPY $x1
-    %2:_(s1) = G_CONSTANT i1 false
-    %3:_(s64) = G_SELECT %2, %0, %1
-    $x0 = COPY %3(s64)
+    ; CHECK: liveins: $x0, $x1
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: [[COPY:%[0-9]+]]:_(i64) = COPY $x1
+    ; CHECK-NEXT: $x0 = COPY [[COPY]](i64)
+    %0:_(i64) = COPY $x0
+    %1:_(i64) = COPY $x1
+    %2:_(i1) = G_CONSTANT i1 false
+    %3:_(i64) = G_SELECT %2, %0, %1
+    $x0 = COPY %3(i64)
 ...
 ---
 # select (true, x, y) -> x
@@ -55,11 +61,13 @@ body:             |
   bb.1:
     liveins: $x0, $x1
     ; CHECK-LABEL: name: test_combine_select_true_res0_res1
-    ; CHECK: [[COPY:%[0-9]+]]:_(s64) = COPY $x0
-    ; CHECK: $x0 = COPY [[COPY]](s64)
-    %0:_(s64) = COPY $x0
-    %1:_(s64) = COPY $x1
-    %2:_(s1) = G_CONSTANT i1 true
-    %3:_(s64) = G_SELECT %2, %0, %1
-    $x0 = COPY %3(s64)
+    ; CHECK: liveins: $x0, $x1
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: [[COPY:%[0-9]+]]:_(i64) = COPY $x0
+    ; CHECK-NEXT: $x0 = COPY [[COPY]](i64)
+    %0:_(i64) = COPY $x0
+    %1:_(i64) = COPY $x1
+    %2:_(i1) = G_CONSTANT i1 true
+    %3:_(i64) = G_SELECT %2, %0, %1
+    $x0 = COPY %3(i64)
 ...

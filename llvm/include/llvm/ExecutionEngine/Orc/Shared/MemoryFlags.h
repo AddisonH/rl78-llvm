@@ -72,7 +72,7 @@ inline MemProt fromSysMemoryProtectionFlags(sys::Memory::ProtectionFlags PF) {
 /// deallocated if a call is made to
 /// JITLinkMemoryManager::InFlightAllocation::abandon. The policies below apply
 /// to finalized allocations.
-enum class MemLifetimePolicy {
+enum class MemLifetime {
   /// Standard memory should be allocated by the allocator and then deallocated
   /// when the deallocate method is called for the finalized allocation.
   Standard,
@@ -89,15 +89,15 @@ enum class MemLifetimePolicy {
 };
 
 /// Print a MemDeallocPolicy.
-inline raw_ostream &operator<<(raw_ostream &OS, MemLifetimePolicy MLP) {
+inline raw_ostream &operator<<(raw_ostream &OS, MemLifetime MLP) {
   switch (MLP) {
-  case MemLifetimePolicy::Standard:
+  case MemLifetime::Standard:
     OS << "standard";
     break;
-  case MemLifetimePolicy::Finalize:
+  case MemLifetime::Finalize:
     OS << "finalize";
     break;
-  case MemLifetimePolicy::NoAlloc:
+  case MemLifetime::NoAlloc:
     OS << "noalloc";
     break;
   }
@@ -124,11 +124,11 @@ public:
   AllocGroup() = default;
 
   /// Create an AllocGroup from a MemProt only -- uses
-  /// MemLifetimePolicy::Standard.
+  /// MemLifetime::Standard.
   AllocGroup(MemProt MP) : Id(static_cast<underlying_type>(MP)) {}
 
-  /// Create an AllocGroup from a MemProt and a MemLifetimePolicy.
-  AllocGroup(MemProt MP, MemLifetimePolicy MLP)
+  /// Create an AllocGroup from a MemProt and a MemLifetime.
+  AllocGroup(MemProt MP, MemLifetime MLP)
       : Id(static_cast<underlying_type>(MP) |
            (static_cast<underlying_type>(MLP) << BitsForProt)) {}
 
@@ -137,9 +137,9 @@ public:
     return static_cast<MemProt>(Id & ((1U << BitsForProt) - 1));
   }
 
-  /// Returns the MemLifetimePolicy for this group.
-  MemLifetimePolicy getMemLifetimePolicy() const {
-    return static_cast<MemLifetimePolicy>(Id >> BitsForProt);
+  /// Returns the MemLifetime for this group.
+  MemLifetime getMemLifetime() const {
+    return static_cast<MemLifetime>(Id >> BitsForProt);
   }
 
   friend bool operator==(const AllocGroup &LHS, const AllocGroup &RHS) {
@@ -184,7 +184,7 @@ public:
   iterator end() { return Elems.end(); }
   iterator find(AllocGroup G) {
     auto I = lower_bound(Elems, G, compareKey);
-    return (I->first == G) ? I : end();
+    return (I == end() || I->first == G) ? I : end();
   }
 
   bool empty() const { return Elems.empty(); }
@@ -203,17 +203,12 @@ private:
 
 /// Print an AllocGroup.
 inline raw_ostream &operator<<(raw_ostream &OS, AllocGroup AG) {
-  return OS << '(' << AG.getMemProt() << ", " << AG.getMemLifetimePolicy()
-            << ')';
+  return OS << '(' << AG.getMemProt() << ", " << AG.getMemLifetime() << ')';
 }
 
 } // end namespace orc
 
 template <> struct DenseMapInfo<orc::MemProt> {
-  static inline orc::MemProt getEmptyKey() { return orc::MemProt(~uint8_t(0)); }
-  static inline orc::MemProt getTombstoneKey() {
-    return orc::MemProt(~uint8_t(0) - 1);
-  }
   static unsigned getHashValue(const orc::MemProt &Val) {
     using UT = std::underlying_type_t<orc::MemProt>;
     return DenseMapInfo<UT>::getHashValue(static_cast<UT>(Val));
@@ -224,12 +219,6 @@ template <> struct DenseMapInfo<orc::MemProt> {
 };
 
 template <> struct DenseMapInfo<orc::AllocGroup> {
-  static inline orc::AllocGroup getEmptyKey() {
-    return orc::AllocGroup(~uint8_t(0));
-  }
-  static inline orc::AllocGroup getTombstoneKey() {
-    return orc::AllocGroup(~uint8_t(0) - 1);
-  }
   static unsigned getHashValue(const orc::AllocGroup &Val) {
     return DenseMapInfo<orc::AllocGroup::underlying_type>::getHashValue(Val.Id);
   }

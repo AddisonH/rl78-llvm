@@ -86,6 +86,7 @@
 #include <type_traits> // std::is_integral, std::is_enum, std::underlying_type,
                        // std::enable_if
 
+#include "llvm/ADT/STLForwardCompat.h" // llvm::to_underlying
 #include "llvm/Support/MathExtras.h" // AddOverflow / SubOverflow
 
 namespace llvm {
@@ -139,8 +140,7 @@ struct CheckedInt {
   template <typename Enum,
             std::enable_if_t<std::is_enum<Enum>::value, bool> = 0>
   static CheckedInt from(Enum FromValue) {
-    using type = std::underlying_type_t<Enum>;
-    return from<type>(static_cast<type>(FromValue));
+    return from(llvm::to_underlying(FromValue));
   }
 
   // Equality
@@ -304,6 +304,16 @@ template <typename T, typename = std::enable_if_t<std::is_integral<T>::value &&
                                                   !std::is_enum<T>::value>>
 auto seq(T Begin, T End) {
   return iota_range<T>(Begin, End, false);
+}
+
+/// Iterate over an integral type from 0 up to - but not including - Size.
+/// Note: Size value has to be within [INTMAX_MIN, INTMAX_MAX - 1] for
+/// forward iteration (resp. [INTMAX_MIN + 1, INTMAX_MAX - 1] for reverse
+/// iteration).
+template <typename T, typename = std::enable_if_t<std::is_integral<T>::value &&
+                                                  !std::is_enum<T>::value>>
+auto seq(T Size) {
+  return seq<T>(0, Size);
 }
 
 /// Iterate over an integral type from Begin to End inclusive.

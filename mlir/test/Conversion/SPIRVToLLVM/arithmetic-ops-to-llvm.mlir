@@ -1,4 +1,4 @@
-// RUN: mlir-opt -convert-spirv-to-llvm='use-opaque-pointers=1' %s | FileCheck %s
+// RUN: mlir-opt -convert-spirv-to-llvm %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
 // spirv.IAdd
@@ -231,5 +231,25 @@ spirv.func @srem_scalar(%arg0: i32, %arg1: i32) "None" {
 spirv.func @srem_vector(%arg0: vector<4xi32>, %arg1: vector<4xi32>) "None" {
   // CHECK: llvm.srem %{{.*}}, %{{.*}} : vector<4xi32>
   %0 = spirv.SRem %arg0, %arg1 : vector<4xi32>
+  spirv.Return
+}
+
+//===----------------------------------------------------------------------===//
+// spirv.SNegate
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @snegate_scalar
+spirv.func @snegate_scalar(%arg0: i32) "None" {
+  // CHECK: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : i32
+  // CHECK: llvm.sub %[[ZERO]], %{{.*}} : i32
+  %0 = spirv.SNegate %arg0 : i32
+  spirv.Return
+}
+
+// CHECK-LABEL: @snegate_vector
+spirv.func @snegate_vector(%arg0: vector<4xi32>) "None" {
+  // CHECK: %[[ZERO:.*]] = llvm.mlir.constant(dense<0> : vector<4xi32>) : vector<4xi32>
+  // CHECK: llvm.sub %[[ZERO]], %{{.*}} : vector<4xi32>
+  %0 = spirv.SNegate %arg0 : vector<4xi32>
   spirv.Return
 }

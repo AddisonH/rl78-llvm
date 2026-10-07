@@ -43,6 +43,9 @@ struct ReportFile {
   // PID of the process that opened fd. If a fork() occurs,
   // the PID of child will be different from fd_pid.
   uptr fd_pid;
+  // Set to true if the last attempt to open the logfile failed, perhaps due to
+  // permission errors
+  bool fallbackToStderrActive = false;
 
  private:
   void ReopenIfNecessary();
@@ -84,7 +87,7 @@ bool IsPathSeparator(const char c);
 bool IsAbsolutePath(const char *path);
 // Returns true on success, false on failure.
 bool CreateDir(const char *pathname);
-// Starts a subprocess and returs its pid.
+// Starts a subprocess and returns its pid.
 // If *_fd parameters are not kInvalidFd their corresponding input/output
 // streams will be redirect to the file. The files will always be closed
 // in parent process even in case of an error.

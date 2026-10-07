@@ -9,6 +9,8 @@ from lldbsuite.test import lldbutil
 
 
 class TestCPPBreakpointLocations(TestBase):
+    SHARED_BUILD_TESTCASE = False
+
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24764")
     def test(self):
         self.do_test(dict())
@@ -27,7 +29,7 @@ class TestCPPBreakpointLocations(TestBase):
         name = bp_dict["name"]
         names = bp_dict["loc_names"]
         bp = target.BreakpointCreateByName(name)
-        self.assertEquals(
+        self.assertEqual(
             bp.GetNumLocations(),
             len(names),
             "Make sure we find the right number of breakpoint locations for {}".format(
@@ -136,6 +138,9 @@ class TestCPPBreakpointLocations(TestBase):
             self.verify_breakpoint_locations(target, bp_dict)
 
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24764")
+    # Wasm emits a single merged destructor rather than the distinct D1/D2
+    # variants whose mangled names this test looks up by hand.
+    @skipIfWasm
     def test_destructors(self):
         self.build()
         exe = self.getBuildArtifact("a.out")
@@ -157,7 +162,7 @@ class TestCPPBreakpointLocations(TestBase):
                 bp_loc_names = {
                     bp_loc.GetAddress().GetFunction().GetName() for bp_loc in bp
                 }
-                self.assertEquals(
+                self.assertEqual(
                     bp_loc_names, loc_names, "Breakpoint set on the correct symbol"
                 )
 
@@ -165,13 +170,13 @@ class TestCPPBreakpointLocations(TestBase):
                 symbol_addresses = set()
                 for symbol in symbols:
                     sc_list = target.FindSymbols(symbol, lldb.eSymbolTypeCode)
-                    self.assertEquals(sc_list.GetSize(), 1, "Found symbol " + symbol)
+                    self.assertEqual(sc_list.GetSize(), 1, "Found symbol " + symbol)
                     symbol = sc_list.GetContextAtIndex(0).GetSymbol()
                     symbol_addresses.add(
                         symbol.GetStartAddress().GetLoadAddress(target)
                     )
 
-                self.assertEquals(
+                self.assertEqual(
                     symbol_addresses, bp_addresses, "Breakpoint set on correct address"
                 )
         finally:

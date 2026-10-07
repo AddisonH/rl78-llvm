@@ -36,6 +36,58 @@ using namespace lldb_private;
 #define LLDB_OPTIONS_register_read
 #include "CommandOptions.inc"
 
+static size_t GetNameSize(const RegisterInfo *reg_info, bool use_primary_name) {
+  const char *reg_name = use_primary_name ? reg_info->name : reg_info->alt_name;
+  return reg_name ? strlen(reg_name) : 0;
+}
+
+static size_t ComputeLongestRegisterName(RegisterContext *reg_ctx,
+                                         const RegisterSet &reg_set,
+                                         bool use_primary_name,
+                                         bool primitive_only) {
+  const size_t num_registers = reg_set.num_registers;
+  size_t name_right_align_at = 0;
+
+  // Loop through all the registers to find the longest register name.
+  for (size_t reg_idx = 0; reg_idx < num_registers; ++reg_idx) {
+    const size_t reg = reg_set.registers[reg_idx];
+    if (const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoAtIndex(reg)) {
+      // Derived registers are skipped if primitive_only is true.
+      if (primitive_only && reg_info->value_regs)
+        continue;
+
+      name_right_align_at = std::max(name_right_align_at,
+                                     GetNameSize(reg_info, use_primary_name));
+    }
+  }
+
+  return name_right_align_at;
+}
+
+// We expect that [command] only contains register names to be printed.
+static size_t ComputeLongestRegisterName(Args &command,
+                                         RegisterContext *reg_ctx,
+                                         bool use_primary_name) {
+  size_t name_right_align_at = 0;
+
+  // Loop through all the arguments to find the longest register name.
+  for (auto &entry : command) {
+    // In most LLDB commands we accept '$<register>' as well as '<register>'
+    // for example '$rbx' for 'rbx'. However internally the name does not have
+    // '$'.
+    llvm::StringRef arg_str = entry.ref();
+    arg_str.consume_front("$");
+
+    if (const RegisterInfo *reg_info =
+            reg_ctx->GetRegisterInfoByName(arg_str)) {
+      name_right_align_at = std::max(name_right_align_at,
+                                     GetNameSize(reg_info, use_primary_name));
+    }
+  }
+
+  return name_right_align_at;
+}
+
 class CommandObjectRegisterRead : public CommandObjectParsed {
 public:
   CommandObjectRegisterRead(CommandInterpreter &interpreter)
@@ -50,19 +102,7 @@ public:
                          {{CommandArgumentType::eArgTypeFormat,
                            "Specify a format to be used for display. If this "
                            "is set, register fields will not be displayed."}}) {
-    CommandArgumentEntry arg;
-    CommandArgumentData register_arg;
-
-    // Define the first (and only) variant of this arg.
-    register_arg.arg_type = eArgTypeRegisterName;
-    register_arg.arg_repetition = eArgRepeatStar;
-
-    // There is only one variant this argument could be; put it into the
-    // argument entry.
-    arg.push_back(register_arg);
-
-    // Push the data for the first argument into the m_arguments vector.
-    m_arguments.push_back(arg);
+    AddSimpleArgumentList(eArgTypeRegisterName, eArgRepeatStar);
 
     // Add the "--format"
     m_option_group.Append(&m_format_options,
@@ -80,16 +120,14 @@ public:
                            OptionElementVector &opt_element_vector) override {
     if (!m_exe_ctx.HasProcessScope())
       return;
-
-    lldb_private::CommandCompletions::InvokeCommonCompletionCallbacks(
-        GetCommandInterpreter(), lldb::eRegisterCompletion, request, nullptr);
+    CommandObject::HandleArgumentCompletion(request, opt_element_vector);
   }
 
   Options *GetOptions() override { return &m_option_group; }
 
   bool DumpRegister(const ExecutionContext &exe_ctx, Stream &strm,
                     RegisterContext &reg_ctx, const RegisterInfo &reg_info,
-                    bool print_flags) {
+                    bool print_flags, size_t reg_name_right_align_at) {
     RegisterValue reg_value;
     if (!reg_ctx.ReadRegister(&reg_info, reg_value))
       return false;
@@ -99,7 +137,8 @@ public:
     bool prefix_with_altname = (bool)m_command_options.alternate_name;
     bool prefix_with_name = !prefix_with_altname;
     DumpRegisterValue(reg_value, strm, reg_info, prefix_with_name,
-                      prefix_with_altname, m_format_options.GetFormat(), 8,
+                      prefix_with_altname, m_format_options.GetFormat(),
+                      reg_name_right_align_at,
                       exe_ctx.GetBestExecutionContextScope(), print_flags,
                       exe_ctx.GetTargetSP());
     if ((reg_info.encoding == eEncodingUint) ||
@@ -109,8 +148,8 @@ public:
         addr_t reg_addr = reg_value.GetAsUInt64(LLDB_INVALID_ADDRESS);
         if (reg_addr != LLDB_INVALID_ADDRESS) {
           Address so_reg_addr;
-          if (exe_ctx.GetTargetRef().GetSectionLoadList().ResolveLoadAddress(
-                  reg_addr, so_reg_addr)) {
+          if (exe_ctx.GetTargetRef().ResolveLoadAddress(reg_addr,
+                                                        so_reg_addr)) {
             strm.PutCString("  ");
             so_reg_addr.Dump(&strm, exe_ctx.GetBestExecutionContextScope(),
                              Address::DumpStyleResolvedDescription);
@@ -137,6 +176,8 @@ public:
       strm.Printf("%s:\n", (reg_set->name ? reg_set->name : "unknown"));
       strm.IndentMore();
       const size_t num_registers = reg_set->num_registers;
+      size_t reg_name_right_align_at = ComputeLongestRegisterName(
+          reg_ctx, *reg_set, !m_command_options.alternate_name, primitive_only);
       for (size_t reg_idx = 0; reg_idx < num_registers; ++reg_idx) {
         const uint32_t reg = reg_set->registers[reg_idx];
         const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoAtIndex(reg);
@@ -144,8 +185,9 @@ public:
         if (primitive_only && reg_info && reg_info->value_regs)
           continue;
 
-        if (reg_info && DumpRegister(exe_ctx, strm, *reg_ctx, *reg_info,
-                                     /*print_flags=*/false))
+        if (reg_info &&
+            DumpRegister(exe_ctx, strm, *reg_ctx, *reg_info,
+                         /*print_flags=*/false, reg_name_right_align_at))
           ++available_count;
         else
           ++unavailable_count;
@@ -161,7 +203,7 @@ public:
   }
 
 protected:
-  bool DoExecute(Args &command, CommandReturnObject &result) override {
+  void DoExecute(Args &command, CommandReturnObject &result) override {
     Stream &strm = result.GetOutputStream();
     RegisterContext *reg_ctx = m_exe_ctx.GetRegisterContext();
 
@@ -185,8 +227,8 @@ protected:
               break;
             }
           } else {
-            result.AppendErrorWithFormat(
-                "invalid register set index: %" PRIu64 "\n", (uint64_t)set_idx);
+            result.AppendErrorWithFormat("invalid register set index: %" PRIu64,
+                                         (uint64_t)set_idx);
             break;
           }
         }
@@ -209,6 +251,10 @@ protected:
         result.AppendError("the --set <set> option can't be used when "
                            "registers names are supplied as arguments\n");
       } else {
+        int reg_name_right_align_at = ComputeLongestRegisterName(
+            command, reg_ctx, !m_command_options.alternate_name);
+        // Extra ident to be consistent with register sets dumping.
+        strm.IndentMore();
         for (auto &entry : command) {
           // in most LLDB commands we accept $rbx as the name for register RBX
           // - and here we would reject it and non-existant. we should be more
@@ -224,17 +270,19 @@ protected:
             // printing flags afterwards.
             bool print_flags =
                 !m_format_options.GetFormatValue().OptionWasSet();
-            if (!DumpRegister(m_exe_ctx, strm, *reg_ctx, *reg_info,
-                              print_flags))
+            if (!DumpRegister(m_exe_ctx, strm, *reg_ctx, *reg_info, print_flags,
+                              reg_name_right_align_at))
               strm.Printf("%-12s = error: unavailable\n", reg_info->name);
           } else {
-            result.AppendErrorWithFormat("Invalid register name '%s'.\n",
+            result.AppendErrorWithFormat("Invalid register name '%s'",
                                          arg_str.str().c_str());
           }
         }
+        strm.IndentLess();
       }
     }
-    return result.Succeeded();
+    if (result.GetStatus() != eReturnStatusFailed)
+      result.SetStatus(eReturnStatusSuccessFinishResult);
   }
 
   class CommandOptions : public OptionGroup {
@@ -348,7 +396,7 @@ public:
   }
 
 protected:
-  bool DoExecute(Args &command, CommandReturnObject &result) override {
+  void DoExecute(Args &command, CommandReturnObject &result) override {
     DataExtractor reg_data;
     RegisterContext *reg_ctx = m_exe_ctx.GetRegisterContext();
 
@@ -378,12 +426,12 @@ protected:
             // has been written.
             m_exe_ctx.GetThreadRef().Flush();
             result.SetStatus(eReturnStatusSuccessFinishNoResult);
-            return true;
+            return;
           }
         }
         if (error.AsCString()) {
           result.AppendErrorWithFormat(
-              "Failed to write register '%s' with value '%s': %s\n",
+              "Failed to write register '%s' with value '%s': %s",
               reg_name.str().c_str(), value_str.str().c_str(),
               error.AsCString());
         } else {
@@ -392,11 +440,10 @@ protected:
               reg_name.str().c_str(), value_str.str().c_str());
         }
       } else {
-        result.AppendErrorWithFormat("Register not found for '%s'.\n",
+        result.AppendErrorWithFormat("Register not found for '%s'",
                                      reg_name.str().c_str());
       }
     }
-    return result.Succeeded();
   }
 };
 
@@ -406,8 +453,9 @@ public:
   CommandObjectRegisterInfo(CommandInterpreter &interpreter)
       : CommandObjectParsed(interpreter, "register info",
                             "View information about a register.", nullptr,
-                            eCommandRequiresRegContext |
-                                eCommandProcessMustBeLaunched) {
+                            eCommandRequiresFrame | eCommandRequiresRegContext |
+                                eCommandProcessMustBeLaunched |
+                                eCommandProcessMustBePaused) {
     SetHelpLong(R"(
 Name             The name lldb uses for the register, optionally with an alias.
 Size             The size of the register in bytes and again in bits.
@@ -425,13 +473,7 @@ Fields      (*)  A table of the names and bit positions of the values contained
 Fields marked with (*) may not always be present. Some information may be
 different for the same register when connected to different debug servers.)");
 
-    CommandArgumentData register_arg;
-    register_arg.arg_type = eArgTypeRegisterName;
-    register_arg.arg_repetition = eArgRepeatPlain;
-
-    CommandArgumentEntry arg1;
-    arg1.push_back(register_arg);
-    m_arguments.push_back(arg1);
+    AddSimpleArgumentList(eArgTypeRegisterName);
   }
 
   ~CommandObjectRegisterInfo() override = default;
@@ -441,15 +483,14 @@ different for the same register when connected to different debug servers.)");
                            OptionElementVector &opt_element_vector) override {
     if (!m_exe_ctx.HasProcessScope() || request.GetCursorIndex() != 0)
       return;
-    CommandCompletions::InvokeCommonCompletionCallbacks(
-        GetCommandInterpreter(), lldb::eRegisterCompletion, request, nullptr);
+    CommandObject::HandleArgumentCompletion(request, opt_element_vector);
   }
 
 protected:
-  bool DoExecute(Args &command, CommandReturnObject &result) override {
+  void DoExecute(Args &command, CommandReturnObject &result) override {
     if (command.GetArgumentCount() != 1) {
       result.AppendError("register info takes exactly 1 argument: <reg-name>");
-      return result.Succeeded();
+      return;
     }
 
     llvm::StringRef reg_name = command[0].ref();
@@ -461,10 +502,8 @@ protected:
           GetCommandInterpreter().GetDebugger().GetTerminalWidth());
       result.SetStatus(eReturnStatusSuccessFinishResult);
     } else
-      result.AppendErrorWithFormat("No register found with name '%s'.\n",
+      result.AppendErrorWithFormat("No register found with name '%s'",
                                    reg_name.str().c_str());
-
-    return result.Succeeded();
   }
 };
 

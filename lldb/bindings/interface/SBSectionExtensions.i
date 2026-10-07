@@ -3,6 +3,11 @@ STRING_EXTENSION_OUTSIDE(SBSection)
 %extend lldb::SBSection {
 #ifdef SWIGPYTHON
     %pythoncode %{
+        # operator== is a free function, which swig does not handle, so we inject
+        # our own equality operator here
+        def __eq__(self, other):
+            return not self.__ne__(other)
+
         def __iter__(self):
             '''Iterate over all subsections in a lldb.SBSection object.'''
             return lldb_iter(self, 'GetNumSubSections', 'GetSubSectionAtIndex')
@@ -22,7 +27,7 @@ STRING_EXTENSION_OUTSIDE(SBSection)
         file_size = property(GetFileByteSize, None, doc='''A read only property that returns the file size in bytes of this section as an integer.''')
         data = property(GetSectionData, None, doc='''A read only property that returns an lldb object that represents the bytes for this section (lldb.SBData) for this section.''')
         type = property(GetSectionType, None, doc='''A read only property that returns an lldb enumeration value (see enumerations that start with "lldb.eSectionType") that represents the type of this section (code, data, etc.).''')
-        target_byte_size = property(GetTargetByteSize, None, doc='''A read only property that returns the size of a target byte represented by this section as a number of host bytes.''')
+        target_byte_size = property(GetTargetByteSize, None, doc='''Deprecated. Always returns 1.''')
         alignment = property(GetAlignment, None, doc='''A read only property that returns the alignment of this section as a number of host bytes.''')
     %}
 #endif

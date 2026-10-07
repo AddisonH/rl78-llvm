@@ -58,7 +58,7 @@ func.func @broadcast_tensor_tensor_tensor(tensor<8x1x?x1xi32>, tensor<7x1x5xi32>
 // Check incompatible vector and tensor result type
 func.func @broadcast_scalar_vector_vector(tensor<4xf32>, tensor<4xf32>) -> vector<4xf32> {
 ^bb0(%arg0: tensor<4xf32>, %arg1: tensor<4xf32>):
-  // expected-error @+1 {{op result #0 must be tensor of any type values, but got 'vector<4xf32>'}}
+  // expected-error @+1 {{op result #0 must be tensor of any non-token type values, but got 'vector<4xf32>'}}
   %0 = "test.broadcastable"(%arg0, %arg1) : (tensor<4xf32>, tensor<4xf32>) -> vector<4xf32>
   return %0 : vector<4xf32>
 }
@@ -111,9 +111,10 @@ func.func @broadcast_tensor_tensor_tensor(tensor<4x3x2xi32>, tensor<?xi32>) -> t
 
 // -----
 
-// Error for inferred dynamic dimension but existing static dimensions
+// It is alright to have an implicit dynamic-to-static cast in a dimension size
+// as long as the runtime result size is consistent with the result tensor's
+// static dimension.
 func.func @broadcast_tensor_tensor_tensor(%arg0: tensor<?xi32>, %arg1: tensor<?xi32>) -> tensor<2xi32> {
-  // expected-error @+1 {{op result type '2' not broadcast compatible with broadcasted operands's shapes '?'}}
   %0 = "test.broadcastable"(%arg0, %arg1) : (tensor<?xi32>, tensor<?xi32>) -> tensor<2xi32>
   return %0 : tensor<2xi32>
 }

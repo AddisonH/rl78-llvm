@@ -1,4 +1,4 @@
-//===--- UnrollLoopsCheck.cpp - clang-tidy --------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,7 +13,7 @@
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include <math.h>
+#include <cmath>
 
 using namespace clang::ast_matchers;
 
@@ -124,10 +124,11 @@ bool UnrollLoopsCheck::hasKnownBounds(const Stmt *Statement,
   if (!Initializer || !Conditional || !Increment)
     return false;
   // If the loop variable value isn't known, loop bounds are unknown.
-  if (const auto *InitDeclStatement = dyn_cast<DeclStmt>(Initializer)) {
+  if (const auto *InitDeclStatement = dyn_cast<DeclStmt>(Initializer);
+      InitDeclStatement && InitDeclStatement->isSingleDecl()) {
     if (const auto *VariableDecl =
             dyn_cast<VarDecl>(InitDeclStatement->getSingleDecl())) {
-      APValue *Evaluation = VariableDecl->evaluateValue();
+      const APValue *Evaluation = VariableDecl->evaluateValue();
       if (!Evaluation || !Evaluation->hasValue())
         return false;
     }
@@ -171,24 +172,25 @@ bool UnrollLoopsCheck::hasLargeNumIterations(const Stmt *Statement,
   const Stmt *Initializer = ForLoop->getInit();
   const Expr *Conditional = ForLoop->getCond();
   const Expr *Increment = ForLoop->getInc();
-  int InitValue;
+  int InitValue = 0;
   // If the loop variable value isn't known, we can't know the loop bounds.
-  if (const auto *InitDeclStatement = dyn_cast<DeclStmt>(Initializer)) {
+  if (const auto *InitDeclStatement = dyn_cast<DeclStmt>(Initializer);
+      InitDeclStatement && InitDeclStatement->isSingleDecl()) {
     if (const auto *VariableDecl =
             dyn_cast<VarDecl>(InitDeclStatement->getSingleDecl())) {
-      APValue *Evaluation = VariableDecl->evaluateValue();
+      const APValue *Evaluation = VariableDecl->evaluateValue();
       if (!Evaluation || !Evaluation->isInt())
         return true;
       InitValue = Evaluation->getInt().getExtValue();
     }
   }
 
-  int EndValue;
+  int EndValue = 0;
   const auto *BinaryOp = cast<BinaryOperator>(Conditional);
   if (!extractValue(EndValue, BinaryOp, Context))
     return true;
 
-  double Iterations;
+  double Iterations = 0.0;
 
   // If increment is unary and not one of ++, --, we can't know the loop bounds.
   if (const auto *Op = dyn_cast<UnaryOperator>(Increment)) {
@@ -203,21 +205,27 @@ bool UnrollLoopsCheck::hasLargeNumIterations(const Stmt *Statement,
   // If increment is binary and not one of +, -, *, /, we can't know the loop
   // bounds.
   if (const auto *Op = dyn_cast<BinaryOperator>(Increment)) {
-    int ConstantValue;
+    int ConstantValue = 0;
     if (!extractValue(ConstantValue, Op, Context))
       return true;
     switch (Op->getOpcode()) {
-    case (BO_AddAssign):
-      Iterations = ceil(float(EndValue - InitValue) / ConstantValue);
+    case BO_AddAssign:
+      Iterations =
+          std::ceil(static_cast<float>(EndValue - InitValue) / ConstantValue);
       break;
-    case (BO_SubAssign):
-      Iterations = ceil(float(InitValue - EndValue) / ConstantValue);
+    case BO_SubAssign:
+      Iterations =
+          std::ceil(static_cast<float>(InitValue - EndValue) / ConstantValue);
       break;
-    case (BO_MulAssign):
-      Iterations = 1 + (log(EndValue) - log(InitValue)) / log(ConstantValue);
+    case BO_MulAssign:
+      Iterations = 1 + ((std::log(static_cast<double>(EndValue)) -
+                         std::log(static_cast<double>(InitValue))) /
+                        std::log(static_cast<double>(ConstantValue)));
       break;
-    case (BO_DivAssign):
-      Iterations = 1 + (log(InitValue) - log(EndValue)) / log(ConstantValue);
+    case BO_DivAssign:
+      Iterations = 1 + ((std::log(static_cast<double>(InitValue)) -
+                         std::log(static_cast<double>(EndValue))) /
+                        std::log(static_cast<double>(ConstantValue)));
       break;
     default:
       // All other operators are not handled; assume large bounds.
@@ -245,8 +253,8 @@ bool UnrollLoopsCheck::extractValue(int &Value, const BinaryOperator *Op,
   return true;
 }
 
-bool UnrollLoopsCheck::exprHasLargeNumIterations(const Expr *Expression,
-                                                 const ASTContext *Context) {
+bool UnrollLoopsCheck::exprHasLargeNumIterations(
+    const Expr *Expression, const ASTContext *Context) const {
   Expr::EvalResult Result;
   if (Expression->EvaluateAsRValue(Result, *Context)) {
     if (!Result.Val.isInt())

@@ -1,11 +1,10 @@
 //===----------------------------------------------------------------------===//
+//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-// XFAIL: LIBCXX-FREEBSD-FIXME
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 // UNSUPPORTED: no-localization
@@ -103,32 +102,6 @@ static void test_valid_values() {
         std::chrono::weekday_indexed{std::chrono::weekday(7), 7});
 
   // Use the global locale (fr_FR)
-#if defined(__APPLE__)
-  check(SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='Dim'\t%A='Dimanche'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(0), 0});
-  check(SV("%u='1'\t%Ou='1'\t%w='1'\t%Ow='1'\t%a='Lun'\t%A='Lundi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(1), 1});
-  check(SV("%u='2'\t%Ou='2'\t%w='2'\t%Ow='2'\t%a='Mar'\t%A='Mardi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(2), 2});
-  check(SV("%u='3'\t%Ou='3'\t%w='3'\t%Ow='3'\t%a='Mer'\t%A='Mercredi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(3), 3});
-  check(SV("%u='4'\t%Ou='4'\t%w='4'\t%Ow='4'\t%a='Jeu'\t%A='Jeudi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(4), 4});
-  check(SV("%u='5'\t%Ou='5'\t%w='5'\t%Ow='5'\t%a='Ven'\t%A='Vendredi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(5), 5});
-  check(SV("%u='6'\t%Ou='6'\t%w='6'\t%Ow='6'\t%a='Sam'\t%A='Samedi'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(6), 6});
-  check(SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='Dim'\t%A='Dimanche'\n"),
-        lfmt,
-        std::chrono::weekday_indexed{std::chrono::weekday(7), 7});
-#else  // defined(__APPLE__)
   check(SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='dim.'\t%A='dimanche'\n"),
         lfmt,
         std::chrono::weekday_indexed{std::chrono::weekday(0), 0});
@@ -153,11 +126,10 @@ static void test_valid_values() {
   check(SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='dim.'\t%A='dimanche'\n"),
         lfmt,
         std::chrono::weekday_indexed{std::chrono::weekday(7), 7});
-#endif // defined(__APPLE__)
 
   // Use supplied locale (ja_JP).
   // This locale has a different alternate, but not on all platforms
-#if defined(_WIN32) || defined(__APPLE__) || defined(_AIX)
+#if defined(_WIN32) || defined(__APPLE__) || defined(_AIX) || defined(__FreeBSD__)
   check(loc,
         SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='日'\t%A='日曜日'\n"),
         lfmt,
@@ -190,7 +162,7 @@ static void test_valid_values() {
         SV("%u='7'\t%Ou='7'\t%w='0'\t%Ow='0'\t%a='日'\t%A='日曜日'\n"),
         lfmt,
         std::chrono::weekday_indexed{std::chrono::weekday(7), 7});
-#else  // defined(_WIN32) || defined(__APPLE__) || defined(_AIX)
+#else  // defined(_WIN32) || defined(__APPLE__) || defined(_AIX) || defined(__FreeBSD__)
   check(loc,
         SV("%u='7'\t%Ou='七'\t%w='0'\t%Ow='〇'\t%a='日'\t%A='日曜日'\n"),
         lfmt,
@@ -223,7 +195,7 @@ static void test_valid_values() {
         SV("%u='7'\t%Ou='七'\t%w='0'\t%Ow='〇'\t%a='日'\t%A='日曜日'\n"),
         lfmt,
         std::chrono::weekday_indexed{std::chrono::weekday(7), 7});
-#endif // defined(_WIN32) || defined(__APPLE__) || defined(_AIX)
+#endif // defined(_WIN32) || defined(__APPLE__) || defined(_AIX) || defined(__FreeBSD__)
 
   std::locale::global(std::locale::classic());
 }
@@ -250,7 +222,7 @@ static void test_invalid_values() {
   { // Invalid weekday, can't test %a and %A
     constexpr std::basic_string_view<CharT> fmt  = SV("{:%%u='%u'%t%%Ou='%Ou'%t%%w='%w'%t%%Ow='%Ow'%n}");
     constexpr std::basic_string_view<CharT> lfmt = SV("{:L%%u='%u'%t%%Ou='%Ou'%t%%w='%w'%t%%Ow='%Ow'%n}");
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
     // Non localized output using C-locale
     check(SV("%u='8'\t%Ou='8'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 0});
     check(SV("%u='8'\t%Ou='8'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 1});
@@ -284,7 +256,7 @@ static void test_invalid_values() {
           SV("%u='255'\t%Ou='255'\t%w='255'\t%Ow='255'\n"),
           lfmt,
           std::chrono::weekday_indexed{std::chrono::weekday(255), 1});
-#elif defined(_WIN32) //  defined(__APPLE__)
+#elif defined(_WIN32) //  defined(__APPLE__) || defined(__FreeBSD__)
     // Non localized output using C-locale
     check(SV("%u=''\t%Ou=''\t%w=''\t%Ow=''\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 0});
     check(SV("%u=''\t%Ou=''\t%w=''\t%Ow=''\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 1});
@@ -302,7 +274,7 @@ static void test_invalid_values() {
     check(loc, SV("%u=''\t%Ou=''\t%w=''\t%Ow=''\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 1});
     check(loc, SV("%u=''\t%Ou=''\t%w=''\t%Ow=''\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(255), 0});
     check(loc, SV("%u=''\t%Ou=''\t%w=''\t%Ow=''\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(255), 1});
-#elif defined(_AIX) //  defined(__APPLE__)
+#elif defined(_AIX)   //  defined(__APPLE__) || defined(__FreeBSD__)
     // Non localized output using C-locale
     check(SV("%u='8'\t%Ou='8'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 0});
     check(SV("%u='8'\t%Ou='8'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 1});
@@ -328,7 +300,7 @@ static void test_invalid_values() {
           SV("%u='5'\t%Ou='5'\t%w='5'\t%Ow='5'\n"),
           lfmt,
           std::chrono::weekday_indexed{std::chrono::weekday(255), 1});
-#else               // defined(__APPLE__)
+#else                 // defined(__APPLE__) || defined(__FreeBSD__)
     // Non localized output using C-locale
     check(SV("%u='1'\t%Ou='1'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 0});
     check(SV("%u='1'\t%Ou='1'\t%w='8'\t%Ow='8'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(8), 1});
@@ -362,7 +334,7 @@ static void test_invalid_values() {
           SV("%u='3'\t%Ou='三'\t%w='255'\t%Ow='255'\n"),
           lfmt,
           std::chrono::weekday_indexed{std::chrono::weekday(255), 1});
-#endif              // defined(__APPLE__)
+#endif                // defined(__APPLE__) || defined(__FreeBSD__)
   }
 
   { // Valid weekday, tests %a and %A
@@ -374,13 +346,8 @@ static void test_invalid_values() {
     check(SV("%a='Sun'\t%A='Sunday'\n"), fmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 6});
 
     // Use the global locale (fr_FR)
-#if defined(__APPLE__)
-    check(SV("%a='Dim'\t%A='Dimanche'\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 0});
-    check(SV("%a='Dim'\t%A='Dimanche'\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 6});
-#else  // defined(__APPLE__)
     check(SV("%a='dim.'\t%A='dimanche'\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 0});
     check(SV("%a='dim.'\t%A='dimanche'\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 6});
-#endif // defined(__APPLE__)
 
     // Use supplied locale (ja_JP)
     check(loc, SV("%a='日'\t%A='日曜日'\n"), lfmt, std::chrono::weekday_indexed{std::chrono::weekday(0), 0});

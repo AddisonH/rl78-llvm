@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-// UNSUPPORTED: availability-filesystem-missing
+// UNSUPPORTED: c++03, c++11, c++14
 
 // <filesystem>
 
@@ -15,7 +14,7 @@
 
 // path lexically_normal() const;
 
-#include "filesystem_include.h"
+#include <filesystem>
 #include <string>
 
 #include "../../path_helper.h"
@@ -23,6 +22,7 @@
 #include "test_macros.h"
 #include "assert_macros.h"
 #include "concat_macros.h"
+namespace fs = std::filesystem;
 
 int main(int, char**) {
   // clang-format off
@@ -60,6 +60,10 @@ int main(int, char**) {
       {"//a/b/", "//a/b/"},
       {"//a/b/.", "//a/b/"},
       {"//a/..", "//a/"},
+      {"C:/..", "C:/"},
+      {"C:/../foo", "C:/foo"},
+      {"C:./", "C:"},
+      {"C:.", "C:"},
 #else
       {"//a/", "/a/"},
       {"//a/b/", "/a/b/"},
@@ -107,6 +111,12 @@ int main(int, char**) {
       {"foo/bar/baz/../../", "foo/"},
       {"foo/bar/./..", "foo/"},
       {"foo/bar/./../", "foo/"},
+#ifdef _WIN32
+      // A root-name followed by a dot-dot filename should not be removed.
+      {"C:..", "C:.."},
+      {"C:..\\..", "C:..\\.."},
+      {"C:foo\\..\\..", "C:.."},
+#endif
       // p6: If there is a root-directory, remove all dot-dot filenames and any
       // directory-separators immediately following them. [ Note: These dot-dot
       // filenames attempt to refer to nonexistent parent directories. - end note ]

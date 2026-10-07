@@ -31,10 +31,13 @@ entry:
 
 !1 = !DIFile(filename: "test.c", directory: ".")
 
+!20 = !DISubroutineType(types: !{})
+
 !5 = distinct !DISubprogram(
   name: "test_position",
   scope: !1,
   file: !1,
+  type: !20,
   line: 1,
   spFlags: DISPFlagDefinition | DISPFlagOptimized,
   unit: !0
@@ -44,6 +47,7 @@ entry:
   name: "test_position2",
   scope: !1,
   file: !1,
+  type: !20,
   line: 5,
   spFlags: DISPFlagDefinition | DISPFlagOptimized,
   unit: !0

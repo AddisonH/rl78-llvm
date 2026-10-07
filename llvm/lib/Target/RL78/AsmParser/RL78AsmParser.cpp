@@ -22,7 +22,7 @@
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCObjectFileInfo.h"
-#include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/MC/MCParser/AsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
@@ -90,15 +90,15 @@ class RL78AsmParser : public MCTargetAsmParser {
   /// }
 
   // Public interface of the MCTargetAsmParser.
-  bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
+  bool matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
-  OperandMatchResultTy tryParseRegister(MCRegister &RegNo, SMLoc &StartLoc,
+  ParseStatus tryParseRegister(MCRegister &RegNo, SMLoc &StartLoc,
                                         SMLoc &EndLoc) override;
   bool parseRegister(MCRegister &Reg, SMLoc &StartLoc, SMLoc &EndLoc) override;
 
-  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+  bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
 
   bool ParseDirective(AsmToken DirectiveID) override;
@@ -114,34 +114,34 @@ class RL78AsmParser : public MCTargetAsmParser {
 
   // Custom parse functions for RL78 specific operands.
 
-  OperandMatchResultTy parseMEMOperand(OperandVector &Operands);
-  OperandMatchResultTy parseStackSlotOperand(OperandVector &Operands);
+  ParseStatus parseMEMOperand(OperandVector &Operands);
+  ParseStatus parseStackSlotOperand(OperandVector &Operands);
 
-  OperandMatchResultTy parseRegOffsetAddrOperand(OperandVector &Operands,
+  ParseStatus parseRegOffsetAddrOperand(OperandVector &Operands,
                                                  StringRef Mnemonic);
-  OperandMatchResultTy parseRegOffsetAddrOperand(OperandVector &Operands);
-  OperandMatchResultTy parseRegRegAddrOperand(OperandVector &Operands);
+  ParseStatus parseRegOffsetAddrOperand(OperandVector &Operands);
+  ParseStatus parseRegRegAddrOperand(OperandVector &Operands);
 
-  OperandMatchResultTy parseEsRegRegRegOperand(OperandVector &Operands);
-  OperandMatchResultTy RegBrackets(OperandVector &Operands, StringRef Mnemonic);
-  OperandMatchResultTy parseEsRegRegAddrOperand(OperandVector &Operands);
-  OperandMatchResultTy parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
+  ParseStatus parseEsRegRegRegOperand(OperandVector &Operands);
+  ParseStatus RegBrackets(OperandVector &Operands, StringRef Mnemonic);
+  ParseStatus parseEsRegRegAddrOperand(OperandVector &Operands);
+  ParseStatus parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
                                                       StringRef Mnemonic);
   bool tokenHasNoDotOrHasSemicolon();
   int64_t parseBeforeDot(const std::string &before_dot);
-  OperandMatchResultTy parseOperand(OperandVector &Operands, StringRef Name);
+  ParseStatus parseOperand(OperandVector &Operands, StringRef Name);
 
   bool tryParseBCCorSCC(OperandVector &Operands, StringRef Name, SMLoc NameLoc);
 
-  OperandMatchResultTy ParseOpeandRBx(OperandVector &Operands);
+  ParseStatus ParseOpeandRBx(OperandVector &Operands);
 
-  OperandMatchResultTy ParseRegister(OperandVector &Operands,
+  ParseStatus ParseRegister(OperandVector &Operands,
                                      StringRef Mnemonic);
    
-  OperandMatchResultTy parseDotIncludingOperand(OperandVector &Operands,
+  ParseStatus parseDotIncludingOperand(OperandVector &Operands,
                                                 StringRef Mnemonic);
 
-  OperandMatchResultTy ParseShiftIntegerOperand(OperandVector &Operands,
+  ParseStatus ParseShiftIntegerOperand(OperandVector &Operands,
                                                 StringRef Mnemonic);
 
   bool searchSymbolAlias(StringRef name, MCRegister &Register, unsigned &RegKind);
@@ -240,8 +240,8 @@ private:
 
 public:
   RL78AsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
-                const MCInstrInfo &MII, const MCTargetOptions &Options)
-      : MCTargetAsmParser(Options, sti, MII), Parser(parser) {
+                const MCInstrInfo &MII)
+      : MCTargetAsmParser(sti, MII), Parser(parser) {
     // Initialize the set of available features.
     setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
 	InitializeRelocationAttributeMap();
@@ -619,7 +619,7 @@ public:
     return EsHlRegAddr.RL78HL.RegNum;
   }
 
-  unsigned getReg() const override {
+  MCRegister getReg() const override {
     assert((Kind == k_Register) && "Invalid access!");
     return Reg.RegNum;
   }
@@ -720,7 +720,7 @@ public:
   /// getEndLoc - Get the location of the last token of this operand.
   SMLoc getEndLoc() const override { return EndLoc; }
 
-  void print(raw_ostream &OS) const override {
+  void print(raw_ostream &OS, const MCAsmInfo &MAI) const override {
     switch (Kind) {
     case k_Token:
       OS << "Token: " << getToken() << "\n";
@@ -736,7 +736,9 @@ public:
       break;
     case k_MemoryImm:
       assert(getMemOff() != nullptr);
-      OS << "Mem: " << getMemBase() << "+" << *getMemOff() << "\n";
+      OS << "Mem: " << getMemBase() << "+";
+      MAI.printExpr(OS, *getMemOff());
+      OS << "\n";
       break;
     default:
       break;
@@ -1234,7 +1236,7 @@ static std::map<std::string, int> ccTono{
 
 RL78AsmParser::~RL78AsmParser() = default;
 
-bool RL78AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
+bool RL78AsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                             OperandVector &Operands,
                                             MCStreamer &Out,
                                             uint64_t &ErrorInfo,
@@ -1567,7 +1569,7 @@ bool RL78AsmParser::EmitSectionDirective(
       RelocationAttribute.compare_insensitive("TEXTF") == 0 ||
       RelocationAttribute.compare_insensitive("TEXTF_UNIT64KP") == 0) {
     getStreamer().emitCodeAlignment(
-        Align(RelocationAttributeDesc->DefaultAlign), STI);
+        Align(RelocationAttributeDesc->DefaultAlign), *STI);
   } else {
     getStreamer().emitValueToAlignment(
         Align(RelocationAttributeDesc->DefaultAlign), 0, 1);
@@ -1652,7 +1654,7 @@ bool RL78AsmParser::parseDirectiveSeg(StringRef Name, StringRef Type) {
 bool RL78AsmParser::ParseDirectiveOrg() {
   std::string NewSectionName;
   MCSectionELF *CurrentSection =
-      dyn_cast<MCSectionELF>(getStreamer().getCurrentSectionOnly());
+      static_cast<MCSectionELF *>(getStreamer().getCurrentSectionOnly());
   std::string SectionNamePrefix = CurrentSection->getName().str();
 
   // If the section name already has the _AT<address> suffix, drop it
@@ -1683,7 +1685,7 @@ bool RL78AsmParser::ParseDirectiveOffset() {
 
 bool RL78AsmParser::checkForValidSection() {
   if (!isParsingMSInlineAsm() && !getStreamer().getCurrentSectionOnly()) {
-    getStreamer().initSections(false, *STI);
+    getStreamer().initSections(*STI);
     return Error(getTok().getLoc(),
                  "expected section directive before assembly directive");
   }
@@ -1788,9 +1790,9 @@ bool RL78AsmParser::parseDirectiveAlign() {
   // directive.
   const MCSection *Section = getStreamer().getCurrentSectionOnly();
   assert(Section && "must have section to emit alignment");
-  bool UseCodeAlign = Section->useCodeAlign();
+  bool UseCodeAlign = getContext().getAsmInfo().useCodeAlign(*Section);
   if (!HasFillExpr && UseCodeAlign) {
-    getStreamer().emitCodeAlignment(Align(Alignment), STI, MaxBytesToFill);
+    getStreamer().emitCodeAlignment(Align(Alignment), *STI, MaxBytesToFill);
   } else {
     getStreamer().emitValueToAlignment(Align(Alignment), FillExpr, 1, MaxBytesToFill);
   }
@@ -1841,8 +1843,8 @@ bool RL78AsmParser::parseMacroLocalSymbols(
 }
 
 static bool isGlobalElfSymbol(MCSymbol *symbol) {
-  return symbol->isELF() &&
-         ((MCSymbolELF *)symbol)->getBinding() == ELF::STB_GLOBAL;
+  // RL78 is ELF-only; MCSymbol no longer records its object format.
+  return static_cast<MCSymbolELF *>(symbol)->getBinding() == ELF::STB_GLOBAL;
 }
 
 bool RL78AsmParser::parseDirectiveMacro(StringRef Name) {
@@ -1861,7 +1863,7 @@ bool RL78AsmParser::parseDirectiveMacro(StringRef Name) {
 
     // Emit an error if two (or more) named parameters share the same name
     for (const MCAsmMacroParameter &CurrParam : Parameters)
-      if (CurrParam.Name.equals(Parameter.Name))
+      if (CurrParam.Name == Parameter.Name)
         return TokError("macro '" + Name +
                         "' has multiple parameters"
                         " named '" +
@@ -2064,9 +2066,9 @@ bool RL78AsmParser::checkSymbolDefinitionExpression(
     // Diagnose assignment to a label.
     if (Value && isSymbolUsedInExpression(Sym, Value))
       return Parser.Error(EqualLoc, "Recursive use of '" + Name + "'");
-    else if (Sym->isUndefined(/*SetUsed*/ false) && !Sym->isUsed() &&
-             !Sym->isVariable())
-      ; // Allow redefinitions of undefined symbols only used in directives.
+    else if (Sym->isUndefined() && !Sym->isVariable())
+      ; // Allow definitions of undefined symbols (MC no longer tracks whether
+        // they were used; upstream likewise allows forward references).
     else if (!Sym->isUndefined()) {
 
       EquOrSetSymbol *foundSymbol = findEquOrSetSymbol(Name);
@@ -2127,7 +2129,7 @@ void RL78AsmParser::updateEquAndSetSymbols(EquOrSetSymbol equOrSetSymbol) {
     if (foundSymbol == nullptr) {
       EquAndSetSymbols.push_back(equOrSetSymbol);
     } else {
-      llvm::erase_value(EquAndSetSymbols, *foundSymbol);
+      llvm::erase(EquAndSetSymbols, *foundSymbol);
       EquAndSetSymbols.push_back(equOrSetSymbol);
     }
   }
@@ -2239,7 +2241,7 @@ bool RL78AsmParser::parseDirectiveEqu(StringRef Name) {
     BitPosSym =
         Parser.getContext().getOrCreateSymbol(BitPositionSymbolPrefix + Name);
     BitPosSym->setRedefinable(false);
-    MCSymbolELF *ELFBitPosSymbol = cast<MCSymbolELF>(BitPosSym);
+    MCSymbolELF *ELFBitPosSymbol = static_cast<MCSymbolELF *>(BitPosSym);
     ELFBitPosSymbol->setType(ELF::STT_HIPROC);
 
     if (ShouldBePublic &&
@@ -2431,7 +2433,7 @@ bool RL78AsmParser::ParseDirective(AsmToken DirectiveID) {
   return true;
 }
 
-bool RL78AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+bool RL78AsmParser::parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                                      SMLoc NameLoc, OperandVector &Operands) {
   // Ensure that if the instruction occurs when relaxation is enabled,
   // relocations are forced for the file. Ideally this would be done when there
@@ -2471,7 +2473,7 @@ bool RL78AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
   // Read the remaining operands.
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     // Read the first operand.
-    if (parseOperand(Operands, Name)) {
+    if (!parseOperand(Operands, Name).isSuccess()) {
       SMLoc Loc = getLexer().getLoc();
       Parser.eatToEndOfStatement();
       return Error(Loc, "unexpected token in argument list");
@@ -2481,7 +2483,7 @@ bool RL78AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       Parser.Lex(); // Eat the comma.
 
       // Parse and remember the operand.
-      if (parseOperand(Operands, Name)) {
+      if (!parseOperand(Operands, Name).isSuccess()) {
         SMLoc Loc = getLexer().getLoc();
         Parser.eatToEndOfStatement();
         return Error(Loc, "unexpected token in argument list");
@@ -2501,7 +2503,7 @@ bool RL78AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
 
 
 
-static OperandMatchResultTy CheckAddressValueRange(StringRef Mnemonic,
+static ParseStatus CheckAddressValueRange(StringRef Mnemonic,
                                                    OperandVector &Operands,
                                                    int64_t AddressValue,
                                                    MCContext &Context, SMLoc S,
@@ -2516,8 +2518,8 @@ static OperandMatchResultTy CheckAddressValueRange(StringRef Mnemonic,
   else if (AddressValue >= 0xffe20 && AddressValue <= 0xfff1f)
     Operands.push_back(RL78Operand::CreateAbs8(EVal, S, E));
   else
-    return MatchOperand_NoMatch;
-  return MatchOperand_Success;
+    return ParseStatus::NoMatch;
+  return ParseStatus::Success;
 }
 
 StringRef StripTempSymbolPrefix(StringRef Symbol) {
@@ -2533,7 +2535,7 @@ StringRef StripTempSymbolPrefix(StringRef Symbol) {
   return Symbol;
 }
 
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
                                         StringRef Mnemonic) {
 
@@ -2542,7 +2544,7 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
       Mnemonic.compare("set1") != 0 && Mnemonic.compare("clr1") != 0 &&
       Mnemonic.compare("bt") != 0 && Mnemonic.compare("bf") != 0 &&
       Mnemonic.compare("btclr") != 0)
-    return MatchOperand_NoMatch;
+    return ParseStatus::NoMatch;
 
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
@@ -2551,12 +2553,12 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
        (Token.getString().compare_insensitive("cy") == 0 ||
         Token.getString().compare_insensitive("es") == 0)) ||
       Token.is(AsmToken::LBrac))
-    return MatchOperand_NoMatch;
+    return ParseStatus::NoMatch;
 
   const MCExpr *Value;
   if (getParser().parseExpression(Value)) {
     Error(Token.getLoc(), "missing expression");
-    return MatchOperand_NoMatch;
+    return ParseStatus::NoMatch;
   }
 
   int64_t AddressValue = 0;
@@ -2570,13 +2572,13 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
         BitPositionSymbolPrefix + Token.getString());
     if (!AddressSymbol || !AddressSymbol->isVariable() ||
         !AddressSymbol->getVariableValue()->evaluateAsAbsolute(AddressValue))
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
     if (!PositionSymbol || !PositionSymbol->isVariable() ||
         !PositionSymbol->getVariableValue()->evaluateAsAbsolute(BitPosition))
-      return MatchOperand_NoMatch;
-    if (CheckAddressValueRange(Mnemonic, Operands, AddressValue, getContext(),
-                               S, E) != MatchOperand_Success)
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
+    if (!CheckAddressValueRange(Mnemonic, Operands, AddressValue, getContext(),
+                               S, E).isSuccess())
+      return ParseStatus::NoMatch;
   } else {
 
     if (/*!HasTargetSubExpressionKind(Value, RL78MCExpr::VK_RL78_BITPOSITIONAL)
@@ -2586,15 +2588,15 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
         BitPosition == -1) {
       LLVM_DEBUG(Value->dump());
       Error(Token.getLoc(), "invalid expression");
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
     }
 
     if (AddressMCValue.isAbsolute() &&
-        CheckAddressValueRange(Mnemonic, Operands, AddressMCValue.getConstant(),
-                               getContext(), S, E) != MatchOperand_Success) {
+        !CheckAddressValueRange(Mnemonic, Operands, AddressMCValue.getConstant(),
+                               getContext(), S, E).isSuccess()) {
       LLVM_DEBUG(Value->dump());
       Error(Token.getLoc(), "invalid expression");
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
     } else if (!AddressMCValue.isAbsolute()) {
       unsigned RegAKind, RegBKind;
       MCRegister RegA, RegB;
@@ -2603,16 +2605,16 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
       StringRef SymAName, SymBName;
       MCSymbol *SymA, *SymB;
 
-      if (AddressMCValue.getSymA()) {
+      if (AddressMCValue.getAddSym()) {
         SymAName = StripTempSymbolPrefix(
-            AddressMCValue.getSymA()->getSymbol().getName());
+            AddressMCValue.getAddSym()->getName());
         IsSymARegister = matchRegisterNameByName(SymAName, RegA, RegAKind);
         SymA = getContext().lookupSymbol(SymAName);
       }
 
-      if (AddressMCValue.getSymB()) {
+      if (AddressMCValue.getSubSym()) {
         SymBName = StripTempSymbolPrefix(
-            AddressMCValue.getSymB()->getSymbol().getName());
+            AddressMCValue.getSubSym()->getName());
         IsSymBRegister = matchRegisterNameByName(SymBName, RegB, RegBKind);
       }
 
@@ -2621,14 +2623,14 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
       if ((IsSymARegister || IsSymBRegister) &&
           AddressMCValue.getConstant() != 0) {
         Error(Token.getLoc(), "invalid expression");
-        return MatchOperand_NoMatch;
+        return ParseStatus::NoMatch;
       }
       const MCExpr *SymEVal;
       if (IsSymARegister || IsSymBRegister) {
         Operands.push_back(
             RL78Operand::CreateReg(IsSymARegister ? RegA : RegB,
                                    IsSymARegister ? RegAKind : RegBKind, S, E));
-      } else if (AddressMCValue.getSymA() && AddressMCValue.getSymB()) {
+      } else if (AddressMCValue.getAddSym() && AddressMCValue.getSubSym()) {
         SymA = getContext().getOrCreateSymbol(SymAName);
         SymB = getContext().getOrCreateSymbol(SymBName);
         SymEVal = MCBinaryExpr::createAdd(
@@ -2639,7 +2641,7 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
             SymEVal, MCSymbolRefExpr::create(SymB, getContext()), getContext());
 
         Operands.push_back(RL78Operand::CreateAbs8(SymEVal, S, E));
-      } else if (AddressMCValue.getSymA()) {
+      } else if (AddressMCValue.getAddSym()) {
         SymA = getContext().getOrCreateSymbol(SymAName);
         SymEVal = MCBinaryExpr::createAdd(
             MCSymbolRefExpr::create(SymA, getContext()),
@@ -2654,13 +2656,13 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
 
   const MCExpr *EVal = MCConstantExpr::create(BitPosition, getContext());
   Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
-  return MatchOperand_Success;
+  return ParseStatus::Success;
 }
 
-OperandMatchResultTy RL78AsmParser::ParseRegister(OperandVector &Operands,
+ParseStatus RL78AsmParser::ParseRegister(OperandVector &Operands,
                                                   StringRef Mnemonic) {
 
-  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
+  ParseStatus ResTy = ParseStatus::NoMatch;
   unsigned RegKind;
   MCRegister Reg;
   if (matchRegisterName(Parser.getTok(), Reg, RegKind) &&
@@ -2671,15 +2673,15 @@ OperandMatchResultTy RL78AsmParser::ParseRegister(OperandVector &Operands,
     SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
     Operands.push_back(RL78Operand::CreateReg(Reg, RegKind, S, E));
 
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
   }
 
   return ResTy;
 }
 
-OperandMatchResultTy RL78AsmParser::ParseOpeandRBx(OperandVector &Operands) {
+ParseStatus RL78AsmParser::ParseOpeandRBx(OperandVector &Operands) {
 
-  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
+  ParseStatus ResTy = ParseStatus::NoMatch;
 
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
@@ -2689,32 +2691,32 @@ OperandMatchResultTy RL78AsmParser::ParseOpeandRBx(OperandVector &Operands) {
   if (name.compare_insensitive("rb0") == 0) {
     EVal = MCConstantExpr::create(0, getContext());
     Operands.push_back(RL78Operand::CreateSELRBx(EVal, S, E));
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
     Parser.Lex();
   } else if (name.compare_insensitive("rb1") == 0) {
     EVal = MCConstantExpr::create(1, getContext());
     Operands.push_back(RL78Operand::CreateSELRBx(EVal, S, E));
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
     Parser.Lex();
   } else if (name.compare_insensitive("rb2") == 0) {
     EVal = MCConstantExpr::create(2, getContext());
     Operands.push_back(RL78Operand::CreateSELRBx(EVal, S, E));
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
     Parser.Lex();
   } else if (name.compare_insensitive("rb3") == 0) {
     EVal = MCConstantExpr::create(3, getContext());
     Operands.push_back(RL78Operand::CreateSELRBx(EVal, S, E));
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
     Parser.Lex();
   }
   return ResTy;
 }
 
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::ParseShiftIntegerOperand(OperandVector &Operands,
                                         StringRef Mnemonic) {
 
-  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
+  ParseStatus ResTy = ParseStatus::NoMatch;
 
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
@@ -2726,7 +2728,7 @@ RL78AsmParser::ParseShiftIntegerOperand(OperandVector &Operands,
       Op = RL78Operand::CreateImm17(EVal, S, E);
 
       Operands.push_back(std::move(Op));
-      ResTy = MatchOperand_Success;
+      ResTy = ParseStatus::Success;
     }
   } else if (Mnemonic.compare("shrw") == 0 || Mnemonic.compare("shlw") == 0 ||
              Mnemonic.compare("sarw") == 0 || Mnemonic.compare("shrw") == 0) {
@@ -2736,7 +2738,7 @@ RL78AsmParser::ParseShiftIntegerOperand(OperandVector &Operands,
       Op = RL78Operand::CreateImm115(EVal, S, E);
 
       Operands.push_back(std::move(Op));
-      ResTy = MatchOperand_Success;
+      ResTy = ParseStatus::Success;
     }
   } else if (Mnemonic.compare("ror") == 0 || Mnemonic.compare("rol") == 0 ||
              Mnemonic.compare("rorc") == 0 || Mnemonic.compare("rolc") == 0 ||
@@ -2745,7 +2747,7 @@ RL78AsmParser::ParseShiftIntegerOperand(OperandVector &Operands,
     Operands.push_back(RL78Operand::CreateToken(Parser.getTok().getString(),
                                                 Parser.getTok().getLoc()));
     Parser.Lex();
-    ResTy = MatchOperand_Success;
+    ResTy = ParseStatus::Success;
   }
   return ResTy;
 }
@@ -2768,18 +2770,18 @@ int64_t RL78AsmParser::parseBeforeDot(const std::string &before_dot) {
   return value;
 }
 
-OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
+ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
                                                  StringRef Mnemonic) {
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
   const MCExpr *Res;
 
   // SEL RB0
-  if (ParseOpeandRBx(Operands) == MatchOperand_Success)
-    return MatchOperand_Success;
+  if (ParseOpeandRBx(Operands).isSuccess())
+    return ParseStatus::Success;
   // Register ax, special, or r8.
-  if (ParseRegister(Operands, Mnemonic) == MatchOperand_Success)
-    return MatchOperand_Success;
+  if (ParseRegister(Operands, Mnemonic).isSuccess())
+    return ParseStatus::Success;
 
   // Byte or word.
   if (getLexer().is(AsmToken::Hash)) {
@@ -2790,7 +2792,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
     const MCExpr *EVal;
     Parser.parseExpression(EVal, E);
     Operands.push_back(RL78Operand::CreateImm(EVal, S, E));
-    return MatchOperand_Success;
+    return ParseStatus::Success;
   }
   if (getLexer().is(AsmToken::Dollar)) {
 
@@ -2802,7 +2804,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
       const MCExpr *EVal;
       Parser.parseExpression(EVal, E);
       Operands.push_back(RL78Operand::CreatebrtargetRel16(EVal, S, E));
-      return MatchOperand_Success;
+      return ParseStatus::Success;
 
     } else {
       SMLoc S = Parser.getTok().getLoc();
@@ -2810,7 +2812,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
       const MCExpr *EVal;
       Parser.parseExpression(EVal, E);
       Operands.push_back(RL78Operand::CreatebrtargetRel8(EVal, S, E));
-      return MatchOperand_Success;
+      return ParseStatus::Success;
     }
   }
   if (getLexer().is(AsmToken::Exclaim)) {
@@ -2827,7 +2829,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
       Operands.push_back(RL78Operand::CreateToken(ExclSecond.getString(),
                                                   ExclSecond.getLoc()));
       Operands.push_back(RL78Operand::CreateAbs20(EVal, S, E));
-      return MatchOperand_Success;
+      return ParseStatus::Success;
     } else {
 
       SMLoc S = Parser.getTok().getLoc();
@@ -2853,9 +2855,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
           EVal = MCConstantExpr::create(value, getContext());
         else {
           MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-          MCSymbolRefExpr::VariantKind Variant = MCSymbolRefExpr::VK_None;
-          EVal =
-              MCSymbolRefExpr::create(Sym, Variant, getParser().getContext());
+          EVal = MCSymbolRefExpr::create(Sym, getParser().getContext());
         }
 
         Operands.push_back(RL78Operand::CreateAbs16(EVal, S, E));
@@ -2867,7 +2867,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
         SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
         Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
         Parser.Lex();
-        return MatchOperand_Success;
+        return ParseStatus::Success;
       } else {
         StringRef checkDot = getLexer().getTok().getString();
         size_t dot = checkDot.find(".");
@@ -2896,26 +2896,29 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
                   Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
                   Parser.Lex();
                 } else
-                  return MatchOperand_NoMatch;
+                  return ParseStatus::NoMatch;
               }
             } else {
               const MCExpr *AddressExpr;
               if (AddressValue.isAbsolute()) {
                 AddressExpr = MCConstantExpr::create(AddressValue.getConstant(),
                                                      getContext());
-              } else if (!AddressValue.getSymB()) {
-                AddressExpr = AddressValue.getSymA();
+              } else if (!AddressValue.getSubSym()) {
+                AddressExpr = MCSymbolRefExpr::create(AddressValue.getAddSym(), getContext());
               } else {
-                AddressExpr = MCBinaryExpr::createSub(AddressValue.getSymA(),
-                                                      AddressValue.getSymB(),
-                                                      getContext());
+                AddressExpr = MCBinaryExpr::createSub(
+                    MCSymbolRefExpr::create(AddressValue.getAddSym(),
+                                            getContext()),
+                    MCSymbolRefExpr::create(AddressValue.getSubSym(),
+                                            getContext()),
+                    getContext());
               }
               Operands.push_back(RL78Operand::CreateAbs16(AddressExpr, S, E));
               Operands.push_back(RL78Operand::CreateImm07(
                   MCConstantExpr::create(BitPosition, getContext()), S, E));
             }
 
-            return MatchOperand_Success;
+            return ParseStatus::Success;
           }
         } else {
           // We expect set1 !addr16.imm.
@@ -2935,9 +2938,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
             EVal = MCConstantExpr::create(value, getContext());
           } else {
             MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-            MCSymbolRefExpr::VariantKind Variant = MCSymbolRefExpr::VK_None;
-            EVal =
-                MCSymbolRefExpr::create(Sym, Variant, getParser().getContext());
+            EVal = MCSymbolRefExpr::create(Sym, getParser().getContext());
           }
 
           Operands.push_back(RL78Operand::CreateAbs16(EVal, S, E));
@@ -2949,38 +2950,37 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
           Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
           Parser.Lex();
 
-          return MatchOperand_Success;
+          return ParseStatus::Success;
         }
       }
     }
   }
 
-  if (parseDotIncludingOperand(Operands, Mnemonic) == MatchOperand_Success)
-    return MatchOperand_Success;
+  if (parseDotIncludingOperand(Operands, Mnemonic).isSuccess())
+    return ParseStatus::Success;
 
   // ES:!addr16.
   // ES : [DE].
   // ES : [DE + byte].
   // ES : [HL] ES : word[B].
   // ES : word[BC].
-  if (parseEsRegRegAddrAndDotOperand(Operands, Mnemonic) ==
-          MatchOperand_Success &&
+  if (parseEsRegRegAddrAndDotOperand(Operands, Mnemonic).isSuccess() &&
       tokenHasNoDotOrHasSemicolon())
-    return MatchOperand_Success;
+    return ParseStatus::Success;
 
-  if (ParseShiftIntegerOperand(Operands, Mnemonic) == MatchOperand_Success)
-    return MatchOperand_Success;
+  if (ParseShiftIntegerOperand(Operands, Mnemonic).isSuccess())
+    return ParseStatus::Success;
 
   // word[bc].
   // word[c].
   // word[b].
-  if (parseRegOffsetAddrOperand(Operands, Mnemonic) == MatchOperand_Success &&
+  if (parseRegOffsetAddrOperand(Operands, Mnemonic).isSuccess() &&
       tokenHasNoDotOrHasSemicolon())
-    return MatchOperand_Success;
+    return ParseStatus::Success;
 
-  if (RegBrackets(Operands, Mnemonic) == MatchOperand_Success &&
+  if (RegBrackets(Operands, Mnemonic).isSuccess() &&
       tokenHasNoDotOrHasSemicolon())
-    return MatchOperand_Success;
+    return ParseStatus::Success;
 
   StringRef checkDot = getLexer().getTok().getString();
   size_t dot = checkDot.find(".");
@@ -3013,7 +3013,7 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
       // See if we have (0xf230+4).[0-7]
       if (TokenString.size() != 2 || TokenString[1] < '0' ||
           TokenString[1] > '7')
-        return MatchOperand_NoMatch;
+        return ParseStatus::NoMatch;
       BitPositionValue = TokenString[1] - '0';
 
     } else if (Token.is(AsmToken::Identifier)) {
@@ -3022,9 +3022,9 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
           TokenString.substr(1, TokenString.size() - 2));
       if (!BitSym || !BitSym->isVariable() ||
           !BitSym->getVariableValue()->evaluateAsAbsolute(BitPositionValue))
-        return MatchOperand_NoMatch;
+        return ParseStatus::NoMatch;
     } else {
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
     }
     const MCExpr *BitPosExpr =
         MCConstantExpr::create(BitPositionValue, getContext());
@@ -3032,24 +3032,24 @@ OperandMatchResultTy RL78AsmParser::parseOperand(OperandVector &Operands,
     SMLoc S = Parser.getTok().getLoc();
     SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
     Operands.push_back(RL78Operand::CreateImm07(BitPosExpr, S, E));
-    return MatchOperand_Success;
+    return ParseStatus::Success;
   }
 
-  return MatchOperand_Success;
+  return ParseStatus::Success;
 }
 
 // Unused.
-OperandMatchResultTy RL78AsmParser::parseMEMOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+ParseStatus RL78AsmParser::parseMEMOperand(OperandVector &Operands) {
+  return ParseStatus::NoMatch;
 }
 
 // Unused.
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseStackSlotOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
 
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands,
                                          StringRef Mnemonic) {
 
@@ -3064,7 +3064,7 @@ RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands,
   size_t dot = checkDot.find(".");
   // In case we have a dot we stop as we will parse this later.
   if (getLexer().is(AsmToken::LBrac) || dot != std::string::npos)
-    return MatchOperand_NoMatch;
+    return ParseStatus::NoMatch;
 
   // Needed for word[bc].
   if (!getParser().parseExpression(Res, E)) {
@@ -3079,7 +3079,7 @@ RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands,
            name.compare_insensitive("c") == 0) &&
           Res != nullptr) {
         if (!matchRegisterName(Parser.getTok(), Reg, RegKind))
-          return MatchOperand_NoMatch;
+          return ParseStatus::NoMatch;
         Parser.Lex(); // Eat the identifier token.
 
         if (getLexer().is(AsmToken::RBrac)) {
@@ -3091,10 +3091,10 @@ RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands,
                 Reg, RegKind, Res, S, E));
 
           Parser.Lex(); // Eat the ']'.
-          return MatchOperand_Success;
+          return ParseStatus::Success;
         }
       }
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
     } else {
       // We need this here because we already parsed the expression.
       if (Res) {
@@ -3112,36 +3112,36 @@ RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands,
           Operands.push_back(RL78Operand::CreateAbs8(Res, S, E));
         else
           Operands.push_back(RL78Operand::CreateAbs8(Res, S, E));
-        return MatchOperand_Success;
+        return ParseStatus::Success;
       }
     }
-    return MatchOperand_NoMatch;
+    return ParseStatus::NoMatch;
   }
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
 
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseRegOffsetAddrOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseRegRegAddrOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseEsRegRegRegOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseEsRegRegAddrOperand(OperandVector &Operands) {
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
 // ES:!addr16.
 // ES : [DE].
 // ES : [DE + byte].
 // ES : [HL] ES : word[B].
 // ES : word[BC].
-OperandMatchResultTy
+ParseStatus
 RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
                                               StringRef Mnemonic) {
 
@@ -3156,14 +3156,14 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
       getLexer().peekTok().is(AsmToken::Colon)) {
 
     if (!matchRegisterName(Parser.getTok(), RegES, RegESKind))
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
 
     Parser.Lex();
 
     if (getLexer().is(AsmToken::Colon))
       Parser.Lex(); // Eat the ':'.
     else
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
 
     if (getLexer().is(AsmToken::Exclaim)) {
       Parser.Lex(); // Eat the '!'.
@@ -3193,8 +3193,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
           Res = MCConstantExpr::create(value, getContext());
         else {
           MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-          MCSymbolRefExpr::VariantKind Variant = MCSymbolRefExpr::VK_None;
-          Res = MCSymbolRefExpr::create(Sym, Variant, getParser().getContext());
+          Res = MCSymbolRefExpr::create(Sym, getParser().getContext());
         }
 
         Operands.push_back(
@@ -3208,7 +3207,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
             SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
         Operands.push_back(RL78Operand::CreateImm07(EVal, S, E));
         Parser.Lex(); // Eat the '!'.
-        return MatchOperand_Success;
+        return ParseStatus::Success;
 
       }
 
@@ -3227,18 +3226,22 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
             if (AddressValue.isAbsolute()) {
               AddressExpr = MCConstantExpr::create(AddressValue.getConstant(),
                                                    getContext());
-            } else if (!AddressValue.getSymB()) {
-              AddressExpr = AddressValue.getSymA();
+            } else if (!AddressValue.getSubSym()) {
+              AddressExpr = MCSymbolRefExpr::create(AddressValue.getAddSym(), getContext());
             } else {
               AddressExpr = MCBinaryExpr::createSub(
-                  AddressValue.getSymA(), AddressValue.getSymB(), getContext());
+                  MCSymbolRefExpr::create(AddressValue.getAddSym(),
+                                          getContext()),
+                  MCSymbolRefExpr::create(AddressValue.getSubSym(),
+                                          getContext()),
+                  getContext());
             }
             Operands.push_back(RL78Operand::CreateEsAddr16(RegES, RegESKind,
                                                            AddressExpr, S, E));
             Operands.push_back(RL78Operand::CreateImm07(
                 MCConstantExpr::create(BitPosition, getContext()), S, E));
           }
-          return MatchOperand_Success;
+          return ParseStatus::Success;
         }
       }
 
@@ -3246,7 +3249,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
       Parser.Lex();
 
       if (!matchRegisterName(Parser.getTok(), Reg, RegKind))
-        return MatchOperand_NoMatch;
+        return ParseStatus::NoMatch;
       Parser.Lex();
 
       if (getLexer().is(AsmToken::RBrac)) {
@@ -3260,13 +3263,13 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
               RegES, RegESKind, Reg, RegKind, Res, S, E));
 
           Parser.Lex(); // Eat the ']'.
-          return MatchOperand_Success;
+          return ParseStatus::Success;
         } else {
           Parser.Lex(); // Eat the ']'.
 
           Operands.push_back(RL78Operand::CreateEsHlRegAddr(
               RegES, RegESKind, Reg, RegKind, S, E));
-          return MatchOperand_Success;
+          return ParseStatus::Success;
         }
       } else if (getLexer().is(AsmToken::Plus)) {
         Parser.Lex(); // Eat the '+'
@@ -3280,7 +3283,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
           Parser.Lex();
           if (getLexer().is(AsmToken::RBrac)) {
             Parser.Lex(); // Eat the ']'.
-            return MatchOperand_Success;
+            return ParseStatus::Success;
           }
         } else if (!getParser().parseExpression(Res, E)) {
 
@@ -3289,7 +3292,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
 
           if (getLexer().is(AsmToken::RBrac)) {
             Parser.Lex(); // Eat the ']'.
-            return MatchOperand_Success;
+            return ParseStatus::Success;
           }
         }
       }
@@ -3298,7 +3301,7 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
         if (getLexer().is(AsmToken::LBrac)) {
           Parser.Lex();
           if (!matchRegisterName(Parser.getTok(), Reg, RegKind))
-            return MatchOperand_NoMatch;
+            return ParseStatus::NoMatch;
           Parser.Lex();
           if (getLexer().is(AsmToken::RBrac)) {
             if (Reg == RL78::RP2)
@@ -3309,21 +3312,21 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
                   RegES, RegESKind, Reg, RegKind, Res, S, E));
 
             Parser.Lex(); // Eat the ']'.
-            return MatchOperand_Success;
+            return ParseStatus::Success;
 
           } else
-            return MatchOperand_Success;
+            return ParseStatus::Success;
         }
       }
     }
   }
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
 
-OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
+ParseStatus RL78AsmParser::RegBrackets(OperandVector &Operands,
                                                 StringRef Mnemonic) {
 
-  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
+  ParseStatus ResTy = ParseStatus::NoMatch;
 
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
@@ -3335,7 +3338,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
 
       if (!getParser().parseExpression(Res, E)) {
         Operands.push_back(RL78Operand::CreateAbs5(Res, S, E));
-        ResTy = MatchOperand_Success;
+        ResTy = ParseStatus::Success;
       }
       if (getLexer().is(AsmToken::RBrac)) {
         Parser.Lex();
@@ -3350,7 +3353,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
     Parser.Lex(); // Eat the '[' token.
 
     if (!matchRegisterName(Parser.getTok(), Reg1, Reg1Kind))
-      return MatchOperand_NoMatch;
+      return ParseStatus::NoMatch;
 
     Parser.Lex();
 
@@ -3361,7 +3364,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
       Operands.push_back(RL78Operand::CreateHLAddr(Reg1, Reg1Kind, S, E));
       Parser.Lex(); // Eat the ']' token.
 
-      ResTy = MatchOperand_Success;
+      ResTy = ParseStatus::Success;
     } else if (getLexer().is(AsmToken::RBrac)) {
 
       Res = MCConstantExpr::create(0, getContext());
@@ -3374,7 +3377,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
             RL78Operand::CreateRegOffsetAddr(Reg1, Reg1Kind, Res, S, E));
 
       Parser.Lex(); // Eat the ']'.
-      return MatchOperand_Success;
+      return ParseStatus::Success;
 
     } else if (getLexer().is(AsmToken::Plus)) {
       Parser.Lex(); // Eat the '+'.
@@ -3386,7 +3389,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
         Operands.push_back(RL78Operand::CreateRegRegAddr(
             Reg1, Reg1Kind, Reg2, Reg2Kind, S, E));
         Parser.Lex();
-        ResTy = MatchOperand_Success;
+        ResTy = ParseStatus::Success;
       } else if (!getParser().parseExpression(Res, E)) {
 
         if (Reg1 == RL78::SPreg) {
@@ -3399,7 +3402,7 @@ OperandMatchResultTy RL78AsmParser::RegBrackets(OperandVector &Operands,
         }
 
         Parser.Lex();
-        ResTy = MatchOperand_Success;
+        ResTy = ParseStatus::Success;
       }
     }
 
@@ -3516,7 +3519,7 @@ bool RL78AsmParser::matchRegisterNameByName(StringRef name, MCRegister &Register
   return searchSymbolAlias(name, Register, RegKind);
 }
 
-OperandMatchResultTy RL78AsmParser::tryParseRegister(MCRegister &Register, SMLoc &StartLoc,
+ParseStatus RL78AsmParser::tryParseRegister(MCRegister &Register, SMLoc &StartLoc,
                                   SMLoc &EndLoc) {
   const AsmToken &Tok = Parser.getTok();
   StartLoc = Tok.getLoc();
@@ -3525,15 +3528,15 @@ OperandMatchResultTy RL78AsmParser::tryParseRegister(MCRegister &Register, SMLoc
   unsigned regKind = RL78Operand::rk_None;
   if (matchRegisterName(Tok, Register, regKind)) {
     Parser.Lex();
-    return MatchOperand_Success;
+    return ParseStatus::Success;
   }
 
-  return MatchOperand_NoMatch;
+  return ParseStatus::NoMatch;
 }
 
 bool RL78AsmParser::parseRegister(MCRegister &RegNo, SMLoc &StartLoc,
                                    SMLoc &EndLoc) {
-  if (tryParseRegister(RegNo, StartLoc, EndLoc) != MatchOperand_Success)
+  if (!tryParseRegister(RegNo, StartLoc, EndLoc).isSuccess())
     return Error(StartLoc, "invalid register name");
   return false;
 }
@@ -3565,8 +3568,7 @@ bool RL78AsmParser::searchSymbolAlias(StringRef name, MCRegister &Register,
         if (matchRegisterNameByName(DefSymbol, Register, RegKind))
           return true;
       }
-    } else if (Sym->isUnset())
-      return false; 
+    }
   return false;
 }
 

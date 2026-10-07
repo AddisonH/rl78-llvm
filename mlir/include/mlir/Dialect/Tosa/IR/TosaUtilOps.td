@@ -44,7 +44,7 @@ def Tosa_ApplyScaleOp :
     Tosa_IntLike:$value,
     Tosa_IntLike:$multiplier,
     Tosa_Int8Like:$shift,
-    BoolAttr:$double_round
+    Tosa_RoundingModeAttr:$rounding_mode
   );
 
   let results = (outs
@@ -54,6 +54,8 @@ def Tosa_ApplyScaleOp :
   let extraClassDeclaration = [{
     std::optional<SmallVector<int64_t, 4>> getShapeForUnroll();
   }];
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -73,6 +75,8 @@ def Tosa_YieldOp : Tosa_Op<"yield", [
   let arguments = (ins
     Variadic<Tosa_Tensor>:$inputs
   );
+
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
 }
 
 #endif // TOSA_UTIL_OPS

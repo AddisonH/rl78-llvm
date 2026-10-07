@@ -17,7 +17,8 @@ enum PragmaMSCommentKind {
   PCK_Lib,      // #pragma comment(lib, ...)
   PCK_Compiler, // #pragma comment(compiler, ...)
   PCK_ExeStr,   // #pragma comment(exestr, ...)
-  PCK_User      // #pragma comment(user, ...)
+  PCK_User,     // #pragma comment(user, ...)
+  PCK_Copyright // #pragma comment(copyright, ...)
 };
 
 enum PragmaMSStructKind {
@@ -33,6 +34,14 @@ enum PragmaFloatControlKind {
   PFC_NoExcept,  // #pragma float_control(except, off)
   PFC_Push,      // #pragma float_control(push)
   PFC_Pop        // #pragma float_control(pop)
+};
+
+enum PragmaFPKind {
+  PFK_Contract,    // #pragma clang fp contract
+  PFK_Reassociate, // #pragma clang fp reassociate
+  PFK_Reciprocal,  // #pragma clang fp reciprocal
+  PFK_Exceptions,  // #pragma clang fp exceptions
+  PFK_EvalMethod   // #pragma clang fp eval_method
 };
 }
 

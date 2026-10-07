@@ -41,7 +41,6 @@ namespace WonkyAccess {
   }
 }
 
-// <rdar://problem/9169404>
 namespace rdar9169404 {
   template<typename T, T N> struct X { };
   template<bool C> struct X<bool, C> {
@@ -54,7 +53,6 @@ namespace rdar9169404 {
 #endif
 }
 
-// rdar://problem/39524996
 namespace rdar39524996 {
   template <typename T, typename U>
   struct enable_if_not_same
@@ -154,3 +152,23 @@ namespace GH60778 {
     ClassTemplate<>::Nested<int> instantiation;
   }
 }
+#if __cplusplus >= 201103L
+namespace GH162855 {
+  template <class...> using A = int;
+  template <class, int> struct B;
+  template <class...> struct C;
+  template <template <class, int...> class TT, long... X>
+  struct C<TT<int, X...>> {
+    template <class... Y> using l = A<B<Y, X>...>;
+  };
+  template <class> struct D;
+  template struct C<D<int>>;
+} // namespace GH162855
+#endif
+
+namespace DependentWithQualifier {
+  template <class> struct A;
+  template <class> struct B;
+  template <class T> struct A<const B<T> > {};
+  template struct A<const B<int> >;
+} // namespace DependentWithQualifier

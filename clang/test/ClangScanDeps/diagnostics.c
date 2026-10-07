@@ -1,9 +1,25 @@
-// RUN: rm -rf %t && mkdir %t
-// RUN: cp %S/Inputs/diagnostics/* %t
+// RUN: rm -rf %t
+// RUN: split-file %s %t
 
-// RUN: sed "s|DIR|%/t|g" %S/Inputs/diagnostics/cdb.json.template > %t/cdb.json
+//--- cdb.json.template
+[
+  {
+    "directory": "DIR",
+    "command": "clang -c DIR/tu.c -fmodules -target i386-apple-ios14.0-simulator -fmodules-cache-path=DIR/cache -Wno-error=invalid-ios-deployment-target -o DIR/tu.o",
+    "file": "DIR/tu.c"
+  }
+]
+//--- mod.h
+//--- module.modulemap
+module mod { header "mod.h" }
+//--- tu.c
+#include "mod.h"
+
+// RUN: sed "s|DIR|%/t|g" %t/cdb.json.template > %t/cdb.json
 // RUN: clang-scan-deps -compilation-database %t/cdb.json -format experimental-full 2>&1 > %t/result.json
-// RUN: cat %t/result.json | sed 's:\\\\\?:/:g' | FileCheck %s -DPREFIX=%/t
+// RUN: cat %t/result.json | sed 's:\\\\\?:/:g' \
+// RUN:   | %scan-deps-filter --fields=name,context-hash,clang-context-hash,command-line,file-deps,clang-module-deps,clang-modulemap-file,link-libraries,input-file \
+// RUN:   | FileCheck %s -DPREFIX=%/t
 
 // Check that the '-Wno-error=invalid-ios-deployment-target' option is being
 // respected and invalid arguments like '-target i386-apple-ios14.0-simulator'
@@ -20,9 +36,10 @@
 // CHECK:            ],
 // CHECK-NEXT:       "context-hash": "[[HASH_MOD:.*]]",
 // CHECK-NEXT:       "file-deps": [
+// CHECK-NEXT:         "[[PREFIX]]/module.modulemap",
 // CHECK-NEXT:         "[[PREFIX]]/mod.h"
-// CHECK-NEXT:         "[[PREFIX]]/module.modulemap"
 // CHECK-NEXT:       ],
+// CHECK-NEXT:       "link-libraries": [],
 // CHECK-NEXT:       "name": "mod"
 // CHECK-NEXT:     }
 // CHECK-NEXT:   ],

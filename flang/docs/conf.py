@@ -9,82 +9,30 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys, os
 from datetime import date
-from recommonmark.parser import CommonMarkParser
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-# sys.path.insert(0, os.path.abspath('.'))
+from llvm_sphinx import *  # see llvm-project/utils/docs/README.md
+
+globals().update(common_conf(tags))
 
 # -- General configuration -----------------------------------------------------
-
-# https://github.com/readthedocs/recommonmark/issues/177
-# Method used to remove the warning message.
-class CustomCommonMarkParser(CommonMarkParser):
-    def visit_document(self, node):
-        pass
-
 
 # If your documentation needs a minimal Sphinx version, state it here.
 # needs_sphinx = '1.0'
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ["sphinx.ext.todo", "sphinx.ext.mathjax", "sphinx.ext.intersphinx"]
+extensions += [
+    "sphinx.ext.todo",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.autodoc",
+]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+# The substitutions to use in markdown files. This contains unconditional
+# substitutions, but more may be added once the configuration is obtained.
+myst_substitutions = {"in_progress": "(In-Progress) " if tags.has("PreRelease") else ""}
 
-# The suffix of source filenames.
-source_suffix = {
-    ".rst": "restructuredtext",
-}
-try:
-    import recommonmark
-except ImportError:
-    # manpages do not use any .md sources
-    if not tags.has("builder-man"):
-        raise
-else:
-    import sphinx
-
-    if sphinx.version_info >= (3, 0):
-        # This requires 0.5 or later.
-        extensions.append("recommonmark")
-    else:
-        source_parsers = {".md": CustomCommonMarkParser}
-    source_suffix[".md"] = "markdown"
-    extensions.append("sphinx_markdown_tables")
-
-    # Setup AutoStructify for inline .rst toctrees in index.md
-    from recommonmark.transform import AutoStructify
-
-    # Stolen from https://github.com/readthedocs/recommonmark/issues/93
-    # Monkey patch to fix recommonmark 0.4 doc reference issues.
-    from recommonmark.states import DummyStateMachine
-
-    orig_run_role = DummyStateMachine.run_role
-
-    def run_role(self, name, options=None, content=None):
-        if name == "doc":
-            name = "any"
-            return orig_run_role(self, name, options, content)
-
-    DummyStateMachine.run_role = run_role
-
-    def setup(app):
-        # Disable inline math to avoid
-        # https://github.com/readthedocs/recommonmark/issues/120 in Extensions.md
-        app.add_config_value("recommonmark_config", {"enable_inline_math": False}, True)
-        app.add_transform(AutoStructify)
-
-
-# The encoding of source files.
-# source_encoding = 'utf-8-sig'
-
-# The master toctree document.
-master_doc = "index"
+import sphinx
 
 # General information about the project.
 project = "Flang"
@@ -113,7 +61,7 @@ copyright = "2017-%d, The Flang Team" % date.today().year
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ["_build", "analyzer"]
+exclude_patterns = ["_build", "analyzer", "FIR/*", "MeetingNotes/*"]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -140,15 +88,12 @@ pygments_style = "friendly"
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "llvm-theme"
+html_theme = "haiku"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-html_theme_options = {"nosidebar": False}
-
-# Add any paths that contain custom themes here, relative to this directory.
-html_theme_path = ["_themes"]
+# html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -172,11 +117,7 @@ html_title = "The Flang Compiler"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
-
-html_context = {
-    "css_files": ["_static/llvm.css"],
-}
+# html_static_path = []
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
@@ -187,13 +128,7 @@ html_last_updated_fmt = "%b %d, %Y"
 # html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-html_sidebars = {
-    "**": [
-        "indexsidebar.html",
-        "searchbox.html",
-    ]
-}
-
+# html_sidebars = {}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -274,7 +209,15 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = []
+man_pages = [
+    (
+        "index",
+        "flang",
+        "flang - the Flang Fortran compiler",
+        ["Flang Contributors"],
+        1,
+    )
+]
 
 # If true, show URL addresses after external links.
 # man_show_urls = False
@@ -305,3 +248,22 @@ texinfo_documents = [
 
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
+
+
+# This can be treated as its own sphinx extension. setup() will be called by
+# sphinx. In it, register a function to be called when the configuration has
+# been initialized. The configuration will contain the values of the -D options
+# passed to sphinx-build on the command line.
+#
+# See llvm/cmake/modules/AddSphinxTarget.cmake for details on how sphinx-build
+# is invoked.
+def setup(app):
+    app.connect("config-inited", myst_substitutions_update)
+
+
+# Override the myst_parser substitutions map after the configuration has been
+# initialized.
+def myst_substitutions_update(app, config):
+    config.myst_substitutions.update(
+        {"release": config.release, "version": config.version}
+    )

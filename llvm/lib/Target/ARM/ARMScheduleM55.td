@@ -46,7 +46,7 @@
 //
 // For this schedule, we currently model latencies and pipelines well for each
 // instruction. MVE instruction take two beats, modelled using
-// ResourceCycles=[2].
+// ReleaseAtCycles=[2].
 //
 //
 // Dual Issue
@@ -152,7 +152,7 @@ def : InstRW<[M55WriteDX_SI], (instregex "t2CS(EL|INC|INV|NEG)")>;
 // Thumb 2 instructions that could be reduced to a thumb 1 instruction and can
 // be dual issued with one of the above. This list is optimistic.
 def : InstRW<[M55WriteDX_DI], (instregex "t2ADDC?rr$", "t2ADDrr$",
-           "t2ADDSrr$", "t2ANDrr$", "t2ASRr[ir]$", "t2BICrr$", "t2CMNzrr$",
+           "t2ADDSrr$", "t2ANDrr$", "t2ASRr[ir]$", "t2BICrr$", "t2CMNrr$",
            "t2CMPr[ir]$", "t2EORrr$", "t2LSLr[ir]$", "t2LSRr[ir]$", "t2MVNr$",
            "t2ORRrr$", "t2REV(16|SH)?$", "t2RORrr$", "t2RSBr[ir]$", "t2RSBSri$",
            "t2SBCrr$", "t2SUBS?rr$", "t2TEQrr$", "t2TSTrr$", "t2STRi12$",
@@ -161,7 +161,7 @@ def : InstRW<[M55WriteDX_DI], (instregex "t2ADDC?rr$", "t2ADDrr$",
 def : InstRW<[M55WriteDX_DI], (instregex "t2SETPAN$", "tADC$", "tADDhirr$",
            "tADDrSP$", "tADDrSPi$", "tADDrr$", "tADDspi$", "tADDspr$", "tADR$",
            "tAND$", "tASRri$", "tASRrr$", "tBIC$", "tBKPT$", "tCBNZ$", "tCBZ$",
-           "tCMNz$", "tCMPhir$", "tCMPi8$", "tCMPr$", "tCPS$", "tEOR$", "tHINT$",
+           "tCMN$","tCMPhir$", "tCMPi8$", "tCMPr$", "tCPS$", "tEOR$", "tHINT$",
            "tHLT$", "tLSLri$", "tLSLrr$", "tLSRri$", "tLSRrr$", "tMOVSr$",
            "tMUL$", "tMVN$", "tORR$", "tPICADD$", "tPOP$", "tPUSH$", "tREV$",
            "tREV16$", "tREVSH$", "tROR$", "tRSB$", "tSBC$", "tSETEND$",
@@ -245,7 +245,7 @@ def : ReadAdvance<ReadMAC, 0>;
 // MVE and VFP //
 //=============//
 
-// The Writes that take ResourceCycles=[2] are MVE instruction, the others VFP.
+// The Writes that take ReleaseAtCycles=[2] are MVE instruction, the others VFP.
 
 let SingleIssue = 1, Latency = 1 in {
   def M55WriteLSE2 : SchedWriteRes<[M55UnitLoadStore]>;
@@ -253,10 +253,10 @@ let SingleIssue = 1, Latency = 1 in {
   def M55WriteFloatE2 : SchedWriteRes<[M55UnitVecFPALU]>;
   def M55WriteSysE2 : SchedWriteRes<[M55UnitVecSys]>;
 
-  def M55Write2LSE2 : SchedWriteRes<[M55UnitLoadStore]> { let ResourceCycles=[2]; }
-  def M55Write2IntE2 : SchedWriteRes<[M55UnitVecALU]> { let ResourceCycles=[2]; }
-  def M55Write2FloatE2 : SchedWriteRes<[M55UnitVecFPALU]> { let ResourceCycles=[2]; }
-  def M55Write2IntFPE2 : SchedWriteRes<[M55UnitVecIntFP]> { let ResourceCycles=[2]; }
+  def M55Write2LSE2 : SchedWriteRes<[M55UnitLoadStore]> { let ReleaseAtCycles=[2]; }
+  def M55Write2IntE2 : SchedWriteRes<[M55UnitVecALU]> { let ReleaseAtCycles=[2]; }
+  def M55Write2FloatE2 : SchedWriteRes<[M55UnitVecFPALU]> { let ReleaseAtCycles=[2]; }
+  def M55Write2IntFPE2 : SchedWriteRes<[M55UnitVecIntFP]> { let ReleaseAtCycles=[2]; }
 }
 
 let SingleIssue = 1, Latency = 2 in {
@@ -264,20 +264,20 @@ let SingleIssue = 1, Latency = 2 in {
   def M55WriteIntE3 : SchedWriteRes<[M55UnitVecALU]>;
   def M55WriteFloatE3 : SchedWriteRes<[M55UnitVecFPALU]>;
 
-  def M55Write2LSE3 : SchedWriteRes<[M55UnitLoadStore]> { let ResourceCycles=[2]; }
-  def M55Write2IntE3 : SchedWriteRes<[M55UnitVecALU]> { let ResourceCycles=[2]; }
-  def M55Write2FloatE3 : SchedWriteRes<[M55UnitVecFPALU]> { let ResourceCycles=[2]; }
+  def M55Write2LSE3 : SchedWriteRes<[M55UnitLoadStore]> { let ReleaseAtCycles=[2]; }
+  def M55Write2IntE3 : SchedWriteRes<[M55UnitVecALU]> { let ReleaseAtCycles=[2]; }
+  def M55Write2FloatE3 : SchedWriteRes<[M55UnitVecFPALU]> { let ReleaseAtCycles=[2]; }
 }
 
 let SingleIssue = 1, Latency = 3 in {
-  def M55Write2IntE3Plus1 : SchedWriteRes<[M55UnitVecALU]> { let ResourceCycles=[2]; }
+  def M55Write2IntE3Plus1 : SchedWriteRes<[M55UnitVecALU]> { let ReleaseAtCycles=[2]; }
 
   // Same as M55Write2IntE3/M55Write2FloatE3 above, but longer latency and no forwarding into stores
-  def M55Write2IntE4NoFwd : SchedWriteRes<[M55UnitVecALU]> { let ResourceCycles=[2]; }
-  def M55Write2FloatE4NoFwd : SchedWriteRes<[M55UnitVecFPALU]> { let ResourceCycles=[2]; }
+  def M55Write2IntE4NoFwd : SchedWriteRes<[M55UnitVecALU]> { let ReleaseAtCycles=[2]; }
+  def M55Write2FloatE4NoFwd : SchedWriteRes<[M55UnitVecFPALU]> { let ReleaseAtCycles=[2]; }
 }
 let SingleIssue = 1, Latency = 4 in {
-  def M55Write2IntE3Plus2 : SchedWriteRes<[M55UnitVecALU]> { let ResourceCycles=[2]; }
+  def M55Write2IntE3Plus2 : SchedWriteRes<[M55UnitVecALU]> { let ReleaseAtCycles=[2]; }
   def M55WriteFloatE3Plus2 : SchedWriteRes<[M55UnitVecFPALU]>;
 }
 let SingleIssue = 1, Latency = 9 in {
@@ -353,9 +353,9 @@ def : InstRW<[M55Write2IntE2], (instregex "MVE_VHADD")>;
 def : InstRW<[M55Write2IntE2], (instregex "MVE_VHCADD")>;
 def : InstRW<[M55Write2IntE2], (instregex "MVE_VHSUB")>;
 def : InstRW<[M55Write2IntE2], (instregex "MVE_V(MAX|MIN)A?(s|u)")>;
-def : InstRW<[M55Write2IntE3], (instregex "MVE_V(MAX|MIN)A?V(s|u)8")>;
+def : InstRW<[M55Write2IntE3Plus2], (instregex "MVE_V(MAX|MIN)A?V(s|u)8")>;
 def : InstRW<[M55Write2IntE3Plus1], (instregex "MVE_V(MAX|MIN)A?V(s|u)16")>;
-def : InstRW<[M55Write2IntE3Plus2], (instregex "MVE_V(MAX|MIN)A?V(s|u)32")>;
+def : InstRW<[M55Write2IntE3], (instregex "MVE_V(MAX|MIN)A?V(s|u)32")>;
 def : InstRW<[M55Write2IntE4NoFwd], (instregex "MVE_VMOVN")>;
 def : InstRW<[M55Write2IntE2], (instregex "MVE_VMOVL")>;
 def : InstRW<[M55Write2IntE3], (instregex "MVE_VMULL[BT]p")>;

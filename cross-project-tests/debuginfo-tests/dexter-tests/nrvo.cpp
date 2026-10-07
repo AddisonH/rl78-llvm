@@ -1,10 +1,10 @@
 // This ensures that DW_OP_deref is inserted when necessary, such as when NRVO
 // of a string object occurs in C++.
 //
-// REQUIRES: system-windows
+// REQUIRES: system-windows, dbgeng-10-19041
 //
-// RUN: %dexter --fail-lt 1.0 -w --builder 'clang-cl_vs2015' \
-// RUN:      --debugger 'dbgeng' --cflags '/Z7 /Zi' --ldflags '/Z7 /Zi' -- %s
+// RUN: %clang_cl /Z7 /Zi %s -o %t
+// RUN: %dexter --use-heuristic --fail-lt 1.0 -w --binary %t --debugger 'dbgeng' -- %s
 
 struct string {
   string() {}

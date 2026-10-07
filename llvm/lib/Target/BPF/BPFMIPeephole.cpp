@@ -24,9 +24,17 @@
 #include "BPFInstrInfo.h"
 #include "BPFTargetMachine.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionAnalysisManager.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/IR/Analysis.h"
 #include "llvm/Support/Debug.h"
 #include <set>
 
@@ -34,20 +42,17 @@ using namespace llvm;
 
 #define DEBUG_TYPE "bpf-mi-zext-elim"
 
+static cl::opt<int> GotolAbsLowBound("gotol-abs-low-bound", cl::Hidden,
+  cl::init(INT16_MAX >> 1), cl::desc("Specify gotol lower bound"));
+
 STATISTIC(ZExtElemNum, "Number of zero extension shifts eliminated");
 
 namespace {
 
-struct BPFMIPeephole : public MachineFunctionPass {
-
-  static char ID;
+struct BPFMIPeepholeImpl {
   const BPFInstrInfo *TII;
   MachineFunction *MF;
   MachineRegisterInfo *MRI;
-
-  BPFMIPeephole() : MachineFunctionPass(ID) {
-    initializeBPFMIPeepholePass(*PassRegistry::getPassRegistry());
-  }
 
 private:
   // Initialize class variables.
@@ -65,10 +70,7 @@ private:
 public:
 
   // Main entry point for this pass.
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
-
+  bool runOnMachineFunction(MachineFunction &MF) {
     initialize(MF);
 
     // First try to eliminate (zext, lshift, rshift) and then
@@ -80,20 +82,23 @@ public:
   }
 };
 
+class BPFMIPeepholeLegacy : public MachineFunctionPass {
+public:
+  static char ID;
+  BPFMIPeepholeLegacy() : MachineFunctionPass(ID) {}
+  bool runOnMachineFunction(MachineFunction &MF) override;
+};
+
 // Initialize class variables.
-void BPFMIPeephole::initialize(MachineFunction &MFParm) {
+void BPFMIPeepholeImpl::initialize(MachineFunction &MFParm) {
   MF = &MFParm;
   MRI = &MF->getRegInfo();
   TII = MF->getSubtarget<BPFSubtarget>().getInstrInfo();
   LLVM_DEBUG(dbgs() << "*** BPF MachineSSA ZEXT Elim peephole pass ***\n\n");
 }
 
-bool BPFMIPeephole::isCopyFrom32Def(MachineInstr *CopyMI)
-{
+bool BPFMIPeepholeImpl::isCopyFrom32Def(MachineInstr *CopyMI) {
   MachineOperand &opnd = CopyMI->getOperand(1);
-
-  if (!opnd.isReg())
-    return false;
 
   // Return false if getting value from a 32bit physical register.
   // Most likely, this physical register is aliased to
@@ -112,13 +117,9 @@ bool BPFMIPeephole::isCopyFrom32Def(MachineInstr *CopyMI)
   return true;
 }
 
-bool BPFMIPeephole::isPhiFrom32Def(MachineInstr *PhiMI)
-{
+bool BPFMIPeepholeImpl::isPhiFrom32Def(MachineInstr *PhiMI) {
   for (unsigned i = 1, e = PhiMI->getNumOperands(); i < e; i += 2) {
     MachineOperand &opnd = PhiMI->getOperand(i);
-
-    if (!opnd.isReg())
-      return false;
 
     MachineInstr *PhiDef = MRI->getVRegDef(opnd.getReg());
     if (!PhiDef)
@@ -137,8 +138,7 @@ bool BPFMIPeephole::isPhiFrom32Def(MachineInstr *PhiMI)
 }
 
 // The \p DefInsn instruction defines a virtual register.
-bool BPFMIPeephole::isInsnFrom32Def(MachineInstr *DefInsn)
-{
+bool BPFMIPeepholeImpl::isInsnFrom32Def(MachineInstr *DefInsn) {
   if (!DefInsn)
     return false;
 
@@ -155,9 +155,13 @@ bool BPFMIPeephole::isInsnFrom32Def(MachineInstr *DefInsn)
   return true;
 }
 
-bool BPFMIPeephole::isMovFrom32Def(MachineInstr *MovMI)
+bool BPFMIPeepholeImpl::isMovFrom32Def(MachineInstr *MovMI)
 {
-  MachineInstr *DefInsn = MRI->getVRegDef(MovMI->getOperand(1).getReg());
+  const MachineOperand &Src = MovMI->getOperand(1);
+  if (Src.getSubReg())
+    return false;
+
+  MachineInstr *DefInsn = MRI->getVRegDef(Src.getReg());
 
   LLVM_DEBUG(dbgs() << "  Def of Mov Src:");
   LLVM_DEBUG(DefInsn->dump());
@@ -171,7 +175,7 @@ bool BPFMIPeephole::isMovFrom32Def(MachineInstr *MovMI)
   return true;
 }
 
-bool BPFMIPeephole::eliminateZExtSeq() {
+bool BPFMIPeepholeImpl::eliminateZExtSeq() {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -223,7 +227,8 @@ bool BPFMIPeephole::eliminateZExtSeq() {
         }
 
         BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(BPF::SUBREG_TO_REG), DstReg)
-          .addImm(0).addReg(SubReg).addImm(BPF::sub_32);
+            .addReg(SubReg)
+            .addImm(BPF::sub_32);
 
         SllMI->eraseFromParent();
         MovMI->eraseFromParent();
@@ -239,7 +244,7 @@ bool BPFMIPeephole::eliminateZExtSeq() {
   return Eliminated;
 }
 
-bool BPFMIPeephole::eliminateZExt() {
+bool BPFMIPeepholeImpl::eliminateZExt() {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -274,7 +279,8 @@ bool BPFMIPeephole::eliminateZExt() {
 
       // Build a SUBREG_TO_REG instruction.
       BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(BPF::SUBREG_TO_REG), dst)
-        .addImm(0).addReg(src).addImm(BPF::sub_32);
+          .addReg(src)
+          .addImm(BPF::sub_32);
 
       ToErase = &MI;
       Eliminated = true;
@@ -286,54 +292,85 @@ bool BPFMIPeephole::eliminateZExt() {
 
 } // end default namespace
 
-INITIALIZE_PASS(BPFMIPeephole, DEBUG_TYPE,
+INITIALIZE_PASS(BPFMIPeepholeLegacy, DEBUG_TYPE,
                 "BPF MachineSSA Peephole Optimization For ZEXT Eliminate",
                 false, false)
 
-char BPFMIPeephole::ID = 0;
-FunctionPass* llvm::createBPFMIPeepholePass() { return new BPFMIPeephole(); }
+char BPFMIPeepholeLegacy::ID = 0;
+FunctionPass *llvm::createBPFMIPeepholeLegacyPass() {
+  return new BPFMIPeepholeLegacy();
+}
+
+bool BPFMIPeepholeLegacy::runOnMachineFunction(MachineFunction &MF) {
+  if (skipFunction(MF.getFunction()))
+    return false;
+
+  BPFMIPeepholeImpl Impl;
+  return Impl.runOnMachineFunction(MF);
+}
+
+PreservedAnalyses BPFMIPeepholePass::run(MachineFunction &MF,
+                                         MachineFunctionAnalysisManager &MFAM) {
+  BPFMIPeepholeImpl Impl;
+  return Impl.runOnMachineFunction(MF)
+             ? getMachineFunctionPassPreservedAnalyses()
+                   .preserveSet<CFGAnalyses>()
+             : PreservedAnalyses::all();
+}
 
 STATISTIC(RedundantMovElemNum, "Number of redundant moves eliminated");
 
 namespace {
 
-struct BPFMIPreEmitPeephole : public MachineFunctionPass {
-
-  static char ID;
+struct BPFMIPreEmitPeepholeImpl {
   MachineFunction *MF;
   const TargetRegisterInfo *TRI;
-
-  BPFMIPreEmitPeephole() : MachineFunctionPass(ID) {
-    initializeBPFMIPreEmitPeepholePass(*PassRegistry::getPassRegistry());
-  }
+  const BPFInstrInfo *TII;
+  bool SupportGotol;
 
 private:
   // Initialize class variables.
   void initialize(MachineFunction &MFParm);
 
+  bool in16BitRange(int Num);
   bool eliminateRedundantMov();
+  bool adjustBranch();
+  bool insertMissingCallerSavedSpills();
+  bool removeMayGotoZero();
+  bool addExitAfterUnreachable();
 
 public:
 
   // Main entry point for this pass.
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
-
+  bool runOnMachineFunction(MachineFunction &MF) {
     initialize(MF);
-
-    return eliminateRedundantMov();
+    bool Changed = eliminateRedundantMov();
+    if (SupportGotol)
+      Changed |= adjustBranch();
+    Changed |= insertMissingCallerSavedSpills();
+    Changed |= removeMayGotoZero();
+    Changed |= addExitAfterUnreachable();
+    return Changed;
   }
 };
 
+class BPFMIPreEmitPeepholeLegacy : public MachineFunctionPass {
+public:
+  static char ID;
+  BPFMIPreEmitPeepholeLegacy() : MachineFunctionPass(ID) {}
+  bool runOnMachineFunction(MachineFunction &MF) override;
+};
+
 // Initialize class variables.
-void BPFMIPreEmitPeephole::initialize(MachineFunction &MFParm) {
+void BPFMIPreEmitPeepholeImpl::initialize(MachineFunction &MFParm) {
   MF = &MFParm;
+  TII = MF->getSubtarget<BPFSubtarget>().getInstrInfo();
   TRI = MF->getSubtarget<BPFSubtarget>().getRegisterInfo();
+  SupportGotol = MF->getSubtarget<BPFSubtarget>().hasGotol();
   LLVM_DEBUG(dbgs() << "*** BPF PreEmit peephole pass ***\n\n");
 }
 
-bool BPFMIPreEmitPeephole::eliminateRedundantMov() {
+bool BPFMIPreEmitPeepholeImpl::eliminateRedundantMov() {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -374,190 +411,478 @@ bool BPFMIPreEmitPeephole::eliminateRedundantMov() {
   return Eliminated;
 }
 
-} // end default namespace
-
-INITIALIZE_PASS(BPFMIPreEmitPeephole, "bpf-mi-pemit-peephole",
-                "BPF PreEmit Peephole Optimization", false, false)
-
-char BPFMIPreEmitPeephole::ID = 0;
-FunctionPass* llvm::createBPFMIPreEmitPeepholePass()
-{
-  return new BPFMIPreEmitPeephole();
+bool BPFMIPreEmitPeepholeImpl::in16BitRange(int Num) {
+  // Well, the cut-off is not precisely at 16bit range since
+  // new codes are added during the transformation. So let us
+  // a little bit conservative.
+  return Num >= -GotolAbsLowBound && Num <= GotolAbsLowBound;
 }
 
-STATISTIC(TruncElemNum, "Number of truncation eliminated");
-
-namespace {
-
-struct BPFMIPeepholeTruncElim : public MachineFunctionPass {
-
-  static char ID;
-  const BPFInstrInfo *TII;
-  MachineFunction *MF;
-  MachineRegisterInfo *MRI;
-
-  BPFMIPeepholeTruncElim() : MachineFunctionPass(ID) {
-    initializeBPFMIPeepholeTruncElimPass(*PassRegistry::getPassRegistry());
-  }
-
-private:
-  // Initialize class variables.
-  void initialize(MachineFunction &MFParm);
-
-  bool eliminateTruncSeq();
-
-public:
-
-  // Main entry point for this pass.
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
-
-    initialize(MF);
-
-    return eliminateTruncSeq();
-  }
-};
-
-static bool TruncSizeCompatible(int TruncSize, unsigned opcode)
-{
-  if (TruncSize == 1)
-    return opcode == BPF::LDB || opcode == BPF::LDB32;
-
-  if (TruncSize == 2)
-    return opcode == BPF::LDH || opcode == BPF::LDH32;
-
-  if (TruncSize == 4)
-    return opcode == BPF::LDW || opcode == BPF::LDW32;
-
-  return false;
-}
-
-// Initialize class variables.
-void BPFMIPeepholeTruncElim::initialize(MachineFunction &MFParm) {
-  MF = &MFParm;
-  MRI = &MF->getRegInfo();
-  TII = MF->getSubtarget<BPFSubtarget>().getInstrInfo();
-  LLVM_DEBUG(dbgs() << "*** BPF MachineSSA TRUNC Elim peephole pass ***\n\n");
-}
-
-// Reg truncating is often the result of 8/16/32bit->64bit or
-// 8/16bit->32bit conversion. If the reg value is loaded with
-// masked byte width, the AND operation can be removed since
-// BPF LOAD already has zero extension.
+// Before cpu=v4, only 16bit branch target offset (-0x8000 to 0x7fff)
+// is supported for both unconditional (JMP) and condition (JEQ, JSGT,
+// etc.) branches. In certain cases, e.g., full unrolling, the branch
+// target offset might exceed 16bit range. If this happens, the llvm
+// will generate incorrect code as the offset is truncated to 16bit.
 //
-// This also solved a correctness issue.
-// In BPF socket-related program, e.g., __sk_buff->{data, data_end}
-// are 32-bit registers, but later on, kernel verifier will rewrite
-// it with 64-bit value. Therefore, truncating the value after the
-// load will result in incorrect code.
-bool BPFMIPeepholeTruncElim::eliminateTruncSeq() {
-  MachineInstr* ToErase = nullptr;
-  bool Eliminated = false;
+// To fix this rare case, a new insn JMPL is introduced. This new
+// insn supports supports 32bit branch target offset. The compiler
+// does not use this insn during insn selection. Rather, BPF backend
+// will estimate the branch target offset and do JMP -> JMPL and
+// JEQ -> JEQ + JMPL conversion if the estimated branch target offset
+// is beyond 16bit.
+bool BPFMIPreEmitPeepholeImpl::adjustBranch() {
+  bool Changed = false;
+  int CurrNumInsns = 0;
+  DenseMap<MachineBasicBlock *, int> SoFarNumInsns;
+  DenseMap<MachineBasicBlock *, MachineBasicBlock *> FollowThroughBB;
+  std::vector<MachineBasicBlock *> MBBs;
 
+  MachineBasicBlock *PrevBB = nullptr;
   for (MachineBasicBlock &MBB : *MF) {
-    for (MachineInstr &MI : MBB) {
-      // The second insn to remove if the eliminate candidate is a pair.
-      MachineInstr *MI2 = nullptr;
-      Register DstReg, SrcReg;
-      MachineInstr *DefMI;
-      int TruncSize = -1;
+    // MBB.size() is the number of insns in this basic block, including some
+    // debug info, e.g., DEBUG_VALUE, so we may over-count a little bit.
+    // Typically we have way more normal insns than DEBUG_VALUE insns.
+    // Also, if we indeed need to convert conditional branch like JEQ to
+    // JEQ + JMPL, we actually introduced some new insns like below.
+    CurrNumInsns += (int)MBB.size();
+    SoFarNumInsns[&MBB] = CurrNumInsns;
+    if (PrevBB != nullptr)
+      FollowThroughBB[PrevBB] = &MBB;
+    PrevBB = &MBB;
+    // A list of original BBs to make later traveral easier.
+    MBBs.push_back(&MBB);
+  }
+  FollowThroughBB[PrevBB] = nullptr;
 
-      // If the previous instruction was marked for elimination, remove it now.
-      if (ToErase) {
-        ToErase->eraseFromParent();
-        ToErase = nullptr;
+  for (unsigned i = 0; i < MBBs.size(); i++) {
+    // We have four cases here:
+    //  (1). no terminator, simple follow through.
+    //  (2). jmp to another bb.
+    //  (3). conditional jmp to another bb or follow through.
+    //  (4). conditional jmp followed by an unconditional jmp.
+    MachineInstr *CondJmp = nullptr, *UncondJmp = nullptr;
+
+    MachineBasicBlock *MBB = MBBs[i];
+    for (MachineInstr &Term : MBB->terminators()) {
+      if (Term.isConditionalBranch()) {
+        assert(CondJmp == nullptr);
+        CondJmp = &Term;
+      } else if (Term.isUnconditionalBranch()) {
+        assert(UncondJmp == nullptr);
+        UncondJmp = &Term;
       }
+    }
 
-      // AND A, 0xFFFFFFFF will be turned into SLL/SRL pair due to immediate
-      // for BPF ANDI is i32, and this case only happens on ALU64.
-      if (MI.getOpcode() == BPF::SRL_ri &&
-          MI.getOperand(2).getImm() == 32) {
-        SrcReg = MI.getOperand(1).getReg();
-        if (!MRI->hasOneNonDBGUse(SrcReg))
-          continue;
+    // (1). no terminator, simple follow through.
+    if (!CondJmp && !UncondJmp)
+      continue;
 
-        MI2 = MRI->getVRegDef(SrcReg);
-        DstReg = MI.getOperand(0).getReg();
+    MachineBasicBlock *CondTargetBB, *JmpBB;
+    CurrNumInsns = SoFarNumInsns[MBB];
 
-        if (!MI2 ||
-            MI2->getOpcode() != BPF::SLL_ri ||
-            MI2->getOperand(2).getImm() != 32)
-          continue;
-
-        // Update SrcReg.
-        SrcReg = MI2->getOperand(1).getReg();
-        DefMI = MRI->getVRegDef(SrcReg);
-        if (DefMI)
-          TruncSize = 4;
-      } else if (MI.getOpcode() == BPF::AND_ri ||
-                 MI.getOpcode() == BPF::AND_ri_32) {
-        SrcReg = MI.getOperand(1).getReg();
-        DstReg = MI.getOperand(0).getReg();
-        DefMI = MRI->getVRegDef(SrcReg);
-
-        if (!DefMI)
-          continue;
-
-        int64_t imm = MI.getOperand(2).getImm();
-        if (imm == 0xff)
-          TruncSize = 1;
-        else if (imm == 0xffff)
-          TruncSize = 2;
-      }
-
-      if (TruncSize == -1)
+    // (2). jmp to another bb.
+    if (!CondJmp && UncondJmp) {
+      JmpBB = UncondJmp->getOperand(0).getMBB();
+      if (in16BitRange(SoFarNumInsns[JmpBB] - JmpBB->size() - CurrNumInsns))
         continue;
 
-      // The definition is PHI node, check all inputs.
-      if (DefMI->isPHI()) {
-        bool CheckFail = false;
+      // replace this insn as a JMPL.
+      BuildMI(MBB, UncondJmp->getDebugLoc(), TII->get(BPF::JMPL)).addMBB(JmpBB);
+      UncondJmp->eraseFromParent();
+      Changed = true;
+      continue;
+    }
 
-        for (unsigned i = 1, e = DefMI->getNumOperands(); i < e; i += 2) {
-          MachineOperand &opnd = DefMI->getOperand(i);
-          if (!opnd.isReg()) {
-            CheckFail = true;
-            break;
-          }
+    const BasicBlock *TermBB = MBB->getBasicBlock();
+    int Dist;
 
-          MachineInstr *PhiDef = MRI->getVRegDef(opnd.getReg());
-          if (!PhiDef || PhiDef->isPHI() ||
-              !TruncSizeCompatible(TruncSize, PhiDef->getOpcode())) {
-            CheckFail = true;
-            break;
-          }
-        }
-
-        if (CheckFail)
-          continue;
-      } else if (!TruncSizeCompatible(TruncSize, DefMI->getOpcode())) {
+    // (3). conditional jmp to another bb or follow through.
+    if (!UncondJmp) {
+      CondTargetBB = CondJmp->getOperand(2).getMBB();
+      MachineBasicBlock *FollowBB = FollowThroughBB[MBB];
+      Dist = SoFarNumInsns[CondTargetBB] - CondTargetBB->size() - CurrNumInsns;
+      if (in16BitRange(Dist))
         continue;
-      }
 
-      BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(BPF::MOV_rr), DstReg)
-              .addReg(SrcReg);
+      // We have
+      //   B2: ...
+      //       if (cond) goto B5
+      //   B3: ...
+      // where B2 -> B5 is beyond 16bit range.
+      //
+      // We do not have 32bit cond jmp insn. So we try to do
+      // the following.
+      //   B2:     ...
+      //           if (cond) goto New_B1
+      //   New_B0  goto B3
+      //   New_B1: gotol B5
+      //   B3: ...
+      // Basically two new basic blocks are created.
+      MachineBasicBlock *New_B0 = MF->CreateMachineBasicBlock(TermBB);
+      MachineBasicBlock *New_B1 = MF->CreateMachineBasicBlock(TermBB);
 
-      if (MI2)
-        MI2->eraseFromParent();
+      // Insert New_B0 and New_B1 into function block list.
+      MachineFunction::iterator MBB_I  = ++MBB->getIterator();
+      MF->insert(MBB_I, New_B0);
+      MF->insert(MBB_I, New_B1);
 
-      // Mark it to ToErase, and erase in the next iteration.
-      ToErase = &MI;
-      TruncElemNum++;
-      Eliminated = true;
+      // replace B2 cond jump
+      if (CondJmp->getOperand(1).isReg())
+        BuildMI(*MBB, MachineBasicBlock::iterator(*CondJmp), CondJmp->getDebugLoc(), TII->get(CondJmp->getOpcode()))
+            .addReg(CondJmp->getOperand(0).getReg())
+            .addReg(CondJmp->getOperand(1).getReg())
+            .addMBB(New_B1);
+      else
+        BuildMI(*MBB, MachineBasicBlock::iterator(*CondJmp), CondJmp->getDebugLoc(), TII->get(CondJmp->getOpcode()))
+            .addReg(CondJmp->getOperand(0).getReg())
+            .addImm(CondJmp->getOperand(1).getImm())
+            .addMBB(New_B1);
+
+      // it is possible that CondTargetBB and FollowBB are the same. But the
+      // above Dist checking should already filtered this case.
+      MBB->removeSuccessor(CondTargetBB);
+      MBB->removeSuccessor(FollowBB);
+      MBB->addSuccessor(New_B0);
+      MBB->addSuccessor(New_B1);
+
+      // Populate insns in New_B0 and New_B1.
+      BuildMI(New_B0, CondJmp->getDebugLoc(), TII->get(BPF::JMP)).addMBB(FollowBB);
+      BuildMI(New_B1, CondJmp->getDebugLoc(), TII->get(BPF::JMPL))
+          .addMBB(CondTargetBB);
+
+      New_B0->addSuccessor(FollowBB);
+      New_B1->addSuccessor(CondTargetBB);
+      CondJmp->eraseFromParent();
+      Changed = true;
+      continue;
+    }
+
+    //  (4). conditional jmp followed by an unconditional jmp.
+    CondTargetBB = CondJmp->getOperand(2).getMBB();
+    JmpBB = UncondJmp->getOperand(0).getMBB();
+
+    // We have
+    //   B2: ...
+    //       if (cond) goto B5
+    //       JMP B7
+    //   B3: ...
+    //
+    // If only B2->B5 is out of 16bit range, we can do
+    //   B2: ...
+    //       if (cond) goto new_B
+    //       JMP B7
+    //   New_B: gotol B5
+    //   B3: ...
+    //
+    // If only 'JMP B7' is out of 16bit range, we can replace
+    // 'JMP B7' with 'JMPL B7'.
+    //
+    // If both B2->B5 and 'JMP B7' is out of range, just do
+    // both the above transformations.
+    Dist = SoFarNumInsns[CondTargetBB] - CondTargetBB->size() - CurrNumInsns;
+    if (!in16BitRange(Dist)) {
+      MachineBasicBlock *New_B = MF->CreateMachineBasicBlock(TermBB);
+
+      // Insert New_B0 into function block list.
+      MF->insert(++MBB->getIterator(), New_B);
+
+      // replace B2 cond jump
+      if (CondJmp->getOperand(1).isReg())
+        BuildMI(*MBB, MachineBasicBlock::iterator(*CondJmp), CondJmp->getDebugLoc(), TII->get(CondJmp->getOpcode()))
+            .addReg(CondJmp->getOperand(0).getReg())
+            .addReg(CondJmp->getOperand(1).getReg())
+            .addMBB(New_B);
+      else
+        BuildMI(*MBB, MachineBasicBlock::iterator(*CondJmp), CondJmp->getDebugLoc(), TII->get(CondJmp->getOpcode()))
+            .addReg(CondJmp->getOperand(0).getReg())
+            .addImm(CondJmp->getOperand(1).getImm())
+            .addMBB(New_B);
+
+      if (CondTargetBB != JmpBB)
+        MBB->removeSuccessor(CondTargetBB);
+      MBB->addSuccessor(New_B);
+
+      // Populate insn in New_B.
+      BuildMI(New_B, CondJmp->getDebugLoc(), TII->get(BPF::JMPL)).addMBB(CondTargetBB);
+
+      New_B->addSuccessor(CondTargetBB);
+      CondJmp->eraseFromParent();
+      Changed = true;
+    }
+
+    if (!in16BitRange(SoFarNumInsns[JmpBB] - CurrNumInsns)) {
+      BuildMI(MBB, UncondJmp->getDebugLoc(), TII->get(BPF::JMPL)).addMBB(JmpBB);
+      UncondJmp->eraseFromParent();
+      Changed = true;
     }
   }
 
-  return Eliminated;
+  return Changed;
 }
 
-} // end default namespace
+static const unsigned CallerSavedRegs[] = {BPF::R0, BPF::R1, BPF::R2,
+                                           BPF::R3, BPF::R4, BPF::R5};
 
-INITIALIZE_PASS(BPFMIPeepholeTruncElim, "bpf-mi-trunc-elim",
-                "BPF MachineSSA Peephole Optimization For TRUNC Eliminate",
-                false, false)
+struct BPFFastCall {
+  MachineInstr *MI;
+  unsigned LiveCallerSavedRegs;
+};
 
-char BPFMIPeepholeTruncElim::ID = 0;
-FunctionPass* llvm::createBPFMIPeepholeTruncElimPass()
-{
-  return new BPFMIPeepholeTruncElim();
+static void collectBPFFastCalls(const TargetRegisterInfo *TRI,
+                                LivePhysRegs &LiveRegs, MachineBasicBlock &BB,
+                                SmallVectorImpl<BPFFastCall> &Calls) {
+  LiveRegs.init(*TRI);
+  LiveRegs.addLiveOuts(BB);
+  Calls.clear();
+  for (MachineInstr &MI : llvm::reverse(BB)) {
+    if (MI.isCall()) {
+      unsigned LiveCallerSavedRegs = 0;
+      for (MCRegister R : CallerSavedRegs) {
+        bool DoSpillFill = false;
+        for (MCPhysReg SR : TRI->subregs(R))
+          DoSpillFill |= !MI.definesRegister(SR, TRI) && LiveRegs.contains(SR);
+        if (!DoSpillFill)
+          continue;
+        LiveCallerSavedRegs |= 1 << R;
+      }
+      if (LiveCallerSavedRegs)
+        Calls.push_back({&MI, LiveCallerSavedRegs});
+    }
+    LiveRegs.stepBackward(MI);
+  }
+}
+
+static int64_t computeMinFixedObjOffset(MachineFrameInfo &MFI,
+                                        unsigned SlotSize) {
+  int64_t MinFixedObjOffset = 0;
+  // Same logic as in X86FrameLowering::adjustFrameForMsvcCxxEh()
+  for (int I = MFI.getObjectIndexBegin(); I < MFI.getObjectIndexEnd(); ++I) {
+    if (MFI.isDeadObjectIndex(I))
+      continue;
+    MinFixedObjOffset = std::min(MinFixedObjOffset, MFI.getObjectOffset(I));
+  }
+  MinFixedObjOffset -=
+      (SlotSize + MinFixedObjOffset % SlotSize) & (SlotSize - 1);
+  return MinFixedObjOffset;
+}
+
+bool BPFMIPreEmitPeepholeImpl::insertMissingCallerSavedSpills() {
+  MachineFrameInfo &MFI = MF->getFrameInfo();
+  SmallVector<BPFFastCall, 8> Calls;
+  LivePhysRegs LiveRegs;
+  const unsigned SlotSize = 8;
+  int64_t MinFixedObjOffset = computeMinFixedObjOffset(MFI, SlotSize);
+  bool Changed = false;
+  for (MachineBasicBlock &BB : *MF) {
+    collectBPFFastCalls(TRI, LiveRegs, BB, Calls);
+    Changed |= !Calls.empty();
+    for (BPFFastCall &Call : Calls) {
+      int64_t CurOffset = MinFixedObjOffset;
+      for (MCRegister Reg : CallerSavedRegs) {
+        if (((1 << Reg) & Call.LiveCallerSavedRegs) == 0)
+          continue;
+        // Allocate stack object
+        CurOffset -= SlotSize;
+        MFI.CreateFixedSpillStackObject(SlotSize, CurOffset);
+        // Generate spill
+        BuildMI(BB, Call.MI->getIterator(), Call.MI->getDebugLoc(),
+                TII->get(BPF::STD))
+            .addReg(Reg, RegState::Kill)
+            .addReg(BPF::R10)
+            .addImm(CurOffset);
+        // Generate fill
+        BuildMI(BB, ++Call.MI->getIterator(), Call.MI->getDebugLoc(),
+                TII->get(BPF::LDD))
+            .addReg(Reg, RegState::Define)
+            .addReg(BPF::R10)
+            .addImm(CurOffset);
+      }
+    }
+  }
+  return Changed;
+}
+
+bool BPFMIPreEmitPeepholeImpl::removeMayGotoZero() {
+  bool Changed = false;
+  MachineBasicBlock *Prev_MBB, *Curr_MBB = nullptr;
+
+  for (MachineBasicBlock &MBB : make_early_inc_range(reverse(*MF))) {
+    Prev_MBB = Curr_MBB;
+    Curr_MBB = &MBB;
+    if (Prev_MBB == nullptr || Curr_MBB->empty())
+      continue;
+
+    MachineInstr &MI = Curr_MBB->back();
+    if (MI.getOpcode() != TargetOpcode::INLINEASM_BR)
+      continue;
+
+    const char *AsmStr = MI.getOperand(0).getSymbolName();
+    SmallVector<StringRef, 4> AsmPieces;
+    SplitString(AsmStr, AsmPieces, ";\n");
+
+    // Do not support multiple insns in one inline asm.
+    if (AsmPieces.size() != 1)
+      continue;
+
+    // The asm insn must be a may_goto insn.
+    SmallVector<StringRef, 4> AsmOpPieces;
+    SplitString(AsmPieces[0], AsmOpPieces, " ");
+    if (AsmOpPieces.size() != 2 || AsmOpPieces[0] != "may_goto")
+      continue;
+    // Enforce the format of 'may_goto <label>'.
+    if (AsmOpPieces[1] != "${0:l}" && AsmOpPieces[1] != "$0")
+      continue;
+
+    // Get the may_goto branch target.
+    MachineOperand &MO = MI.getOperand(InlineAsm::MIOp_FirstOperand + 1);
+    if (!MO.isMBB() || MO.getMBB() != Prev_MBB)
+      continue;
+
+    Changed = true;
+    if (Curr_MBB->begin() == MI) {
+      // Single 'may_goto' insn in the same basic block.
+      Curr_MBB->removeSuccessor(Prev_MBB);
+      for (MachineBasicBlock *Pred : Curr_MBB->predecessors())
+        Pred->replaceSuccessor(Curr_MBB, Prev_MBB);
+      Curr_MBB->eraseFromParent();
+      Curr_MBB = Prev_MBB;
+    } else {
+      // Remove 'may_goto' insn.
+      MI.eraseFromParent();
+    }
+  }
+
+  return Changed;
+}
+
+// If the last insn in a funciton is 'JAL &bpf_unreachable', let us add an
+// 'exit' insn after that insn. This will ensure no fallthrough at the last
+// insn, making kernel verification easier.
+bool BPFMIPreEmitPeepholeImpl::addExitAfterUnreachable() {
+  MachineBasicBlock &MBB = MF->back();
+  MachineInstr &MI = MBB.back();
+  if (MI.getOpcode() != BPF::JAL || !MI.getOperand(0).isGlobal() ||
+      MI.getOperand(0).getGlobal()->getName() != BPF_TRAP)
+    return false;
+
+  BuildMI(&MBB, MI.getDebugLoc(), TII->get(BPF::RET));
+  return true;
+}
+
+} // namespace
+
+INITIALIZE_PASS(BPFMIPreEmitPeepholeLegacy, "bpf-mi-pre-emit-peephole",
+                "BPF PreEmit Peephole Optimization", false, false)
+
+char BPFMIPreEmitPeepholeLegacy::ID = 0;
+FunctionPass *llvm::createBPFMIPreEmitPeepholeLegacyPass() {
+  return new BPFMIPreEmitPeepholeLegacy();
+}
+
+bool BPFMIPreEmitPeepholeLegacy::runOnMachineFunction(MachineFunction &MF) {
+  if (skipFunction(MF.getFunction()))
+    return false;
+  BPFMIPreEmitPeepholeImpl Impl;
+  return Impl.runOnMachineFunction(MF);
+}
+
+PreservedAnalyses
+BPFMIPreEmitPeepholePass::run(MachineFunction &MF,
+                              MachineFunctionAnalysisManager &MFAM) {
+  BPFMIPreEmitPeepholeImpl Impl;
+  return Impl.runOnMachineFunction(MF)
+             ? getMachineFunctionPassPreservedAnalyses()
+                   .preserveSet<CFGAnalyses>()
+             : PreservedAnalyses::all();
+}
+
+namespace {
+
+bool expandStackArgPseudos(MachineFunction &MF) {
+  bool Changed = false;
+  const BPFInstrInfo *TII = MF.getSubtarget<BPFSubtarget>().getInstrInfo();
+  for (MachineBasicBlock &MBB : MF) {
+    for (auto It = MBB.begin(), End = MBB.end(); It != End;) {
+      MachineInstr &MI = *It++;
+      DebugLoc DL = MI.getDebugLoc();
+
+      switch (MI.getOpcode()) {
+      default:
+        break;
+
+      case BPF::LOAD_STACK_ARG_PSEUDO: {
+        Register DstReg = MI.getOperand(0).getReg();
+        int16_t Off = MI.getOperand(1).getImm();
+
+        BuildMI(MBB, MI, DL, TII->get(BPF::LDD), DstReg)
+            .addReg(BPF::R11)
+            .addImm(Off);
+        MI.eraseFromParent();
+        Changed = true;
+        break;
+      }
+
+      case BPF::STORE_STACK_ARG_PSEUDO: {
+        int16_t Off = MI.getOperand(0).getImm();
+        const MachineOperand &SrcMO = MI.getOperand(1);
+        Register SrcReg = SrcMO.getReg();
+        bool IsKill = SrcMO.isKill();
+
+        BuildMI(MBB, MI, DL, TII->get(BPF::STD))
+            .addReg(SrcReg, getKillRegState(IsKill))
+            .addReg(BPF::R11)
+            .addImm(Off);
+        MI.eraseFromParent();
+        Changed = true;
+        break;
+      }
+
+      case BPF::STORE_STACK_ARG_IMM_PSEUDO: {
+        int16_t Off = MI.getOperand(0).getImm();
+        int32_t Val = MI.getOperand(1).getImm();
+
+        BuildMI(MBB, MI, DL, TII->get(BPF::STD_imm))
+            .addImm(Val)
+            .addReg(BPF::R11)
+            .addImm(Off);
+        MI.eraseFromParent();
+        Changed = true;
+        break;
+      }
+      }
+    }
+  }
+
+  return Changed;
+}
+
+class BPFMIExpandStackArgPseudosLegacy : public MachineFunctionPass {
+public:
+  static char ID;
+  BPFMIExpandStackArgPseudosLegacy() : MachineFunctionPass(ID) {}
+  bool runOnMachineFunction(MachineFunction &MF) override;
+};
+
+} // namespace
+
+INITIALIZE_PASS(BPFMIExpandStackArgPseudosLegacy,
+                "bpf-mi-expand-stack-arg-pseudos",
+                "BPF Stack argument psuedo expansion", false, false)
+
+char BPFMIExpandStackArgPseudosLegacy::ID = 0;
+FunctionPass *llvm::createBPFMIExpandStackArgPseudosLegacyPass() {
+  return new BPFMIExpandStackArgPseudosLegacy();
+}
+
+bool BPFMIExpandStackArgPseudosLegacy::runOnMachineFunction(
+    MachineFunction &MF) {
+  return expandStackArgPseudos(MF);
+}
+
+PreservedAnalyses
+BPFMIExpandStackArgPseudosPass::run(MachineFunction &MF,
+                                    MachineFunctionAnalysisManager &MFAM) {
+  return expandStackArgPseudos(MF) ? getMachineFunctionPassPreservedAnalyses()
+                                         .preserveSet<CFGAnalyses>()
+                                   : PreservedAnalyses::all();
 }

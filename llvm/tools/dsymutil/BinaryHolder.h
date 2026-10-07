@@ -38,8 +38,15 @@ class BinaryHolder {
 public:
   using TimestampTy = sys::TimePoint<std::chrono::seconds>;
 
-  BinaryHolder(IntrusiveRefCntPtr<vfs::FileSystem> VFS, bool Verbose = false)
-      : VFS(VFS), Verbose(Verbose) {}
+  struct Options {
+    Options(bool Verbose = false, bool Warn = true)
+        : Verbose(Verbose), Warn(Warn) {}
+    bool Verbose;
+    bool Warn;
+  };
+
+  BinaryHolder(IntrusiveRefCntPtr<vfs::FileSystem> VFS,
+               BinaryHolder::Options Opts = {});
 
   // Forward declarations for friend declaration.
   class ObjectEntry;
@@ -58,7 +65,7 @@ public:
   public:
     /// Load the given object binary in memory.
     Error load(IntrusiveRefCntPtr<vfs::FileSystem> VFS, StringRef Filename,
-               TimestampTy Timestamp, bool Verbose = false);
+               TimestampTy Timestamp, BinaryHolder::Options = {});
 
     /// Access all owned ObjectFiles.
     std::vector<const object::ObjectFile *> getObjects() const;
@@ -103,18 +110,18 @@ public:
       std::string Filename;
       TimestampTy Timestamp;
 
-      KeyTy() {}
+      KeyTy() = default;
       KeyTy(StringRef Filename, TimestampTy Timestamp)
           : Filename(Filename.str()), Timestamp(Timestamp) {}
     };
 
     /// Load the given object binary in memory.
     Error load(IntrusiveRefCntPtr<vfs::FileSystem> VFS, StringRef Filename,
-               TimestampTy Timestamp, bool Verbose = false);
+               TimestampTy Timestamp, BinaryHolder::Options = {});
 
     Expected<const ObjectEntry &> getObjectEntry(StringRef Filename,
                                                  TimestampTy Timestamp,
-                                                 bool Verbose = false);
+                                                 BinaryHolder::Options = {});
 
   private:
     std::vector<std::unique_ptr<object::Archive>> Archives;
@@ -126,34 +133,29 @@ public:
   getObjectEntry(StringRef Filename, TimestampTy Timestamp = TimestampTy());
 
   void clear();
+  void eraseObjectEntry(StringRef Filename);
 
 private:
   /// Cache of static archives. Objects that are part of a static archive are
   /// stored under this object, rather than in the map below.
   StringMap<std::unique_ptr<ArchiveEntry>> ArchiveCache;
+  StringMap<uint32_t> ArchiveRefCounter;
   std::mutex ArchiveCacheMutex;
 
   /// Object entries for objects that are not in a static archive.
   StringMap<std::unique_ptr<ObjectEntry>> ObjectCache;
+  StringMap<uint32_t> ObjectRefCounter;
   std::mutex ObjectCacheMutex;
 
   /// Virtual File System instance.
   IntrusiveRefCntPtr<vfs::FileSystem> VFS;
 
-  bool Verbose;
+  Options Opts;
 };
 
 } // namespace dsymutil
 
 template <> struct DenseMapInfo<dsymutil::BinaryHolder::ArchiveEntry::KeyTy> {
-
-  static inline dsymutil::BinaryHolder::ArchiveEntry::KeyTy getEmptyKey() {
-    return dsymutil::BinaryHolder::ArchiveEntry::KeyTy();
-  }
-
-  static inline dsymutil::BinaryHolder::ArchiveEntry::KeyTy getTombstoneKey() {
-    return dsymutil::BinaryHolder::ArchiveEntry::KeyTy("/", {});
-  }
 
   static unsigned
   getHashValue(const dsymutil::BinaryHolder::ArchiveEntry::KeyTy &K) {

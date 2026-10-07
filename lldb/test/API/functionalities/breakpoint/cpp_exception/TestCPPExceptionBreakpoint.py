@@ -9,6 +9,7 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
+@skipIfWasm  # wasm inferiors are built with -fno-exceptions
 class TestCPPExceptionBreakpoint(TestBase):
     my_var = 10
 
@@ -51,7 +52,7 @@ class TestCPPExceptionBreakpoint(TestBase):
         thread_list = lldbutil.get_threads_stopped_at_breakpoint(
             process, exception_bkpt
         )
-        self.assertEquals(
+        self.assertEqual(
             len(thread_list), 1, "One thread stopped at the exception breakpoint."
         )
 
@@ -84,6 +85,6 @@ class TestCPPExceptionBreakpoint(TestBase):
         thread_list = lldbutil.get_threads_stopped_at_breakpoint(
             process, exception_bkpt
         )
-        self.assertEquals(
+        self.assertEqual(
             len(thread_list), 1, "One thread stopped at the exception breakpoint."
         )

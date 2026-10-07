@@ -1,4 +1,4 @@
-//===--- ProBoundsConstantArrayIndexCheck.cpp - clang-tidy-----------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -48,9 +48,8 @@ void ProBoundsConstantArrayIndexCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       cxxOperatorCallExpr(
           hasOverloadedOperatorName("[]"),
-          hasArgument(
-              0, hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
-                     cxxRecordDecl(hasName("::std::array")).bind("type")))))),
+          callee(cxxMethodDecl(
+              ofClass(cxxRecordDecl(hasName("::std::array")).bind("type")))),
           hasArgument(1, expr().bind("index")))
           .bind("expr"),
       this);
@@ -79,7 +78,7 @@ void ProBoundsConstantArrayIndexCheck::check(
     else
       BaseRange =
           cast<CXXOperatorCallExpr>(Matched)->getArg(0)->getSourceRange();
-    SourceRange IndexRange = IndexExpr->getSourceRange();
+    const SourceRange IndexRange = IndexExpr->getSourceRange();
 
     auto Diag = diag(Matched->getExprLoc(),
                      "do not use array subscript when the index is "
@@ -116,7 +115,7 @@ void ProBoundsConstantArrayIndexCheck::check(
   const auto &SizeArg = TemplateArgs[1];
   if (SizeArg.getKind() != TemplateArgument::Integral)
     return;
-  llvm::APInt ArraySize = SizeArg.getAsIntegral();
+  const llvm::APInt ArraySize = SizeArg.getAsIntegral();
 
   // Get uint64_t values, because different bitwidths would lead to an assertion
   // in APInt::uge.

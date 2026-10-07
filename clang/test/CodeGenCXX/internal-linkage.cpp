@@ -17,7 +17,6 @@ Anon anon1;
 // CHECK: @anon2 = internal global
 X<Anon> anon2;
 
-// rdar: // 8071804
 char const * const xyzzy = "Hello, world!";
 extern char const * const xyzzy;
 
@@ -61,4 +60,4 @@ template <typename T> class klass {
 };
 namespace { struct S; }
 void foo () { klass<S> x; }
-// CHECK: @_ZTV5klassIN12_GLOBAL__N_11SEE = internal unnamed_addr constant
+// CHECK: @_ZTV5klassIN12_GLOBAL__N_11SEE = internal constant

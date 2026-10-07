@@ -5,7 +5,6 @@ set(LLVM_TARGET_DEFINITIONS RL78.td)
 tablegen(LLVM RL78GenAsmMatcher.inc -gen-asm-matcher)
 tablegen(LLVM RL78GenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM RL78GenDAGISel.inc -gen-dag-isel)
-tablegen(LLVM RL78GenDisassemblerTables.inc -gen-disassembler)
 tablegen(LLVM RL78GenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM RL78GenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM RL78GenRegisterInfo.inc -gen-register-info)
@@ -28,6 +27,7 @@ add_llvm_target(RL78CodeGen
   RL78CMPWithZeroElimination.cpp
   RL78SelectBTCLR.cpp
   RL78InsertExchangeInstructions.cpp
+  RL78ExpandInlineAsm.cpp
   RL78ExpandPseudoInsts.cpp
   RL78InstructionSpecialization.cpp
   RL78ConstPropAndOpSwap.cpp

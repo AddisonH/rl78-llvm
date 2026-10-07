@@ -1,11 +1,14 @@
 /// Test default standards.
-/// CUDA/HIP uses the same default standards as C++.
 
-// RUN: %clang_cc1 -dM -E %s | grep __cplusplus >%T-cpp-std.txt
-// RUN: %clang_cc1 -dM -E -x cuda %s | grep __cplusplus >%T-cuda-cuda.txt
-// RUN: %clang_cc1 -dM -E -x hip %s | grep __cplusplus >%T-hip-std.txt
-// RUN: diff %T-cpp-std.txt %T-cuda-cuda.txt
-// RUN: diff %T-cpp-std.txt %T-hip-std.txt
+// RUN: %clang_cc1 -dM -E %s | grep __cplusplus > %t-cpp-std.txt
+// RUN: FileCheck --input-file %t-cpp-std.txt --check-prefix=CXX17 %s
+
+/// Check that CUDA/HIP uses the same default standards as C++.
+
+// RUN: %clang_cc1 -dM -E -x cuda %s | grep __cplusplus > %t-cuda-std.txt
+// RUN: %clang_cc1 -dM -E -x hip %s | grep __cplusplus > %t-hip-std.txt
+// RUN: diff %t-cpp-std.txt %t-cuda-std.txt
+// RUN: diff %t-cpp-std.txt %t-hip-std.txt
 
 // RUN: %clang_cc1 -dM -E -x cuda -std=c++14 %s | FileCheck --check-prefix=CXX14 %s
 // RUN: %clang_cc1 -dM -E -x cuda -std=c++17 %s | FileCheck --check-prefix=CXX17 %s

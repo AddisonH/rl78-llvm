@@ -1,6 +1,39 @@
 add_custom_target(libc-cpp-utils-tests)
 
 add_libc_test(
+  algorithm_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    algorithm_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.algorithm
+  )
+
+add_libc_test(
+  array_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    array_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.array
+  )
+
+add_libc_test(
+  bit_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    bit_test.cpp
+  DEPENDS
+    libc.hdr.stdint_proxy
+    libc.src.__support.big_int
+    libc.src.__support.CPP.bit
+    libc.src.__support.macros.properties.types
+)
+
+add_libc_test(
   bitset_test
   SUITE
     libc-cpp-utils-tests
@@ -21,6 +54,17 @@ add_libc_test(
 )
 
 add_libc_test(
+  expected_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    expected_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.expected
+    libc.src.__support.CPP.type_traits
+)
+
+add_libc_test(
   stringview_test
   SUITE
     libc-cpp-utils-tests
@@ -28,6 +72,8 @@ add_libc_test(
     stringview_test.cpp
   DEPENDS
     libc.src.__support.CPP.string_view
+    libc.src.__support.CPP.type_traits
+    libc.src.string.memory_utils.inline_memcpy
 )
 
 add_libc_test(
@@ -37,8 +83,19 @@ add_libc_test(
   SRCS
     limits_test.cpp
   DEPENDS
+    libc.src.__support.big_int
     libc.src.__support.CPP.limits
-    libc.src.__support.uint
+    libc.src.__support.macros.properties.types
+)
+
+add_libc_test(
+  mutex_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    mutex_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.mutex
 )
 
 add_libc_test(
@@ -53,7 +110,7 @@ add_libc_test(
 
 
 # This test fails with invalid address space operations on sm_60
-if(NOT LIBC_GPU_TARGET_ARCHITECTURE_IS_NVPTX)
+if(NOT LIBC_TARGET_ARCHITECTURE_IS_NVPTX)
   add_libc_test(
     atomic_test
     SUITE
@@ -87,6 +144,26 @@ add_libc_test(
 )
 
 add_libc_test(
+  tuple_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    tuple_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.tuple
+)
+
+add_libc_test(
+  scope_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+    scope_test.cpp
+  DEPENDS
+    libc.src.__support.CPP.scope
+)
+
+add_libc_test(
   span_test
   SUITE
     libc-cpp-utils-tests
@@ -103,6 +180,29 @@ add_libc_test(
   SRCS
     string_test.cpp
   DEPENDS
+  libc.hdr.func.free
   libc.src.__support.CPP.string
   libc.src.__support.CPP.string_view
 )
+
+add_libc_test(
+  type_traits_test
+  SUITE
+    libc-cpp-utils-tests
+  SRCS
+  type_traits_test.cpp
+  DEPENDS
+  libc.src.__support.CPP.type_traits
+)
+
+if(LIBC_COMPILER_HAS_EXT_VECTOR_TYPE)
+  add_libc_test(
+    simd_test
+    SUITE
+      libc-cpp-utils-tests
+    SRCS
+      simd_test.cpp
+    DEPENDS
+      libc.src.__support.CPP.simd
+  )
+endif()

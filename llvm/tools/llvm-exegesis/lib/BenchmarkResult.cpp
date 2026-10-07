@@ -9,20 +9,24 @@
 #include "BenchmarkResult.h"
 #include "BenchmarkRunner.h"
 #include "Error.h"
+#include "ValidationEvent.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/ObjectYAML/YAML.h"
+#include "llvm/Support/Errc.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 
-static constexpr const char kIntegerPrefix[] = "i_0x";
-static constexpr const char kDoublePrefix[] = "f_";
-static constexpr const char kInvalidOperand[] = "INVALID";
+static constexpr char kIntegerPrefix[] = "i_0x";
+static constexpr char kDoublePrefix[] = "f_";
+static constexpr char kInvalidOperand[] = "INVALID";
 
 namespace llvm {
 
@@ -33,8 +37,7 @@ namespace {
 struct YamlContext {
   YamlContext(const exegesis::LLVMState &State)
       : State(&State), ErrorStream(LastError),
-        OpcodeNameToOpcodeIdx(State.getOpcodeNameToOpcodeIdxMapping()),
-        RegNameToRegNo(State.getRegNameToRegNoMapping()) {}
+        OpcodeNameToOpcodeIdx(State.getOpcodeNameToOpcodeIdxMapping()) {}
 
   void serializeMCInst(const MCInst &MCInst, raw_ostream &OS) {
     OS << getInstrName(MCInst.getOpcode());
@@ -63,24 +66,38 @@ struct YamlContext {
 
   std::string &getLastError() { return ErrorStream.str(); }
 
+  // Returns the recorded error to report to the YAML parser from a
+  // ScalarTraits::input. When ContinueOnError is set, recoverable per-entry
+  // errors (e.g. an unknown opcode in a bitrotted sample) are left recorded for
+  // the caller to inspect but are not reported to the parser, which would
+  // otherwise abort parsing of every remaining document.
+  StringRef getInputError() {
+    return ContinueOnError ? StringRef() : StringRef(getLastError());
+  }
+
   raw_string_ostream &getErrorStream() { return ErrorStream; }
 
-  StringRef getRegName(unsigned RegNo) {
-    // Special case: RegNo 0 is NoRegister. We have to deal with it explicitly.
-    if (RegNo == 0)
+  // When set, ScalarTraits::input swallows recoverable deserialization errors
+  // (see getInputError) so that readYamls can skip the offending entry instead
+  // of aborting the whole file.
+  bool ContinueOnError = false;
+
+  StringRef getRegName(MCRegister Reg) {
+    // Special case: Reg may be invalid. We have to deal with it explicitly.
+    if (!Reg.isValid())
       return kNoRegister;
-    const StringRef RegName = State->getRegInfo().getName(RegNo);
+    const StringRef RegName = State->getRegInfo().getName(Reg);
     if (RegName.empty())
-      ErrorStream << "No register with enum value '" << RegNo << "'\n";
+      ErrorStream << "No register with enum value '" << Reg.id() << "'\n";
     return RegName;
   }
 
-  std::optional<unsigned> getRegNo(StringRef RegName) {
-    auto Iter = RegNameToRegNo.find(RegName);
-    if (Iter != RegNameToRegNo.end())
-      return Iter->second;
-    ErrorStream << "No register with name '" << RegName << "'\n";
-    return std::nullopt;
+  std::optional<MCRegister> getRegNo(StringRef RegName) {
+    std::optional<MCRegister> RegisterNumber =
+        State->getRegisterNumberFromName(RegName);
+    if (!RegisterNumber.has_value())
+      ErrorStream << "No register with name '" << RegName << "'\n";
+    return RegisterNumber;
   }
 
 private:
@@ -141,11 +158,44 @@ private:
     return InstrName;
   }
 
+  StringRef findNearestOpcodeName(StringRef InstrName) const {
+    unsigned BestDistance = 2;
+    StringRef Nearest;
+
+    for (const auto &Entry : OpcodeNameToOpcodeIdx) {
+      StringRef Candidate = Entry.getFirst();
+
+      size_t CandidateSize = Candidate.size();
+      size_t InstrSize = InstrName.size();
+      size_t AbsDiff = llvm::AbsoluteDifference(CandidateSize, InstrSize);
+
+      if (AbsDiff >= BestDistance)
+        continue;
+
+      unsigned Distance =
+          InstrName.edit_distance(Candidate, /*AllowReplacements=*/true,
+                                  /*MaxEditDistance=*/BestDistance - 1);
+
+      if (Distance < BestDistance) {
+        BestDistance = Distance;
+        Nearest = Candidate;
+        if (BestDistance == 1)
+          break;
+      }
+    }
+
+    return Nearest;
+  }
+
   unsigned getInstrOpcode(StringRef InstrName) {
     auto Iter = OpcodeNameToOpcodeIdx.find(InstrName);
     if (Iter != OpcodeNameToOpcodeIdx.end())
       return Iter->second;
-    ErrorStream << "No opcode with name '" << InstrName << "'\n";
+
+    ErrorStream << "No opcode with name '" << InstrName << "'";
+    if (StringRef Nearest = findNearestOpcodeName(InstrName); !Nearest.empty())
+      ErrorStream << " - did you mean '" << Nearest << "' ?";
+    ErrorStream << "\n";
     return 0;
   }
 
@@ -153,7 +203,6 @@ private:
   std::string LastError;
   raw_string_ostream ErrorStream;
   const DenseMap<StringRef, unsigned> &OpcodeNameToOpcodeIdx;
-  const DenseMap<StringRef, unsigned> &RegNameToRegNo;
 };
 } // namespace
 
@@ -178,7 +227,7 @@ template <> struct ScalarTraits<MCInst> {
   static StringRef input(StringRef Scalar, void *Ctx, MCInst &Value) {
     YamlContext &Context = getTypedContext(Ctx);
     Context.deserializeMCInst(Scalar, Value);
-    return Context.getLastError();
+    return Context.getInputError();
   }
 
   // By default strings are quoted only when necessary.
@@ -193,6 +242,27 @@ template <> struct SequenceElementTraits<exegesis::BenchmarkMeasure> {
   static const bool flow = false;
 };
 
+template <>
+struct CustomMappingTraits<std::map<exegesis::ValidationEvent, int64_t>> {
+  static void inputOne(IO &Io, StringRef KeyStr,
+                       std::map<exegesis::ValidationEvent, int64_t> &VI) {
+    Expected<exegesis::ValidationEvent> Key =
+        exegesis::getValidationEventByName(KeyStr);
+    if (!Key) {
+      Io.setError("Key is not a valid validation event");
+      return;
+    }
+    Io.mapRequired(KeyStr, VI[*Key]);
+  }
+
+  static void output(IO &Io, std::map<exegesis::ValidationEvent, int64_t> &VI) {
+    for (auto &IndividualVI : VI) {
+      Io.mapRequired(exegesis::getValidationEventName(IndividualVI.first),
+                     IndividualVI.second);
+    }
+  }
+};
+
 // exegesis::Measure is rendererd as a flow instead of a list.
 // e.g. { "key": "the key", "value": 0123 }
 template <> struct MappingTraits<exegesis::BenchmarkMeasure> {
@@ -204,14 +274,13 @@ template <> struct MappingTraits<exegesis::BenchmarkMeasure> {
     }
     Io.mapRequired("value", Obj.PerInstructionValue);
     Io.mapOptional("per_snippet_value", Obj.PerSnippetValue);
+    Io.mapOptional("validation_counters", Obj.ValidationCounters);
   }
   static const bool flow = true;
 };
 
-template <>
-struct ScalarEnumerationTraits<exegesis::Benchmark::ModeE> {
-  static void enumeration(IO &Io,
-                          exegesis::Benchmark::ModeE &Value) {
+template <> struct ScalarEnumerationTraits<exegesis::Benchmark::ModeE> {
+  static void enumeration(IO &Io, exegesis::Benchmark::ModeE &Value) {
     Io.enumCase(Value, "", exegesis::Benchmark::Unknown);
     Io.enumCase(Value, "latency", exegesis::Benchmark::Latency);
     Io.enumCase(Value, "uops", exegesis::Benchmark::Uops);
@@ -226,8 +295,8 @@ template <> struct SequenceElementTraits<exegesis::RegisterValue> {
 };
 
 template <> struct ScalarTraits<exegesis::RegisterValue> {
-  static constexpr const unsigned kRadix = 16;
-  static constexpr const bool kSigned = false;
+  static constexpr unsigned kRadix = 16;
+  static constexpr bool kSigned = false;
 
   static void output(const exegesis::RegisterValue &RV, void *Ctx,
                      raw_ostream &Out) {
@@ -242,7 +311,7 @@ template <> struct ScalarTraits<exegesis::RegisterValue> {
     String.split(Pieces, "=0x", /* MaxSplit */ -1,
                  /* KeepEmpty */ false);
     YamlContext &Context = getTypedContext(Ctx);
-    std::optional<unsigned> RegNo;
+    std::optional<MCRegister> RegNo;
     if (Pieces.size() == 2 && (RegNo = Context.getRegNo(Pieces[0]))) {
       RV.Register = *RegNo;
       const unsigned BitsNeeded = APInt::getBitsNeeded(Pieces[1], kRadix);
@@ -251,7 +320,7 @@ template <> struct ScalarTraits<exegesis::RegisterValue> {
       Context.getErrorStream()
           << "Unknown initial register value: '" << String << "'";
     }
-    return Context.getLastError();
+    return Context.getInputError();
   }
 
   static QuotingType mustQuote(StringRef) { return QuotingType::Single; }
@@ -259,8 +328,7 @@ template <> struct ScalarTraits<exegesis::RegisterValue> {
   static const bool flow = true;
 };
 
-template <>
-struct MappingContextTraits<exegesis::BenchmarkKey, YamlContext> {
+template <> struct MappingContextTraits<exegesis::BenchmarkKey, YamlContext> {
   static void mapping(IO &Io, exegesis::BenchmarkKey &Obj,
                       YamlContext &Context) {
     Io.setContext(&Context);
@@ -270,8 +338,7 @@ struct MappingContextTraits<exegesis::BenchmarkKey, YamlContext> {
   }
 };
 
-template <>
-struct MappingContextTraits<exegesis::Benchmark, YamlContext> {
+template <> struct MappingContextTraits<exegesis::Benchmark, YamlContext> {
   struct NormalizedBinary {
     NormalizedBinary(IO &io) {}
     NormalizedBinary(IO &, std::vector<uint8_t> &Data) : Binary(Data) {}
@@ -280,7 +347,6 @@ struct MappingContextTraits<exegesis::Benchmark, YamlContext> {
       std::string Str;
       raw_string_ostream OSS(Str);
       Binary.writeAsBinary(OSS);
-      OSS.flush();
       Data.assign(Str.begin(), Str.end());
       return Data;
     }
@@ -288,13 +354,22 @@ struct MappingContextTraits<exegesis::Benchmark, YamlContext> {
     BinaryRef Binary;
   };
 
-  static void mapping(IO &Io, exegesis::Benchmark &Obj,
-                      YamlContext &Context) {
+  static void mapping(IO &Io, exegesis::Benchmark &Obj, YamlContext &Context) {
     Io.mapRequired("mode", Obj.Mode);
     Io.mapRequired("key", Obj.Key, Context);
     Io.mapRequired("cpu_name", Obj.CpuName);
     Io.mapRequired("llvm_triple", Obj.LLVMTriple);
-    Io.mapRequired("num_repetitions", Obj.NumRepetitions);
+    // Optionally map num_repetitions and min_instructions to the same
+    // value to preserve backwards compatibility.
+    // TODO(boomanaiden154): Move min_instructions to mapRequired and
+    // remove num_repetitions once num_repetitions is ready to be removed
+    // completely.
+    if (Io.outputting())
+      Io.mapRequired("min_instructions", Obj.MinInstructions);
+    else {
+      Io.mapOptional("num_repetitions", Obj.MinInstructions);
+      Io.mapOptional("min_instructions", Obj.MinInstructions);
+    }
     Io.mapRequired("measurements", Obj.Measurements);
     Io.mapRequired("error", Obj.Error);
     Io.mapOptional("info", Obj.Info);
@@ -306,8 +381,7 @@ struct MappingContextTraits<exegesis::Benchmark, YamlContext> {
 };
 
 template <> struct MappingTraits<exegesis::Benchmark::TripleAndCpu> {
-  static void mapping(IO &Io,
-                      exegesis::Benchmark::TripleAndCpu &Obj) {
+  static void mapping(IO &Io, exegesis::Benchmark::TripleAndCpu &Obj) {
     assert(!Io.outputting() && "can only read TripleAndCpu");
     // Read triple.
     Io.mapRequired("llvm_triple", Obj.LLVMTriple);
@@ -324,8 +398,7 @@ Expected<std::set<Benchmark::TripleAndCpu>>
 Benchmark::readTriplesAndCpusFromYamls(MemoryBufferRef Buffer) {
   // We're only mapping a field, drop other fields and silence the corresponding
   // warnings.
-  yaml::Input Yin(
-      Buffer, nullptr, +[](const SMDiagnostic &, void *Context) {});
+  yaml::Input Yin(Buffer, nullptr, +[](const SMDiagnostic &, void *Context) {});
   Yin.setAllowUnknownKeys(true);
   std::set<TripleAndCpu> Result;
   yaml::EmptyContext Context;
@@ -340,8 +413,8 @@ Benchmark::readTriplesAndCpusFromYamls(MemoryBufferRef Buffer) {
   return Result;
 }
 
-Expected<Benchmark>
-Benchmark::readYaml(const LLVMState &State, MemoryBufferRef Buffer) {
+Expected<Benchmark> Benchmark::readYaml(const LLVMState &State,
+                                        MemoryBufferRef Buffer) {
   yaml::Input Yin(Buffer);
   YamlContext Context(State);
   Benchmark Benchmark;
@@ -352,27 +425,41 @@ Benchmark::readYaml(const LLVMState &State, MemoryBufferRef Buffer) {
   return std::move(Benchmark);
 }
 
-Expected<std::vector<Benchmark>>
-Benchmark::readYamls(const LLVMState &State,
-                                MemoryBufferRef Buffer) {
+Expected<std::vector<Benchmark>> Benchmark::readYamls(const LLVMState &State,
+                                                      MemoryBufferRef Buffer) {
   yaml::Input Yin(Buffer);
   YamlContext Context(State);
+  // Recoverable per-entry errors (e.g. unknown opcodes) are recorded rather
+  // than reported to the parser, so a single bad entry can be dropped without
+  // aborting the read of the whole file.
+  Context.ContinueOnError = true;
   std::vector<Benchmark> Benchmarks;
+  unsigned NumSkippedEntries = 0;
   while (Yin.setCurrentDocument()) {
     Benchmarks.emplace_back();
     yamlize(Yin, Benchmarks.back(), /*unused*/ true, Context);
     if (Yin.error())
       return errorCodeToError(Yin.error());
-    if (!Context.getLastError().empty())
-      return make_error<Failure>(Context.getLastError());
+    if (!Context.getLastError().empty()) {
+      // Warn about the unparsable entry (e.g. an unknown opcode from a
+      // bitrotted sample), discard it, and continue so that a single bad entry
+      // doesn't abort the read of the whole file.
+      WithColor::warning() << "skipping benchmark entry: "
+                           << Context.getLastError();
+      Context.getLastError().clear();
+      Benchmarks.pop_back();
+      ++NumSkippedEntries;
+    }
     Yin.nextDocument();
   }
+  if (NumSkippedEntries)
+    WithColor::warning() << "skipped " << NumSkippedEntries
+                         << " benchmark entries that could not be parsed\n";
   return std::move(Benchmarks);
 }
 
-Error Benchmark::writeYamlTo(const LLVMState &State,
-                                        raw_ostream &OS) {
-  auto Cleanup = make_scope_exit([&] { OS.flush(); });
+Error Benchmark::writeYamlTo(const LLVMState &State, raw_ostream &OS) {
+  llvm::scope_exit Cleanup([&] { OS.flush(); });
   yaml::Output Yout(OS, nullptr /*Ctx*/, 200 /*WrapColumn*/);
   YamlContext Context(State);
   Yout.beginDocuments();
@@ -383,8 +470,7 @@ Error Benchmark::writeYamlTo(const LLVMState &State,
   return Error::success();
 }
 
-Error Benchmark::readYamlFrom(const LLVMState &State,
-                                         StringRef InputContent) {
+Error Benchmark::readYamlFrom(const LLVMState &State, StringRef InputContent) {
   yaml::Input Yin(InputContent);
   YamlContext Context(State);
   if (Yin.setCurrentDocument())
@@ -408,7 +494,6 @@ bool operator==(const BenchmarkMeasure &A, const BenchmarkMeasure &B) {
   return std::tie(A.Key, A.PerInstructionValue, A.PerSnippetValue) ==
          std::tie(B.Key, B.PerInstructionValue, B.PerSnippetValue);
 }
-
 
 } // namespace exegesis
 } // namespace llvm

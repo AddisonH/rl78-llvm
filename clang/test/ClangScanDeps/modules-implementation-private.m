@@ -26,19 +26,25 @@ framework module FW_Private { umbrella header "FW_Private.h" }
 
 // RUN: sed "s|DIR|%/t|g" %t/cdb.json.template > %t/cdb.json
 // RUN: clang-scan-deps -compilation-database %t/cdb.json -format experimental-full > %t/result.json
-// RUN: cat %t/result.json | sed 's:\\\\\?:/:g' | FileCheck %s -DPREFIX=%/t
+// RUN: cat %t/result.json | sed 's:\\\\\?:/:g' \
+// RUN:   | %scan-deps-filter --fields=clang-context-hash,clang-module-deps,clang-modulemap-file,context-hash,file-deps,input-file,link-libraries,name \
+// RUN:   | FileCheck %s -DPREFIX=%/t
 
 // CHECK:      {
 // CHECK-NEXT:   "modules": [
 // CHECK-NEXT:     {
 // CHECK-NEXT:       "clang-module-deps": [],
 // CHECK-NEXT:       "clang-modulemap-file": "[[PREFIX]]/frameworks/FW.framework/Modules/module.private.modulemap",
-// CHECK-NEXT:       "command-line": [
-// CHECK:            ],
 // CHECK-NEXT:       "context-hash": "{{.*}}",
 // CHECK-NEXT:       "file-deps": [
 // CHECK-NEXT:         "[[PREFIX]]/frameworks/FW.framework/Modules/module.private.modulemap",
 // CHECK-NEXT:         "[[PREFIX]]/frameworks/FW.framework/PrivateHeaders/FW_Private.h"
+// CHECK-NEXT:       ],
+// CHECK-NEXT:       "link-libraries": [
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "isFramework": true,
+// CHECK-NEXT:           "link-name": "FW"
+// CHECK-NEXT:         }
 // CHECK-NEXT:       ],
 // CHECK-NEXT:       "name": "FW_Private"
 // CHECK-NEXT:     }
@@ -54,13 +60,11 @@ framework module FW_Private { umbrella header "FW_Private.h" }
 // CHECK-NEXT:               "module-name": "FW_Private"
 // CHECK-NEXT:             }
 // CHECK-NEXT:           ],
-// CHECK-NEXT:           "command-line": [
-// CHECK:                ],
-// CHECK-NEXT:           "executable": "clang",
-// CHECK-NEXT:           "file-deps": [
+// CHECK:                "file-deps": [
 // CHECK-NEXT:             "[[PREFIX]]/tu.m",
 // CHECK-NEXT:             "[[PREFIX]]/frameworks/FW.framework/PrivateHeaders/Missed.h",
-// CHECK-NEXT:             "[[PREFIX]]/frameworks/FW.framework/Headers/FW.h"
+// CHECK-NEXT:             "[[PREFIX]]/frameworks/FW.framework/Headers/FW.h",
+// CHECK-NEXT:             "[[PREFIX]]/frameworks/FW.framework/Modules/module.modulemap"
 // CHECK-NEXT:           ],
 // CHECK-NEXT:           "input-file": "[[PREFIX]]/tu.m"
 // CHECK-NEXT:         }

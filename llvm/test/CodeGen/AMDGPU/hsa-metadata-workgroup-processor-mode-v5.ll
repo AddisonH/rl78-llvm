@@ -1,7 +1,7 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+cumode < %s | FileCheck -check-prefix=GFX10 %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 < %s | FileCheck -check-prefix=GFX10-CU %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=+cumode < %s | FileCheck -check-prefix=GFX10 %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 < %s | FileCheck -check-prefix=GFX10-CU %s
+; RUN: llc -mtriple=amdgpu10.10-amd-amdhsa -mattr=+cumode < %s | FileCheck -check-prefix=GFX10 %s
+; RUN: llc -mtriple=amdgpu10.10-amd-amdhsa < %s | FileCheck -check-prefix=GFX10-CU %s
+; RUN: llc -mtriple=amdgpu11.00-amd-amdhsa -mattr=+cumode < %s | FileCheck -check-prefix=GFX10 %s
+; RUN: llc -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck -check-prefix=GFX10-CU %s
 
 ; GFX10:    .amdhsa_workgroup_processor_mode 0
 ; GFX10:    .workgroup_processor_mode: 0
@@ -14,4 +14,4 @@ entry:
 }
 
 !llvm.module.flags = !{!0}
-!0 = !{i32 1, !"amdgpu_code_object_version", i32 500}
+!0 = !{i32 1, !"amdhsa_code_object_version", i32 500}

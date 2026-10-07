@@ -8,6 +8,7 @@
 #include <x86intrin.h>
 
 #if NEED_AVX_1
+// expected-warning@+1 {{AVX vector argument of type '__m256i' (vector of 4 'long long' values) without 'avx' enabled changes the ABI}}
 int baz(__m256i a) {
   return _mm256_extract_epi32(a, 3); // expected-error {{'__builtin_ia32_vec_ext_v8si' needs target feature avx}}
 }
@@ -15,7 +16,7 @@ int baz(__m256i a) {
 
 #if NEED_AVX_2
 __m128 need_avx(__m128 a, __m128 b) {
-  return _mm_cmp_ps(a, b, 0); // expected-error {{'__builtin_ia32_cmpps' needs target feature avx}}
+  return _mm_cmp_ps(a, b, 8); // expected-error {{'__builtin_ia32_cmpps' needs target feature avx}}
 }
 #endif
 

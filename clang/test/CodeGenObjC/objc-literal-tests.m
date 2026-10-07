@@ -1,6 +1,5 @@
 // RUN: %clang_cc1 -x objective-c -triple x86_64-apple-darwin10 -fblocks -emit-llvm %s -o - | FileCheck %s
 // RUN: %clang_cc1 -x objective-c++ -triple x86_64-apple-darwin10 -fblocks -emit-llvm %s -o - | FileCheck %s
-// rdar://10111397
 
 #if __has_feature(objc_bool)
 #define YES __objc_yes
@@ -69,9 +68,9 @@ int main(void) {
   NSNumber *fortyTwoLong = @42l;
   // CHECK: call{{.*}}@objc_msgSend{{.*}}i64 noundef 42
   NSNumber *fortyTwoLongLong = @42ll;
-  // CHECK: call{{.*}}@objc_msgSend{{.*}}float noundef 0x400921FB60000000
+  // CHECK: call{{.*}}@objc_msgSend{{.*}}float noundef f0x40490FDB
   NSNumber *piFloat = @3.141592654f;
-  // CHECK: call{{.*}}@objc_msgSend{{.*}}double noundef 0x400921FB54411744
+  // CHECK: call{{.*}}@objc_msgSend{{.*}}double noundef f0x400921FB54411744
   NSNumber *piDouble = @3.1415926535;
   // CHECK: call{{.*}}@objc_msgSend{{.*}}i8 noundef signext 1
   NSNumber *yesNumber = @__objc_yes;
@@ -86,7 +85,6 @@ NSDictionary *dictionary = @{@"name" : NSUserName(),
   return __objc_yes == __objc_no;
 }
 
-// rdar://10579122
 typedef BOOL (^foo)(void);
 extern void bar(foo a);
 

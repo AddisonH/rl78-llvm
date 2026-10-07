@@ -8,22 +8,20 @@
 
 #include "src/unistd/ftruncate.h"
 
-#include "src/__support/OSUtil/syscall.h" // For internal syscall function.
+#include "src/__support/OSUtil/linux/syscall_wrappers/ftruncate.h"
 #include "src/__support/common.h"
+#include "src/__support/libc_errno.h"
+#include "src/__support/macros/config.h"
 
-#include "src/errno/libc_errno.h"
-#include <sys/syscall.h> // For syscall numbers.
-#include <unistd.h>
-
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, ftruncate, (int fd, off_t len)) {
-  int ret = __llvm_libc::syscall_impl(SYS_ftruncate, fd, len);
-  if (ret < 0) {
-    libc_errno = -ret;
+  auto result = linux_syscalls::ftruncate(fd, len);
+  if (!result) {
+    libc_errno = result.error();
     return -1;
   }
   return 0;
 }
 
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE_DECL

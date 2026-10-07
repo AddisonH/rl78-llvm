@@ -33,7 +33,9 @@ text. It's specifically intended not to require sanitizing plain text, such as
 the HTML/XML requirement to replace ``<`` with ``&lt;`` and the like.
 
 :doc:`llvm-symbolizer <CommandGuide/llvm-symbolizer>` includes a symbolizing
-filter via its ``--filter-markup`` option.
+filter via its ``--filter-markup`` option. Also, LLVM utilites emit stack
+traces as markup when the ``LLVM_ENABLE_SYMBOLIZER_MARKUP`` environment
+variable is set.
 
 Scope and assumptions
 =====================
@@ -313,7 +315,7 @@ Trigger elements
 ================
 
 These elements cause an external action and will be presented to the user in a
-human readable form. Generally they trigger an external action to occur that
+human-readable form. Generally they trigger an external action to occur that
 results in a linkable page. The link or some other informative information about
 the external action can then be presented to the user.
 

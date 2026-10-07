@@ -18,6 +18,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 
 #include <cstddef>
@@ -214,36 +215,43 @@ public:
   ///     The stream to which to dump the object description.
   void Dump(llvm::raw_ostream &s) const;
 
+  /// Convert the filespec object to a json value.
+  ///
+  /// Convert the filespec object to a json value. If the object contains a
+  /// valid directory name, it will be displayed followed by a directory
+  /// delimiter, and the filename.
+  ///
+  /// \return
+  ///     A json value representation of a filespec.
+  llvm::json::Value ToJSON() const;
+
   Style GetPathStyle() const;
 
   /// Directory string const get accessor.
   ///
   /// \return
   ///     A const reference to the directory string object.
-  const ConstString &GetDirectory() const { return m_directory; }
+  llvm::StringRef GetDirectory() const { return m_directory; }
 
   /// Directory string set accessor.
   ///
   /// \param[in] directory
   ///     The value to replace the directory with.
-  void SetDirectory(ConstString directory);
   void SetDirectory(llvm::StringRef directory);
 
   /// Clear the directory in this object.
   void ClearDirectory();
 
-
   /// Filename string const get accessor.
   ///
   /// \return
   ///     A const reference to the filename string object.
-  const ConstString &GetFilename() const { return m_filename; }
+  llvm::StringRef GetFilename() const { return m_filename; }
 
   /// Filename string set accessor.
   ///
   /// \param[in] filename
   ///     The const string to replace the directory with.
-  void SetFilename(ConstString filename);
   void SetFilename(llvm::StringRef filename);
 
   /// Clear the filename in this object.
@@ -308,14 +316,6 @@ public:
   ///     concatenated.
   std::string GetPath(bool denormalize = true) const;
 
-  /// Get the full path as a ConstString.
-  ///
-  /// This method should only be used when you need a ConstString or the
-  /// const char * from a ConstString to ensure permanent lifetime of C string.
-  /// Anyone needing the path temporarily should use the GetPath() method that
-  /// returns a std:string.
-  ConstString GetPathAsConstString(bool denormalize = true) const;
-
   /// Extract the full path to the file.
   ///
   /// Extract the directory and path into an llvm::SmallVectorImpl<>
@@ -324,9 +324,9 @@ public:
 
   /// Extract the extension of the file.
   ///
-  /// Returns a ConstString that represents the extension of the filename for
+  /// Returns a StringRef that represents the extension of the filename for
   /// this FileSpec object. If this object does not represent a file, or the
-  /// filename has no extension, ConstString(nullptr) is returned. The dot
+  /// filename has no extension, an empty StringRef is returned. The dot
   /// ('.') character is the first character in the returned string.
   ///
   /// \return Returns the extension of the file as a StringRef.
@@ -334,12 +334,12 @@ public:
 
   /// Return the filename without the extension part
   ///
-  /// Returns a ConstString that represents the filename of this object
+  /// Returns a StringRef that represents the filename of this object
   /// without the extension part (e.g. for a file named "foo.bar", "foo" is
   /// returned)
   ///
-  /// \return Returns the filename without extension as a ConstString object.
-  ConstString GetFileNameStrippingExtension() const;
+  /// \return Returns the filename without extension as a StringRef object.
+  llvm::StringRef GetFileNameStrippingExtension() const;
 
   /// Get the memory cost of this object.
   ///
@@ -377,21 +377,6 @@ public:
   ///     The triple which is used to set the Path style.
   void SetFile(llvm::StringRef path, const llvm::Triple &triple);
 
-  bool IsResolved() const { return m_is_resolved; }
-
-  /// Set if the file path has been resolved or not.
-  ///
-  /// If you know a file path is already resolved and avoided passing a \b
-  /// true parameter for any functions that take a "bool resolve_path"
-  /// parameter, you can set the value manually using this call to make sure
-  /// we don't try and resolve it later, or try and resolve a path that has
-  /// already been resolved.
-  ///
-  /// \param[in] is_resolved
-  ///     A boolean value that will replace the current value that
-  ///     indicates if the paths in this object have been resolved.
-  void SetIsResolved(bool is_resolved) { m_is_resolved = is_resolved; }
-
   FileSpec CopyByAppendingPathComponent(llvm::StringRef component) const;
   FileSpec CopyByRemovingLastPathComponent() const;
 
@@ -426,23 +411,21 @@ protected:
 
   /// Called anytime m_directory or m_filename is changed to clear any cached
   /// state in this object.
-  void PathWasModified() {
-    m_is_resolved = false;
-    m_absolute = Absolute::Calculate;
-  }
+  void PathWasModified() { m_absolute = Absolute::Calculate; }
 
-  enum class Absolute : uint8_t {
-    Calculate,
-    Yes,
-    No
-  };
+  enum class Absolute : uint8_t { Calculate, Yes, No };
 
-  // Member variables
-  ConstString m_directory;            ///< The uniqued directory path
-  ConstString m_filename;             ///< The uniqued filename path
-  mutable bool m_is_resolved = false; ///< True if this path has been resolved.
-  mutable Absolute m_absolute = Absolute::Calculate; ///< Cache absoluteness.
-  Style m_style; ///< The syntax that this path uses (e.g. Windows / Posix)
+  /// The unique'd directory path.
+  ConstString m_directory;
+
+  /// The unique'd filename path.
+  ConstString m_filename;
+
+  /// Cache whether this path is absolute.
+  mutable Absolute m_absolute = Absolute::Calculate;
+
+  /// The syntax that this path uses. (e.g. Windows / Posix)
+  Style m_style;
 };
 
 /// Dump a FileSpec object to a stream
@@ -473,6 +456,22 @@ template <> struct format_provider<lldb_private::FileSpec> {
   static void format(const lldb_private::FileSpec &F, llvm::raw_ostream &Stream,
                      StringRef Style);
 };
+
+/// DenseMapInfo implementation.
+/// \{
+template <> struct DenseMapInfo<lldb_private::FileSpec> {
+  static unsigned getHashValue(lldb_private::FileSpec file_spec) {
+    return llvm::hash_combine(
+        DenseMapInfo<llvm::StringRef>::getHashValue(file_spec.GetDirectory()),
+        DenseMapInfo<llvm::StringRef>::getHashValue(file_spec.GetFilename()),
+        DenseMapInfo<llvm::sys::path::Style>::getHashValue(
+            file_spec.GetPathStyle()));
+  }
+  static bool isEqual(lldb_private::FileSpec LHS, lldb_private::FileSpec RHS) {
+    return LHS == RHS;
+  }
+};
+/// \}
 
 } // namespace llvm
 

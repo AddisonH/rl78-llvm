@@ -14,6 +14,7 @@
 
 #include "llvm/MCA/Support.h"
 #include "llvm/MC/MCSchedule.h"
+#include "llvm/Support/Debug.h"
 #include <numeric>
 
 namespace llvm {
@@ -21,7 +22,7 @@ namespace mca {
 
 #define DEBUG_TYPE "llvm-mca"
 
-ResourceCycles &ResourceCycles::operator+=(const ResourceCycles &RHS) {
+ReleaseAtCycles &ReleaseAtCycles::operator+=(const ReleaseAtCycles &RHS) {
   if (Denominator == RHS.Denominator)
     Numerator += RHS.Numerator;
   else {
@@ -67,18 +68,18 @@ void computeProcResourceMasks(const MCSchedModel &SM,
     }
     ProcResourceID++;
   }
+}
 
 #ifndef NDEBUG
-  LLVM_DEBUG(dbgs() << "\nProcessor resource masks:"
-                    << "\n");
+void dumpProcResourceMasks(const MCSchedModel &SM, ArrayRef<uint64_t> Masks) {
+  dbgs() << "\nProcessor resource masks:\n";
   for (unsigned I = 0, E = SM.getNumProcResourceKinds(); I < E; ++I) {
     const MCProcResourceDesc &Desc = *SM.getProcResource(I);
-    LLVM_DEBUG(dbgs() << '[' << format_decimal(I,2) << "] " << " - "
-                      << format_hex(Masks[I],16) << " - "
-                      << Desc.Name << '\n');
+    dbgs() << '[' << format_decimal(I, 2) << "] " << " - "
+           << format_hex(Masks[I], 16) << " - " << Desc.Name << '\n';
   }
-#endif
 }
+#endif
 
 double computeBlockRThroughput(const MCSchedModel &SM, unsigned DispatchWidth,
                                unsigned NumMicroOps,
@@ -92,18 +93,18 @@ double computeBlockRThroughput(const MCSchedModel &SM, unsigned DispatchWidth,
   // The number of available resource units affects the resource pressure
   // distribution, as well as how many blocks can be executed every cycle.
   for (unsigned I = 0, E = SM.getNumProcResourceKinds(); I < E; ++I) {
-    unsigned ResourceCycles = ProcResourceUsage[I];
-    if (!ResourceCycles)
+    unsigned ReleaseAtCycles = ProcResourceUsage[I];
+    if (!ReleaseAtCycles)
       continue;
 
     const MCProcResourceDesc &MCDesc = *SM.getProcResource(I);
-    double Throughput = static_cast<double>(ResourceCycles) / MCDesc.NumUnits;
+    double Throughput = static_cast<double>(ReleaseAtCycles) / MCDesc.NumUnits;
     Max = std::max(Max, Throughput);
   }
 
   // The block reciprocal throughput is computed as the MAX of:
   //  - (NumMicroOps / DispatchWidth)
-  //  - (NumUnits / ResourceCycles)   for every consumed processor resource.
+  //  - (NumUnits / ReleaseAtCycles)   for every consumed processor resource.
   return Max;
 }
 

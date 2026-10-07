@@ -3,12 +3,12 @@
 ; follow by and a trunc to a register sized integer gives a cost of 1 rather
 ; than the expanded cost if it is not.
 
-; RUN: opt -passes="print<cost-model>" -cost-kind=code-size 2>&1 -disable-output -mtriple=amdgcn-unknown-amdhsa < %s | FileCheck %s --check-prefix=CHECK
+; RUN: opt -passes="print<cost-model>" -cost-kind=code-size 2>&1 -disable-output -mtriple=amdgpu6.01-unknown-amdhsa < %s | FileCheck %s --check-prefix=CHECK
 
 ; Check that cost is 1 for unusual load to register sized load.
 define i32 @loadUnusualIntegerWithTrunc(ptr %ptr) {
 ; CHECK-LABEL: 'loadUnusualIntegerWithTrunc'
-; CHECK-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: %out = load i128, ptr %ptr, align 4
+; CHECK-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: %out = load i128, ptr %ptr, align 8
 ; CHECK-NEXT:  Cost Model: Found an estimated cost of 0 for instruction: %trunc = trunc i128 %out to i32
 ; CHECK-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: ret i32 %trunc
 ;
@@ -19,7 +19,7 @@ define i32 @loadUnusualIntegerWithTrunc(ptr %ptr) {
 
 define i128 @loadUnusualInteger(ptr %ptr) {
 ; CHECK-LABEL: 'loadUnusualInteger'
-; CHECK-NEXT:  Cost Model: Found an estimated cost of 2 for instruction: %out = load i128, ptr %ptr, align 4
+; CHECK-NEXT:  Cost Model: Found an estimated cost of 2 for instruction: %out = load i128, ptr %ptr, align 8
 ; CHECK-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: ret i128 %out
 ;
   %out = load i128, ptr %ptr

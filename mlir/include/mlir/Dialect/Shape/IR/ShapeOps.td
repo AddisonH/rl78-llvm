@@ -20,7 +20,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -321,11 +321,6 @@ def Shape_DimOp : Shape_Op<"dim",
   let assemblyFormat = "$value `,` $index attr-dict `:` type($value) `,`"
                        "type($index) `->` type($extent)";
 
-  let builders = [
-    // Builder that allows passing a constant dimension as a simple integer.
-    OpBuilder<(ins "Value":$value, "int64_t":$index)>
-  ];
-
   let extraClassDeclaration = [{
     /// Get the `index` value as integer if it is constant.
     std::optional<int64_t> getConstantIndex();
@@ -566,7 +561,6 @@ def Shape_ShapeOfOp : Shape_Op<"shape_of",
   let assemblyFormat = "$arg attr-dict `:` type($arg) `->` type($result)";
 
   let hasCanonicalizer = 1;
-  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
@@ -684,9 +678,7 @@ def Shape_YieldOp : Shape_Op<"yield",
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilder<(ins),
-    [{ build($_builder, $_state, std::nullopt); }]>
-  ];
+  let builders = [OpBuilder<(ins), [{ build($_builder, $_state, {}); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
   let hasVerifier = 1;
@@ -826,7 +818,7 @@ def Shape_AssumingAllOp : Shape_Op<"assuming_all", [Commutative, Pure]> {
 
 def Shape_AssumingOp : Shape_Op<"assuming", [
     SingleBlockImplicitTerminator<"AssumingYieldOp">,
-    DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+    DeclareOpInterfaceMethods<RegionBranchOpInterface, ["getSuccessorInputs"]>,
     RecursiveMemoryEffects]> {
   let summary = "Execute the region";
   let description = [{
@@ -1031,7 +1023,7 @@ def Shape_FunctionLibraryOp : Shape_Op<"function_library",
 }
 
 def Shape_FuncOp : Shape_Op<"func",
-    [AffineScope, AutomaticAllocationScope, CallableOpInterface,
+    [AffineScope, AutomaticAllocationScope,
      FunctionOpInterface, IsolatedFromAbove, OpAsmOpInterface]> {
   let summary = "Shape function";
   let description = [{
@@ -1062,7 +1054,7 @@ def Shape_FuncOp : Shape_Op<"func",
                          ArrayRef<NamedAttribute> attrs,
                          ArrayRef<DictionaryAttr> argAttrs);
     //===------------------------------------------------------------------===//
-    // CallableOpInterface
+    // FunctionOpInterface Methods
     //===------------------------------------------------------------------===//
 
     /// Returns the region on the current operation that is callable. This may
@@ -1071,28 +1063,6 @@ def Shape_FuncOp : Shape_Op<"func",
     ::mlir::Region *getCallableRegion() {
       return isExternal() ? nullptr : &getBody();
     }
-
-    /// Returns the results types that the callable region produces when
-    /// executed.
-    ArrayRef<Type> getCallableResults() {
-      return getFunctionType().getResults();
-    }
-
-    /// Returns the argument attributes for all callable region arguments or
-    /// null if there are none.
-    ::mlir::ArrayAttr getCallableArgAttrs() {
-      return getArgAttrs().value_or(nullptr);
-    }
-
-    /// Returns the result attributes for all callable region results or
-    /// null if there are none.
-    ::mlir::ArrayAttr getCallableResAttrs() {
-      return getResAttrs().value_or(nullptr);
-    }
-
-    //===------------------------------------------------------------------===//
-    // FunctionOpInterface Methods
-    //===------------------------------------------------------------------===//
 
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

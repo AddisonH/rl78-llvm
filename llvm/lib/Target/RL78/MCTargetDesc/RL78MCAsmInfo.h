@@ -23,7 +23,7 @@ class RL78ELFMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit RL78ELFMCAsmInfo(const Triple &TheTriple);
+  RL78ELFMCAsmInfo(const Triple &TheTriple, const MCTargetOptions &Options);
 };
 
 } // end namespace llvm

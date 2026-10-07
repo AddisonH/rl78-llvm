@@ -1,9 +1,10 @@
 // C++-specific checks for the alignment builtins
 // RUN: %clang_cc1 -triple=x86_64-unknown-unknown -std=c++11 -o - %s -fsyntax-only -verify
+// RUN: %clang_cc1 -triple=x86_64-unknown-unknown -std=c++11 -o - %s -fsyntax-only -verify -fexperimental-new-constant-interpreter
 
 // Check that we don't crash when using dependent types in __builtin_align:
 template <typename a, a b>
-void *c(void *d) { // expected-note{{candidate template ignored}}
+void *c(void *d) { // expected-note{{a non-type template parameter cannot have type 'struct x' before C++20}}
   return __builtin_align_down(d, b);
 }
 
@@ -84,9 +85,9 @@ public:
   virtual void vfunc();
 };
 void test_member_ptr() {
-  __builtin_align_up(&MemPtr::data, 64);    // expected-error{{operand of type 'int MemPtr::*' where arithmetic or pointer type is required}}
-  __builtin_align_down(&MemPtr::func, 64);  // expected-error{{operand of type 'void (MemPtr::*)()' where arithmetic or pointer type is required}}
-  __builtin_is_aligned(&MemPtr::vfunc, 64); // expected-error{{operand of type 'void (MemPtr::*)()' where arithmetic or pointer type is required}}
+  __builtin_align_up(&MemPtr::data, 64);    // expected-error{{operand of type 'int MemPtr::*' where arithmetic or pointer type is required}} expected-note{{member pointers are not allowed here}}
+  __builtin_align_down(&MemPtr::func, 64);  // expected-error{{operand of type 'void (MemPtr::*)()' where arithmetic or pointer type is required}} expected-note{{member pointers are not allowed here}}
+  __builtin_is_aligned(&MemPtr::vfunc, 64); // expected-error{{operand of type 'void (MemPtr::*)()' where arithmetic or pointer type is required}} expected-note{{member pointers are not allowed here}}
 }
 
 void test_references(Foo &i) {
@@ -137,26 +138,26 @@ static_assert(!wrap_is_aligned(wrap_align_down(wrap_align_up(22, 16), 32), 64), 
 constexpr long const_value(long l) { return l; }
 // Check some invalid values during constant-evaluation
 static_assert(wrap_align_down(1, const_value(-1)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_down(1, -1)'}}
+// expected-note@-1{{in call to 'wrap_align_down<int>(1, -1)'}}
 static_assert(wrap_align_up(1, const_value(-2)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_up(1, -2)'}}
+// expected-note@-1{{in call to 'wrap_align_up<int>(1, -2)'}}
 static_assert(wrap_is_aligned(1, const_value(-3)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_is_aligned(1, -3)'}}
+// expected-note@-1{{in call to 'wrap_is_aligned<int>(1, -3)'}}
 static_assert(wrap_align_down(1, const_value(17)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_down(1, 17)'}}
+// expected-note@-1{{in call to 'wrap_align_down<int>(1, 17)'}}
 static_assert(wrap_align_up(1, const_value(18)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_up(1, 18)'}}
+// expected-note@-1{{in call to 'wrap_align_up<int>(1, 18)'}}
 static_assert(wrap_is_aligned(1, const_value(19)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_is_aligned(1, 19)'}}
+// expected-note@-1{{in call to 'wrap_is_aligned<int>(1, 19)'}}
 
 // Check invalid values for smaller types:
 static_assert(wrap_align_down(static_cast<short>(1), const_value(1 << 20)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_down(1, 1048576)'}}
+// expected-note@-1{{in call to 'wrap_align_down<short>(1, 1048576)'}}
 // Check invalid boolean type
 static_assert(wrap_align_up(static_cast<int>(1), const_value(1ull << 33)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_align_up(1, 8589934592)'}}
+// expected-note@-1{{in call to 'wrap_align_up<int>(1, 8589934592)'}}
 static_assert(wrap_is_aligned(static_cast<char>(1), const_value(1 << 22)), ""); // expected-error{{not an integral constant expression}}
-// expected-note@-1{{in call to 'wrap_is_aligned(1, 4194304)'}}
+// expected-note@-1{{in call to 'wrap_is_aligned<char>(1, 4194304)'}}
 
 // Check invalid boolean type
 static_assert(wrap_align_up(static_cast<bool>(1), const_value(1 << 21)), ""); // expected-error{{not an integral constant expression}}
@@ -239,5 +240,11 @@ static_assert(!__builtin_is_aligned(static_cast<unsigned long>(7), static_cast<s
 static_assert(!__builtin_is_aligned(static_cast<signed long>(7), static_cast<unsigned short>(4)), "");
 static_assert(!__builtin_is_aligned(static_cast<unsigned short>(7), static_cast<signed long>(4)), "");
 
+// Check that one-past-end pointers work correctly (GH#178647).
+static_assert(__builtin_align_up(&align32array[128], 4) == align32array + 128, "");
+
 // Check the diagnostic message
 _Alignas(void) char align_void_array[1]; // expected-error {{invalid application of '_Alignas' to an incomplete type 'void'}}
+
+static_assert(!__builtin_is_aligned(&"", 4), ""); // expected-error {{not an integral constant expression}} \
+                                                  // expected-note {{cannot constant evaluate whether run-time alignment is at least 4}}

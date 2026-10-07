@@ -20,6 +20,7 @@
 #include "clang/AST/MangleNumberingContext.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/DiagnosticAST.h"
 #include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
@@ -30,14 +31,12 @@ namespace {
 /// Typically these are things like static locals, lambdas, or blocks.
 class MicrosoftNumberingContext : public MangleNumberingContext {
   llvm::DenseMap<const Type *, unsigned> ManglingNumbers;
-  unsigned LambdaManglingNumber;
-  unsigned StaticLocalNumber;
-  unsigned StaticThreadlocalNumber;
+  unsigned LambdaManglingNumber = 0;
+  unsigned StaticLocalNumber = 0;
+  unsigned StaticThreadlocalNumber = 0;
 
 public:
-  MicrosoftNumberingContext()
-      : LambdaManglingNumber(0), StaticLocalNumber(0),
-        StaticThreadlocalNumber(0) {}
+  MicrosoftNumberingContext() = default;
 
   unsigned getManglingNumber(const CXXMethodDecl *CallOperator) override {
     return ++LambdaManglingNumber;
@@ -85,9 +84,7 @@ public:
         MicrosoftNumberingContext::getManglingNumber(TD, MSLocalManglingNumber);
     if (DeviceN > 0xFFFF || HostN > 0xFFFF) {
       DiagnosticsEngine &Diags = TD->getASTContext().getDiagnostics();
-      unsigned DiagID = Diags.getCustomDiagID(
-          DiagnosticsEngine::Error, "Mangling number exceeds limit (65535)");
-      Diags.Report(TD->getLocation(), DiagID);
+      Diags.Report(TD->getLocation(), diag::err_ms_mangle_number_overflow);
     }
     return (DeviceN << 16) | HostN;
   }

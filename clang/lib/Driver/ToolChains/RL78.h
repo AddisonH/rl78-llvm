@@ -25,6 +25,15 @@ public:
   std::string computeSysRoot() const override;
 
   bool IsIntegratedAssemblerDefault() const override { return true; }
+  // The RL78 toolchain links with lld (the vendor set CLANG_DEFAULT_LINKER).
+  const char *getDefaultLinker() const override { return "ld.lld"; }
+  // BareMetal advertises runtime sanitizers (ASan, SafeStack, ...) that RL78
+  // has no runtime for; keep the generic set, as in the 17-based toolchain.
+  SanitizerMask
+  getSupportedSanitizers(BoundArch BA,
+                         Action::OffloadKind DeviceOffloadKind) const override {
+    return ToolChain::getSupportedSanitizers(BA, DeviceOffloadKind);
+  }
 
   // TODO: override functions as needed (multlib etc.)
   void

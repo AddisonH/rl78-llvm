@@ -14,7 +14,6 @@
 
 #include "llvm/CodeGen/SwiftErrorValueTracking.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -82,14 +81,14 @@ void SwiftErrorValueTracking::setFunction(MachineFunction &mf) {
   TLI = MF->getSubtarget().getTargetLowering();
   TII = MF->getSubtarget().getInstrInfo();
 
-  if (!TLI->supportSwiftError())
-    return;
-
   SwiftErrorVals.clear();
   VRegDefMap.clear();
   VRegUpwardsUse.clear();
   VRegDefUses.clear();
   SwiftErrorArg = nullptr;
+
+  if (!TLI->supportSwiftError())
+    return;
 
   // Check if function has a swifterror argument.
   bool HaveSeenSwiftErrorArg = false;
@@ -179,7 +178,7 @@ void SwiftErrorValueTracking::propagateVRegs() {
       // Check whether we have a single vreg def from all predecessors.
       // Otherwise we need a phi.
       SmallVector<std::pair<MachineBasicBlock *, Register>, 4> VRegs;
-      SmallSet<const MachineBasicBlock *, 8> Visited;
+      SmallPtrSet<const MachineBasicBlock *, 8> Visited;
       for (auto *Pred : MBB->predecessors()) {
         if (!Visited.insert(Pred).second)
           continue;
@@ -252,6 +251,25 @@ void SwiftErrorValueTracking::propagateVRegs() {
       if (!UpwardsUse)
         setCurrentVReg(MBB, SwiftErrorVal, PHIVReg);
     }
+  }
+
+  // Create implicit defs for upward uses from unreachable blocks
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  for (const auto &Use : VRegUpwardsUse) {
+    const MachineBasicBlock *UseBB = Use.first.first;
+    Register VReg = Use.second;
+    if (!MRI.def_empty(VReg))
+      continue;
+
+#ifdef EXPENSIVE_CHECKS
+    assert(std::find(RPOT.begin(), RPOT.end(), UseBB) == RPOT.end() &&
+           "Reachable block has VReg upward use without definition.");
+#endif
+
+    MachineBasicBlock *UseBBMut = MF->getBlockNumbered(UseBB->getNumber());
+
+    BuildMI(*UseBBMut, UseBBMut->getFirstNonPHI(), DebugLoc(),
+            TII->get(TargetOpcode::IMPLICIT_DEF), VReg);
   }
 }
 

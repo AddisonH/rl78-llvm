@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -verify -fsyntax-only -triple x86_64-linux-gnu %s
 
 int x __attribute__((section(
-   42)));  // expected-error {{'section' attribute requires a string}}
+   42)));  // expected-error {{expected string literal as argument of 'section' attribute}}
 
 
 // PR6007
@@ -48,3 +48,46 @@ template <typename> __attribute__((section("template_fn1"))) void template_fn1()
 const int const_global_var __attribute__((section("template_fn1"))) = 42;           // expected-error {{'const_global_var' causes a section type conflict with 'template_fn1'}}
 int mut_global_var __attribute__((section("template_fn2"))) = 42;                   // expected-note {{declared here}}
 template <typename> __attribute__((section("template_fn2"))) void template_fn2() {} // expected-error {{'template_fn2' causes a section type conflict with 'mut_global_var'}}
+
+namespace mutable_member {
+struct t1 {
+  mutable int i;
+};
+extern const t1 v1;
+__attribute__((section("mutable_member"))) const t1 v1{};
+extern int i;
+__attribute__((section("mutable_member"))) int i{};
+} // namespace mutable_member
+
+namespace non_trivial_ctor {
+struct t1 {
+  t1();
+  constexpr t1(int) { }
+};
+extern const t1 v1;
+__attribute__((section("non_trivial_ctor"))) const t1 v1; // expected-note {{declared here}}
+extern const t1 v2;
+__attribute__((section("non_trivial_ctor"))) const t1 v2{3}; // expected-error {{'v2' causes a section type conflict with 'v1'}}
+} // namespace non_trivial_ctor
+
+// Check that a section conflict with a decl whose name is not a simple
+// identifier (here, a lambda's call operator) is diagnosed without crashing.
+namespace GH192264 {
+auto lambda = [](int val) __attribute__((section("lambda_op"))) { return val; }; // expected-note {{declared here}}
+__attribute__((section("lambda_op"))) int i{}; // expected-error {{'i' causes a section type conflict with 'operator()'}}
+} // namespace GH192264
+
+// Check that a section conflict with a decl whose name is not a simple
+// identifier (here, a lambda's call operator) is diagnosed without crashing.
+namespace lambda_call_operator_pragma {
+auto lambda = [](int val) __attribute__((section("lambda_op_pragma"))) { return val; }; // expected-note {{declared here}}
+#pragma clang section bss="lambda_op_pragma" // expected-error {{this causes a section type conflict with 'operator()'}}
+#pragma clang section bss=""
+} // namespace lambda_call_operator_pragma
+
+namespace GH192264_original {
+struct S {};
+using F = decltype([](auto val) // expected-note {{declared here}}
+__attribute__((section("gh192264"))) const S s{}; // expected-error {{expected body of lambda expression}}
+__attribute__((section("gh192264"))) int i{}; // expected-error {{'i' causes a section type conflict with 'operator()'}}
+} // namespace GH192264_original

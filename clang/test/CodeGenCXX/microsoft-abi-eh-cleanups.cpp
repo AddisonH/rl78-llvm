@@ -16,11 +16,11 @@ void HasEHCleanup() {
 
 // With exceptions, we need to clean up at least one of these temporaries.
 // WIN32-LABEL: define dso_local void @"?HasEHCleanup@@YAXXZ"() {{.*}} {
-// WIN32:   %[[base:.*]] = call ptr @llvm.stacksave()
+// WIN32:   %[[base:.*]] = call ptr @llvm.stacksave.p0()
 //    If this call throws, we have to restore the stack.
-// WIN32:   call void @"?getA@@YA?AUA@@XZ"(ptr sret(%struct.A) align 4 %{{.*}})
+// WIN32:   call void @"?getA@@YA?AUA@@XZ"(ptr dead_on_unwind writable sret(%struct.A) align 4 %{{.*}})
 //    If this call throws, we have to cleanup the first temporary.
-// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr sret(%struct.A) align 4 %{{.*}})
+// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr dead_on_unwind writable sret(%struct.A) align 4 %{{.*}})
 //    If this call throws, we have to cleanup the stacksave.
 // WIN32:   call noundef i32 @"?TakesTwo@@YAHUA@@0@Z"
 // WIN32:   call void @llvm.stackrestore
@@ -41,9 +41,9 @@ void HasEHCleanupNoexcept() noexcept {
 
 // With exceptions, we need to clean up at least one of these temporaries.
 // WIN32-LABEL: define dso_local void @"?HasEHCleanupNoexcept@@YAXXZ"() {{.*}} {
-// WIN32:   %[[base:.*]] = call ptr @llvm.stacksave()
-// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr sret(%struct.A) align 4 %{{.*}})
-// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr sret(%struct.A) align 4 %{{.*}})
+// WIN32:   %[[base:.*]] = call ptr @llvm.stacksave.p0()
+// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr dead_on_unwind writable sret(%struct.A) align 4 %{{.*}})
+// WIN32:   invoke void @"?getA@@YA?AUA@@XZ"(ptr dead_on_unwind writable sret(%struct.A) align 4 %{{.*}})
 // WIN32:   invoke noundef i32 @"?TakesTwo@@YAHUA@@0@Z"
 // WIN32:   call void @llvm.stackrestore
 // WIN32:   ret void
@@ -61,16 +61,16 @@ int HasDeactivatedCleanups() {
 
 // WIN32-LABEL: define dso_local noundef i32 @"?HasDeactivatedCleanups@@YAHXZ"() {{.*}} {
 // WIN32:   %[[isactive:.*]] = alloca i1
-// WIN32:   call ptr @llvm.stacksave()
+// WIN32:   call ptr @llvm.stacksave.p0()
 // WIN32:   %[[argmem:.*]] = alloca inalloca [[argmem_ty:<{ %struct.A, %struct.A }>]]
-// WIN32:   %[[arg1:.*]] = getelementptr inbounds [[argmem_ty]], ptr %[[argmem]], i32 0, i32 1
+// WIN32:   %[[arg1:.*]] = getelementptr inbounds nuw [[argmem_ty]], ptr %[[argmem]], i32 0, i32 1
 // WIN32:   call x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"
 // WIN32:   invoke void @"?TakeRef@@YAXABUA@@@Z"
 //
 // WIN32:   invoke x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"(ptr {{[^,]*}} %[[arg1]])
 // WIN32:   store i1 true, ptr %[[isactive]]
 //
-// WIN32:   %[[arg0:.*]] = getelementptr inbounds [[argmem_ty]], ptr %[[argmem]], i32 0, i32 0
+// WIN32:   %[[arg0:.*]] = getelementptr inbounds nuw [[argmem_ty]], ptr %[[argmem]], i32 0, i32 0
 // WIN32:   invoke x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"
 // WIN32:   invoke void @"?TakeRef@@YAXABUA@@@Z"
 // WIN32:   invoke x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"
@@ -97,7 +97,7 @@ int HasConditionalCleanup(bool cond) {
 // WIN32-LABEL: define dso_local noundef i32 @"?HasConditionalCleanup@@YAH_N@Z"(i1 noundef zeroext %{{.*}}) {{.*}} {
 // WIN32:   store i1 false
 // WIN32:   br i1
-// WIN32:   call ptr @llvm.stacksave()
+// WIN32:   call ptr @llvm.stacksave.p0()
 // WIN32:   call x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"(ptr {{[^,]*}} %{{.*}})
 // WIN32:   store i1 true
 // WIN32:   invoke x86_thiscallcc noundef ptr @"??0A@@QAE@XZ"(ptr {{[^,]*}} %{{.*}})
@@ -277,13 +277,13 @@ void f() {
 
 // WIN32-LIFETIME-LABEL: define dso_local void @"?f@lifetime_marker@@YAXXZ"()
 // WIN32-LIFETIME: %[[c:.*]] = alloca %"struct.lifetime_marker::C"
-// WIN32-LIFETIME: call void @llvm.lifetime.start.p0(i64 1, ptr %c)
+// WIN32-LIFETIME: call void @llvm.lifetime.start.p0(ptr %c)
 // WIN32-LIFETIME: invoke void @"?g@lifetime_marker@@YAXXZ"()
 // WIN32-LIFETIME-NEXT: to label %[[cont:[^ ]*]] unwind label %[[lpad0:[^ ]*]]
 //
 // WIN32-LIFETIME: [[cont]]
 // WIN32-LIFETIME: call x86_thiscallcc void @"??1C@lifetime_marker@@QAE@XZ"({{.*}})
-// WIN32-LIFETIME: call void @llvm.lifetime.end.p0(i64 1, ptr %[[c]])
+// WIN32-LIFETIME: call void @llvm.lifetime.end.p0(ptr %[[c]])
 //
 // WIN32-LIFETIME: [[lpad0]]
 // WIN32-LIFETIME-NEXT: cleanuppad
@@ -292,7 +292,7 @@ void f() {
 //
 // WIN32-LIFETIME: [[lpad1]]
 // WIN32-LIFETIME-NEXT: cleanuppad
-// WIN32-LIFETIME: call void @llvm.lifetime.end.p0(i64 1, ptr %[[c]])
+// WIN32-LIFETIME: call void @llvm.lifetime.end.p0(ptr %[[c]])
 }
 
 struct class_2 {

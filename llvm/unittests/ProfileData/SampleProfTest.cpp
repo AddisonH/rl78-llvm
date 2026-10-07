@@ -18,7 +18,9 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/OnDiskHashTable.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Testing/Support/SupportHelpers.h"
@@ -137,6 +139,66 @@ struct SampleProfTest : ::testing::Test {
     delete PS;
   }
 
+  // Write a minimal profile with a specific format version to an in-memory
+  // buffer.
+  ErrorOr<SmallVector<char, 128>> writeProfileToBuffer(uint64_t Version) {
+    SmallVector<char, 128> Buffer;
+    std::unique_ptr<raw_ostream> OS =
+        std::make_unique<raw_svector_ostream>(Buffer);
+    auto WriterOrErr =
+        SampleProfileWriter::create(OS, SampleProfileFormat::SPF_Ext_Binary);
+    if (std::error_code EC = WriterOrErr.getError())
+      return EC;
+    auto Writer = std::move(WriterOrErr.get());
+    Writer->setFormatVersion(Version);
+
+    StringRef FooName("_Z3fooi");
+    FunctionSamples FooSamples;
+    FooSamples.setFunction(FunctionId(FooName));
+    FooSamples.addTotalSamples(1);
+
+    SampleProfileMap Profiles;
+    Profiles[FooName] = std::move(FooSamples);
+
+    if (std::error_code EC = Writer->write(Profiles))
+      return EC;
+    Writer->getOutputStream().flush();
+    Writer.reset();
+    return Buffer;
+  }
+
+  // Write a raw profile header (Magic + Version) directly to a buffer.
+  // This bypasses the writer validation and is used to test reader error
+  // handling.
+  SmallVector<char, 128> writeRawHeaderToBuffer(uint64_t Version) {
+    SmallVector<char, 128> Buffer;
+    raw_svector_ostream OS(Buffer);
+    encodeULEB128(SPMagic(SPF_Ext_Binary), OS);
+    encodeULEB128(Version, OS);
+    return Buffer;
+  }
+
+  // Read the profile from an in-memory buffer, verify its payload, and
+  // return the format version.
+  ErrorOr<uint64_t> readVersionFromBuffer(ArrayRef<char> Buffer) {
+    std::unique_ptr<MemoryBuffer> MemBuffer = MemoryBuffer::getMemBuffer(
+        StringRef(Buffer.data(), Buffer.size()), "profile",
+        /*RequiresNullTerminator*/ false);
+    auto FS = vfs::getRealFileSystem();
+    auto ReaderOrErr = SampleProfileReader::create(MemBuffer, Context, *FS);
+    if (std::error_code EC = ReaderOrErr.getError())
+      return EC;
+    auto Reader = std::move(ReaderOrErr.get());
+    if (std::error_code EC = Reader->read())
+      return EC;
+    if (Reader->getProfiles().size() != 1)
+      return sampleprof_error::malformed;
+    FunctionSamples *Samples = Reader->getSamplesFor("_Z3fooi");
+    if (!Samples || Samples->getTotalSamples() != 1)
+      return sampleprof_error::malformed;
+    return Reader->getFormatVersion();
+  }
+
   void testRoundTrip(SampleProfileFormat Format, bool Remap, bool UseMD5) {
     TempFile ProfileFile("profile", "", "", /*Unique*/ true);
     createWriter(Format, ProfileFile.path());
@@ -145,7 +207,7 @@ struct SampleProfTest : ::testing::Test {
 
     StringRef FooName("_Z3fooi");
     FunctionSamples FooSamples;
-    FooSamples.setName(FooName);
+    FooSamples.setFunction(FunctionId(FooName));
     FooSamples.addTotalSamples(7711);
     FooSamples.addHeadSamples(610);
     FooSamples.addBodySamples(1, 0, 610);
@@ -155,43 +217,43 @@ struct SampleProfTest : ::testing::Test {
     FooSamples.addBodySamples(10, 0, 605);
 
     // Add inline instance with name "_Z3gooi".
-    StringRef GooName("_Z3gooi");
+    FunctionId GooName(StringRef("_Z3gooi"));
     auto &GooSamples =
-        FooSamples.functionSamplesAt(LineLocation(7, 0))[GooName.str()];
-    GooSamples.setName(GooName);
+        FooSamples.functionSamplesAt(LineLocation(7, 0))[GooName];
+    GooSamples.setFunction(GooName);
     GooSamples.addTotalSamples(502);
     GooSamples.addBodySamples(3, 0, 502);
 
     // Add inline instance with name "_Z3hooi".
-    StringRef HooName("_Z3hooi");
+    FunctionId HooName(StringRef("_Z3hooi"));
     auto &HooSamples =
-        GooSamples.functionSamplesAt(LineLocation(9, 0))[HooName.str()];
-    HooSamples.setName(HooName);
+        GooSamples.functionSamplesAt(LineLocation(9, 0))[HooName];
+    HooSamples.setFunction(HooName);
     HooSamples.addTotalSamples(317);
     HooSamples.addBodySamples(4, 0, 317);
 
     StringRef BarName("_Z3bari");
     FunctionSamples BarSamples;
-    BarSamples.setName(BarName);
+    BarSamples.setFunction(FunctionId(BarName));
     BarSamples.addTotalSamples(20301);
     BarSamples.addHeadSamples(1437);
     BarSamples.addBodySamples(1, 0, 1437);
     // Test how reader/writer handles unmangled names.
     StringRef MconstructName("_M_construct<char *>");
     StringRef StringviewName("string_view<std::allocator<char> >");
-    BarSamples.addCalledTargetSamples(1, 0, MconstructName, 1000);
-    BarSamples.addCalledTargetSamples(1, 0, StringviewName, 437);
+    BarSamples.addCalledTargetSamples(1, 0, FunctionId(MconstructName), 1000);
+    BarSamples.addCalledTargetSamples(1, 0, FunctionId(StringviewName), 437);
 
     StringRef BazName("_Z3bazi");
     FunctionSamples BazSamples;
-    BazSamples.setName(BazName);
+    BazSamples.setFunction(FunctionId(BazName));
     BazSamples.addTotalSamples(12557);
     BazSamples.addHeadSamples(1257);
     BazSamples.addBodySamples(1, 0, 12557);
 
     StringRef BooName("_Z3booi");
     FunctionSamples BooSamples;
-    BooSamples.setName(BooName);
+    BooSamples.setFunction(FunctionId(BooName));
     BooSamples.addTotalSamples(1232);
     BooSamples.addHeadSamples(1);
     BooSamples.addBodySamples(1, 0, 1232);
@@ -210,8 +272,8 @@ struct SampleProfTest : ::testing::Test {
     if (Remap) {
       FooName = "_Z4fauxi";
       BarName = "_Z3barl";
-      GooName = "_Z3gool";
-      HooName = "_Z3hool";
+      GooName = FunctionId(StringRef("_Z3gool"));
+      HooName = FunctionId(StringRef("_Z3hool"));
     }
 
     M.getOrInsertFunction(FooName, fn_type);
@@ -245,7 +307,7 @@ struct SampleProfTest : ::testing::Test {
     FunctionSamples *ReadFooSamples = Reader->getSamplesFor(FooName);
     ASSERT_TRUE(ReadFooSamples != nullptr);
     if (!UseMD5) {
-      ASSERT_EQ("_Z3fooi", ReadFooSamples->getName());
+      ASSERT_EQ("_Z3fooi", ReadFooSamples->getFunction().str());
     }
     ASSERT_EQ(7711u, ReadFooSamples->getTotalSamples());
     ASSERT_EQ(610u, ReadFooSamples->getHeadSamples());
@@ -254,7 +316,8 @@ struct SampleProfTest : ::testing::Test {
     // inline instance for GooName. Test the correct FunctionSamples can be
     // found with Remapper support.
     const FunctionSamples *ReadGooSamples =
-        ReadFooSamples->findFunctionSamplesAt(LineLocation(7, 0), GooName,
+        ReadFooSamples->findFunctionSamplesAt(LineLocation(7, 0),
+                                              GooName.stringRef(),
                                               Reader->getRemapper());
     ASSERT_TRUE(ReadGooSamples != nullptr);
     ASSERT_EQ(502u, ReadGooSamples->getTotalSamples());
@@ -263,7 +326,8 @@ struct SampleProfTest : ::testing::Test {
     // no inline instance for GooName. Test no FunctionSamples will be
     // found with Remapper support.
     const FunctionSamples *ReadGooSamplesAgain =
-        ReadFooSamples->findFunctionSamplesAt(LineLocation(9, 0), GooName,
+        ReadFooSamples->findFunctionSamplesAt(LineLocation(9, 0),
+                                              GooName.stringRef(),
                                               Reader->getRemapper());
     ASSERT_TRUE(ReadGooSamplesAgain == nullptr);
 
@@ -272,7 +336,8 @@ struct SampleProfTest : ::testing::Test {
     // inline instance for HooName. Test the correct FunctionSamples can be
     // found with Remapper support.
     const FunctionSamples *ReadHooSamples =
-        ReadGooSamples->findFunctionSamplesAt(LineLocation(9, 0), HooName,
+        ReadGooSamples->findFunctionSamplesAt(LineLocation(9, 0),
+                                              HooName.stringRef(),
                                               Reader->getRemapper());
     ASSERT_TRUE(ReadHooSamples != nullptr);
     ASSERT_EQ(317u, ReadHooSamples->getTotalSamples());
@@ -280,7 +345,7 @@ struct SampleProfTest : ::testing::Test {
     FunctionSamples *ReadBarSamples = Reader->getSamplesFor(BarName);
     ASSERT_TRUE(ReadBarSamples != nullptr);
     if (!UseMD5) {
-      ASSERT_EQ("_Z3bari", ReadBarSamples->getName());
+      ASSERT_EQ("_Z3bari", ReadBarSamples->getFunction().str());
     }
     ASSERT_EQ(20301u, ReadBarSamples->getTotalSamples());
     ASSERT_EQ(1437u, ReadBarSamples->getHeadSamples());
@@ -304,13 +369,9 @@ struct SampleProfTest : ::testing::Test {
     FunctionSamples *ReadBooSamples = Reader->getSamplesFor(BooName);
     ASSERT_TRUE(ReadBooSamples != nullptr);
     ASSERT_EQ(1232u, ReadBooSamples->getTotalSamples());
-
-    std::string MconstructGUID;
-    StringRef MconstructRep =
-        getRepInFormat(MconstructName, UseMD5, MconstructGUID);
-    std::string StringviewGUID;
-    StringRef StringviewRep =
-        getRepInFormat(StringviewName, UseMD5, StringviewGUID);
+    
+    FunctionId MconstructRep = getRepInFormat(MconstructName);
+    FunctionId StringviewRep = getRepInFormat(StringviewName);
     ASSERT_EQ(1000u, CTMap.get()[MconstructRep]);
     ASSERT_EQ(437u, CTMap.get()[StringviewRep]);
 
@@ -333,7 +394,7 @@ struct SampleProfTest : ::testing::Test {
                           uint64_t TotalSamples, uint64_t HeadSamples) {
     StringRef Name(Fname);
     FunctionSamples FcnSamples;
-    FcnSamples.setName(Name);
+    FcnSamples.setFunction(FunctionId(Name));
     FcnSamples.addTotalSamples(TotalSamples);
     FcnSamples.addHeadSamples(HeadSamples);
     FcnSamples.addBodySamples(1, 0, HeadSamples);
@@ -489,6 +550,141 @@ TEST_F(SampleProfTest, none_suffix_elision_text) {
   Expected["foo.bar"] = uint64_t(20303);
   Expected["foo.llvm.2465"] = uint64_t(20305);
   testSuffixElisionPolicy(SampleProfileFormat::SPF_Text, "none", Expected);
+}
+
+TEST_F(SampleProfTest, FuncOffsetHashTable) {
+  std::vector<std::pair<uint64_t, uint64_t>> TestData = {
+      {0x1111111122222222ULL, 100},
+      {0x3333333344444444ULL, 250},
+      {0x5555555566666666ULL, 1000},
+  };
+
+  SmallVector<char, 128> Buffer;
+  raw_svector_ostream OS(Buffer);
+
+  FuncOffsetHashTableWriterInfo WriterInfo;
+  OnDiskChainedHashTableGenerator<FuncOffsetHashTableWriterInfo> Generator;
+
+  for (const auto &[Name, Offset] : TestData)
+    Generator.insert(Name, Offset);
+
+  // Add padding to avoid bucket offset 0.
+  OS.write("PAD ", 4);
+  uint32_t BucketTableOffset = Generator.Emit(OS, WriterInfo);
+
+  const unsigned char *Start =
+      reinterpret_cast<const unsigned char *>(Buffer.data());
+
+  const unsigned char *Buckets = Start + BucketTableOffset;
+  const unsigned char *Payload = Start + 4;
+
+  auto Table =
+      std::unique_ptr<OnDiskIterableChainedHashTable<FuncOffsetHashTableInfo>>(
+          OnDiskIterableChainedHashTable<FuncOffsetHashTableInfo>::Create(
+              Buckets, Payload, Start));
+
+  ASSERT_TRUE(Table);
+
+  for (const auto &[Name, Offset] : TestData) {
+    auto Iter = Table->find(Name);
+    ASSERT_TRUE(Iter != Table->end());
+    ASSERT_EQ(*Iter, Offset);
+  }
+
+  auto Iter = Table->find(0x9999999999999999ULL);
+  ASSERT_TRUE(Iter == Table->end());
+}
+
+TEST_F(SampleProfTest, SampleProfileFuncOffsetTableInMemory) {
+  SampleProfileFuncOffsetTable Table(InMemoryMode, 2);
+
+  // Test empty table
+  EXPECT_EQ(Table.lookup(0x1111ULL), std::nullopt);
+
+  // Test insert and lookup
+  Table.insert(0x11112222ULL, 100);
+  Table.insert(0x33334444ULL, 200);
+
+  EXPECT_EQ(Table.lookup(0x11112222ULL), 100);
+  EXPECT_EQ(Table.lookup(0x33334444ULL), 200);
+  EXPECT_EQ(Table.lookup(0x55556666ULL), std::nullopt);
+}
+
+TEST_F(SampleProfTest, SampleProfileFuncOffsetTableOnDisk) {
+  std::vector<std::pair<uint64_t, uint64_t>> TestData = {
+      {0x1111111122222222ULL, 100},
+      {0x3333333344444444ULL, 250},
+      {0x5555555566666666ULL, 1000},
+  };
+
+  SmallVector<char, 128> Buffer;
+  raw_svector_ostream OS(Buffer);
+
+  FuncOffsetHashTableWriterInfo WriterInfo;
+  OnDiskChainedHashTableGenerator<FuncOffsetHashTableWriterInfo> Generator;
+
+  for (const auto &[Name, Offset] : TestData)
+    Generator.insert(Name, Offset);
+
+  // Add padding to avoid bucket offset 0.
+  OS.write("PAD ", 4);
+  uint32_t BucketTableOffset = Generator.Emit(OS, WriterInfo);
+
+  const unsigned char *Start =
+      reinterpret_cast<const unsigned char *>(Buffer.data());
+
+  const unsigned char *Buckets = Start + BucketTableOffset;
+  const unsigned char *Payload = Start + 4;
+
+  SampleProfileFuncOffsetTable Table(OnDiskMode, Buckets, Payload, Start);
+
+  // Test lookup
+  for (const auto &[Name, Offset] : TestData) {
+    auto LookupResult = Table.lookup(Name);
+    ASSERT_TRUE(LookupResult.has_value());
+    EXPECT_EQ(*LookupResult, Offset);
+  }
+
+  // Test non-existent key
+  EXPECT_EQ(Table.lookup(0x9999999999999999ULL), std::nullopt);
+}
+
+// Verify that requesting format version 103 results in a version 103 profile.
+TEST_F(SampleProfTest, SampleProfileFormatVersion103) {
+  auto BufferOrErr = writeProfileToBuffer(103);
+  ASSERT_TRUE(NoError(BufferOrErr.getError()));
+  auto Buffer = std::move(*BufferOrErr);
+
+  auto ReadVersionOrErr = readVersionFromBuffer(Buffer);
+  ASSERT_TRUE(NoError(ReadVersionOrErr.getError()));
+  EXPECT_EQ(*ReadVersionOrErr, 103u);
+}
+
+// Verify that requesting format version 104 results in a version 104 profile.
+TEST_F(SampleProfTest, SampleProfileFormatVersion104) {
+  auto BufferOrErr = writeProfileToBuffer(104);
+  ASSERT_TRUE(NoError(BufferOrErr.getError()));
+  auto Buffer = std::move(*BufferOrErr);
+
+  auto ReadVersionOrErr = readVersionFromBuffer(Buffer);
+  ASSERT_TRUE(NoError(ReadVersionOrErr.getError()));
+  EXPECT_EQ(*ReadVersionOrErr, 104u);
+}
+
+// Verify that requesting format version 102 (below minimum supported) is
+// rejected by the reader.
+TEST_F(SampleProfTest, SampleProfileFormatVersion102) {
+  auto Buffer = writeRawHeaderToBuffer(102);
+  auto ReadVersionOrErr = readVersionFromBuffer(Buffer);
+  EXPECT_EQ(ReadVersionOrErr.getError(), sampleprof_error::unsupported_version);
+}
+
+// Verify that requesting format version 105 (above latest supported) is
+// rejected by the reader.
+TEST_F(SampleProfTest, SampleProfileFormatVersion105) {
+  auto Buffer = writeRawHeaderToBuffer(105);
+  auto ReadVersionOrErr = readVersionFromBuffer(Buffer);
+  EXPECT_EQ(ReadVersionOrErr.getError(), sampleprof_error::unsupported_version);
 }
 
 } // end anonymous namespace

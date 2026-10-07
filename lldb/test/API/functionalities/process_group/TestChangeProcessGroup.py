@@ -8,6 +8,7 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
+@skipIfWasm  # no fork()/setpgid() on WebAssembly
 class ChangeProcessGroupTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -68,7 +69,7 @@ class ChangeProcessGroupTestCase(TestBase):
         # release the child from its loop
         value = thread.GetSelectedFrame().EvaluateExpression("release_child_flag = 1")
         self.assertTrue(value.IsValid())
-        self.assertEquals(value.GetValueAsUnsigned(0), 1)
+        self.assertEqual(value.GetValueAsUnsigned(0), 1)
         process.Continue()
 
         # make sure the child's process group id is different from its pid

@@ -11,8 +11,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-#include <algorithm>
-#include <numeric>
+#include <iterator>
+#include <limits>
+#include <vector>
 
 using namespace llvm;
 
@@ -182,6 +183,8 @@ TEST(SafeIntIteratorTest, Operations) {
 }
 
 TEST(SequenceTest, Iteration) {
+  EXPECT_THAT(seq(5), ElementsAre(0, 1, 2, 3, 4));
+
   EXPECT_THAT(seq(-4, 5), ElementsAre(-4, -3, -2, -1, 0, 1, 2, 3, 4));
   EXPECT_THAT(reverse(seq(-4, 5)), ElementsAre(4, 3, 2, 1, 0, -1, -2, -3, -4));
 

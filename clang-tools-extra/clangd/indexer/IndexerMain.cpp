@@ -38,6 +38,16 @@ static llvm::cl::opt<IndexFileFormat>
                                        "binary RIFF format")),
            llvm::cl::init(IndexFileFormat::RIFF));
 
+static llvm::cl::list<std::string> QueryDriverGlobs{
+    "query-driver",
+    llvm::cl::desc(
+        "Comma separated list of globs for white-listing gcc-compatible "
+        "drivers that are safe to execute. Drivers matching any of these globs "
+        "will be used to extract system includes. e.g. "
+        "/usr/bin/**/clang-*,/path/to/repo/**/g++-*"),
+    llvm::cl::CommaSeparated,
+};
+
 class IndexActionFactory : public tooling::FrontendActionFactory {
 public:
   IndexActionFactory(IndexFileIn &Result) : Result(Result) {}
@@ -55,33 +65,33 @@ public:
       std::lock_guard<std::mutex> Lock(FilesMu);
       return Files.insert(*AbsPath).second; // Skip already processed files.
     };
-    return createStaticIndexingAction(
-        Opts,
-        [&](SymbolSlab S) {
-          // Merge as we go.
-          std::lock_guard<std::mutex> Lock(SymbolsMu);
-          for (const auto &Sym : S) {
-            if (const auto *Existing = Symbols.find(Sym.ID))
-              Symbols.insert(mergeSymbol(*Existing, Sym));
-            else
-              Symbols.insert(Sym);
-          }
-        },
-        [&](RefSlab S) {
-          std::lock_guard<std::mutex> Lock(RefsMu);
-          for (const auto &Sym : S) {
-            // Deduplication happens during insertion.
-            for (const auto &Ref : Sym.second)
-              Refs.insert(Sym.first, Ref);
-          }
-        },
-        [&](RelationSlab S) {
-          std::lock_guard<std::mutex> Lock(RelsMu);
-          for (const auto &R : S) {
-            Relations.insert(R);
-          }
-        },
-        /*IncludeGraphCallback=*/nullptr);
+    return createStaticIndexingAction(Opts, [&](IndexFileIn Result) {
+      {
+        // Merge as we go.
+        std::lock_guard<std::mutex> Lock(SymbolsMu);
+        for (const auto &Sym : *Result.Symbols) {
+          if (const auto *Existing = Symbols.find(Sym.ID))
+            Symbols.insert(mergeSymbol(*Existing, Sym));
+          else
+            Symbols.insert(Sym);
+        }
+      }
+      {
+        std::lock_guard<std::mutex> Lock(RefsMu);
+        for (const auto &Sym : *Result.Refs) {
+          // Deduplication happens during insertion.
+          for (const auto &Ref : Sym.second)
+            Refs.insert(Sym.first, Ref);
+        }
+      }
+      {
+        std::lock_guard<std::mutex> Lock(RelsMu);
+        for (const auto &R : *Result.Relations) {
+          Relations.insert(R);
+        }
+      }
+      // FIXME: Handle Result.Sources?
+    });
   }
 
   bool runInvocation(std::shared_ptr<CompilerInvocation> Invocation,
@@ -144,12 +154,16 @@ int main(int argc, const char **argv) {
 
   // Collect symbols found in each translation unit, merging as we go.
   clang::clangd::IndexFileIn Data;
+  auto Mangler = std::make_shared<clang::clangd::CommandMangler>(
+      clang::clangd::CommandMangler::detect());
+  Mangler->SystemIncludeExtractor = clang::clangd::getSystemIncludeExtractor(
+      static_cast<llvm::ArrayRef<std::string>>(
+          clang::clangd::QueryDriverGlobs));
   auto Err = Executor->get()->execute(
       std::make_unique<clang::clangd::IndexActionFactory>(Data),
       clang::tooling::ArgumentsAdjuster(
-          [Mangler = std::make_shared<clang::clangd::CommandMangler>(
-               clang::clangd::CommandMangler::detect())](
-              const std::vector<std::string> &Args, llvm::StringRef File) {
+          [Mangler = std::move(Mangler)](const std::vector<std::string> &Args,
+                                         llvm::StringRef File) {
             clang::tooling::CompileCommand Cmd;
             Cmd.CommandLine = Args;
             Mangler->operator()(Cmd, File);

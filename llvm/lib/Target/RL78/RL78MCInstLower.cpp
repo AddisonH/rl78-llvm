@@ -37,7 +37,6 @@ static MCOperand LowerSymbolOperand(const MachineInstr *MI,
     Symbol = AP.getSymbol(MO.getGlobal());
     if (MI->getOpcode() == RL78::CALLT_addr5) {
       Symbol = AP.OutContext.getOrCreateSymbol(Twine("@") + Symbol->getName());
-      Symbol->setExternal(true);
     }
     break;
 

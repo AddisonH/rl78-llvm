@@ -148,7 +148,7 @@ define <2 x i64> @udiv_indentity_zero(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V3-NEXT:    divq %rcx
 ; CHECK-X64-V3-NEXT:    movq %rax, %rcx
 ; CHECK-X64-V3-NEXT:    vmovq %xmm1, %rax
-; CHECK-X64-V3-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V3-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V3-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V3-NEXT:    divq %rsi
 ; CHECK-X64-V3-NEXT:    vmovq %rcx, %xmm0
@@ -161,14 +161,14 @@ define <2 x i64> @udiv_indentity_zero(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k0
 ; CHECK-X64-V4-NEXT:    knotw %k0, %k1
-; CHECK-X64-V4-NEXT:    vpbroadcastq {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1} {z}
+; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 {%k1} {z} = [1,1]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rax, %rcx
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rsi
 ; CHECK-X64-V4-NEXT:    vmovq %rcx, %xmm0
@@ -206,7 +206,7 @@ define <2 x i64> @udiv_indentity_partial_zero(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [1,1]
-; CHECK-X64-V4-NEXT:    vmovdqa64 {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vmovdqa64 {{.*#+}} xmm0 {%k1} = [0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
@@ -251,13 +251,13 @@ define <2 x i64> @urem_identity_const(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [11,11]
-; CHECK-X64-V4-NEXT:    vpbroadcastq {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 {%k1} = [1,1]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rdx, %rcx
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rsi
@@ -296,13 +296,13 @@ define <2 x i64> @sdiv_identity_const(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [1,1]
-; CHECK-X64-V4-NEXT:    vmovdqa64 {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vmovdqa64 {{.*#+}} xmm0 {%k1} = [11,13]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rax, %rcx
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rsi
@@ -341,13 +341,13 @@ define <2 x i64> @sdiv_identity_const_todo_better_nonzero(<2 x i1> %c, <2 x i64>
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [1,1]
-; CHECK-X64-V4-NEXT:    vmovdqa64 {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vmovdqa64 {{.*#+}} xmm0 {%k1} = [11,17]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rax, %rcx
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rsi
@@ -386,13 +386,13 @@ define <2 x i64> @srem_identity_const(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [11,11]
-; CHECK-X64-V4-NEXT:    vpbroadcastq {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 {%k1} = [1,1]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rdx, %rcx
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rsi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %esi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rsi
@@ -436,14 +436,14 @@ define <2 x i64> @udivrem_identity_const(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [1,1]
-; CHECK-X64-V4-NEXT:    vpbroadcastq {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 {%k1} = [11,11]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rax, %rcx
 ; CHECK-X64-V4-NEXT:    movq %rdx, %rsi
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rdi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %edi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    xorl %edx, %edx
 ; CHECK-X64-V4-NEXT:    divq %rdi
@@ -493,14 +493,14 @@ define <2 x i64> @sdivrem_identity_const(<2 x i1> %c, <2 x i64> %x) {
 ; CHECK-X64-V4-NEXT:    vpsllq $63, %xmm0, %xmm0
 ; CHECK-X64-V4-NEXT:    vpmovq2m %xmm0, %k1
 ; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 = [1,1]
-; CHECK-X64-V4-NEXT:    vpbroadcastq {{\.?LCPI[0-9]+_[0-9]+}}(%rip), %xmm0 {%k1}
+; CHECK-X64-V4-NEXT:    vpbroadcastq {{.*#+}} xmm0 {%k1} = [11,11]
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm0, %rcx
 ; CHECK-X64-V4-NEXT:    vpextrq $1, %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rcx
 ; CHECK-X64-V4-NEXT:    movq %rax, %rcx
 ; CHECK-X64-V4-NEXT:    movq %rdx, %rsi
-; CHECK-X64-V4-NEXT:    vmovq %xmm0, %rdi
+; CHECK-X64-V4-NEXT:    vmovd %xmm0, %edi
 ; CHECK-X64-V4-NEXT:    vmovq %xmm1, %rax
 ; CHECK-X64-V4-NEXT:    cqto
 ; CHECK-X64-V4-NEXT:    idivq %rdi

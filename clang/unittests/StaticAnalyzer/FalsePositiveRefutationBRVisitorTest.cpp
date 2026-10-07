@@ -26,13 +26,15 @@ namespace {
 
 class FalsePositiveGenerator : public Checker<eval::Call> {
   using Self = FalsePositiveGenerator;
-  const BuiltinBug FalsePositiveGeneratorBug{this, "FalsePositiveGenerator"};
+  const BugType FalsePositiveGeneratorBug{this, "FalsePositiveGenerator"};
   using HandlerFn = bool (Self::*)(const CallEvent &Call,
                                    CheckerContext &) const;
   CallDescriptionMap<HandlerFn> Callbacks = {
-      {{{"reachedWithContradiction"}, 0}, &Self::reachedWithContradiction},
-      {{{"reachedWithNoContradiction"}, 0}, &Self::reachedWithNoContradiction},
-      {{{"reportIfCanBeTrue"}, 1}, &Self::reportIfCanBeTrue},
+      {{CDM::SimpleFunc, {"reachedWithContradiction"}, 0},
+       &Self::reachedWithContradiction},
+      {{CDM::SimpleFunc, {"reachedWithNoContradiction"}, 0},
+       &Self::reachedWithNoContradiction},
+      {{CDM::SimpleFunc, {"reportIfCanBeTrue"}, 1}, &Self::reportIfCanBeTrue},
   };
 
   bool report(CheckerContext &C, ProgramStateRef State,
@@ -61,7 +63,7 @@ class FalsePositiveGenerator : public Checker<eval::Call> {
   bool reportIfCanBeTrue(const CallEvent &Call, CheckerContext &C) const {
     // A specific instantiation of an inlined function may have more constrained
     // values than can generally be assumed. Skip the check.
-    if (C.getPredecessor()->getLocationContext()->getStackFrame()->getParent())
+    if (C.getPredecessor()->getStackFrame()->getParent())
       return false;
 
     SVal AssertionVal = Call.getArgSVal(0);
@@ -90,8 +92,8 @@ void addFalsePositiveGenerator(AnalysisASTConsumer &AnalysisConsumer,
   AnOpts.CheckersAndPackages = {{"test.FalsePositiveGenerator", true},
                                 {"debug.ViewExplodedGraph", false}};
   AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
-    Registry.addChecker<FalsePositiveGenerator>(
-        "test.FalsePositiveGenerator", "EmptyDescription", "EmptyDocsUri");
+    Registry.addChecker<FalsePositiveGenerator>("test.FalsePositiveGenerator",
+                                                "MockDescription");
   });
 }
 
@@ -181,8 +183,10 @@ TEST_F(FalsePositiveRefutationBRVisitorTestBase,
       if (n >= 1 && n <= 2) {
         if (x >= 3)
           return;
-        // x: [0,2] and n: [1,2]
-        int y = x + n; // y: '(x+n)' Which is in approximately between 1 and 4.
+        // x: [0,2] and n: [1,2], so the reachable products of 'x*n' are
+        // {0,1,2,4}. The range manager cannot represent this gap and
+        // over-approximates the symbol '(x*n)' to the contiguous range [0,4].
+        int y = x * n;
 
         // Registers the symbol 'y' with the constraint [1, MAX] in the true
         // branch.
@@ -192,13 +196,14 @@ TEST_F(FalsePositiveRefutationBRVisitorTestBase,
           // SAT. Therefore that report is NOT invalidated.
           reachedWithNoContradiction(); // 'y' can be greater than zero. OK
 
-          // If we ask the analyzer whether the 'y' can be 5. It won't know,
-          // therefore, the state will be created where the 'y' expression is 5.
+          // If we ask the analyzer whether the 'y' can be 3. It won't know,
+          // because 3 is inside the over-approximated range [1,4], therefore
+          // the state will be created where the 'y' expression is 3.
           // Although, this assumption is false!
-          // 'y' can not be 5 if the maximal value of both x and n is 2.
+          // 'x*n' can not be 3 given x: [0,2] and n: [1,2].
           // The BugPath which become UnSAT in the ErrorNode with a refined
           // constraint, should be invalidated.
-          reportIfCanBeTrue(y == 5);
+          reportIfCanBeTrue(y == 3);
         }
       }
     })";

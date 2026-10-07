@@ -25,7 +25,7 @@ class WasmDumper : public objdump::Dumper {
 
 public:
   WasmDumper(const WasmObjectFile &O) : Dumper(O), Obj(O) {}
-  void printPrivateHeaders(bool MachOOnlyFirst) override;
+  void printPrivateHeaders() override;
 };
 } // namespace
 
@@ -34,7 +34,7 @@ objdump::createWasmDumper(const object::WasmObjectFile &Obj) {
   return std::make_unique<WasmDumper>(Obj);
 }
 
-void WasmDumper::printPrivateHeaders(bool) {
+void WasmDumper::printPrivateHeaders() {
   outs() << "Program Header:\n";
   outs() << "Version: 0x";
   outs().write_hex(Obj.getHeader().Version);
@@ -60,7 +60,6 @@ Error objdump::getWasmRelocationValueString(const WasmObjectFile *Obj,
     Result.append(SymName.begin(), SymName.end());
   }
   Fmt << (Rel.Addend < 0 ? "" : "+") << Rel.Addend;
-  Fmt.flush();
   Result.append(FmtBuf.begin(), FmtBuf.end());
   return Error::success();
 }

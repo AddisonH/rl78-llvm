@@ -10,7 +10,6 @@
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCELFObjectWriter.h"
-#include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/EndianStream.h"
 #include "RL78.h"
@@ -113,15 +112,15 @@ static unsigned adjustFixupValue(unsigned Kind, int64_t Value, SMLoc Loc,
 
 namespace llvm {
 
-  const MCFixupKindInfo &RL78AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
+  MCFixupKindInfo RL78AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     const static MCFixupKindInfo Infos[RL78::NumTargetFixupKinds] = {
         // Name                    Offset Bits  Flags.
-        {"fixup_RL78_DIR8S_PCREL", 0, 8, MCFixupKindInfo::FKF_IsPCRel},
-        {"fixup_RL78_DIR16S_PCREL", 0, 16, MCFixupKindInfo::FKF_IsPCRel},
+        {"fixup_RL78_DIR8S_PCREL", 0, 8, 0},
+        {"fixup_RL78_DIR16S_PCREL", 0, 16, 0},
         {"fixup_RL78_DIR3U", 0, 3, 0},
         {"fixup_RL78_DIR8U", 0, 8, 0},
         {"fixup_RL78_DIR8U_SAD", 0, 8, 0},
-        {"fixup_RL78_DIR8UW_SAD", 0, 16, 0},
+        {"fixup_RL78_DIR8UW_SAD", 0, 8, 0},
         {"fixup_RL78_DIR16U", 0, 16, 0},
         {"fixup_RL78_DIR16U_RAM", 0, 16, 0},
         {"fixup_RL78_DIR16UW_RAM", 0, 16, 0},
@@ -129,7 +128,11 @@ namespace llvm {
         {"fixup_RL78_DIR20U_16", 0, 16, 0},
         {"fixup_RL78_DIR20UW_16", 0, 16, 0},
         {"fixup_RL78_DIR32U", 0, 32, 0},
-        {"fixup_RL78_DIR_CALLT", 0, 5, 0},
+        // The CALLT table index is split over non-contiguous bits of the
+        // second byte (see the CALLT_addr5 encoder), which this table cannot
+        // describe; the value is only ever resolved by the linker. With 5 bits
+        // applyFixup wrote 5/8 = 0 bytes anyway, and -show-encoding asserted.
+        {"fixup_RL78_DIR_CALLT", 0, 0, 0},
         {"fixup_RL78_SYM", 0, 0, 0},
         {"fixup_RL78_OPsctsize", 0, 0, 0},
         {"fixup_RL78_OPscttop", 0, 0, 0},
@@ -158,14 +161,14 @@ namespace llvm {
     if (Kind < FirstTargetFixupKind)
       return MCAsmBackend::getFixupKindInfo(Kind);
 
-    assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
+    assert(unsigned(Kind - FirstTargetFixupKind) < RL78::NumTargetFixupKinds &&
            "Invalid kind!");
     return Infos[Kind - FirstTargetFixupKind];
   }
 
-  bool RL78AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
-                                             const MCFixup &Fixup,
-                                             const MCValue &Target) {
+  /// Fixups that must always become relocations: the CC-RL operator stack
+  /// (SYM/OP*/ABS*) and, with linker relaxation, the relaxable branches.
+  bool RL78AsmBackend::shouldForceRelocation(const MCFixup &Fixup) const {
     switch ((RL78::Fixups)Fixup.getKind()) {
     default:
       return false;
@@ -199,37 +202,28 @@ namespace llvm {
     }
   }
 
-  bool RL78AsmBackend::fixupNeedsRelaxationAdvanced(
-      const MCFixup& Fixup, bool Resolved, uint64_t Value,
-      const MCRelaxableFragment* DF, const MCAsmLayout& Layout,
-      const bool WasForced) const {
-    return fixupNeedsRelaxation(Fixup, Value, DF, Layout);
-  }
-
-  bool RL78AsmBackend::mayNeedRelaxation(const MCInst &Inst,
-                         const MCSubtargetInfo &STI) const {
-    switch (Inst.getOpcode()) {
-    case RL78::BR_rel16:
-      return true;
-    default:
-      return false;
-    }
-  }
-
-  /// fixupNeedsRelaxation - Target specific predicate for whether a given
-  /// fixup requires the associated instruction to be relaxed.
-  bool RL78AsmBackend::fixupNeedsRelaxation(
-      const MCFixup &Fixup, uint64_t Value,
-      const MCRelaxableFragment *DF,
-      const MCAsmLayout &Layout) const {
+  // RL78 "relaxes" downwards: BR_rel16 is emitted and shrunk to BR_rel8 when
+  // the displacement fits. As in LLVM 17 this ignores Resolved, so a branch
+  // to a not-yet-resolved symbol is decided on the value computed so far.
+  bool RL78AsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
+                                                    const MCFixup &Fixup,
+                                                    const MCValue &,
+                                                    uint64_t Value,
+                                                    bool Resolved) const {
     int64_t Offset = int64_t(Value);
 
-    switch ((unsigned)Fixup.getKind()) {
+    switch (Fixup.getKind()) {
     case RL78::fixup_RL78_DIR16S_PCREL:
       return (Offset > -128 && Offset < 127);
     default:
       return false;
     }
+  }
+
+  bool RL78AsmBackend::mayNeedRelaxation(unsigned Opcode,
+                                         ArrayRef<MCOperand> Operands,
+                                         const MCSubtargetInfo &STI) const {
+    return Opcode == RL78::BR_rel16;
   }
 
   void RL78AsmBackend::relaxInstruction(MCInst &Inst,
@@ -256,7 +250,7 @@ namespace llvm {
                                     const MCSubtargetInfo *STI) const {
 
     for (uint64_t i = 0; i != Count; ++i)
-      support::endian::write<uint8_t>(OS, 0x00, support::little);
+      support::endian::write<uint8_t>(OS, 0x00, llvm::endianness::little);
 
     return true;
   }
@@ -271,24 +265,27 @@ public:
   ELFRL78AsmBackend(const Target &T, const MCSubtargetInfo &STI)
       : RL78AsmBackend(T, STI) {}
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsResolved,
-                  const MCSubtargetInfo *STI) const override {
-    MCContext &Ctx = Asm.getContext();
+  void applyFixup(const MCFragment &F, const MCFixup &Fixup,
+                  const MCValue &Target, uint8_t *Data, uint64_t Value,
+                  bool IsResolved) override {
+    if (IsResolved && shouldForceRelocation(Fixup))
+      IsResolved = false;
+    maybeAddReloc(F, Fixup, Target, Value, IsResolved);
+    if (mc::isRelocation(Fixup.getKind()))
+      return;
+
+    MCContext &Ctx = getContext();
     Value = adjustFixupValue(Fixup.getKind(), static_cast<int64_t>(Value),
                              Fixup.getLoc(), forceRelaxRelocs(), Ctx);
     if (!Value)
       return; // Doesn't change encoding.
 
-    unsigned Offset = Fixup.getOffset();
-
     // For each byte of the fragment that the fixup touches, mask in the bits
     // from the fixup value. The Value has been "split up" into the
-    // appropriate bitfields above.
+    // appropriate bitfields above. Data points at the fixup offset.
     for (unsigned i = 0, e = (getFixupKindInfo(Fixup.getKind()).TargetSize / 8);
          i != e; ++i)
-      Data[Offset + i] |= uint8_t((Value >> (i * 8)) & 0xff);
+      Data[i] |= uint8_t((Value >> (i * 8)) & 0xff);
   }
 
   std::unique_ptr<MCObjectTargetWriter>

@@ -12,6 +12,7 @@
 
 #include "RL78InstPrinter.h"
 #include "RL78TargetMachine.h"
+#include "llvm/MC/MCAsmInfo.h"
 
 using namespace llvm;
 
@@ -21,7 +22,7 @@ using namespace llvm;
 #define PRINT_ALIAS_INSTR
 #include "RL78GenAsmWriter.inc"
 
-void RL78InstPrinter::printRegName(raw_ostream &OS, MCRegister Reg) const {
+void RL78InstPrinter::printRegName(raw_ostream &OS, MCRegister Reg) {
   OS << StringRef(getRegisterName(Reg)).lower();
 }
 
@@ -51,7 +52,7 @@ void RL78InstPrinter::printOperand(const MCInst *MI, int opNum,
 
   if (MO.isExpr()) {
     O << "#";
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
     return;
   }
 }
@@ -67,7 +68,7 @@ void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
     if (MO1.isImm()) {
       O << (int)MO1.getImm();
     } else if (MO1.isExpr()) {
-      MO1.getExpr()->print(O, &MAI);
+      MAI.printExpr(O, *MO1.getExpr());
     } else
       llvm_unreachable("Operand type is not Immediate or Expression!");
     O << "[";
@@ -109,7 +110,7 @@ void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
     }
   } else if (MO1.isExpr()) {
     O << "+";
-    MO1.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO1.getExpr());
   } else
     llvm_unreachable("Operand type is not Immediate or Expression!");
   O << "]";
@@ -123,7 +124,7 @@ void RL78InstPrinter::printSELRBxOperand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << RB[MO.getImm()];
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -137,7 +138,7 @@ void RL78InstPrinter::printBitOperand(const MCInst *MI, int opNum,
                     "Instruction using operand outside of range.");
     O << "." << (int)MO.getImm();
   } else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -149,7 +150,7 @@ void RL78InstPrinter::printShiftOperand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << (int)MO.getImm();
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -162,7 +163,7 @@ void RL78InstPrinter::printABS8Operand(const MCInst *MI, int opNum,
     O << (((MO.getImm() & 0xFF) < 0x20) ? "0xfff" : "0xffe")
       << format_hex_no_prefix(MO.getImm() & 0xFF, 2);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -174,7 +175,7 @@ void RL78InstPrinter::printSfrOperand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << "0xfff" << format_hex_no_prefix(0xFF & MO.getImm(), 2);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -196,7 +197,7 @@ void RL78InstPrinter::printABS16Operand(const MCInst *MI, int opNum,
       break;
     }
   } else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
 
   assert((MO.isImm() || MO.isExpr()) &&
          "Operand type is not Immediate or Expression!");
@@ -210,7 +211,7 @@ void RL78InstPrinter::printABS5Operand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << format_hex(MO.getImm(), 6);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 
@@ -224,7 +225,7 @@ void RL78InstPrinter::printABS20Operand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << format_hex(MO.getImm(), 0);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -240,7 +241,7 @@ void RL78InstPrinter::printStackSlotOperand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << (int)MO.getImm();
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 
@@ -255,7 +256,7 @@ void RL78InstPrinter::printRel8Operand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << format_hex(MO.getImm(), 2);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -267,7 +268,7 @@ void RL78InstPrinter::printRel16Operand(const MCInst *MI, int opNum,
   if (MO.isImm())
     O << format_hex(MO.getImm(), 0);
   else if (MO.isExpr())
-    MO.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }
@@ -315,7 +316,7 @@ void RL78InstPrinter::printEsRegMemOperand(const MCInst *MI, int opNum,
     if (MO2.isImm()) {
       O << (int)MO2.getImm();
     } else if (MO2.isExpr()) {
-      MO2.getExpr()->print(O, &MAI);
+      MAI.printExpr(O, *MO2.getExpr());
     } else
       llvm_unreachable("Operand type is not Immediate or Expression!");
 
@@ -335,7 +336,7 @@ void RL78InstPrinter::printEsRegMemOperand(const MCInst *MI, int opNum,
     }
   } else if (MO2.isExpr()) {
     O << "+";
-    MO2.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO2.getExpr());
   } else
     llvm_unreachable("Operand type is not Immediate or Expression!");
   O << "]";
@@ -375,7 +376,7 @@ void RL78InstPrinter::printEsAddr16Operand(const MCInst *MI, int opNum,
   if (MO1.isImm())
     O << format_hex(0xFFFF & MO1.getImm(), 0);
   else if (MO1.isExpr())
-    MO1.getExpr()->print(O, &MAI);
+    MAI.printExpr(O, *MO1.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
 }

@@ -1,9 +1,10 @@
-; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefix=SI -check-prefix=FUNC %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=SI -check-prefix=FUNC %s
 
 declare float @llvm.amdgcn.rcp.f32(float) #0
 declare double @llvm.amdgcn.rcp.f64(double) #0
 
 declare double @llvm.amdgcn.sqrt.f64(double) #0
+declare float @llvm.amdgcn.sqrt.f32(float) #0
 declare double @llvm.sqrt.f64(double) #0
 declare float @llvm.sqrt.f32(float) #0
 
@@ -12,7 +13,7 @@ declare float @llvm.sqrt.f32(float) #0
 ; SI-NOT: [[NAN]]
 ; SI: buffer_store_dword [[NAN]]
 define amdgpu_kernel void @rcp_undef_f32(ptr addrspace(1) %out) #1 {
-  %rcp = call float @llvm.amdgcn.rcp.f32(float undef)
+  %rcp = call float @llvm.amdgcn.rcp.f32(float poison)
   store float %rcp, ptr addrspace(1) %out, align 4
   ret void
 }
@@ -50,7 +51,7 @@ define amdgpu_kernel void @safe_no_fp32_denormals_rcp_f32(ptr addrspace(1) %out,
 ; SI-NOT: [[RESULT]]
 ; SI: buffer_store_dword [[RESULT]]
 define amdgpu_kernel void @safe_f32_denormals_rcp_pat_f32(ptr addrspace(1) %out, float %src) #4 {
-  %rcp = fdiv float 1.0, %src, !fpmath !0
+  %rcp = fdiv afn float 1.0, %src, !fpmath !0
   store float %rcp, ptr addrspace(1) %out, align 4
   ret void
 }
@@ -64,19 +65,48 @@ define amdgpu_kernel void @unsafe_f32_denormals_rcp_pat_f32(ptr addrspace(1) %ou
 }
 
 ; FUNC-LABEL: {{^}}safe_rsq_rcp_pat_f32:
-; SI: v_rsq_f32_e32
+; SI: v_mul_f32
+; SI: v_rsq_f32
+; SI: v_mul_f32
+; SI: v_fma_f32
+; SI: v_fma_f32
+; SI: v_fma_f32
+; SI: v_fma_f32
+; SI: v_fma_f32
+; SI: v_rcp_f32
 define amdgpu_kernel void @safe_rsq_rcp_pat_f32(ptr addrspace(1) %out, float %src) #1 {
-  %sqrt = call float @llvm.sqrt.f32(float %src)
-  %rcp = call float @llvm.amdgcn.rcp.f32(float %sqrt)
+  %sqrt = call contract float @llvm.sqrt.f32(float %src)
+  %rcp = call contract float @llvm.amdgcn.rcp.f32(float %sqrt)
+  store float %rcp, ptr addrspace(1) %out, align 4
+  ret void
+}
+
+; FUNC-LABEL: {{^}}safe_rsq_rcp_pat_amdgcn_sqrt_f32:
+; SI: v_sqrt_f32_e32
+; SI: v_rcp_f32_e32
+define amdgpu_kernel void @safe_rsq_rcp_pat_amdgcn_sqrt_f32(ptr addrspace(1) %out, float %src) #1 {
+  %sqrt = call contract float @llvm.amdgcn.sqrt.f32(float %src)
+  %rcp = call contract float @llvm.amdgcn.rcp.f32(float %sqrt)
+  store float %rcp, ptr addrspace(1) %out, align 4
+  ret void
+}
+
+; FUNC-LABEL: {{^}}safe_rsq_rcp_pat_amdgcn_sqrt_f32_nocontract:
+; SI: v_sqrt_f32_e32
+; SI: v_rcp_f32_e32
+define amdgpu_kernel void @safe_rsq_rcp_pat_amdgcn_sqrt_f32_nocontract(ptr addrspace(1) %out, float %src) #1 {
+  %sqrt = call float @llvm.amdgcn.sqrt.f32(float %src)
+  %rcp = call contract float @llvm.amdgcn.rcp.f32(float %sqrt)
   store float %rcp, ptr addrspace(1) %out, align 4
   ret void
 }
 
 ; FUNC-LABEL: {{^}}unsafe_rsq_rcp_pat_f32:
-; SI: v_rsq_f32_e32
+; SI: v_sqrt_f32_e32
+; SI: v_rcp_f32_e32
 define amdgpu_kernel void @unsafe_rsq_rcp_pat_f32(ptr addrspace(1) %out, float %src) #2 {
-  %sqrt = call float @llvm.sqrt.f32(float %src)
-  %rcp = call float @llvm.amdgcn.rcp.f32(float %sqrt)
+  %sqrt = call afn float @llvm.sqrt.f32(float %src)
+  %rcp = call afn float @llvm.amdgcn.rcp.f32(float %sqrt)
   store float %rcp, ptr addrspace(1) %out, align 4
   ret void
 }
@@ -115,10 +145,8 @@ define amdgpu_kernel void @rcp_pat_f64(ptr addrspace(1) %out, double %src) #1 {
 ; SI: v_fma_f64
 ; SI: v_fma_f64
 ; SI: v_fma_f64
-; SI: v_fma_f64
-; SI: v_fma_f64
 define amdgpu_kernel void @unsafe_rcp_pat_f64(ptr addrspace(1) %out, double %src) #2 {
-  %rcp = fdiv double 1.0, %src
+  %rcp = fdiv afn double 1.0, %src
   store double %rcp, ptr addrspace(1) %out, align 8
   ret void
 }
@@ -146,10 +174,10 @@ define amdgpu_kernel void @safe_rsq_rcp_pat_f64(ptr addrspace(1) %out, double %s
 ; SI-NOT: v_rsq_f64_e32
 ; SI: v_sqrt_f64
 ; SI: v_rcp_f64
-define amdgpu_kernel void @safe_amdgcn_sqrt_rsq_rcp_pat_f64(double addrspace(1)* %out, double %src) #1 {
+define amdgpu_kernel void @safe_amdgcn_sqrt_rsq_rcp_pat_f64(ptr addrspace(1) %out, double %src) #1 {
   %sqrt = call double @llvm.amdgcn.sqrt.f64(double %src)
   %rcp = call double @llvm.amdgcn.rcp.f64(double %sqrt)
-  store double %rcp, double addrspace(1)* %out, align 8
+  store double %rcp, ptr addrspace(1) %out, align 8
   ret void
 }
 
@@ -165,10 +193,10 @@ define amdgpu_kernel void @safe_amdgcn_sqrt_rsq_rcp_pat_f64(double addrspace(1)*
 ; SI: v_fma_f64
 ; SI: v_rcp_f64
 ; SI: buffer_store_dwordx2
-define amdgpu_kernel void @unsafe_rsq_rcp_pat_f64(double addrspace(1)* %out, double %src) #2 {
+define amdgpu_kernel void @unsafe_rsq_rcp_pat_f64(ptr addrspace(1) %out, double %src) #2 {
   %sqrt = call double @llvm.sqrt.f64(double %src)
   %rcp = call double @llvm.amdgcn.rcp.f64(double %sqrt)
-  store double %rcp, double addrspace(1)* %out, align 8
+  store double %rcp, ptr addrspace(1) %out, align 8
   ret void
 }
 
@@ -184,9 +212,9 @@ define amdgpu_kernel void @unsafe_amdgcn_sqrt_rsq_rcp_pat_f64(ptr addrspace(1) %
 }
 
 attributes #0 = { nounwind readnone }
-attributes #1 = { nounwind "unsafe-fp-math"="false" "denormal-fp-math-f32"="preserve-sign,preserve-sign" }
-attributes #2 = { nounwind "unsafe-fp-math"="true" "denormal-fp-math-f32"="preserve-sign,preserve-sign" }
-attributes #3 = { nounwind "unsafe-fp-math"="false" "denormal-fp-math-f32"="ieee,ieee" }
-attributes #4 = { nounwind "unsafe-fp-math"="true" "denormal-fp-math-f32"="ieee,ieee" }
+attributes #1 = { nounwind denormal_fpenv(float: preservesign) }
+attributes #2 = { nounwind denormal_fpenv(float: preservesign) }
+attributes #3 = { nounwind denormal_fpenv(float: ieee|ieee) }
+attributes #4 = { nounwind denormal_fpenv(float: ieee|ieee) }
 
 !0 = !{float 2.500000e+00}

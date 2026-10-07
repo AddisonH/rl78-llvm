@@ -222,6 +222,17 @@ OPTIONS
  Show coverage for branch conditions in terms of either count or percentage.
  The supported views are: "count", "percent".
 
+.. option:: -show-mcdc
+
+ Show modified condition/decision coverage (MC/DC) for each applicable boolean
+ expression.
+
+.. option:: -show-mcdc-non-executed-vectors
+
+ When showing MC/DC details, also list test vectors that were not executed (for
+ example in a ``Not executed`` section after the executed vectors). By default,
+ only executed test vectors are shown.
+
 .. option:: -show-line-counts
 
  Show the execution counts for each line. Defaults to true, unless another
@@ -248,6 +259,11 @@ OPTIONS
  Show the execution counts for each line if there is only one region on the
  line, but show the individual regions if there are multiple on the line.
  Defaults to false.
+
+.. option:: -show-directory-coverage
+
+ Generate an index file in each directory that contains at least one source
+ file with a top level index showing aggregates. Defaults to false.
 
 .. option:: -use-color
 
@@ -278,6 +294,10 @@ OPTIONS
 .. option:: -ignore-filename-regex=<PATTERN>
 
  Skip source code files with file paths that match the given regular expression.
+
+.. option:: -include-filename-regex=<PATTERN>
+
+ Only include source code files with file paths that match the given regular expression.
 
 .. option:: -format=<FORMAT>
 
@@ -340,7 +360,11 @@ OPTIONS
 
  Map the paths in the coverage data to local source file paths. This allows you
  to generate the coverage data on one machine, and then use llvm-cov on a
- different machine where you have the same files on a different path.
+ different machine where you have the same files on a different path. Multiple
+ `-path-equivalence` arguments can be passed to specify different mappings. Each
+ argument consists of a source path `<from>` and its corresponding local path `<to>`.
+ The mappings are applied in the order they are specified. If multiple mappings can
+ be applied to a single path, the first mapping encountered is used.
 
 .. option:: -coverage-watermark=<high>,<low>
 
@@ -365,6 +389,11 @@ OPTIONS
 
  Fail if an object file cannot be found for a binary ID present in the profile,
  neither on the command line nor via binary ID lookup.
+
+.. option:: -empty-profile
+
+ Display the baseline coverage of the binaries with all zero execution counts.
+ Mutually exclusive with -instr-profile.
 
 .. program:: llvm-cov report
 
@@ -417,6 +446,10 @@ OPTIONS
 
  Show statistics for all branch conditions. Defaults to true.
 
+.. option:: -show-mcdc-summary
+
+ Show MC/DC statistics. Defaults to false.
+
 .. option:: -show-functions
 
  Show coverage summaries for each function. Defaults to false.
@@ -451,6 +484,11 @@ OPTIONS
 
  Fail if an object file cannot be found for a binary ID present in the profile,
  neither on the command line nor via binary ID lookup.
+
+.. option:: -empty-profile
+
+ Display the baseline coverage of the binaries with all zero execution counts.
+ Mutually exclusive with -instr-profile.
 
 .. program:: llvm-cov export
 
@@ -508,15 +546,21 @@ OPTIONS
 
  Skip source code files with file paths that match the given regular expression.
 
- .. option:: -skip-expansions
+.. option:: -skip-expansions
 
  Skip exporting macro expansion coverage data.
 
- .. option:: -skip-functions
+.. option:: -skip-functions
 
  Skip exporting per-function coverage data.
 
- .. option:: -num-threads=N, -j=N
+.. option:: -show-mcdc-non-executed-vectors
+
+ When MC/DC data is present in the export, include test vectors that were not
+ executed (for JSON, these appear with ``"executed": false`` alongside executed
+ vectors). By default, only executed MC/DC test vectors are exported.
+
+.. option:: -num-threads=N, -j=N
 
  Use N threads to export coverage data. When N=0, llvm-cov auto-detects an
  appropriate number of threads to use. This is the default.
@@ -543,3 +587,30 @@ OPTIONS
 
  Fail if an object file cannot be found for a binary ID present in the profile,
  neither on the command line nor via binary ID lookup.
+
+.. option:: -empty-profile
+
+ Export the baseline coverage of the binaries with all zero execution counts.
+ Mutually exclusive with -instr-profile.
+
+CONVERT-FOR-TESTING COMMAND
+---------------------------
+
+.. warning::
+  This command is for the LLVM developers who are working on ``llvm-cov`` only.
+
+SYNOPSIS
+^^^^^^^^
+
+:program:`llvm-cov convert-for-testing` *BIN* -o *OUT*
+
+DESCRIPTION
+^^^^^^^^^^^
+
+The :program:`llvm-cov convert-for-testing` command serves the purpose of
+testing `llvm-cov` itself. It can extract all code coverage data from the
+binary *BIN* to the file *OUT*, thereby reducing the size of test files. The
+output file typically bears the :program:`.covmapping` extension.
+
+The :program:`.covmapping` files can be read back by ``llvm-cov`` just as
+ordinary binary files.

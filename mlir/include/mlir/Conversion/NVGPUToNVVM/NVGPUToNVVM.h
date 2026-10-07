@@ -12,14 +12,36 @@
 
 namespace mlir {
 
+class Attribute;
 class LLVMTypeConverter;
-class RewritePatternSet;
+class MLIRContext;
+class MemRefType;
 class Pass;
+class RewritePatternSet;
+class TypeConverter;
 
 #define GEN_PASS_DECL_CONVERTNVGPUTONVVMPASS
 #include "mlir/Conversion/Passes.h.inc"
 
-void populateNVGPUToNVVMConversionPatterns(LLVMTypeConverter &converter,
+namespace nvgpu {
+class MBarrierGroupType;
+
+/// Returns the memory space attribute of the mbarrier object.
+Attribute getMbarrierMemorySpace(MLIRContext *context,
+                                 MBarrierGroupType barrierType);
+
+/// Return the memref type that can be used to represent an mbarrier object.
+MemRefType getMBarrierMemrefType(MLIRContext *context,
+                                 MBarrierGroupType barrierType);
+} // namespace nvgpu
+
+namespace nvgpu {
+/// Remap common GPU memory spaces (Workgroup, Private, etc) to LLVM address
+/// spaces.
+void populateCommonGPUTypeAndAttributeConversions(TypeConverter &typeConverter);
+} // namespace nvgpu
+
+void populateNVGPUToNVVMConversionPatterns(const LLVMTypeConverter &converter,
                                            RewritePatternSet &patterns);
 } // namespace mlir
 

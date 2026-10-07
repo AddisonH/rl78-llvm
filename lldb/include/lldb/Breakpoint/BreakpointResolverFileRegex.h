@@ -10,9 +10,8 @@
 #ifndef LLDB_BREAKPOINT_BREAKPOINTRESOLVERFILEREGEX_H
 #define LLDB_BREAKPOINT_BREAKPOINTRESOLVERFILEREGEX_H
 
-#include <set>
 #include "lldb/Breakpoint/BreakpointResolver.h"
-#include "lldb/Utility/ConstString.h"
+#include <set>
 
 namespace lldb_private {
 
@@ -27,9 +26,8 @@ public:
       const lldb::BreakpointSP &bkpt, RegularExpression regex,
       const std::unordered_set<std::string> &func_name_set, bool exact_match);
 
-  static BreakpointResolver *
-  CreateFromStructuredData(const lldb::BreakpointSP &bkpt,
-                           const StructuredData::Dictionary &options_dict,
+  static lldb::BreakpointResolverSP
+  CreateFromStructuredData(const StructuredData::Dictionary &options_dict,
                            Status &error);
 
   StructuredData::ObjectSP SerializeToStructuredData() override;

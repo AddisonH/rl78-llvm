@@ -6,7 +6,7 @@ add_entrypoint_object(
     ../malloc.h
   DEPENDS
     libc.include.stdlib
-    libc.src.__support.RPC.rpc_client
+    libc.src.__support.GPU.allocator
 )
 
 add_entrypoint_object(
@@ -15,6 +15,59 @@ add_entrypoint_object(
     free.cpp
   HDRS
     ../free.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.__support.RPC.rpc_client
+)
+
+add_entrypoint_object(
+  realloc
+  SRCS
+    realloc.cpp
+  HDRS
+    ../realloc.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.__support.GPU.allocator
+)
+
+add_entrypoint_object(
+  calloc
+  SRCS
+    calloc.cpp
+  HDRS
+    ../calloc.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.__support.GPU.allocator
+)
+
+add_entrypoint_object(
+  aligned_alloc
+  SRCS
+    aligned_alloc.cpp
+  HDRS
+    ../aligned_alloc.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.__support.GPU.allocator
+)
+
+add_header_library(
+  abort_utils
+  HDRS
+    abort_utils.h
+  DEPENDS
+    libc.src.__support.GPU.utils
+    libc.src.__support.RPC.rpc_client
+)
+
+add_entrypoint_object(
+  system
+  SRCS
+    system.cpp
+  HDRS
+    ../system.h
   DEPENDS
     libc.include.stdlib
     libc.src.__support.RPC.rpc_client

@@ -56,8 +56,7 @@ BitVector RL78RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 /// If a target supports multiple different pointer register classes,
 /// kind specifies which one is indicated.
 const TargetRegisterClass *
-RL78RegisterInfo::getPointerRegClass(const MachineFunction &MF,
-                                     unsigned Kind) const {
+RL78RegisterInfo::getPointerRegClass(unsigned Kind) const {
   return &RL78::RL78RPRegsRegClass;
 }
 

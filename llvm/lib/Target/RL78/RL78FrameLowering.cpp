@@ -669,7 +669,7 @@ bool RL78FrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
 // hasFP - Return true if the specified function should have a dedicated frame
 // pointer register.  This is true if the function has variable sized allocas or
 // if frame pointer elimination is disabled.
-bool RL78FrameLowering::hasFP(const MachineFunction &MF) const {
+bool RL78FrameLowering::hasFPImpl(const MachineFunction &MF) const {
   #ifndef NDEBUG
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   assert(!MFI.hasVarSizedObjects() && "Functions requiring a frame pointer are not supported.");

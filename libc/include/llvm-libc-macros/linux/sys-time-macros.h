@@ -6,8 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H
-#define __LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H
+#ifndef LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H
+#define LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H
+
+// Timer types for setitimer(2).
+#define ITIMER_REAL 0
+#define ITIMER_VIRTUAL 1
+#define ITIMER_PROF 2
 
 // Add two timevals and put the result in timeval_ptr_result. If the resulting
 // usec value is greater than 999,999 then the microseconds are turned into full
@@ -50,4 +55,4 @@
        ? ((timeval_ptr_a)->tv_usec CMP(timeval_ptr_b)->tv_usec)                \
        : ((timeval_ptr_a)->tv_sec CMP(timeval_ptr_b)->tv_sec))
 
-#endif // __LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H
+#endif // LLVM_LIBC_MACROS_LINUX_SYS_TIME_MACROS_H

@@ -10,13 +10,10 @@
 #include "flang/Common/idioms.h"
 #include "flang/Parser/char-buffer.h"
 #include "flang/Parser/characters.h"
-#include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 #include <cstring>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -46,7 +43,7 @@ void SourceFile::RecordLineStarts() {
 void SourceFile::IdentifyPayload() {
   llvm::StringRef content{buf_->getBufferStart(), buf_->getBufferSize()};
   constexpr llvm::StringLiteral UTF8_BOM{"\xef\xbb\xbf"};
-  if (content.startswith(UTF8_BOM)) {
+  if (content.starts_with(UTF8_BOM)) {
     bom_end_ = UTF8_BOM.size();
     encoding_ = Encoding::UTF_8;
   }
@@ -64,8 +61,15 @@ std::optional<std::string> LocateSourceFile(
     return name;
   }
   for (const std::string &dir : searchPath) {
-    llvm::SmallString<128> path{dir};
-    llvm::sys::path::append(path, name);
+    llvm::SmallString<128> path;
+    // If the file is found in the current directory, don't append the
+    // directory path. This preserves the user's format.
+    if (dir == ".") {
+      path = name;
+    } else {
+      path = dir;
+      llvm::sys::path::append(path, name);
+    }
     bool isDir{false};
     auto er = llvm::sys::fs::is_directory(path, isDir);
     if (!er && !isDir) {
@@ -73,6 +77,31 @@ std::optional<std::string> LocateSourceFile(
     }
   }
   return std::nullopt;
+}
+
+std::vector<std::string> LocateSourceFileAll(
+    std::string name, const std::vector<std::string> &searchPath) {
+  if (name == "-" || llvm::sys::path::is_absolute(name)) {
+    return {name};
+  }
+  std::vector<std::string> result;
+  for (const std::string &dir : searchPath) {
+    llvm::SmallString<128> path;
+    // If the file is found in the current directory, don't append the
+    // directory path. This preserves the user's format.
+    if (dir == ".") {
+      path = name;
+    } else {
+      path = dir;
+      llvm::sys::path::append(path, name);
+    }
+    bool isDir{false};
+    auto er = llvm::sys::fs::is_directory(path, isDir);
+    if (!er && !isDir) {
+      result.emplace_back(path.str().str());
+    }
+  }
+  return result;
 }
 
 std::size_t RemoveCarriageReturns(llvm::MutableArrayRef<char> buf) {
@@ -124,7 +153,7 @@ bool SourceFile::Open(std::string path, llvm::raw_ostream &error) {
 
 bool SourceFile::ReadStandardInput(llvm::raw_ostream &error) {
   Close();
-  path_ = "standard input";
+  path_ = "<stdin>";
   auto buf_or = llvm::MemoryBuffer::getSTDIN();
   if (!buf_or) {
     auto err = buf_or.getError();

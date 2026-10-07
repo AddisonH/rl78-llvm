@@ -1,8 +1,6 @@
 // RUN: %check_clang_tidy %s bugprone-signal-handler %t \
 // RUN: -config='{CheckOptions: \
-// RUN:  [{key: bugprone-signal-handler.AsyncSafeFunctionSet, value: "POSIX"}]}' \
-// RUN: -- -isystem %clang_tidy_headers
-
+// RUN:  {bugprone-signal-handler.AsyncSafeFunctionSet: "POSIX"}}'
 #include "signal.h"
 #include "stdlib.h"
 #include "stdio.h"

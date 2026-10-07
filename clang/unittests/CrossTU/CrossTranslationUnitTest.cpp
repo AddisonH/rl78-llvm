@@ -125,8 +125,8 @@ public:
 protected:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, StringRef) override {
-    CI.getAnalyzerOpts()->CTUImportThreshold = OverrideLimit;
-    CI.getAnalyzerOpts()->CTUImportCppThreshold = OverrideLimit;
+    CI.getAnalyzerOpts().CTUImportThreshold = OverrideLimit;
+    CI.getAnalyzerOpts().CTUImportCppThreshold = OverrideLimit;
     return std::make_unique<CTUASTConsumer>(CI, Success);
   }
 
@@ -189,6 +189,22 @@ TEST(CrossTranslationUnit, EmptyInvocationListIsNotValid) {
         Err.getCode() == index_error_code::invocation_list_wrong_format;
   });
   EXPECT_TRUE(IsWrongFromatError);
+}
+
+TEST(CrossTranslationUnit, WrongFormatInvocationListHasLineNumber) {
+  // The first entry is valid; the second has a scalar value instead of a
+  // sequence. The error should report the line of the malformed value.
+  auto Input = R"(/tmp/valid.cpp:
+  - clang++
+/tmp/bad.cpp: not_a_sequence
+)";
+
+  llvm::Expected<InvocationListTy> Result = parseInvocationList(Input);
+  EXPECT_FALSE(static_cast<bool>(Result));
+  llvm::handleAllErrors(Result.takeError(), [&](IndexError &Err) {
+    EXPECT_EQ(Err.getCode(), index_error_code::invocation_list_wrong_format);
+    EXPECT_EQ(Err.getLineNum(), 3);
+  });
 }
 
 TEST(CrossTranslationUnit, AmbiguousInvocationListIsDetected) {

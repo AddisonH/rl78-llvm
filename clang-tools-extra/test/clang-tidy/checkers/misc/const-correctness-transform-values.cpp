@@ -1,9 +1,10 @@
 // RUN: %check_clang_tidy %s misc-const-correctness %t -- \
-// RUN:   -config="{CheckOptions: [\
-// RUN:   {key: 'misc-const-correctness.TransformValues', value: true},\
-// RUN:   {key: 'misc-const-correctness.WarnPointersAsValues', value: false}, \
-// RUN:   {key: 'misc-const-correctness.TransformPointersAsValues', value: false}, \
-// RUN:   ]}" -- -fno-delayed-template-parsing
+// RUN:   -config="{CheckOptions: {\
+// RUN:   misc-const-correctness.TransformValues: true,\
+// RUN:   misc-const-correctness.WarnPointersAsValues: false, \
+// RUN:   misc-const-correctness.WarnPointersAsPointers: false, \
+// RUN:   misc-const-correctness.TransformPointersAsValues: false} \
+// RUN:   }" -- -fno-delayed-template-parsing
 
 bool global;
 char np_global = 0; // globals can't be known to be const
@@ -12,12 +13,6 @@ namespace foo {
 int scoped;
 float np_scoped = 1; // namespace variables are like globals
 } // namespace foo
-
-// Lambdas should be ignored, because they do not follow the normal variable
-// semantic (e.g. the type is only known to the compiler).
-void lambdas() {
-  auto Lambda = [](int i) { return i < 0; };
-}
 
 void some_function(double, wchar_t);
 
@@ -54,8 +49,8 @@ void template_instantiation() {
 struct ConstNonConstClass {
   ConstNonConstClass();
   ConstNonConstClass(double &np_local0);
-  double nonConstMethod() {}
-  double constMethod() const {}
+  double nonConstMethod() { return 0; }
+  double constMethod() const { return 0; }
   double modifyingMethod(double &np_arg0) const;
 
   double NonConstMember;

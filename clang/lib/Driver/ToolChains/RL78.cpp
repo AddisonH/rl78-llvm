@@ -10,10 +10,10 @@
 
 #include "Gnu.h"
 #include "Arch/RL78.h"
-#include "CommonArgs.h"
+#include "clang/Driver/CommonArgs.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/MultilibBuilder.h"
-#include "clang/Driver/Options.h"
+#include "clang/Options/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
@@ -168,7 +168,7 @@ static bool findRL78Multilibs(const Driver &D, const llvm::Triple &TargetTriple,
 
     Result.Multilibs =
         MultilibSetBuilder().Either(ArrayRef<MultilibBuilder>(libs)).makeMultilibSet();
-    return Result.Multilibs.select(Flags, Result.SelectedMultilibs);
+    return Result.Multilibs.select(D, Flags, Result.SelectedMultilibs);
 }
 
 // RL78 Toolchain
@@ -269,7 +269,7 @@ static bool userProvidedPasses(const llvm::opt::ArgList &Args) {
     SmallVector<StringRef, 8> Pieces;
     WL.split(Pieces, ',');
     for (StringRef P : Pieces)
-      if (P.startswith("lto-newpm-passes="))
+      if (P.starts_with("lto-newpm-passes="))
         return true;
   }
 
@@ -294,7 +294,6 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   const ToolChain &ToolChain = getToolChain();
   std::string Linker = ToolChain.GetProgramPath(getShortName());
-  const Driver &D = ToolChain.getDriver();
   ArgStringList CmdArgs;
 
   auto &TC = static_cast<const toolchains::RL78ToolChain &>(getToolChain());
@@ -368,21 +367,19 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   llvm::sys::path::append(Dir, "lib");
   CmdArgs.push_back(Args.MakeArgString("-L" + Dir));
 
-  if (D.isUsingLTO()) {
+  if (auto LTO = ToolChain.getLTOMode(Args); LTO != LTOK_None) {
     assert(!Inputs.empty() && "Must have at least one input.");
     // Provide a default LTO pipeline tuned for code size (improves -Os/-Oz
     // builds).
     if (!userProvidedPasses(Args)) {
-      if (StringRef O = getOptmizationLevel(Args);
-          O.equals("s") || O.equals("z")) {
-        const char *lvl = O.equals("s") ? "Os" : "Oz";
-        CmdArgs.push_back(Args.MakeArgString(Twine("--lto-newpm-passes=lto<") +
-                                             lvl + ">,globalopt,mergefunc"));
-      }
+      // LLVM 23 has no Os/Oz pipelines: O2, with the functions' optsize /
+      // minsize attributes (set at compile time) doing the size tuning.
+      if (StringRef O = getOptmizationLevel(Args); O == "s" || O == "z")
+        CmdArgs.push_back(
+            Args.MakeArgString("--lto-newpm-passes=lto<O2>,globalopt,mergefunc"));
     }
     rl78::addRL78PassTuneArgs(Args, CmdArgs);
-    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs[0],
-                  D.getLTOMode() == LTOK_Thin);
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
   }
 
   // Adding default linker script if -T option not specified

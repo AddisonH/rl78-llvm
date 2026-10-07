@@ -35,7 +35,7 @@ class MCInst;
 class MachineInstr;
 class PassRegistry;
 
-FunctionPass *createRL78ISelDag(RL78TargetMachine &TM, CodeGenOpt::Level OptLevel);
+FunctionPass *createRL78ISelDag(RL78TargetMachine &TM, CodeGenOptLevel OptLevel);
 
 FunctionPass *createRL78InsertExchangeInstructionsPass();
 FunctionPass *createRL78ExpandPseudoInstsPass();
@@ -48,9 +48,11 @@ FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 FunctionPass *createRL78NarrowDemandedOpsPass();
+FunctionPass *createRL78ExpandInlineAsmPass();
 
-void initializeRL78DAGToDAGISelPass(PassRegistry &);
+void initializeRL78DAGToDAGISelLegacyPass(PassRegistry &);
 void initializeRL78NarrowDemandedOpsPass(PassRegistry &);
+void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 
 void LowerRL78MachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                    AsmPrinter &AP);

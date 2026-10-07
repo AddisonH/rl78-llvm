@@ -57,7 +57,7 @@ public:
   RL78MCCodeEmitter &operator=(const RL78MCCodeEmitter &) = delete;
   ~RL78MCCodeEmitter() override = default;
 
-  void encodeInstruction(const MCInst &MI, raw_ostream &OS,
+  void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
 
@@ -76,7 +76,7 @@ public:
   unsigned
   getTargetOpValue(const MCInst &MI, unsigned OpNo, uint32_t offset,
                    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI,
-                   enum MCFixupKind fixup1) const;
+                   MCFixupKind fixup1) const;
 
   unsigned getBranchOnRegTargetOpValue(const MCInst &MI, unsigned OpNo,
                                        SmallVectorImpl<MCFixup> &Fixups,
@@ -157,7 +157,7 @@ static void encodeBitManip1RInstruction(const MCInst &MI,
   Bits += MI.getOperand(ImmIndex).getImm() << 4;
 }
 
-void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
+void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                                           SmallVectorImpl<MCFixup> &Fixups,
                                           const MCSubtargetInfo &STI) const {
   unsigned long long Bits = getBinaryCodeForInstr(MI, Fixups, STI);
@@ -3191,21 +3191,21 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   // Format".
   switch (Size) {
   case 1:
-    support::endian::write<uint8_t>(OS, Bits, support::big);
+    support::endian::write<uint8_t>(CB, Bits, llvm::endianness::big);
     break;
   case 2:
-    support::endian::write<uint16_t>(OS, Bits, support::big);
+    support::endian::write<uint16_t>(CB, Bits, llvm::endianness::big);
     break;
   case 3:
-    support::endian::write<uint16_t>(OS, Bits >> 8, support::big);
-    support::endian::write<uint8_t>(OS, Bits, support::big);
+    support::endian::write<uint16_t>(CB, Bits >> 8, llvm::endianness::big);
+    support::endian::write<uint8_t>(CB, Bits, llvm::endianness::big);
     break;
   case 4:
-    support::endian::write<uint32_t>(OS, Bits, support::big);
+    support::endian::write<uint32_t>(CB, Bits, llvm::endianness::big);
     break;
   case 5:
-    support::endian::write<uint32_t>(OS, Bits >> 8, support::big);
-    support::endian::write<uint8_t>(OS, Bits, support::big);
+    support::endian::write<uint32_t>(CB, Bits >> 8, llvm::endianness::big);
+    support::endian::write<uint8_t>(CB, Bits, llvm::endianness::big);
     break;
   default:
     llvm_unreachable("Invalid instruction size!");
@@ -3232,7 +3232,7 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
                                              uint32_t offset,
                                              SmallVectorImpl<MCFixup> &Fixups,
                                              const MCSubtargetInfo &STI,
-                                             enum MCFixupKind fixup1) const {
+                                             MCFixupKind fixup1) const {
   const MCOperand &MO = MI.getOperand(OpNo);
   if (MO.isImm()) {
     int64_t immediateValue = MO.getImm();
@@ -3342,7 +3342,7 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
     RL78MCExpr::createFixupsForExpression(MO.getExpr(), offset, valueSize,
                                           Fixups, true, fixup1, Ctx, MI.getLoc());
   } else {
-    Fixups.push_back(MCFixup::create(offset, MO.getExpr(), fixup1));
+    Fixups.push_back(RL78::createFixup(offset, MO.getExpr(), fixup1));
   }
 
   // Ensure an R_RL78_RELAX relocation will be emitted if linker relaxation
@@ -3352,11 +3352,15 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
     switch (rl78Fixup) {
     case RL78::fixup_RL78_DIR20U:
     case RL78::fixup_RL78_DIR16U:
-    case RL78::fixup_RL78_DIR16S_PCREL:
-      Fixups.push_back(MCFixup::create(offset, MCConstantExpr::create(0, Ctx),
-                                       MCFixupKind(RL78::fixup_RL78_RELAX),
-                                       MI.getLoc()));
+    case RL78::fixup_RL78_DIR16S_PCREL: {
+      // Deliberately not MCFixup::setLinkerRelaxable(): that makes label
+      // differences in the section unfoldable, and RL78 has no relocations
+      // to express them (DWARF .uleb128 would fail to assemble). As in the
+      // 17-based toolchain, such differences are folded at assembly time.
+      Fixups.push_back(RL78::createFixup(
+          offset, MCConstantExpr::create(0, Ctx), RL78::fixup_RL78_RELAX));
       break;
+    }
     default:
       break;
     }

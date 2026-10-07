@@ -10,7 +10,7 @@ removes ``virtual`` from those functions as it is not required.
 user that a function was virtual. C++ compilers did not use the presence of
 this to signify an overridden function.
 
-In C++ 11 ``override`` and ``final`` keywords were introduced to allow
+In C++11 ``override`` and ``final`` keywords were introduced to allow
 overridden functions to be marked appropriately. Their presence allows
 compilers to verify that an overridden function correctly overrides a base
 class implementation.
@@ -39,6 +39,11 @@ Options
    warning/error checking flags requiring ``override`` explicitly on overridden
    members, such as ``gcc -Wsuggest-override``/``gcc -Werror=suggest-override``.
    Default is `false`.
+
+.. option:: AllowVirtualAndOverride
+
+   If set to `true`, this check will not diagnose ``virtual`` as redundant
+   with ``override``. Default is `false`.
 
 .. option:: OverrideSpelling
 

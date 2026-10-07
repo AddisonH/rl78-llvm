@@ -12,6 +12,7 @@ from lldbsuite.test import lldbplatform
 from lldbsuite.test import lldbutil
 
 
+@skipIfWasm  # driver cannot launch a Wasm inferior
 class CommandLineCompletionTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -60,10 +61,12 @@ class CommandLineCompletionTestCase(TestBase):
 
     def do_test_variable_completion(self, command):
         self.complete_from_to(f"{command} fo", f"{command} fooo")
-        self.complete_from_to(f"{command} fooo.", f"{command} fooo.")
+        self.complete_from_to(f"{command} fooo.", f"{command} fooo.t")
+        self.complete_from_to(f"{command} fooo.t.", f"{command} fooo.t.x")
         self.complete_from_to(f"{command} fooo.dd", f"{command} fooo.dd")
 
-        self.complete_from_to(f"{command} ptr_fooo->", f"{command} ptr_fooo->")
+        self.complete_from_to(f"{command} ptr_fooo->", f"{command} ptr_fooo->t")
+        self.complete_from_to(f"{command} ptr_fooo->t.", f"{command} ptr_fooo->t.x")
         self.complete_from_to(f"{command} ptr_fooo->dd", f"{command} ptr_fooo->dd")
 
         self.complete_from_to(f"{command} cont", f"{command} container")
@@ -80,6 +83,14 @@ class CommandLineCompletionTestCase(TestBase):
             f"{command} ptr_container->Mem", f"{command} ptr_container->MemberVar"
         )
 
+    def test_frame_variable_direct_ivar(self):
+        """Test that 'frame variable' completes members of 'this' directly."""
+        self.build()
+        lldbutil.run_to_name_breakpoint(self, "Bar")
+        self.completions_contain("frame variable ", ["t", "temp"])
+        self.complete_from_to("frame variable te", "frame variable temp")
+        self.complete_from_to("frame variable t.", "frame variable t.x")
+
     def test_process_attach_dash_dash_con(self):
         """Test that 'process attach --con' completes to 'process attach --continue '."""
         self.complete_from_to("process attach --con", "process attach --continue ")
@@ -94,6 +105,7 @@ class CommandLineCompletionTestCase(TestBase):
         )
         self.complete_from_to("process load Makef", "process load Makefile")
 
+    @skipIfTargetDoesNotSupportSharedLibraries()
     @skipUnlessPlatform(["linux"])
     def test_process_unload(self):
         """Test the completion for "process unload <index>" """
@@ -105,9 +117,18 @@ class CommandLineCompletionTestCase(TestBase):
             self, "// Break here", lldb.SBFileSpec("main.cpp")
         )
         err = lldb.SBError()
-        self.process().LoadImage(
-            lldb.SBFileSpec(self.getBuildArtifact("libshared.so")), err
-        )
+        local_spec = lldb.SBFileSpec(self.getBuildArtifact("libshared.so"))
+        if lldb.remote_platform:
+            self.process().LoadImage(
+                local_spec,
+                lldb.SBFileSpec(
+                    lldbutil.append_to_process_working_directory(self, "libshared.so"),
+                    False,
+                ),
+                err,
+            )
+        else:
+            self.process().LoadImage(local_spec, err)
         self.assertSuccess(err)
 
         self.complete_from_to("process unload ", "process unload 0")
@@ -128,6 +149,12 @@ class CommandLineCompletionTestCase(TestBase):
         interp = self.dbg.GetCommandInterpreter()
         match_strings = lldb.SBStringList()
         num_matches = interp.HandleCompletion(input, len(input), 0, -1, match_strings)
+        if match_strings.GetSize() > 0:
+            self.assertEqual(match_strings[0], match_strings.GetStringAtIndex(0))
+            self.assertEqual(
+                match_strings[-1],
+                match_strings.GetStringAtIndex(match_strings.GetSize() - 1),
+            )
         found_needle = False
         for match in match_strings:
             if needle in match:
@@ -186,12 +213,6 @@ class CommandLineCompletionTestCase(TestBase):
         self.complete_from_to("plugin load ", [])
 
     def test_log_enable(self):
-        self.complete_from_to("log enable ll", ["lldb"])
-        self.complete_from_to("log enable dw", ["dwarf"])
-        self.complete_from_to("log enable lldb al", ["all"])
-        self.complete_from_to("log enable lldb sym", ["symbol"])
-
-    def test_log_enable(self):
         self.complete_from_to("log disable ll", ["lldb"])
         self.complete_from_to("log disable dw", ["dwarf"])
         self.complete_from_to("log disable lldb al", ["all"])
@@ -235,18 +256,12 @@ class CommandLineCompletionTestCase(TestBase):
     def test_log_dir(self):
         # Complete our source directory.
         src_dir = os.path.dirname(os.path.realpath(__file__))
-        self.complete_from_to(
-            "log enable lldb expr -f " + src_dir,
-            [src_dir + os.sep],
-            turn_off_re_match=True,
-        )
+        self.complete_from_to("log enable lldb expr -f " + src_dir, [src_dir + os.sep])
 
     # <rdar://problem/11052829>
     def test_infinite_loop_while_completing(self):
         """Test that 'process print hello\' completes to itself and does not infinite loop."""
-        self.complete_from_to(
-            "process print hello\\", "process print hello\\", turn_off_re_match=True
-        )
+        self.complete_from_to("process print hello\\", "process print hello\\")
 
     def test_watchpoint_co(self):
         """Test that 'watchpoint co' completes to 'watchpoint command '."""
@@ -335,14 +350,23 @@ class CommandLineCompletionTestCase(TestBase):
             "settings replace target.ru", "settings replace target.run-args"
         )
 
-    def test_settings_show_term(self):
-        self.complete_from_to("settings show term-", "settings show term-width")
+    def test_settings_show_term_width(self):
+        self.complete_from_to("settings show term-w", "settings show term-width")
 
-    def test_settings_list_term(self):
-        self.complete_from_to("settings list term-", "settings list term-width")
+    def test_settings_list_term_width(self):
+        self.complete_from_to("settings list term-w", "settings list term-width")
 
-    def test_settings_remove_term(self):
-        self.complete_from_to("settings remove term-", "settings remove term-width")
+    def test_settings_show_term_height(self):
+        self.complete_from_to("settings show term-h", "settings show term-height")
+
+    def test_settings_list_term_height(self):
+        self.complete_from_to("settings list term-h", "settings list term-height")
+
+    def test_settings_remove_term_width(self):
+        self.complete_from_to("settings remove term-w", "settings remove term-width")
+
+    def test_settings_remove_term_height(self):
+        self.complete_from_to("settings remove term-h", "settings remove term-height")
 
     def test_settings_s(self):
         """Test that 'settings s' completes to ['set', 'show']."""
@@ -351,6 +375,18 @@ class CommandLineCompletionTestCase(TestBase):
     def test_settings_set_th(self):
         """Test that 'settings set thread-f' completes to 'settings set thread-format'."""
         self.complete_from_to("settings set thread-f", "settings set thread-format")
+
+    def test_settings_set_shows_description(self):
+        """Test that 'settings set' completions also offer the setting description."""
+        self.check_completion_with_desc(
+            "settings set term-w",
+            [
+                [
+                    "term-width",
+                    "The maximum number of columns to use for displaying text.",
+                ]
+            ],
+        )
 
     def test_settings_s_dash(self):
         """Test that 'settings set --g' completes to 'settings set --global'."""
@@ -477,7 +513,7 @@ class CommandLineCompletionTestCase(TestBase):
         self.complete_from_to("my_test_cmd main.cp", ["main.cpp"])
         self.expect("my_test_cmd main.cpp", substrs=["main.cpp"])
 
-    @skipIfWindows
+    @skipIf(hostoslist=["windows"])
     def test_completion_target_create_from_root_dir(self):
         """Tests source file completion by completing ."""
         root_dir = os.path.abspath(os.sep)
@@ -622,6 +658,21 @@ class CommandLineCompletionTestCase(TestBase):
     def test_command_unalias(self):
         self.complete_from_to("command unalias ima", "command unalias image")
 
+    def test_command_aliases(self):
+        self.runCmd("command alias brkpt breakpoint")
+        # Exact matches are chosen if possible, even if there are longer
+        # completions we could use.
+        self.complete_from_to("b", "b ")
+        # Aliases are included in possible completions.
+        self.complete_from_to("br", ["breakpoint", "brkpt"])
+        # An alias can be the chosen completion.
+        self.complete_from_to("brk", "brkpt")
+
+        # The list can contain only aliases if there's no built-ins to match.
+        self.runCmd("command alias test_1 breakpoint")
+        self.runCmd("command alias test_2 breakpoint")
+        self.complete_from_to("test_", ["test_1", "test_2"])
+
     def test_completion_description_commands(self):
         """Test descriptions of top-level command completions"""
         self.check_completion_with_desc(
@@ -653,8 +704,8 @@ class CommandLineCompletionTestCase(TestBase):
         self.check_completion_with_desc(
             "breakpoint set -",
             [
-                ["-h", "Set the breakpoint on exception catcH."],
-                ["-w", "Set the breakpoint on exception throW."],
+                ["-h", "Set the breakpoint on exception catch."],
+                ["-w", "Set the breakpoint on exception throw."],
             ],
         )
 
@@ -662,8 +713,8 @@ class CommandLineCompletionTestCase(TestBase):
         self.check_completion_with_desc(
             "breakpoint set --",
             [
-                ["--on-catch", "Set the breakpoint on exception catcH."],
-                ["--on-throw", "Set the breakpoint on exception throW."],
+                ["--on-catch", "Set the breakpoint on exception catch."],
+                ["--on-throw", "Set the breakpoint on exception throw."],
             ],
         )
 
@@ -671,8 +722,8 @@ class CommandLineCompletionTestCase(TestBase):
         self.check_completion_with_desc(
             "breakpoint set --on-",
             [
-                ["--on-catch", "Set the breakpoint on exception catcH."],
-                ["--on-throw", "Set the breakpoint on exception throW."],
+                ["--on-catch", "Set the breakpoint on exception catch."],
+                ["--on-throw", "Set the breakpoint on exception throw."],
             ],
         )
 
@@ -694,7 +745,7 @@ class CommandLineCompletionTestCase(TestBase):
         )
         self.check_completion_with_desc(
             "frame recognizer delete ",
-            [["0", "py_class, module module_name, symbol recognizer_name"]],
+            [["0", "py_class, module module_name, demangled symbol recognizer_name"]],
         )
 
     def test_platform_install_local_file(self):
@@ -707,9 +758,7 @@ class CommandLineCompletionTestCase(TestBase):
         self.build()
         self.dbg.CreateTarget(self.getBuildArtifact("a.out"))
         self.complete_from_to(
-            "breakpoint set -n Fo",
-            "breakpoint set -n Foo::Bar(int,\\ int)",
-            turn_off_re_match=True,
+            "breakpoint set -n Fo", "breakpoint set -n Foo::Bar(int,\\ int)"
         )
         # No completion for Qu because the candidate is
         # (anonymous namespace)::Quux().
@@ -769,7 +818,7 @@ class CommandLineCompletionTestCase(TestBase):
         # complete with prefix '$'
         self.completions_match("register read $rb", ["$rbx", "$rbp"])
         self.completions_match("register read $ra", ["$rax"])
-        self.complete_from_to("register read rax $", ["\$rax", "\$rbx", "\$rcx"])
+        self.complete_from_to("register read rax $", ["$rax", "$rbx", "$rcx"])
         self.complete_from_to("register read $rax ", ["rax", "rbx", "rcx"])
 
         # test cases for register write
@@ -883,8 +932,46 @@ class CommandLineCompletionTestCase(TestBase):
 
     def test_ambiguous_command(self):
         """Test completing an ambiguous commands"""
-        self.complete_from_to("settings s", ['set', 'show'])
+        self.complete_from_to("settings s", ["set", "show"])
 
     def test_ambiguous_subcommand(self):
         """Test completing a subcommand of an ambiguous command"""
         self.complete_from_to("settings s ta", [])
+
+    @skipIfTargetDoesNotSupportSharedLibraries()
+    def test_shlib_name(self):
+        self.build()
+        error = lldb.SBError()
+        # Create a target, but don't load dependent modules
+        target = self.dbg.CreateTarget(self.getBuildArtifact("a.out"), None, None, False, error)
+        self.assertSuccess(error)
+        self.registerSharedLibrariesWithTarget(target, ["shared"])
+
+        basenames = []
+        paths = []
+        for m in target.modules:
+            basenames.append(m.file.basename)
+            paths.append(m.file.fullpath)
+
+        # To see all the diffs
+        self.maxDiff = None
+
+        # An empty string completes to everything
+        self.completions_match("target symbols add -s ", basenames + paths)
+
+        # Base name completion
+        self.completions_match("target symbols add -s a.", ["a.out"])
+
+        # Full path completion
+        prefix = os.path.commonpath(paths)
+        self.completions_match("target symbols add -s '" + prefix, paths)
+
+        # Full path, but ending with a path separator
+        prefix_sep = prefix + os.path.sep
+        self.completions_match("target symbols add -s '" + prefix_sep, paths)
+
+        # The completed path should match the spelling of the input, so if the
+        # input contains a double separator, so should the completions.
+        prefix_sep_sep = prefix_sep + os.path.sep
+        paths_sep = [prefix_sep_sep + p[len(prefix_sep) :] for p in paths]
+        self.completions_match("target symbols add -s '" + prefix_sep_sep, paths_sep)

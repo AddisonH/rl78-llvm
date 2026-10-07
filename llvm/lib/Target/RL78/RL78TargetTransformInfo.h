@@ -37,12 +37,45 @@ class RL78TTIImpl : public BasicTTIImplBase<RL78TTIImpl> {
 
 public:
   explicit RL78TTIImpl(const RL78TargetMachine *TM, const Function &F)
-      : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
+      : BaseT(TM, F.getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
-  TTI::MemCmpExpansionOptions enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const;
+  TTI::MemCmpExpansionOptions
+  enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const override;
 
-  bool hasDivRemOp(Type *DataType, bool IsSigned);
+  bool hasDivRemOp(Type *DataType, bool IsSigned) const override;
+
+  bool isProfitableToSinkOperands(Instruction *I,
+                                  SmallVectorImpl<Use *> &Ops) const override {
+
+    if (!I->getFunction()->hasOptSize())
+      return false;
+
+    for (unsigned i = 0; i < I->getNumOperands(); ++i) {
+      bool operandValid = true;
+      if (auto UI = dyn_cast<Instruction>(I->getOperandUse(i))) {
+
+        if (UI->getOpcode() == Instruction::Call ||
+            UI->getOpcode() == Instruction::Load ||
+            UI->getOpcode() == Instruction::Store ||
+            UI->getOpcode() == Instruction::Alloca)
+          operandValid = false;
+
+        if (UI->isTerminator() || isa<PHINode>(UI) || UI->isEHPad() ||
+            UI->mayThrow())
+          operandValid = false;
+
+        for (unsigned j = 0; (j < UI->getNumOperands()) && operandValid; ++j) {
+          if (auto UI2 = dyn_cast<Instruction>(UI->getOperandUse(j)))
+            operandValid = false;
+        }
+
+        if (operandValid && !UI->hasNUsesOrMore(2))
+          Ops.push_back(&I->getOperandUse(i));
+      }
+    }
+    return !Ops.empty();
+  }
 };
 
 } // end namespace llvm.

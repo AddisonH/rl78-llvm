@@ -15,18 +15,25 @@
 #include "index/Relation.h"
 #include "index/Symbol.h"
 #include "index/SymbolID.h"
+#include "index/SymbolLocation.h"
 #include "index/SymbolOrigin.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
+#include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Index/IndexDataConsumer.h"
 #include "clang/Index/IndexSymbol.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
 
 namespace clang {
 namespace clangd {
@@ -152,9 +159,16 @@ public:
   void finish() override;
 
 private:
+  // If D is an instantiation of a likely forwarding function, return the
+  // constructors it invokes so that we can record indirect references
+  // to those as well. The returned ArrayRef is owned by
+  // `ForwardingToConstructorCache`.
+  ArrayRef<const CXXConstructorDecl *> findIndirectConstructors(const Decl *D);
+
   const Symbol *addDeclaration(const NamedDecl &, SymbolID,
                                bool IsMainFileSymbol);
-  void addDefinition(const NamedDecl &, const Symbol &DeclSymbol);
+  void addDefinition(const NamedDecl &, const Symbol &DeclSymbol,
+                     bool SkipDocCheck);
   void processRelations(const NamedDecl &ND, const SymbolID &ID,
                         ArrayRef<index::SymbolRelation> Relations);
 
@@ -175,6 +189,10 @@ private:
   void setIncludeLocation(const Symbol &S, SourceLocation,
                           const include_cleaner::Symbol &Sym);
 
+  // Providers for Symbol.IncludeHeaders.
+  // The final spelling is calculated in finish().
+  llvm::DenseMap<SymbolID, llvm::SmallVector<include_cleaner::Header>>
+      SymbolProviders;
   // Files which contain ObjC symbols.
   // This is finalized and used in finish().
   llvm::DenseSet<FileID> FilesWithObjCConstructs;
@@ -197,6 +215,7 @@ private:
     SourceLocation Loc;
     FileID FID;
     index::SymbolRoleSet Roles;
+    index::SymbolKind Kind;
     const Decl *Container;
     bool Spelled;
   };
@@ -217,6 +236,9 @@ private:
   std::unique_ptr<HeaderFileURICache> HeaderFileURIs;
   llvm::DenseMap<const Decl *, SymbolID> DeclToIDCache;
   llvm::DenseMap<const MacroInfo *, SymbolID> MacroToIDCache;
+  llvm::DenseMap<const FunctionDecl *,
+                 SmallVector<const CXXConstructorDecl *, 1>>
+      ForwardingToConstructorCache;
 };
 
 } // namespace clangd

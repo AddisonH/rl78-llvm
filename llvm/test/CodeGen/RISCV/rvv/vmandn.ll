@@ -3,10 +3,6 @@
 ; RUN:   -verify-machineinstrs | FileCheck %s
 ; RUN: sed 's/iXLen/i64/g' %s | llc -mtriple=riscv64 -mattr=+v \
 ; RUN:   -verify-machineinstrs | FileCheck %s
-declare <vscale x 1 x i1> @llvm.riscv.vmandn.nxv1i1(
-  <vscale x 1 x i1>,
-  <vscale x 1 x i1>,
-  iXLen);
 
 define <vscale x 1 x i1> @intrinsic_vmandn_mm_nxv1i1(<vscale x 1 x i1> %0, <vscale x 1 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv1i1:
@@ -23,11 +19,6 @@ entry:
   ret <vscale x 1 x i1> %a
 }
 
-declare <vscale x 2 x i1> @llvm.riscv.vmandn.nxv2i1(
-  <vscale x 2 x i1>,
-  <vscale x 2 x i1>,
-  iXLen);
-
 define <vscale x 2 x i1> @intrinsic_vmandn_mm_nxv2i1(<vscale x 2 x i1> %0, <vscale x 2 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv2i1:
 ; CHECK:       # %bb.0: # %entry
@@ -42,11 +33,6 @@ entry:
 
   ret <vscale x 2 x i1> %a
 }
-
-declare <vscale x 4 x i1> @llvm.riscv.vmandn.nxv4i1(
-  <vscale x 4 x i1>,
-  <vscale x 4 x i1>,
-  iXLen);
 
 define <vscale x 4 x i1> @intrinsic_vmandn_mm_nxv4i1(<vscale x 4 x i1> %0, <vscale x 4 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv4i1:
@@ -63,11 +49,6 @@ entry:
   ret <vscale x 4 x i1> %a
 }
 
-declare <vscale x 8 x i1> @llvm.riscv.vmandn.nxv8i1(
-  <vscale x 8 x i1>,
-  <vscale x 8 x i1>,
-  iXLen);
-
 define <vscale x 8 x i1> @intrinsic_vmandn_mm_nxv8i1(<vscale x 8 x i1> %0, <vscale x 8 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv8i1:
 ; CHECK:       # %bb.0: # %entry
@@ -82,11 +63,6 @@ entry:
 
   ret <vscale x 8 x i1> %a
 }
-
-declare <vscale x 16 x i1> @llvm.riscv.vmandn.nxv16i1(
-  <vscale x 16 x i1>,
-  <vscale x 16 x i1>,
-  iXLen);
 
 define <vscale x 16 x i1> @intrinsic_vmandn_mm_nxv16i1(<vscale x 16 x i1> %0, <vscale x 16 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv16i1:
@@ -103,11 +79,6 @@ entry:
   ret <vscale x 16 x i1> %a
 }
 
-declare <vscale x 32 x i1> @llvm.riscv.vmandn.nxv32i1(
-  <vscale x 32 x i1>,
-  <vscale x 32 x i1>,
-  iXLen);
-
 define <vscale x 32 x i1> @intrinsic_vmandn_mm_nxv32i1(<vscale x 32 x i1> %0, <vscale x 32 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv32i1:
 ; CHECK:       # %bb.0: # %entry
@@ -122,11 +93,6 @@ entry:
 
   ret <vscale x 32 x i1> %a
 }
-
-declare <vscale x 64 x i1> @llvm.riscv.vmandn.nxv64i1(
-  <vscale x 64 x i1>,
-  <vscale x 64 x i1>,
-  iXLen);
 
 define <vscale x 64 x i1> @intrinsic_vmandn_mm_nxv64i1(<vscale x 64 x i1> %0, <vscale x 64 x i1> %1, iXLen %2) nounwind {
 ; CHECK-LABEL: intrinsic_vmandn_mm_nxv64i1:

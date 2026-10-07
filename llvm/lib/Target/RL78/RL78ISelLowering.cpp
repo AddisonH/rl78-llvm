@@ -139,7 +139,8 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
 bool RL78TargetLowering::CanLowerReturn(
     CallingConv::ID CallConv, MachineFunction &MF, bool isVarArg,
-    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
+    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context,
+    const Type *RetTy) const {
   uint64_t size = 0;
   for (auto arg : Outs)
     size += arg.VT.getSizeInBits();
@@ -421,10 +422,10 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       int FI = MFI.CreateStackObject(Size, align, false);
       SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
       SDValue SizeNode = DAG.getConstant(Size, dl, MVT::i16);
-      Chain = DAG.getMemcpy(Chain, dl, FIPtr, Arg, SizeNode, align,
+      Chain = DAG.getMemcpy(Chain, dl, FIPtr, Arg, SizeNode, align, align,
                             false,       // isVolatile,
                             (Size <= 2), // AlwaysInline if size <= 2,
-                            false,       // isTailCall
+                            /*CI=*/nullptr, std::nullopt,
                             MachinePointerInfo(StackAS), MachinePointerInfo(StackAS));
       ByValArgs.push_back(FIPtr);
     } else {
@@ -496,9 +497,10 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
         SDValue SizeNode = DAG.getConstant(Size, dl, MVT::i16);
         SDValue MemCpyChain =
             DAG.getMemcpy(Chain, dl, FIPtr, LoadAddr, SizeNode, Align(2),
+                          Align(2),
                           false, // isVolatile,
                           false, // AlwaysInline
-                          false, // isTailCall
+                          /*CI=*/nullptr, std::nullopt,
                           MachinePointerInfo(StackAS), MachinePointerInfo(StackAS));
         i += PartNum - 1;
         MemOpChains.push_back(MemCpyChain);
@@ -977,7 +979,7 @@ void RL78TargetLowering::AnalyzeCCRLCallOperands(
   for (size_t i = 0, e = args.size(); i != e; i++) {
     MVT ArgVT = args[i][0].VT;
     ISD::ArgFlagsTy ArgFlags = args[i][0].Flags;
-    bool isVarArg = !args[i][0].IsFixed;
+    bool isVarArg = args[i][0].Flags.isVarArg();
     AllocateMultiPartArgument(opCounter, ArgVT, ArgVT, CCValAssign::Full,
                               ArgFlags, State, args[i].size(), isVarArg);
     opCounter += args[i].size();
@@ -1109,7 +1111,7 @@ static unsigned IntCondCCodeSign(ISD::CondCode CC) {
 
 RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
                                        const RL78Subtarget &STI)
-    : TargetLowering(TM), Subtarget(&STI) {
+    : TargetLowering(TM, STI), Subtarget(&STI) {
   MVT PtrVT = MVT::getIntegerVT(8 * TM.getPointerSize(0));
 
   setBooleanContents(ZeroOrOneBooleanContent);
@@ -1318,60 +1320,11 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 
-  setLibcallName(RTLIB::ADD_F32, "_COM_fadd");            // was __addsf3
-  setLibcallName(RTLIB::ADD_F64, "_COM_dadd");            // was __adddf3
-  setLibcallName(RTLIB::SUB_F32, "_COM_fsub");            // was __subsf3
-  setLibcallName(RTLIB::SUB_F64, "_COM_dsub");            // was __subdf3
-  setLibcallName(RTLIB::MUL_I16, "_COM_imul");            // was __mulhi3
-  setLibcallName(RTLIB::MUL_I32, "_COM_lmul");            // was __mulsi3
-  setLibcallName(RTLIB::MUL_I64, "_COM_llmul");           // was __muldi3
-  setLibcallName(RTLIB::MUL_F32, "_COM_fmul");            // was __mulsf3
-  setLibcallName(RTLIB::MUL_F64, "_COM_dmul");            // was __muldf3
-  setLibcallName(RTLIB::SDIV_I8, "_COM_scdiv");           // was __divqi3
-  setLibcallName(RTLIB::UDIV_I8, "_COM_ucdiv");           // was __udivqi3
-  setLibcallName(RTLIB::SDIV_I16, "_COM_sidiv");          // was __divhi3
-  setLibcallName(RTLIB::UDIV_I16, "_COM_uidiv");          // was __udivhi3
-  setLibcallName(RTLIB::SDIV_I32, "_COM_sldiv");          // was __divsi3
-  setLibcallName(RTLIB::UDIV_I32, "_COM_uldiv");          // was __udivsi3
-  setLibcallName(RTLIB::SDIV_I64, "_COM_slldiv");         // was __divdi3
-  setLibcallName(RTLIB::UDIV_I64, "_COM_ulldiv");         // was __udivdi3
-  setLibcallName(RTLIB::DIV_F32, "_COM_fdiv");            // was __divsf3
-  setLibcallName(RTLIB::DIV_F64, "_COM_ddiv");            // was __divdf3
-  setLibcallName(RTLIB::SREM_I8, "_COM_screm");           // was __modqi3
-  setLibcallName(RTLIB::UREM_I8, "_COM_ucrem");           // was __umodqi3
-  setLibcallName(RTLIB::SREM_I16, "_COM_sirem");          // was __modhi3
-  setLibcallName(RTLIB::UREM_I16, "_COM_uirem");          // was __umodhi3
-  setLibcallName(RTLIB::SREM_I32, "_COM_slrem");          // was __modsi3
-  setLibcallName(RTLIB::UREM_I32, "_COM_ulrem");          // was __umodsi3
-  setLibcallName(RTLIB::SREM_I64, "_COM_sllrem");         // was __moddi3
-  setLibcallName(RTLIB::UREM_I64, "_COM_ullrem");         // was __umoddi3
-  setLibcallName(RTLIB::SINTTOFP_I32_F32, "_COM_sltof");  // was __floatsisf
-  setLibcallName(RTLIB::SINTTOFP_I32_F64, "_COM_sltod");  // was __floatsidf
-  setLibcallName(RTLIB::UINTTOFP_I32_F32, "_COM_ultof");  // was __floatunsisf
-  setLibcallName(RTLIB::UINTTOFP_I32_F64, "_COM_ultod");  // was __floatunsidf
-  setLibcallName(RTLIB::SINTTOFP_I64_F32, "_COM_slltof"); // was __floatdisf
-  setLibcallName(RTLIB::SINTTOFP_I64_F64, "_COM_slltod"); // was __floatdidf
-  setLibcallName(RTLIB::UINTTOFP_I64_F32, "_COM_ulltof"); // was __floatundisf
-  setLibcallName(RTLIB::UINTTOFP_I64_F64, "_COM_ulltod"); // was __floatundidf
-  setLibcallName(RTLIB::FPTOSINT_F32_I32, "_COM_ftosl");  // was __fixsfsi
-  setLibcallName(RTLIB::FPTOUINT_F32_I32, "_COM_ftoul");  // was __fixunssfsi
-  setLibcallName(RTLIB::FPTOSINT_F32_I64, "_COM_ftosll"); // was __fixsfdi
-  setLibcallName(RTLIB::FPTOUINT_F32_I64, "_COM_ftoull"); // was __fixunssfdi
-  setLibcallName(RTLIB::FPTOSINT_F64_I32, "_COM_dtosl");  // was __fixdfsi
-  setLibcallName(RTLIB::FPTOUINT_F64_I32, "_COM_dtoul");  // was __fixunsdfsi
-  setLibcallName(RTLIB::FPTOSINT_F64_I64, "_COM_dtosll"); // was __fixdfdi
-  setLibcallName(RTLIB::FPTOUINT_F64_I64, "_COM_dtoull"); // was __fixunsdfdi
-  setLibcallName(RTLIB::FPEXT_F32_F64, "_COM_ftod");      // was __extendsfdf2
-  setLibcallName(RTLIB::FPROUND_F64_F32, "_COM_dtof");    // was __truncdfsf2
-  setLibcallName(RTLIB::SRA_I32, "_COM_lsar");            // was __ashrsi3
-  setLibcallName(RTLIB::SRL_I32, "_COM_lshr");            // was __lshrsi3
-  setLibcallName(RTLIB::SHL_I32, "_COM_lshl");            // was __ashlsi3
-  setLibcallName(RTLIB::SRA_I64, "_COM_llsar");           // was __ashrdi3
-  setLibcallName(RTLIB::SRL_I64, "_COM_llshr");           // was __lshrdi3
-  setLibcallName(RTLIB::SHL_I64, "_COM_llshl");           // was __ashldi3
+  // Runtime helpers use the CC-RL names (_COM_*); see RL78SystemLibrary in
+  // llvm/include/llvm/IR/RuntimeLibcalls.td.
 
   // Override MaxLoadsPerMemcmp value (from the default 8) for -O3
-  if (TM.getOptLevel() == CodeGenOpt::Aggressive)
+  if (TM.getOptLevel() == CodeGenOptLevel::Aggressive)
     MaxLoadsPerMemcmp = 32;
 }
 
@@ -1409,15 +1362,14 @@ bool RL78TargetLowering::decomposeMulByConstant(LLVMContext &Context, EVT VT,
   // For i16 the decomposition might be better than a call.
   // If O3, inline it.
   if (VT == MVT::i16 ||
-      getTargetMachine().getOptLevel() == CodeGenOpt::Aggressive)
+      getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive)
     return true;
   return false;
 }
 
-bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
-                                            const CallInst &I,
-                                            MachineFunction &MF,
-                                            unsigned Intrinsic) const {
+void RL78TargetLowering::getTgtMemIntrinsic(
+    SmallVectorImpl<IntrinsicInfo> &Infos, const CallBase &I,
+    MachineFunction &MF, unsigned Intrinsic) const {
 
   switch (Intrinsic) {
   case Intrinsic::rl78_mului:
@@ -1430,7 +1382,7 @@ bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   case Intrinsic::rl78_remul:
   case Intrinsic::rl78_macui:
   case Intrinsic::rl78_macsi:
-    return false;
+    return;
   case Intrinsic::rl78_mov1:
   case Intrinsic::rl78_and1:
   case Intrinsic::rl78_or1:
@@ -1438,6 +1390,7 @@ bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   case Intrinsic::rl78_set1:
   case Intrinsic::rl78_clr1:
   case Intrinsic::rl78_not1: {
+    IntrinsicInfo Info;
 
     const Module &M = *I.getParent()->getParent()->getParent();
     PointerType *PtrTy = cast<PointerType>(I.getArgOperand(0)->getType());
@@ -1447,10 +1400,10 @@ bool RL78TargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     Info.offset = 0;
     Info.align = Align(M.getDataLayout().getTypeAllocSizeInBits(PtrTy) / 16);
     Info.flags = MachineMemOperand::MOLoad | MachineMemOperand::MOStore;
-    return true;
+    Infos.push_back(Info);
+    return;
   }
   }
-  return false;
 }
 
 const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -1576,13 +1529,13 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     if (V->hasSection()) {
       StringRef SectionName = V->getSection();
       size_t nameOffset =
-          SectionName.startswith(".bss_AT")
+          SectionName.starts_with(".bss_AT")
               ? std::string(".bss_AT").size()
-              : SectionName.startswith(".bssf_AT")
+              : SectionName.starts_with(".bssf_AT")
                     ? std::string(".bssf_AT").size()
-                    : SectionName.startswith(".const_AT")
+                    : SectionName.starts_with(".const_AT")
                           ? std::string(".const_AT").size()
-                          : SectionName.startswith(".constf_AT")
+                          : SectionName.starts_with(".constf_AT")
                                 ? std::string(".constf_AT").size()
                                 : 0;
       uint64_t Address;
@@ -1982,11 +1935,10 @@ SDValue RL78TargetLowering::LowerLibCall(SDValue Op, SelectionDAG &DAG,
   TargetLowering::ArgListTy Args;
 
   for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
-    TargetLowering::ArgListEntry Entry;
-    Entry.Ty = Ops[i].getValueType().getTypeForEVT(*DAG.getContext());
+    TargetLowering::ArgListEntry Entry(
+        Ops[i], Ops[i].getValueType().getTypeForEVT(*DAG.getContext()));
     Entry.IsSExt = IsSigned;
     Entry.IsZExt = !IsSigned;
-    Entry.Node = Ops[i];
     Args.push_back(Entry);
   }
   SDValue Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other);
@@ -2019,9 +1971,8 @@ SDValue RL78TargetLowering::LowerLibCallVoid(SDValue Op, SelectionDAG &DAG,
   TargetLowering::ArgListTy Args;
 
   for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
-    TargetLowering::ArgListEntry Entry;
-    Entry.Ty = Ops[i].getValueType().getTypeForEVT(*DAG.getContext());
-    Entry.Node = Ops[i];
+    TargetLowering::ArgListEntry Entry(
+        Ops[i], Ops[i].getValueType().getTypeForEVT(*DAG.getContext()));
     Entry.IsSExt = OpsIsSigned;
     Entry.IsZExt = !Entry.IsSExt;
     Args.push_back(Entry);
@@ -2145,7 +2096,7 @@ SDValue RL78TargetLowering::LowerMULO(SDValue Op, SelectionDAG &DAG) const {
     // two arguments.
     SDValue Ret;
     TargetLowering::MakeLibCallOptions CallOptions;
-    CallOptions.setSExt(isSigned);
+    CallOptions.setIsSigned(isSigned);
     CallOptions.setIsPostTypeLegalization(true);
 
     // Main difference between the default expand and our custom one:
@@ -2659,7 +2610,7 @@ SDValue RL78TargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
     SDValue Lo =
         DAG.getLoad(MVT::i8, dl, Chain, Ptr, LD->getPointerInfo(), align,
                     LD->getMemOperand()->getFlags(), LD->getAAInfo());
-    SDValue HiPtr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(IncrementSize));
+    SDValue HiPtr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::getFixed(IncrementSize));
     SDValue Hi = DAG.getLoad(MVT::i8, dl, Chain, HiPtr,
                     LD->getPointerInfo().getWithOffset(IncrementSize),
                     llvm::MaybeAlign(MinAlign(align.value(), IncrementSize)),
@@ -2705,7 +2656,7 @@ SDValue RL78TargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
     SDValue Store1 =
         DAG.getTruncStore(Chain, dl, SDValue(Lo, 0), Ptr, ST->getPointerInfo(),
                           MVT::i8, align, ST->getMemOperand()->getFlags());
-    Ptr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(IncrementSize));
+    Ptr = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::getFixed(IncrementSize));
     SDValue Store2 = DAG.getTruncStore(
         Chain, dl, SDValue(Hi, 0), Ptr,
         ST->getPointerInfo().getWithOffset(IncrementSize), MVT::i8,
@@ -2894,10 +2845,7 @@ RL78TargetLowering::PerformUDIVREMCombine(SDNode *N, DAGCombinerInfo &DCI,
   SDValue op1hi = DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
                                   N->getOperand(1), high);
 
-  for (SDNode::use_iterator UI = Op0.getNode()->use_begin(),
-                            UE = Op0.getNode()->use_end();
-       UI != UE; ++UI) {
-    SDNode *User = *UI;
+  for (SDNode *User : Op0.getNode()->users()) {
     if (User == N || User->getOpcode() == ISD::DELETED_NODE ||
         User->use_empty())
       continue;
@@ -3657,7 +3605,7 @@ RL78TargetLowering::LowerAndOrXor16_rp_rp(unsigned int opcode, MachineInstr &MI,
 
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addReg(MI.getOperand(2).getReg(), 0, RL78::sub_hi);
+      .addReg(MI.getOperand(2).getReg(), RegState::NoFlags, RL78::sub_hi);
 
   BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
       .addReg(RL78::R0, RegState::Define)
@@ -3666,7 +3614,7 @@ RL78TargetLowering::LowerAndOrXor16_rp_rp(unsigned int opcode, MachineInstr &MI,
 
   BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
       .addReg(RL78::R1, RegState::Kill)
-      .addReg(MI.getOperand(2).getReg(), 0, RL78::sub_lo);
+      .addReg(MI.getOperand(2).getReg(), RegState::NoFlags, RL78::sub_lo);
 
   BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
       .addReg(RL78::R0, RegState::Define)
@@ -3807,7 +3755,7 @@ RL78TargetLowering::LowerSignedCMP0(MachineInstr &MI,
     unsigned Rs0 = MI.getOperand(0).getReg();
     BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
             TII->get(RL78::XOR1_cy_r))
-        .addReg(Rs0, isKill ? RegState::Kill : 0)
+        .addReg(Rs0, isKill ? RegState::Kill : RegState::NoFlags)
         .addImm(7);
   } break;
   case RL78::CMP0_abs16: {
@@ -4184,7 +4132,7 @@ RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
     BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
             TII->get(RL78::COPY))
         .addReg(RL78::R1, RegState::Define)
-        .addReg(MI.getOperand(1).getReg(), 0, RL78::sub_hi);
+        .addReg(MI.getOperand(1).getReg(), RegState::NoFlags, RL78::sub_hi);
     BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
             TII->get(RL78::XOR1_cy_r))
         .addReg(RL78::R1, RegState::Kill)
@@ -4395,7 +4343,7 @@ RL78TargetLowering::LowerADDE_SUBE_rp_rp(unsigned int opcode, MachineInstr &MI,
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
       .addReg(Rs1, RegState::Kill);
 
-  if (IsCarryDead(MI) && getTargetMachine().getOptLevel() == CodeGenOpt::Aggressive) {
+  if (IsCarryDead(MI) && getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive) {
     // After changing Op0 and Op1 to RP0, delegate it to expandPostRAPseudo.
     // Since expandPostRAPseudo is using bundle and we disable outlining of bundles,
     // we do this only when optimizing for speed.
@@ -4413,14 +4361,14 @@ RL78TargetLowering::LowerADDE_SUBE_rp_rp(unsigned int opcode, MachineInstr &MI,
         .addReg(RL78::R0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
         .addReg(RL78::R1, RegState::Kill)
-        .addReg(Rs2, 0, RL78::sub_lo);
+        .addReg(Rs2, RegState::NoFlags, RL78::sub_lo);
     BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
         .addReg(RL78::R1, RegState::Kill)
         .addReg(RL78::R0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
         .addReg(RL78::R1, RegState::Kill)
-        .addReg(Rs2, 0, RL78::sub_hi);
+        .addReg(Rs2, RegState::NoFlags, RL78::sub_hi);
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
         .addReg(RL78::RP0, RegState::Kill);
 
@@ -5445,7 +5393,7 @@ MachineBasicBlock *RL78TargetLowering::LowerESSrc(MachineInstr &MI,
   if (MI.getOperand(OpNum).isReg()) {
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1)
         .addReg(MI.getOperand(OpNum).getReg(),
-                MI.getOperand(OpNum).isKill() ? RegState::Kill : 0,
+                MI.getOperand(OpNum).isKill() ? RegState::Kill : RegState::NoFlags,
                 RL78::sub_lo);
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_A), RL78::ES)
         .addReg(RL78::R1, RegState::Kill);
@@ -5468,7 +5416,7 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
   if (MI.getOperand(1).isReg()) {
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::CS)
         .addReg(MI.getOperand(1).getReg(),
-                MI.getOperand(1).isKill() ? RegState::Kill : 0, RL78::sub_lo);
+                MI.getOperand(1).isKill() ? RegState::Kill : RegState::NoFlags, RL78::sub_lo);
   } else {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV_cs_imm), RL78::CS)
         .add(MI.getOperand(1));
@@ -5594,7 +5542,7 @@ MachineBasicBlock *
 RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                 MachineBasicBlock *BB) const {
   // MI.dump();
-  bool OptForSpeed = getTargetMachine().getOptLevel() == CodeGenOpt::Aggressive;
+  bool OptForSpeed = getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive;
 
   switch (MI.getOpcode()) {
   default:
@@ -6060,7 +6008,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
 
 bool RL78TargetLowering::ExpandInlineAsm(CallInst *CI) const {
   InlineAsm *IA = cast<InlineAsm>(CI->getCalledOperand());
-  std::string AsmStr = IA->getAsmString();
+  std::string AsmStr = IA->getAsmString().str();
   SmallVector<StringRef, 4> AsmPieces;
   SplitString(AsmStr, AsmPieces, " ;\n");
   switch (AsmPieces.size()) {
@@ -6072,17 +6020,17 @@ bool RL78TargetLowering::ExpandInlineAsm(CallInst *CI) const {
     Function *Int;
     // Keep in sync with RL78TargetLowering::PerformDAGCombine ISD::TRAP.
     if (AsmStr.compare("nop") == 0) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_nop);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_nop);
     } else if ((AsmStr.compare("halt") == 0)) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_halt);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_halt);
     } else if ((AsmStr.compare("stop") == 0)) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_stop);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_stop);
     } else if ((AsmStr.compare("brk") == 0)) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_brk);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_brk);
     } else if ((AsmStr.compare("ei") == 0)) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_ei);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_ei);
     } else if ((AsmStr.compare("di") == 0)) {
-      Int = Intrinsic::getDeclaration(M, Intrinsic::rl78_di);
+      Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_di);
     } else {
         return false;
     }

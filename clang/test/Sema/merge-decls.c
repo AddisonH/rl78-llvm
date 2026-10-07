@@ -30,7 +30,6 @@ Vi2 g0; // expected-error {{redefinition of 'g0'}}
 _Complex int g1; // expected-note {{previous definition is here}}
 _Complex float g1; // expected-error {{redefinition of 'g1'}}
 
-// rdar://6096412
 extern char i6096412[10];
 extern char i6096412[];
 void foo6096412(void) {
@@ -82,14 +81,14 @@ void test6_f(a)
 {}
 void test6_g() {
   int arr[10];
-  test6_f(&arr); // expected-warning {{incompatible pointer types passing 'int (*)[10]' to parameter of type 'int (*)[11]}}
+  test6_f(&arr); // expected-error {{incompatible pointer types passing 'int (*)[10]' to parameter of type 'int (*)[11]}}
 }
 
 void test7_f(int (*)[10]);
 void test7_f(int (*)[]); // expected-note {{passing argument to parameter here}}
 void test7_g() {
   int x[5];
-  test7_f(&x); // expected-warning {{incompatible pointer types passing 'int (*)[5]' to parameter of type 'int (*)[10]}}
+  test7_f(&x); // expected-error {{incompatible pointer types passing 'int (*)[5]' to parameter of type 'int (*)[10]}}
 }
 
 char d;

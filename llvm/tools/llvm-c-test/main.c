@@ -58,9 +58,6 @@ static void print_usage(void) {
           "    Run test for checking if LLVMValueRef is a ValueAsMetadata\n");
   fprintf(stderr, "  * --echo\n");
   fprintf(stderr, "    Read bitcode file from stdin - print it back out\n\n");
-  fprintf(stderr, "  * --echo --opaque-pointers\n");
-  fprintf(stderr, "    Read bitcode file from stdin - print it back out in "
-                  "opaque pointer mode\n\n");
   fprintf(stderr, "  * --test-diagnostic-handler\n");
   fprintf(stderr,
           "    Read bitcode file from stdin with a diagnostic handler set\n\n");
@@ -104,6 +101,8 @@ int main(int argc, char **argv) {
     return llvm_replace_md_operand();
   } else if (argc == 2 && !strcmp(argv[1], "--is-a-value-as-metadata")) {
     return llvm_is_a_value_as_metadata();
+  } else if (argc == 2 && !strcmp(argv[1], "--add-globaldebuginfo")) {
+    return llvm_add_globaldebuginfo();
   } else if (argc == 2 && !strcmp(argv[1], "--test-function-attributes")) {
     return llvm_test_function_attributes();
   } else if (argc == 2 && !strcmp(argv[1], "--test-callsite-attributes")) {

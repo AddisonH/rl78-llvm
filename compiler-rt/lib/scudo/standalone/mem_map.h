@@ -22,6 +22,7 @@
 #include "trusty.h"
 
 #include "mem_map_fuchsia.h"
+#include "mem_map_linux.h"
 
 namespace scudo {
 
@@ -43,6 +44,7 @@ public:
   void releaseAndZeroPagesToOSImpl(uptr From, uptr Size);
   uptr getBaseImpl() { return Base; }
   uptr getCapacityImpl() { return Capacity; }
+  s64 getResidentPagesImpl(uptr From, uptr Size);
 
   void setMapPlatformData(MapPlatformData &NewData) { Data = NewData; }
 
@@ -73,10 +75,10 @@ private:
 };
 
 #if SCUDO_LINUX
-using ReservedMemoryT = ReservedMemoryDefault;
+using ReservedMemoryT = ReservedMemoryLinux;
 using MemMapT = ReservedMemoryT::MemMapT;
 #elif SCUDO_FUCHSIA
-using ReservedMemoryT = ReservedMemoryDefault;
+using ReservedMemoryT = ReservedMemoryFuchsia;
 using MemMapT = ReservedMemoryT::MemMapT;
 #elif SCUDO_TRUSTY
 using ReservedMemoryT = ReservedMemoryDefault;

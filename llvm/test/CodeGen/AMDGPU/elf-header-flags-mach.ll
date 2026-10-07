@@ -1,79 +1,99 @@
-; RUN: llc -filetype=obj -march=r600 -mcpu=r600 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,R600 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=r630 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,R630 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=rs880 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RS880 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=rv670 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV670 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=rv710 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV710 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=rv730 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV730 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=rv770 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV770 %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=cedar < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CEDAR %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=cypress < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CYPRESS %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=juniper < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,JUNIPER %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=redwood < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,REDWOOD %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=sumo < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,SUMO %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=barts < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,BARTS %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=caicos < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CAICOS %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=cayman < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CAYMAN %s
-; RUN: llc -filetype=obj -march=r600 -mcpu=turks < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,TURKS %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx600 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX600 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=tahiti < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX600 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx601 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=pitcairn < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=verde < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx602 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=hainan < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=oland < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx700 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX700 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=kaveri < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX700 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx701 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX701 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=hawaii < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX701 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx702 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX702 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx703 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=kabini < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=mullins < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx704 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX704 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=bonaire < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX704 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx705 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX705 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx801 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX801 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=carrizo < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX801 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx802 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=iceland < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=tonga < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx803 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=fiji < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=polaris10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=polaris11 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx805 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX805 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=tongapro < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX805 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx810 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX810 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=stoney < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX810 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx900 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX900 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx902 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX902 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx904 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX904 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx906 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX906 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx908 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX908 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx909 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX909 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx90a < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX90A %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx90c < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX90C %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx940 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX940 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx941 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX941 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx942 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX942 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1010 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1010 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1011 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1011 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1012 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1012 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1013 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1013 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1030 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1030 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1031 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1031 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1032 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1032 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1033 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1033 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1034 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1034 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1035 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1035 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1036 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1036 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1100 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1100 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1101 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1101 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1102 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1102 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1103 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1103 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1150 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1150 %s
-; RUN: llc -filetype=obj -march=amdgcn -mcpu=gfx1151 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1151 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=r600 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,R600 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=r630 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,R630 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=rs880 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RS880 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=rv670 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV670 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=rv710 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV710 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=rv730 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV730 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=rv770 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,RV770 %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=cedar < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CEDAR %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=cypress < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CYPRESS %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=juniper < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,JUNIPER %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=redwood < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,REDWOOD %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=sumo < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,SUMO %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=barts < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,BARTS %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=caicos < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CAICOS %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=cayman < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,CAYMAN %s
+; RUN: llc -filetype=obj -mtriple=r600 -mcpu=turks < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-R600,TURKS %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX600 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX600 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX601 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu6.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX602 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX700 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX700 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX701 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX701 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX702 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX703 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.04 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX704 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.04 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX704 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu7.05 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX705 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX801 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX801 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX802 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX803 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.05 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX805 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.05 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX805 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX810 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu8.10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX810 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX900 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX902 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.04 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX904 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.06 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX906 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.08 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX908 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.09 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX909 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.0a < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX90A %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.0c < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX90C %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.42 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX942 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu9.50 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX950 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1010 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.11 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1011 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.12 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1012 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.13 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1013 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.30 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1030 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.31 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1031 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.32 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1032 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.33 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1033 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.34 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1034 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.35 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1035 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu10.36 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1036 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1100 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1101 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.02 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1102 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.03 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1103 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.50 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1150 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.51 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1151 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.52 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1152 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.53 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1153 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.54 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1154 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.70 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1170 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.71 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1171 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu11.72 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1172 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu12.00 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1200 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu12.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1201 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu12.50 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1250 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu12.51 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1251 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu13.10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1310 %s
+
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu9 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX9_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu9.4 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX9_4_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu10.1 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX10_1_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu10.3 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX10_3_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu11 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX11_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu11.7 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX11_7_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu12 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX12_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu12.5 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX12_5_GENERIC %s
+; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu13 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX13_GENERIC %s
 
 ; FIXME: With the default attributes the eflags are not accurate for
 ; xnack and sramecc. Subsequent Target-ID patches will address this.
@@ -83,7 +103,7 @@
 ; ARCH-R600: AddressSize: 32bit
 
 ; ARCH-GCN: Format: elf64-amdgpu
-; ARCH-GCN: Arch: amdgcn
+; ARCH-GCN: Arch: amdgpu
 ; ARCH-GCN: AddressSize: 64bit
 
 ; ALL:         Flags [
@@ -125,9 +145,8 @@
 ; GFX909:        EF_AMDGPU_MACH_AMDGCN_GFX909 (0x31)
 ; GFX90A:        EF_AMDGPU_MACH_AMDGCN_GFX90A (0x3F)
 ; GFX90C:        EF_AMDGPU_MACH_AMDGCN_GFX90C (0x32)
-; GFX940:        EF_AMDGPU_MACH_AMDGCN_GFX940 (0x40)
-; GFX941:        EF_AMDGPU_MACH_AMDGCN_GFX941 (0x4B)
 ; GFX942:        EF_AMDGPU_MACH_AMDGCN_GFX942 (0x4C)
+; GFX950:        EF_AMDGPU_MACH_AMDGCN_GFX950 (0x4F)
 ; GFX1010:       EF_AMDGPU_MACH_AMDGCN_GFX1010 (0x33)
 ; GFX1011:       EF_AMDGPU_MACH_AMDGCN_GFX1011 (0x34)
 ; GFX1012:       EF_AMDGPU_MACH_AMDGCN_GFX1012 (0x35)
@@ -145,6 +164,27 @@
 ; GFX1103:       EF_AMDGPU_MACH_AMDGCN_GFX1103 (0x44)
 ; GFX1150:       EF_AMDGPU_MACH_AMDGCN_GFX1150 (0x43)
 ; GFX1151:       EF_AMDGPU_MACH_AMDGCN_GFX1151 (0x4A)
+; GFX1152:       EF_AMDGPU_MACH_AMDGCN_GFX1152 (0x55)
+; GFX1153:       EF_AMDGPU_MACH_AMDGCN_GFX1153 (0x58)
+; GFX1154:       EF_AMDGPU_MACH_AMDGCN_GFX1154 (0x57)
+; GFX1170:       EF_AMDGPU_MACH_AMDGCN_GFX1170 (0x5D)
+; GFX1171:       EF_AMDGPU_MACH_AMDGCN_GFX1171 (0x5E)
+; GFX1172:       EF_AMDGPU_MACH_AMDGCN_GFX1172 (0x5C)
+; GFX1200:       EF_AMDGPU_MACH_AMDGCN_GFX1200 (0x48)
+; GFX1201:       EF_AMDGPU_MACH_AMDGCN_GFX1201 (0x4E)
+; GFX1250:       EF_AMDGPU_MACH_AMDGCN_GFX1250 (0x49)
+; GFX1251:       EF_AMDGPU_MACH_AMDGCN_GFX1251 (0x5A)
+; GFX1310:       EF_AMDGPU_MACH_AMDGCN_GFX1310 (0x50)
+
+; GFX9_GENERIC:       EF_AMDGPU_MACH_AMDGCN_GFX9_GENERIC (0x51)
+; GFX9_4_GENERIC:     EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC (0x5F)
+; GFX10_1_GENERIC:    EF_AMDGPU_MACH_AMDGCN_GFX10_1_GENERIC (0x52)
+; GFX10_3_GENERIC:    EF_AMDGPU_MACH_AMDGCN_GFX10_3_GENERIC (0x53)
+; GFX11_GENERIC:      EF_AMDGPU_MACH_AMDGCN_GFX11_GENERIC (0x54)
+; GFX11_7_GENERIC:    EF_AMDGPU_MACH_AMDGCN_GFX11_7_GENERIC (0x62)
+; GFX12_GENERIC:      EF_AMDGPU_MACH_AMDGCN_GFX12_GENERIC (0x59)
+; GFX12_5_GENERIC:    EF_AMDGPU_MACH_AMDGCN_GFX12_5_GENERIC (0x5B)
+; GFX13_GENERIC:      EF_AMDGPU_MACH_AMDGCN_GFX13_GENERIC (0x63)
 ; ALL:         ]
 
 define amdgpu_kernel void @elf_header() {

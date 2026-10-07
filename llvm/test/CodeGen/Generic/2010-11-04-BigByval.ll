@@ -6,6 +6,10 @@
 ; Please note, that there are NVPTX special testcases for "byval"
 ; UNSUPPORTED: target=nvptx{{.*}}
 
+; AArch64 incorrectly nests ADJCALLSTACKDOWN/ADJCALLSTACKUP.
+; UNSUPPORTED: expensive_checks && target=aarch64{{.*}}
+; UNSUPPORTED: expensive_checks && target=arm64{{.*}}
+
 %big = type [131072 x i8]
 
 declare void @foo(ptr byval(%big) align 1)

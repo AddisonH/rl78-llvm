@@ -14,10 +14,11 @@
 #define LLVM_LIB_TARGET_RL78_RL78TARGETMACHINE_H
 
 #include "RL78Subtarget.h"
+#include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 
 namespace llvm {
 
-class RL78TargetMachine : public LLVMTargetMachine {
+class RL78TargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   //RL78Subtarget Subtarget;
   mutable StringMap<std::unique_ptr<RL78Subtarget>> SubtargetMap;
@@ -26,7 +27,7 @@ public:
   RL78TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                     StringRef FS, const TargetOptions &Options,
                     std::optional<Reloc::Model> RM, std::optional<CodeModel::Model> CM,
-                    CodeGenOpt::Level OL, bool JIT);
+                    CodeGenOptLevel OL, bool JIT);
   ~RL78TargetMachine() override;
 
   // DO NOT IMPLEMENT: There is no such thing as a valid default subtarget,

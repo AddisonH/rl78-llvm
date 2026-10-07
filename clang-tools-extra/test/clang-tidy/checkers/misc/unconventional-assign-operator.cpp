@@ -1,16 +1,6 @@
 // RUN: %check_clang_tidy %s misc-unconventional-assign-operator %t -- -- -fno-delayed-template-parsing
 
-namespace std {
-template <typename T>
-struct remove_reference { typedef T type; };
-template <typename T>
-struct remove_reference<T &> { typedef T type; };
-template <typename T>
-struct remove_reference<T &&> { typedef T type; };
-template <typename T>
-typename remove_reference<T>::type &&move(T &&t);
-}
-
+#include <utility>
 
 struct Good {
   Good& operator=(const Good&);
@@ -45,7 +35,7 @@ struct BadArgument {
   BadArgument& operator=(BadArgument&);
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: operator=() should take 'BadArgument const&', 'BadArgument&&' or 'BadArgument'
   BadArgument& operator=(const BadArgument&&);
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: operator=() should take 'BadAr
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: operator=() should take 'BadArgument const&', 'BadArgument&&' or 'BadArgument'
 };
 
 struct BadModifier {
@@ -76,7 +66,7 @@ class BadReturnStatement {
 public:
   BadReturnStatement& operator=(BadReturnStatement&& rhs) {
     n = std::move(rhs.n);
-    return rhs;
+    return *&rhs;
 // CHECK-MESSAGES: :[[@LINE-1]]:5: warning: operator=() should always return '*this'
   }
 
@@ -163,3 +153,24 @@ struct TemplateTypeAlias {
   Alias3<TypeAlias::Alias> &operator=(double) { return *this; }
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: operator=() should return 'TemplateTypeAlias&' [misc-unconventional-assign-operator]
 };
+
+namespace gh143237 {
+template<typename T>
+struct TemplateAssignment {
+  explicit TemplateAssignment(int) {
+  }
+
+  TemplateAssignment& operator=(int n) {
+    // No warning
+    return *this = TemplateAssignment(n);
+  }
+};
+}
+
+namespace GH153770 {
+  struct A;
+  struct A {
+    A() = default;
+    A& operator=(const A&) = default;
+  };
+} // namespace GH153770

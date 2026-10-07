@@ -24,7 +24,7 @@ RL78SelectionDAGTargetInfo::~RL78SelectionDAGTargetInfo() = default;
 SDValue
 RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
     SelectionDAG &DAG, const SDLoc &dl, SDValue Chain, SDValue Op1, SDValue Op2,
-    SDValue Op3, Align Align, bool isVolatile, bool AlwaysInline,
+    SDValue Op3, bool isVolatile, bool AlwaysInline,
     MachinePointerInfo DstPtrInfo, MachinePointerInfo SrcPtrInfo,
     unsigned LibCall, const char *FarLibCallName) const {
   if (AlwaysInline)
@@ -32,7 +32,6 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
 
   // Emit a library call.
   TargetLowering::ArgListTy Args;
-  TargetLowering::ArgListEntry Entry;
 
   // If the default pointer size is 32 bits, -mfar-data is in effect
   const auto FarData = DAG.getDataLayout().getPointerSizeInBits() == 32;
@@ -57,19 +56,15 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
     }
   }
 
-  Entry.Ty = Type::getInt8PtrTy(*DAG.getContext(), DstPtrInfo.getAddrSpace());
-  Entry.Node = Op1;
-  Args.push_back(Entry);
-
-  Entry.Ty = Type::getInt8PtrTy(*DAG.getContext(), SrcPtrInfo.getAddrSpace());
-  Entry.Node = Op2;
-  Args.push_back(Entry);
+  Args.emplace_back(
+      Op1, PointerType::get(*DAG.getContext(), DstPtrInfo.getAddrSpace()));
+  Args.emplace_back(
+      Op2, PointerType::get(*DAG.getContext(), SrcPtrInfo.getAddrSpace()));
 
   // -mfar-data makes the default ptr size (in address space 0) 32-bit;
   // in this case, use address space 1 (near) to reflect that size_t remains 16-bit
-  Entry.Ty = DAG.getDataLayout().getIntPtrType(*DAG.getContext(), FarData ? 1 : 0);
-  Entry.Node = Op3;
-  Args.push_back(Entry);
+  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext(),
+                                                            FarData ? 1 : 0));
 
   const char *libcallName =
       DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 32
@@ -97,18 +92,19 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
 
 SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpy(
     SelectionDAG &DAG, const SDLoc &dl, SDValue Chain, SDValue Op1, SDValue Op2,
-    SDValue Op3, Align Align, bool isVolatile, bool AlwaysInline,
-    MachinePointerInfo DstPtrInfo, MachinePointerInfo SrcPtrInfo) const {
+    SDValue Op3, Align DstAlign, Align SrcAlign, bool isVolatile,
+    bool AlwaysInline, MachinePointerInfo DstPtrInfo,
+    MachinePointerInfo SrcPtrInfo) const {
   return EmitTargetCodeForMemcpymove(
-      DAG, dl, Chain, Op1, Op2, Op3, Align, isVolatile, AlwaysInline,
+      DAG, dl, Chain, Op1, Op2, Op3, isVolatile, AlwaysInline,
       DstPtrInfo, SrcPtrInfo, RTLIB::MEMCPY, "_COM_memcpy_ff");
 }
 
 SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemmove(
     SelectionDAG &DAG, const SDLoc &dl, SDValue Chain, SDValue Op1, SDValue Op2,
-    SDValue Op3, Align Align, bool isVolatile, MachinePointerInfo DstPtrInfo,
-    MachinePointerInfo SrcPtrInfo) const {
-  return EmitTargetCodeForMemcpymove(DAG, dl, Chain, Op1, Op2, Op3, Align,
+    SDValue Op3, Align DstAlign, Align SrcAlign, bool isVolatile,
+    MachinePointerInfo DstPtrInfo, MachinePointerInfo SrcPtrInfo) const {
+  return EmitTargetCodeForMemcpymove(DAG, dl, Chain, Op1, Op2, Op3,
                                      isVolatile, false, DstPtrInfo, SrcPtrInfo,
                                      RTLIB::MEMMOVE, "_COM_memmove_ff");
 }
@@ -120,7 +116,6 @@ SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemset(
 
   // Emit a library call.
   TargetLowering::ArgListTy Args;
-  TargetLowering::ArgListEntry Entry;
 
   // If the default pointer size is 32 bits, -mfar-data is in effect
   const auto FarData = DAG.getDataLayout().getPointerSizeInBits() == 32;
@@ -135,21 +130,14 @@ SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemset(
     DstPtrInfo.AddrSpace = 0;
   }
 
-  Entry.Node = Op1;
-  Entry.Ty = Type::getInt8PtrTy(*DAG.getContext(), DstPtrInfo.getAddrSpace());
-  Args.push_back(Entry);
-
-  Entry.Node = Op2;
+  Args.emplace_back(
+      Op1, PointerType::get(*DAG.getContext(), DstPtrInfo.getAddrSpace()));
   // Here we pass it as i16, despite only the low i8 part being used
-  Entry.Ty =
-      EVT::getIntegerVT(*DAG.getContext(), 16).getTypeForEVT(*DAG.getContext());
-  Args.push_back(Entry);
-
-  Entry.Node = Op3;
+  Args.emplace_back(Op2, Type::getInt16Ty(*DAG.getContext()));
   // -mfar-data makes the default ptr size (in address space 0) 32-bit;
   // in this case, use address space 1 (near) to reflect that size_t remains 16-bit
-  Entry.Ty = DAG.getDataLayout().getIntPtrType(*DAG.getContext(), FarData ? 1 : 0);
-  Args.push_back(Entry);
+  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext(),
+                                                            FarData ? 1 : 0));
 
   const char *libcallName =
       DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 32

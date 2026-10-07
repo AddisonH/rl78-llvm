@@ -7,6 +7,9 @@ add_header_library(
     aarch64/inline_memcpy.h
     aarch64/inline_memmove.h
     aarch64/inline_memset.h
+    arm/common.h
+    arm/inline_memcpy.h
+    arm/inline_memset.h
     generic/aligned_access.h
     generic/byte_per_byte.h
     inline_bcmp.h
@@ -30,21 +33,24 @@ add_header_library(
     x86_64/inline_memcpy.h
     x86_64/inline_memmove.h
     x86_64/inline_memset.h
-  DEPS
+  DEPENDS
+    libc.hdr.stdint_proxy
     libc.src.__support.common
     libc.src.__support.CPP.bit
     libc.src.__support.CPP.cstddef
     libc.src.__support.CPP.type_traits
     libc.src.__support.macros.config
+    libc.src.__support.macros.is_defined
     libc.src.__support.macros.optimization
     libc.src.__support.macros.properties.architectures
+    libc.src.__support.macros.properties.compiler
 )
 
 add_header_library(
   inline_memcpy
   HDRS
     inline_memcpy.h
-  DEPS
+  DEPENDS
     .memory_utils
 )
 
@@ -52,7 +58,7 @@ add_header_library(
   inline_memmove
   HDRS
     inline_memmove.h
-  DEPS
+  DEPENDS
     .memory_utils
 )
 
@@ -60,7 +66,7 @@ add_header_library(
   inline_memcmp
   HDRS
     inline_memcmp.h
-  DEPS
+  DEPENDS
     .memory_utils
 )
 
@@ -68,7 +74,7 @@ add_header_library(
   inline_memset
   HDRS
     inline_memset.h
-  DEPS
+  DEPENDS
     .memory_utils
 )
 
@@ -76,7 +82,7 @@ add_header_library(
   inline_bzero
   HDRS
     inline_bzero.h
-  DEPS
+  DEPENDS
     .inline_memset
 )
 

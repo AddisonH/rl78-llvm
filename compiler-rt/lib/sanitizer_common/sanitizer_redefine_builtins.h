@@ -11,15 +11,32 @@
 //
 //===----------------------------------------------------------------------===//
 #ifndef SANITIZER_COMMON_NO_REDEFINE_BUILTINS
-#ifndef SANITIZER_REDEFINE_BUILTINS_H
-#define SANITIZER_REDEFINE_BUILTINS_H
+#  ifndef SANITIZER_REDEFINE_BUILTINS_H
+#    define SANITIZER_REDEFINE_BUILTINS_H
 
 // The asm hack only works with GCC and Clang.
-#if !defined(_WIN32)
+#    if !defined(_WIN32) && !defined(_AIX) && !defined(__APPLE__)
 
-asm("memcpy = __sanitizer_internal_memcpy");
-asm("memmove = __sanitizer_internal_memmove");
-asm("memset = __sanitizer_internal_memset");
+#      if defined(__hexagon__)
+
+#        define SANITIZER_REDEFINE_BUILTIN_ASM(name) \
+          asm(".set " #name ", __sanitizer_internal_" #name)
+
+#      else
+
+#        define SANITIZER_REDEFINE_BUILTIN_ASM(name) \
+          asm(#name " = __sanitizer_internal_" #name)
+
+#      endif
+
+SANITIZER_REDEFINE_BUILTIN_ASM(memcpy);
+SANITIZER_REDEFINE_BUILTIN_ASM(memmove);
+SANITIZER_REDEFINE_BUILTIN_ASM(memset);
+
+#      undef SANITIZER_REDEFINE_BUILTIN_ASM
+
+#      if defined(__cplusplus) && \
+          !defined(SANITIZER_COMMON_REDEFINE_BUILTINS_IN_STD)
 
 // The builtins should not be redefined in source files that make use of C++
 // standard libraries, in particular where C++STL headers with inline functions
@@ -46,7 +63,8 @@ using unordered_set = Define_SANITIZER_COMMON_NO_REDEFINE_BUILTINS_in_cpp_file;
 using vector = Define_SANITIZER_COMMON_NO_REDEFINE_BUILTINS_in_cpp_file;
 }  // namespace std
 
-#endif  // !_WIN32
+#      endif  // __cpluplus
+#    endif    // !_WIN32
 
-#endif  // SANITIZER_REDEFINE_BUILTINS_H
-#endif  // SANITIZER_COMMON_NO_REDEFINE_BUILTINS
+#  endif  // SANITIZER_REDEFINE_BUILTINS_H
+#endif    // SANITIZER_COMMON_NO_REDEFINE_BUILTINS

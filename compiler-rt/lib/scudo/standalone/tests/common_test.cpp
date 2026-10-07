@@ -11,88 +11,43 @@
 
 #include "common.h"
 #include "mem_map.h"
-#include <algorithm>
-#include <fstream>
+
+#include <errno.h>
+#include <string.h>
+#include <sys/mman.h>
 
 namespace scudo {
 
-static uptr getResidentMemorySize() {
-  if (!SCUDO_LINUX)
-    UNREACHABLE("Not implemented!");
-  uptr Size;
-  uptr Resident;
-  std::ifstream IFS("/proc/self/statm");
-  IFS >> Size;
-  IFS >> Resident;
-  return Resident * getPageSizeCached();
+TEST(ScudoCommonTest, IsPowerOfTwo) {
+  EXPECT_FALSE(isPowerOfTwo(0));
+  EXPECT_TRUE(isPowerOfTwo(1));
+  EXPECT_TRUE(isPowerOfTwo(2));
+  EXPECT_TRUE(isPowerOfTwo(4));
+  EXPECT_FALSE(isPowerOfTwo(3));
 }
 
-// Fuchsia needs getResidentMemorySize implementation.
-TEST(ScudoCommonTest, SKIP_ON_FUCHSIA(ResidentMemorySize)) {
-  uptr OnStart = getResidentMemorySize();
-  EXPECT_GT(OnStart, 0UL);
+TEST(ScudoCommonTest, ComputePercentage) {
+  uptr Integral, Fractional;
+  computePercentage(50, 100, &Integral, &Fractional);
+  EXPECT_EQ(Integral, 50U);
+  EXPECT_EQ(Fractional, 0U);
 
-  const uptr Size = 1ull << 30;
-  const uptr Threshold = Size >> 3;
+  computePercentage(1, 3, &Integral, &Fractional);
+  EXPECT_EQ(Integral, 33U);
+  EXPECT_EQ(Fractional, 33U);
 
-  MemMapT MemMap;
-  ASSERT_TRUE(MemMap.map(/*Addr=*/0U, Size, "ResidentMemorySize"));
-  ASSERT_NE(MemMap.getBase(), 0U);
-  void *P = reinterpret_cast<void *>(MemMap.getBase());
-  EXPECT_LT(getResidentMemorySize(), OnStart + Threshold);
+  computePercentage(2, 3, &Integral, &Fractional);
+  EXPECT_EQ(Integral, 66U);
+  EXPECT_EQ(Fractional, 67U);
 
-  memset(P, 1, Size);
-  EXPECT_GT(getResidentMemorySize(), OnStart + Size - Threshold);
-
-  MemMap.releasePagesToOS(MemMap.getBase(), Size);
-  EXPECT_LT(getResidentMemorySize(), OnStart + Threshold);
-
-  memset(P, 1, Size);
-  EXPECT_GT(getResidentMemorySize(), OnStart + Size - Threshold);
-
-  MemMap.unmap(MemMap.getBase(), Size);
+  computePercentage(0, 0, &Integral, &Fractional);
+  EXPECT_EQ(Integral, 100U);
+  EXPECT_EQ(Fractional, 0U);
 }
 
-TEST(ScudoCommonTest, Zeros) {
-  const uptr Size = 1ull << 20;
-
-  MemMapT MemMap;
-  ASSERT_TRUE(MemMap.map(/*Addr=*/0U, Size, "Zeros"));
-  ASSERT_NE(MemMap.getBase(), 0U);
-  uptr *P = reinterpret_cast<uptr *>(MemMap.getBase());
-  const ptrdiff_t N = Size / sizeof(uptr);
-  EXPECT_EQ(std::count(P, P + N, 0), N);
-
-  memset(P, 1, Size);
-  EXPECT_EQ(std::count(P, P + N, 0), 0);
-
-  MemMap.releasePagesToOS(MemMap.getBase(), Size);
-  EXPECT_EQ(std::count(P, P + N, 0), N);
-
-  MemMap.unmap(MemMap.getBase(), Size);
+TEST(ScudoCommonTest, IsAlignedSlow) {
+  EXPECT_TRUE(isAlignedSlow(64, 16));
+  EXPECT_FALSE(isAlignedSlow(65, 16));
 }
-
-#if 0
-// This test is temorarily disabled because it may not work as expected. E.g.,
-// it doesn't dirty the pages so the pages may not be commited and it may only
-// work on the single thread environment. As a result, this test is flaky and is
-// impacting many test scenarios.
-TEST(ScudoCommonTest, GetRssFromBuffer) {
-  constexpr int64_t AllocSize = 10000000;
-  constexpr int64_t Error = 3000000;
-  constexpr size_t Runs = 10;
-
-  int64_t Rss = scudo::GetRSS();
-  EXPECT_GT(Rss, 0);
-
-  std::vector<std::unique_ptr<char[]>> Allocs(Runs);
-  for (auto &Alloc : Allocs) {
-    Alloc.reset(new char[AllocSize]());
-    int64_t Prev = Rss;
-    Rss = scudo::GetRSS();
-    EXPECT_LE(std::abs(Rss - AllocSize - Prev), Error);
-  }
-}
-#endif
 
 } // namespace scudo

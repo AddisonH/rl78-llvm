@@ -6,6 +6,10 @@
 ; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=knl -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX512
 ; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=skx -mattr=-prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX512
 ; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=skx -mattr=+prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX
+; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=c86-4g-m7 -mattr=-prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX512
+; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=c86-4g-m7 -mattr=+prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX
+; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=c86-4g-m8 -mattr=-prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX512
+; RUN: opt < %s -mtriple=x86_64-unknown -mcpu=c86-4g-m8 -mattr=+prefer-256-bit -passes=slp-vectorizer -S | FileCheck %s --check-prefix=AVX
 
 @a64 = common global [8 x i64] zeroinitializer, align 64
 @b64 = common global [8 x i64] zeroinitializer, align 64
@@ -385,10 +389,10 @@ define void @smax_v64i8() {
 ; SSE-NEXT:    [[TMP7:%.*]] = load <16 x i8>, ptr getelementptr inbounds ([64 x i8], ptr @a8, i32 0, i64 32), align 1
 ; SSE-NEXT:    [[TMP8:%.*]] = load <16 x i8>, ptr getelementptr inbounds ([64 x i8], ptr @b8, i32 0, i64 32), align 1
 ; SSE-NEXT:    [[TMP9:%.*]] = call <16 x i8> @llvm.smax.v16i8(<16 x i8> [[TMP7]], <16 x i8> [[TMP8]])
+; SSE-NEXT:    store <16 x i8> [[TMP9]], ptr getelementptr inbounds ([64 x i8], ptr @c8, i32 0, i64 32), align 1
 ; SSE-NEXT:    [[TMP10:%.*]] = load <16 x i8>, ptr getelementptr inbounds ([64 x i8], ptr @a8, i32 0, i64 48), align 1
 ; SSE-NEXT:    [[TMP11:%.*]] = load <16 x i8>, ptr getelementptr inbounds ([64 x i8], ptr @b8, i32 0, i64 48), align 1
 ; SSE-NEXT:    [[TMP12:%.*]] = call <16 x i8> @llvm.smax.v16i8(<16 x i8> [[TMP10]], <16 x i8> [[TMP11]])
-; SSE-NEXT:    store <16 x i8> [[TMP9]], ptr getelementptr inbounds ([64 x i8], ptr @c8, i32 0, i64 32), align 1
 ; SSE-NEXT:    store <16 x i8> [[TMP12]], ptr getelementptr inbounds ([64 x i8], ptr @c8, i32 0, i64 48), align 1
 ; SSE-NEXT:    ret void
 ;

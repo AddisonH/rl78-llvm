@@ -1,5 +1,5 @@
 // RUN: %check_clang_tidy -std=c++14,c++17 -check-suffix=CXX-14-17 %s modernize-make-unique %t -- -- -I %S/Inputs/smart-ptr -D CXX_14_17=1
-// RUN: %check_clang_tidy -std=c++20 -check-suffix=CXX-20 %s modernize-make-unique %t -- -- -I %S/Inputs/smart-ptr -D CXX_20=1
+// RUN: %check_clang_tidy -std=c++20-or-later -check-suffix=CXX-20 %s modernize-make-unique %t -- -- -I %S/Inputs/smart-ptr -D CXX_20=1
 
 #include "unique_ptr.h"
 // CHECK-FIXES: #include <memory>
@@ -62,7 +62,7 @@ void f() {
   // "new NoCopyMoveCtor{}" is processed differently in C++14/17 and C++20:
   //   * In C++14/17, it is recognized as aggregate initialization,
   //     no fixes will be generated although the generated fix is compilable.
-  //   * In C++20, it is is recognized as default constructor initialization
+  //   * In C++20, it is recognized as default constructor initialization
   //     (similar to "new NoCopyMoveCtor()"), the check will emit the fix and
   //     the fix is correct.
   auto PNoCopyMoveCtor = std::unique_ptr<NoCopyMoveCtor>(new NoCopyMoveCtor{});

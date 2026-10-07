@@ -16,7 +16,9 @@ using namespace llvm;
 
 void RL78ELFMCAsmInfo::anchor() {}
 
-RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple) {
+RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple,
+                                   const MCTargetOptions &Options)
+    : MCAsmInfoELF(Options) {
   Data64bitsDirective = nullptr;
   ZeroDirective = "\t.skip\t";
   CommentString = ";";
@@ -33,6 +35,9 @@ RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple) {
   CalleeSaveStackSlotSize = 2; // A saved register is always 2 byte.
 
   HasRL78Expressions = true;
+
+  // Keep LLVM 17's `.set sym, value` form (upstream now defaults to `sym = value`).
+  UsesSetToEquateSymbol = true;
 
   AllowAtInName = true;
 

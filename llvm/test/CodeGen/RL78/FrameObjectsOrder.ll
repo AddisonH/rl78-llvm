@@ -1,4 +1,4 @@
-;RUN: llc -mtriple=rl78 <%s -print-after=prologepilog 2>&1| FileCheck %s
+;RUN: llc -mtriple=rl78 <%s -print-after=prolog-epilog 2>&1| FileCheck %s
 
 define void @test_order(){
 ;CHECK: Frame Objects:

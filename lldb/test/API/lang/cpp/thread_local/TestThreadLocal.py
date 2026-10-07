@@ -7,8 +7,10 @@ from lldbsuite.test import lldbutil
 from lldbsuite.test import lldbtest
 
 
+@skipIfWasm  # checks the platform-specific TLS-uninitialized error, N/A to wasm
 class PlatformProcessCrashInfoTestCase(TestBase):
     @expectedFailureAll(oslist=["windows", "linux", "freebsd", "netbsd"])
+    @skipIfDarwin  # rdar://120795095
     def test_thread_local(self):
         # Set a breakpoint on the first instruction of the main function,
         # before the TLS initialization has run.
@@ -37,6 +39,11 @@ class PlatformProcessCrashInfoTestCase(TestBase):
 
         process.Kill()
         lldbutil.run_to_breakpoint_do_run(self, target, main_bkpt)
+
+        # The test fails during tear down because the module isn't cleared.
+        # Even though this test case is marked as xfail, a failure during
+        # tear down still counts as an error.
+        main_module.Clear()
 
         self.expect(
             "expr tl_local_int",

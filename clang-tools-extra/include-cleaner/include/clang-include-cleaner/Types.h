@@ -22,6 +22,7 @@
 #ifndef CLANG_INCLUDE_CLEANER_TYPES_H
 #define CLANG_INCLUDE_CLEANER_TYPES_H
 
+#include "clang/Basic/FileEntry.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Tooling/Inclusions/StandardLibrary.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -30,7 +31,9 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include <memory>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -40,7 +43,6 @@ class raw_ostream;
 } // namespace llvm
 namespace clang {
 class Decl;
-class FileEntry;
 class IdentifierInfo;
 namespace include_cleaner {
 
@@ -76,11 +78,6 @@ private:
   // Order must match Kind enum!
   std::variant<const Decl *, struct Macro> Storage;
 
-  // Disambiguation tag to make sure we can call the right constructor from
-  // DenseMapInfo methods.
-  struct SentinelTag {};
-  Symbol(SentinelTag, decltype(Storage) Sentinel)
-      : Storage(std::move(Sentinel)) {}
   friend llvm::DenseMapInfo<Symbol>;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Symbol &);
@@ -120,7 +117,7 @@ struct Header {
     Verbatim,
   };
 
-  Header(const FileEntry *FE) : Storage(FE) {}
+  Header(FileEntryRef FE) : Storage(FE) {}
   Header(tooling::stdlib::Header H) : Storage(H) {}
   Header(StringRef VerbatimSpelling) : Storage(VerbatimSpelling) {}
 
@@ -128,25 +125,20 @@ struct Header {
   bool operator==(const Header &RHS) const { return Storage == RHS.Storage; }
   bool operator<(const Header &RHS) const;
 
-  const FileEntry *physical() const { return std::get<Physical>(Storage); }
+  FileEntryRef physical() const { return std::get<Physical>(Storage); }
   tooling::stdlib::Header standard() const {
     return std::get<Standard>(Storage);
   }
   StringRef verbatim() const { return std::get<Verbatim>(Storage); }
 
-  /// Absolute path for the header when it's a physical file. Otherwise just
-  /// the spelling without surrounding quotes/brackets.
+  /// For physical files, either absolute path or path relative to the execution
+  /// root. Otherwise just the spelling without surrounding quotes/brackets.
   llvm::StringRef resolvedPath() const;
 
 private:
   // Order must match Kind enum!
-  std::variant<const FileEntry *, tooling::stdlib::Header, StringRef> Storage;
+  std::variant<FileEntryRef, tooling::stdlib::Header, StringRef> Storage;
 
-  // Disambiguation tag to make sure we can call the right constructor from
-  // DenseMapInfo methods.
-  struct SentinelTag {};
-  Header(SentinelTag, decltype(Storage) Sentinel)
-      : Storage(std::move(Sentinel)) {}
   friend llvm::DenseMapInfo<Header>;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Header &);
@@ -154,8 +146,8 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Header &);
 /// A single #include directive written in the main file.
 struct Include {
   llvm::StringRef Spelled;             // e.g. vector
-  const FileEntry *Resolved = nullptr; // e.g. /path/to/c++/v1/vector
-                                       // nullptr if the header was not found
+  OptionalFileEntryRef Resolved;       // e.g. /path/to/c++/v1/vector
+                                       // nullopt if the header was not found
   SourceLocation HashLocation;         // of hash in #include <vector>
   unsigned Line = 0;                   // 1-based line number for #include
   bool Angled = false;                 // True if spelled with <angle> quotes.
@@ -167,6 +159,20 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Include &);
 /// Supports efficiently hit-testing Headers against Includes.
 class Includes {
 public:
+  /// Registers a directory on the include path (-I etc) from HeaderSearch.
+  /// This allows reasoning about equivalence of e.g. "path/a/b.h" and "a/b.h".
+  /// This must be called before calling add() in order to take effect.
+  ///
+  /// The paths may be relative or absolute, but the paths passed to
+  /// addSearchDirectory() and add() (that is: Include.Resolved->getName())
+  /// should be consistent, as they are compared lexically.
+  /// Generally, this is satisfied if you obtain paths through HeaderSearch
+  /// and FileEntries through PPCallbacks::IncludeDirective().
+  void addSearchDirectory(llvm::StringRef);
+
+  /// Registers an include directive seen in the main file.
+  ///
+  /// This should only be called after all search directories are added.
   void add(const Include &);
 
   /// All #includes seen, in the order they appear.
@@ -183,9 +189,13 @@ public:
   const Include *atLine(unsigned OneBasedIndex) const;
 
 private:
+  llvm::StringSet<> SearchPath;
+
   std::vector<Include> All;
   // Lookup structures for match(), values are index into All.
   llvm::StringMap<llvm::SmallVector<unsigned>> BySpelling;
+  // Heuristic spellings that likely resolve to the given file.
+  llvm::StringMap<llvm::SmallVector<unsigned>> BySpellingAlternate;
   llvm::DenseMap<const FileEntry *, llvm::SmallVector<unsigned>> ByFile;
   llvm::DenseMap<unsigned, unsigned> ByLine;
 };
@@ -199,12 +209,6 @@ template <> struct DenseMapInfo<clang::include_cleaner::Symbol> {
   using Outer = clang::include_cleaner::Symbol;
   using Base = DenseMapInfo<decltype(Outer::Storage)>;
 
-  static inline Outer getEmptyKey() {
-    return {Outer::SentinelTag{}, Base::getEmptyKey()};
-  }
-  static inline Outer getTombstoneKey() {
-    return {Outer::SentinelTag{}, Base::getTombstoneKey()};
-  }
   static unsigned getHashValue(const Outer &Val) {
     return Base::getHashValue(Val.Storage);
   }
@@ -216,10 +220,6 @@ template <> struct DenseMapInfo<clang::include_cleaner::Macro> {
   using Outer = clang::include_cleaner::Macro;
   using Base = DenseMapInfo<decltype(Outer::Definition)>;
 
-  static inline Outer getEmptyKey() { return {nullptr, Base::getEmptyKey()}; }
-  static inline Outer getTombstoneKey() {
-    return {nullptr, Base::getTombstoneKey()};
-  }
   static unsigned getHashValue(const Outer &Val) {
     return Base::getHashValue(Val.Definition);
   }
@@ -231,12 +231,6 @@ template <> struct DenseMapInfo<clang::include_cleaner::Header> {
   using Outer = clang::include_cleaner::Header;
   using Base = DenseMapInfo<decltype(Outer::Storage)>;
 
-  static inline Outer getEmptyKey() {
-    return {Outer::SentinelTag{}, Base::getEmptyKey()};
-  }
-  static inline Outer getTombstoneKey() {
-    return {Outer::SentinelTag{}, Base::getTombstoneKey()};
-  }
   static unsigned getHashValue(const Outer &Val) {
     return Base::getHashValue(Val.Storage);
   }

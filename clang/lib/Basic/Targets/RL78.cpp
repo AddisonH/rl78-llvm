@@ -17,48 +17,64 @@
 using namespace clang;
 using namespace clang::targets;
 
-static constexpr Builtin::Info BuiltinInfo[] = {
-#define BUILTIN(ID, TYPE, ATTRS)                                               \
-  {#ID, TYPE, ATTRS, nullptr, HeaderDesc::NO_HEADER, ALL_LANGUAGES},
-#define TARGET_BUILTIN(ID, TYPE, ATTRS, FEATURE)                               \
-  {#ID, TYPE, ATTRS, FEATURE, HeaderDesc::NO_HEADER, ALL_LANGUAGES},
-#include "clang/Basic/BuiltinsRL78.def"
-};
+static constexpr int NumBuiltins =
+    clang::RL78::LastTSBuiltin - Builtin::FirstTSBuiltin;
 
-ArrayRef<Builtin::Info> RL78TargetInfo::getTargetBuiltins() const {
-  return llvm::ArrayRef(BuiltinInfo, clang::RL78::LastTSBuiltin -
-                                             Builtin::FirstTSBuiltin);
+static constexpr llvm::StringTable BuiltinStrings =
+    CLANG_BUILTIN_STR_TABLE_START
+#define BUILTIN CLANG_BUILTIN_STR_TABLE
+#include "clang/Basic/BuiltinsRL78.def"
+    ;
+
+static constexpr auto BuiltinInfos = Builtin::MakeInfos<NumBuiltins>({
+#define BUILTIN CLANG_BUILTIN_ENTRY
+#include "clang/Basic/BuiltinsRL78.def"
+});
+
+llvm::SmallVector<Builtin::InfosShard>
+RL78TargetInfo::getTargetBuiltins() const {
+  return {{&BuiltinStrings, BuiltinInfos}};
 }
 
 const char *const RL78TargetInfo::GCCRegNames[] = {
     "ax", "bc", "de", "hl", "x", "a",  "c", "b", "e",
     "d",  "l",  "h",  "sp",  "ap", "psw", "es", "cs"};
 
-const LangASMap RL78TargetInfo::RL78AddrSpaceMap = {  
-  0, // Default
-  0, // opencl_global
-  0, // opencl_local
-  0, // opencl_constant
-  0, // opencl_private
-  0, // opencl_generic
-  0, // opencl_global_device
-  0, // opencl_global_host
-  0, // cuda_device
-  0, // cuda_constant
-  0, // cuda_shared
-  0, // sycl_global
-  0, // sycl_global_device
-  0, // sycl_global_host
-  0, // sycl_local
-  0, // sycl_private
-  0, // ptr32_sptr
-  0, // ptr32_uptr
-  0, // ptr64
-  0, // hlsl_groupshared
-  0, // wasm_funcref
-  1, // __near
-  2, // __far_data
-  3, // __far_code
+// Positional: one entry per LangAS before FirstTargetAddressSpace.
+static_assert((unsigned)LangAS::__near == 27 &&
+                  (unsigned)LangAS::FirstTargetAddressSpace == 30,
+              "LangAS changed: update RL78AddrSpaceMap");
+const LangASMap RL78TargetInfo::RL78AddrSpaceMap = {
+    0, // Default
+    0, // opencl_global
+    0, // opencl_local
+    0, // opencl_constant
+    0, // opencl_private
+    0, // opencl_generic
+    0, // opencl_global_device
+    0, // opencl_global_host
+    0, // cuda_device
+    0, // cuda_constant
+    0, // cuda_shared
+    0, // sycl_global
+    0, // sycl_global_device
+    0, // sycl_global_host
+    0, // sycl_local
+    0, // sycl_private
+    0, // ptr32_sptr
+    0, // ptr32_uptr
+    0, // ptr64
+    0, // hlsl_groupshared
+    0, // hlsl_constant
+    0, // hlsl_private
+    0, // hlsl_device
+    0, // hlsl_input
+    0, // hlsl_output
+    0, // hlsl_push_constant
+    0, // wasm_funcref
+    1, // __near
+    2, // __far_data
+    3, // __far_code
 };
 
 ArrayRef<const char *> RL78TargetInfo::getGCCRegNames() const {
@@ -164,13 +180,15 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
 
   SS.flush();
 
-  resetDataLayout(DL, "_"); // '_' is to be consistent with Mach-O prefixing.
+  resetDataLayout(DL);
+  UserLabelPrefix = "_"; // Consistent with the Mach-O mangling above.
 
   AddrSpaceMap = &RL78AddrSpaceMap;
 }
 
-void RL78TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts) {
-  TargetInfo::adjust(Diags, Opts);
+void RL78TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
+                            const TargetInfo *Aux) {
+  TargetInfo::adjust(Diags, Opts, Aux);
   // Turn off POSIXThreads and ThreadModel so that we don't predefine _REENTRANT
   // or __STDCPP_THREADS__ if we will eventually end up stripping atomics
   // because they are unsupported.

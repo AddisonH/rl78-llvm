@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 %s -fsyntax-only -std=c99 -pedantic -verify=expected,ext -Wundef -DTRIGRAPHS=1
-// RUN: %clang_cc1 %s -fsyntax-only -std=c2x -pedantic -verify=expected,ext -Wundef -DTRIGRAPHS=1
+// RUN: %clang_cc1 %s -fsyntax-only -std=c23 -pedantic -verify=expected,ext -Wundef -ftrigraphs -DTRIGRAPHS=1
 // RUN: %clang_cc1 %s -fsyntax-only -x c++ -pedantic -verify=expected,ext -Wundef -fno-trigraphs
 // RUN: %clang_cc1 %s -fsyntax-only -x c++ -std=c++23 -pedantic -ftrigraphs -DTRIGRAPHS=1 -verify=expected,cxx23 -Wundef -Wpre-c++23-compat
 // RUN: %clang_cc1 %s -fsyntax-only -x c++ -pedantic -verify=expected,ext -Wundef -ftrigraphs -DTRIGRAPHS=1
@@ -131,7 +131,7 @@ C 1
                        // expected-error {{macro name must be an identifier}}
 #define \NN            // expected-warning {{incomplete universal character name; treating as '\' followed by identifier}} expected-error {{macro name must be an identifier}}
 #define \N{GREEK_SMALL-LETTERALPHA}  // expected-error {{'GREEK_SMALL-LETTERALPHA' is not a valid Unicode character name}} \
-                                     // expected-note {{characters names in Unicode escape sequences are sensitive to case and whitespaces}}
+                                     // expected-note {{character names in Unicode escape sequences are sensitive to case and whitespaces}}
 #define \N{🤡}  // expected-error {{'🤡' is not a valid Unicode character name}} \
                 // expected-error {{macro name must be an identifier}}
 
@@ -159,3 +159,6 @@ int a\N{LATIN CAPITAL LETTER A WITH GRAVE??>;
 // expected-warning@-1 {{incomplete}}\
 // expected-error@-1 {{expected unqualified-id}}
 #endif
+
+// GH64161
+int A\N{LEFT-TO-RIGHT OVERRIDE}; // expected-error {{character <U+202D> not allowed in an identifier}}

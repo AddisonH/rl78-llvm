@@ -15,10 +15,10 @@ module m1
 end module
 !Expect: m1.mod
 !module m1
+!private::priv
 !interface gen
 !procedure::priv
 !end interface
-!private::priv
 !contains
 !pure function priv(n)
 !integer(4),intent(in)::n
@@ -40,7 +40,7 @@ end module
 !private::m1$m1$priv
 !contains
 !subroutine s(a)
-!real(4)::a(1_8:int(m1$m1$priv(1_4),kind=8))
+!real(4)::a(1_8:__builtin_int(m1$m1$priv(1_4),kind=8))
 !end
 !end
 

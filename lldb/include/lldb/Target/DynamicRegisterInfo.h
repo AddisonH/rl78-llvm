@@ -12,18 +12,16 @@
 #include <map>
 #include <vector>
 
-#include "lldb/Target/RegisterFlags.h"
 #include "lldb/Utility/ConstString.h"
+#include "lldb/Utility/RegisterFlags.h"
+#include "lldb/Utility/RegisterInfo.h"
 #include "lldb/Utility/StructuredData.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
+class Stream;
 
 class DynamicRegisterInfo {
-protected:
-  DynamicRegisterInfo(DynamicRegisterInfo &) = default;
-  DynamicRegisterInfo &operator=(DynamicRegisterInfo &) = default;
-
 public:
   struct Register {
     ConstString name;
@@ -45,6 +43,9 @@ public:
   };
 
   DynamicRegisterInfo() = default;
+  DynamicRegisterInfo(DynamicRegisterInfo &) = default;
+  DynamicRegisterInfo &operator=(DynamicRegisterInfo &) = default;
+
 
   static std::unique_ptr<DynamicRegisterInfo>
   Create(const StructuredData::Dictionary &dict, const ArchSpec &arch);
@@ -70,16 +71,13 @@ public:
 
   const lldb_private::RegisterSet *GetRegisterSet(uint32_t i) const;
 
-  uint32_t GetRegisterSetIndexByName(const lldb_private::ConstString &set_name,
-                                     bool can_create);
-
   uint32_t ConvertRegisterKindToRegisterNumber(uint32_t kind,
                                                uint32_t num) const;
 
   const lldb_private::RegisterInfo *GetRegisterInfo(uint32_t kind,
                                                     uint32_t num) const;
 
-  void Dump() const;
+  void Dump(Stream &s) const;
 
   void Clear();
 
@@ -89,16 +87,21 @@ public:
   GetRegisterInfo(llvm::StringRef reg_name) const;
 
   typedef std::vector<lldb_private::RegisterInfo> reg_collection;
-  llvm::iterator_range<reg_collection::const_iterator> registers() const {
-    return llvm::iterator_range<reg_collection::const_iterator>(m_regs);
-  }
+  typedef llvm::iterator_range<reg_collection::const_iterator>
+      reg_collection_const_range;
+  typedef llvm::iterator_range<reg_collection::iterator> reg_collection_range;
+
+  template <typename T> T registers() = delete;
+
+  template <typename T> T registers() const = delete;
+
+  void ConfigureOffsets();
 
 protected:
   // Classes that inherit from DynamicRegisterInfo can see and modify these
   typedef std::vector<lldb_private::RegisterSet> set_collection;
   typedef std::vector<uint32_t> reg_num_collection;
   typedef std::vector<reg_num_collection> set_reg_num_collection;
-  typedef std::vector<lldb_private::ConstString> name_collection;
   typedef std::map<uint32_t, reg_num_collection> reg_to_regs_map;
   typedef std::map<uint32_t, uint32_t> reg_offset_map;
 
@@ -116,12 +119,9 @@ protected:
 
   void Finalize(const lldb_private::ArchSpec &arch);
 
-  void ConfigureOffsets();
-
   reg_collection m_regs;
   set_collection m_sets;
   set_reg_num_collection m_set_reg_nums;
-  name_collection m_set_names;
   reg_to_regs_map m_value_regs_map;
   reg_to_regs_map m_invalidate_regs_map;
   reg_offset_map m_value_reg_offset_map;
@@ -130,6 +130,24 @@ protected:
   bool m_finalized = false;
   bool m_is_reconfigurable = false;
 };
+
+template <>
+inline DynamicRegisterInfo::reg_collection_const_range
+DynamicRegisterInfo::registers() {
+  return reg_collection_const_range(m_regs);
+}
+
+template <>
+inline DynamicRegisterInfo::reg_collection_range
+DynamicRegisterInfo::registers() {
+  return reg_collection_range(m_regs);
+}
+
+template <>
+inline DynamicRegisterInfo::reg_collection_const_range
+DynamicRegisterInfo::registers() const {
+  return reg_collection_const_range(m_regs);
+}
 
 void addSupplementaryRegister(std::vector<DynamicRegisterInfo::Register> &regs,
                               DynamicRegisterInfo::Register new_reg_info);

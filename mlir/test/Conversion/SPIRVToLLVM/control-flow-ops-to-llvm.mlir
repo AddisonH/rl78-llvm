@@ -1,4 +1,4 @@
-// RUN: mlir-opt -convert-spirv-to-llvm='use-opaque-pointers=1' -split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: mlir-opt -convert-spirv-to-llvm -split-input-file -verify-diagnostics %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
 // spirv.Branch
@@ -86,6 +86,14 @@ spirv.module Logical GLSL450 {
 //===----------------------------------------------------------------------===//
 
 spirv.module Logical GLSL450 {
+  // CHECK-LABEL: @empty_loop
+  spirv.func @empty_loop() "None" {
+    // CHECK: llvm.return
+    spirv.mlir.loop {
+    }
+    spirv.Return
+  }
+
   // CHECK-LABEL: @infinite_loop
   spirv.func @infinite_loop(%count : i32) -> () "None" {
     // CHECK:   llvm.br ^[[BB1:.*]]
@@ -205,5 +213,23 @@ spirv.module Logical GLSL450 {
     // CHECK: ^bb3:
     %one = spirv.Constant 1 : i32
     spirv.ReturnValue %one : i32
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// spirv.Unreachable
+//===----------------------------------------------------------------------===//
+
+spirv.module Logical GLSL450 {
+  // CHECK-LABEL: @unreachable
+  spirv.func @unreachable() -> () "None" {
+    // CHECK: llvm.br ^bb1
+    spirv.Branch ^label
+  // CHECK: ^bb1:
+  ^label:
+    // CHECK: llvm.unreachable
+    spirv.Unreachable
   }
 }

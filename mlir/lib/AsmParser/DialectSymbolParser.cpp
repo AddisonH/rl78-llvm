@@ -12,10 +12,22 @@
 //===----------------------------------------------------------------------===//
 
 #include "AsmParserImpl.h"
+#include "Parser.h"
+#include "mlir/AsmParser/AsmParserState.h"
+#include "mlir/IR/AsmState.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/Support/LLVM.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
+#include <cassert>
+#include <cstddef>
+#include <utility>
 
 using namespace mlir;
 using namespace mlir::detail;
@@ -77,6 +89,7 @@ ParseResult Parser::parseDialectSymbolBody(StringRef &body,
     nestedPunctuation.pop_back();
     return success();
   };
+  const char *curBufferEnd = state.lex.getBufferEnd();
   do {
     // Handle code completions, which may appear in the middle of the symbol
     // body.
@@ -84,6 +97,12 @@ ParseResult Parser::parseDialectSymbolBody(StringRef &body,
       isCodeCompletion = true;
       nestedPunctuation.clear();
       break;
+    }
+
+    if (curBufferEnd == curPtr) {
+      if (!nestedPunctuation.empty())
+        return emitPunctError();
+      return emitError("unexpected nul or EOF in pretty dialect name");
     }
 
     char c = *curPtr++;
@@ -157,7 +176,8 @@ ParseResult Parser::parseDialectSymbolBody(StringRef &body,
 
 /// Parse an extended dialect symbol.
 template <typename Symbol, typename SymbolAliasMap, typename CreateFn>
-static Symbol parseExtendedSymbol(Parser &p, SymbolAliasMap &aliases,
+static Symbol parseExtendedSymbol(Parser &p, AsmParserState *asmState,
+                                  SymbolAliasMap &aliases,
                                   CreateFn &&createSymbol) {
   Token tok = p.getToken();
 
@@ -167,6 +187,7 @@ static Symbol parseExtendedSymbol(Parser &p, SymbolAliasMap &aliases,
     return p.codeCompleteDialectSymbol(aliases);
 
   // Parse the dialect namespace.
+  SMRange range = p.getToken().getLocRange();
   SMLoc loc = p.getToken().getLoc();
   p.consumeToken();
 
@@ -189,6 +210,12 @@ static Symbol parseExtendedSymbol(Parser &p, SymbolAliasMap &aliases,
       return (p.emitWrongTokenError("undefined symbol alias id '" + identifier +
                                     "'"),
               nullptr);
+    if (asmState) {
+      if constexpr (std::is_same_v<Symbol, Type>)
+        asmState->addTypeAliasUses(identifier, range);
+      else
+        asmState->addAttrAliasUses(identifier, range);
+    }
     return aliasIt->second;
   }
 
@@ -232,7 +259,7 @@ static Symbol parseExtendedSymbol(Parser &p, SymbolAliasMap &aliases,
 Attribute Parser::parseExtendedAttr(Type type) {
   MLIRContext *ctx = getContext();
   Attribute attr = parseExtendedSymbol<Attribute>(
-      *this, state.symbols.attributeAliasDefinitions,
+      *this, state.asmState, state.symbols.attributeAliasDefinitions,
       [&](StringRef dialectName, StringRef symbolData, SMLoc loc) -> Attribute {
         // Parse an optional trailing colon type.
         Type attrType = type;
@@ -279,7 +306,7 @@ Attribute Parser::parseExtendedAttr(Type type) {
 Type Parser::parseExtendedType() {
   MLIRContext *ctx = getContext();
   return parseExtendedSymbol<Type>(
-      *this, state.symbols.typeAliasDefinitions,
+      *this, state.asmState, state.symbols.typeAliasDefinitions,
       [&](StringRef dialectName, StringRef symbolData, SMLoc loc) -> Type {
         // If we found a registered dialect, then ask it to parse the type.
         if (auto *dialect = ctx->getOrLoadDialect(dialectName)) {

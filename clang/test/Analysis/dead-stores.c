@@ -156,7 +156,6 @@ int f14(int count) {
   return index;
 }
 
-// Test case for <rdar://problem/6248086>
 void f15(unsigned x, unsigned y) {
   int count = x * y; // no-warning
   int z[count];      // non-nested-warning {{unused variable 'z'}}
@@ -176,7 +175,6 @@ void f17(void) {
   x = x;
 }
 
-// <rdar://problem/6506065>
 // The values of dead stores are only "consumed" in an enclosing expression
 // what that value is actually used.  In other words, don't say "Although the
 // value stored to 'x' is used...".
@@ -506,21 +504,7 @@ int f26_nestedblocks(void) {
   return y;
 }
 
-// The FOREACH macro in QT uses 'break' statements within statement expressions
-// placed within the increment code of for loops.
-void rdar8014335(void) {
-  for (int i = 0 ; i != 10 ; ({ break; })) {
-    for (;; ({ ++i; break; }))
-      ;
-    // non-nested-warning@-2 {{'break' is bound to current loop, GCC binds it to the enclosing loop}}
-    // Note that the next value stored to 'i' is never executed
-    // because the next statement to be executed is the 'break'
-    // in the increment code of the first loop.
-    i = i * 3; // non-nested-warning {{Value stored to 'i' is never read}}
-  }
-}
-
-// <rdar://problem/8320674> NullStmts followed by do...while() can lead to disconnected CFG
+// NullStmts followed by do...while() can lead to disconnected CFG
 //
 // This previously caused bogus dead-stores warnings because the body of the first do...while was
 // disconnected from the entry of the function.

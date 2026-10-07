@@ -9,6 +9,8 @@ from lldbsuite.test import lldbutil
 
 
 class TestInterruptThreadNames(TestBase):
+    NO_DEBUG_INFO_TESTCASE = True
+
     @skipUnlessDarwin
     @add_test_categories(["pyapi"])
     def test_with_python_api(self):
@@ -38,7 +40,7 @@ class TestInterruptThreadNames(TestBase):
 
         # Check that the program was able to create its threads within the allotted time
         self.assertTrue(inferior_set_up.IsValid())
-        self.assertEquals(inferior_set_up.GetValueAsSigned(), 1)
+        self.assertEqual(inferior_set_up.GetValueAsSigned(), 1)
 
         self.check_number_of_threads(process)
 

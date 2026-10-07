@@ -27,7 +27,8 @@ using namespace llvm;
 void RL78InstrInfo::anchor() {}
 
 RL78InstrInfo::RL78InstrInfo(RL78Subtarget &ST)
-    : RL78GenInstrInfo(RL78::ADJCALLSTACKDOWN, RL78::ADJCALLSTACKUP), RI(),
+    : RL78GenInstrInfo(ST, RI, RL78::ADJCALLSTACKDOWN, RL78::ADJCALLSTACKUP),
+      RI(),
       Subtarget(ST) {}
 
 /// isLoadFromStackSlot - If the specified machine instruction is a direct
@@ -35,7 +36,7 @@ RL78InstrInfo::RL78InstrInfo(RL78Subtarget &ST)
 /// the destination along with the FrameIndex of the loaded stack slot.  If
 /// not, return 0.  This predicate must return 0 if the instruction has
 /// any side effects other than loading from the stack slot.
-unsigned RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
+Register RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
   // MI.dump();
   if ((MI.getOpcode() == RL78::LOAD8_r_stack_slot) ||
@@ -54,7 +55,7 @@ unsigned RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// the source reg along with the FrameIndex of the loaded stack slot.  If
 /// not, return 0.  This predicate must return 0 if the instruction has
 /// any side effects other than storing to the stack slot.
-unsigned RL78InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
+Register RL78InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                            int &FrameIndex) const {
   if ((MI.getOpcode() == RL78::STORE8_stack_slot_r) ||
       (MI.getOpcode() == RL78::STORE16_stack_slot_rp)) {
@@ -71,22 +72,24 @@ void RL78InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                         MachineBasicBlock::iterator I,
                                         Register SrcReg, bool isKill, int FI,
                                         const TargetRegisterClass *RC,
-                                        const TargetRegisterInfo *TRI,
-                                        Register VReg) const {
+                                        Register VReg,
+                                        MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
   // dbgs() << "storeRegToStackSlot\n";
   if (I != MBB.end())
     DL = I->getDebugLoc();
-  if ((TRI->getRegSizeInBits(*RC) == 8)) {
+  if ((RI.getRegSizeInBits(*RC) == 8)) {
     BuildMI(MBB, I, DL, get(RL78::STORE8_stack_slot_r))
         .addFrameIndex(FI)
         .addImm(0)
-        .addReg(SrcReg, getKillRegState(isKill));
+        .addReg(SrcReg, getKillRegState(isKill))
+        .setMIFlag(Flags);
   } else {
     BuildMI(MBB, I, DL, get(RL78::STORE16_stack_slot_rp))
         .addFrameIndex(FI)
         .addImm(0)
-        .addReg(SrcReg, getKillRegState(isKill));
+        .addReg(SrcReg, getKillRegState(isKill))
+        .setMIFlag(Flags);
   }
   // MBB.dump();
 }
@@ -95,20 +98,23 @@ void RL78InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register DestReg, int FI,
                                          const TargetRegisterClass *RC,
-                                         const TargetRegisterInfo *TRI,
-                                         Register VReg) const {
+                                         Register VReg, unsigned SubReg,
+                                         MachineInstr::MIFlag Flags) const {
+  assert(SubReg == 0 && "RL78 does not reload into a subregister");
   DebugLoc DL;
   if (I != MBB.end())
     DL = I->getDebugLoc();
   // dbgs() << "loadRegFromStackSlot\n";
-  if (TRI->getRegSizeInBits(*RC) == 8) {
+  if (RI.getRegSizeInBits(*RC) == 8) {
     BuildMI(MBB, I, DL, get(RL78::LOAD8_r_stack_slot), DestReg)
         .addFrameIndex(FI)
-        .addImm(0);
+        .addImm(0)
+        .setMIFlag(Flags);
   } else {
     BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_stack_slot), DestReg)
         .addFrameIndex(FI)
-        .addImm(0);
+        .addImm(0)
+        .setMIFlag(Flags);
     // We can't do this here becuase it's done during reg alloc.
     // BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_stack_slot),
     // RL78::RP0).addFrameIndex(FI).addImm(0); BuildMI(MBB, I, DL,
@@ -601,8 +607,9 @@ RL78InstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
 
 void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I,
-                                const DebugLoc &DL, MCRegister DestReg,
-                                MCRegister SrcReg, bool KillSrc) const {
+                                const DebugLoc &DL, Register DestReg,
+                                Register SrcReg, bool KillSrc,
+                                bool RenamableDest, bool RenamableSrc) const {
 #define MACRHigh 0xFFF2
 #define MACRLow 0xFFF0
   // 8 bit copy:
@@ -844,9 +851,11 @@ static unsigned getCallFrameSize(MachineInstr &MI) {
 
 /// Returns a \p outliner::OutlinedFunction struct containing target-specific
 /// information for a set of outlining candidates.
-std::optional<outliner::OutlinedFunction>
+std::optional<std::unique_ptr<outliner::OutlinedFunction>>
 RL78InstrInfo::getOutliningCandidateInfo(
-    std::vector<outliner::Candidate> &RepeatedSequenceLocs) const {
+    const MachineModuleInfo &MMI,
+    std::vector<outliner::Candidate> &RepeatedSequenceLocs,
+    unsigned MinRepeats) const {
 
   auto illegalOutline = [=](outliner::Candidate &C) {
     unsigned maxCallFrameSize = 0, callFrameSize;
@@ -900,40 +909,42 @@ RL78InstrInfo::getOutliningCandidateInfo(
   // Remove candidates that need big SP adjustment
   llvm::erase_if(RepeatedSequenceLocs, illegalOutline);
   // If the sequence doesn't have enough candidates left, then we're done.
-  if (RepeatedSequenceLocs.size() < 2)
+  if (RepeatedSequenceLocs.size() < MinRepeats)
     return std::nullopt;
 
   unsigned SequenceSize =
-      std::accumulate(RepeatedSequenceLocs[0].front(),
-                      std::next(RepeatedSequenceLocs[0].back()), 0,
+      std::accumulate(RepeatedSequenceLocs[0].begin(),
+                      RepeatedSequenceLocs[0].end(), 0,
                       [this](unsigned Sum, const MachineInstr &MI) {
                         return Sum + getInstSizeInBytes(MI);
                       });
 
-  if (RepeatedSequenceLocs[0].back()->isTerminator()) {
+  if (RepeatedSequenceLocs[0].back().isTerminator()) {
     unsigned CO = Subtarget.HasFarCodeModel() ? get(RL78::BR_addr20).getSize()
                                               : get(RL78::BR_addr16).getSize();
 
     for (outliner::Candidate &C : RepeatedSequenceLocs)
       C.setCallInfo(MachineOutlinerTailCall, CO);
 
-    return outliner::OutlinedFunction(RepeatedSequenceLocs, SequenceSize,
-                                      0, // Number of bytes to emit frame.
-                                      MachineOutlinerTailCall // Type of frame.
+    return std::make_unique<outliner::OutlinedFunction>(
+        RepeatedSequenceLocs, SequenceSize,
+        0,                      // Number of bytes to emit frame.
+        MachineOutlinerTailCall // Type of frame.
     );
   }
   unsigned CO = Subtarget.HasFarCodeModel() ? get(RL78::CALL_addr20).getSize()
                                             : get(RL78::CALL_addr16).getSize();
   for (outliner::Candidate &C : RepeatedSequenceLocs)
     C.setCallInfo(MachineOutlinerDefault, CO);
-  return outliner::OutlinedFunction(RepeatedSequenceLocs, SequenceSize, 0,
-                                    MachineOutlinerDefault);
+  return std::make_unique<outliner::OutlinedFunction>(
+      RepeatedSequenceLocs, SequenceSize, 0, MachineOutlinerDefault);
 }
 
 /// Returns how or if \p MI should be outlined.
 outliner::InstrType
-RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
-                                unsigned Flags) const {
+RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
+                                    MachineBasicBlock::iterator &MIT,
+                                    unsigned Flags) const {
   MachineInstr &MI = *MIT;
   // Don't allow debug values to impact outlining type.
   if (MI.isDebugInstr() || MI.isIndirectDebugValue() ||
@@ -979,6 +990,12 @@ RL78InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
   }
 
   switch (MI.getOpcode()) {
+  // __nop/asm("nop") is used for timing delays; an outlined call/ret would
+  // change the cycle count. (EI/DI/HALT/... stay outlinable: a call/ret or
+  // branch does not change the interrupt state, and interrupt epilogues such
+  // as "ei; reti" are deliberately outlined for size.)
+  case RL78::NOP:
+    return outliner::InstrType::Illegal;
   case RL78::MOVW_sp_rp:
   case RL78::MOVW_rp_sp:
   case RL78::MOVW_AX_sp:
@@ -1147,8 +1164,9 @@ RL78InstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
 
 MachineInstr *RL78InstrInfo::foldMemoryOperandImpl(
     MachineFunction &MF, MachineInstr &MI, ArrayRef<unsigned> Ops,
-    MachineBasicBlock::iterator InsertPt, int FrameIndex, LiveIntervals *LIS,
+    int FrameIndex, MachineInstr *&CopyMI, LiveIntervals *LIS,
     VirtRegMap *VRM) const {
+  CopyMI = nullptr;
   if ((MI.getOpcode() != RL78::MOV_r_imm))
     return nullptr;
 
@@ -1159,7 +1177,7 @@ MachineInstr *RL78InstrInfo::foldMemoryOperandImpl(
 
   int64_t Imm = MI.getOperand(1).getImm();
 
-  return BuildMI(*MI.getParent(), InsertPt, MI.getDebugLoc(),
+  return BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
                  get(RL78::STORE8_stack_slot_imm))
       .addFrameIndex(FrameIndex)
       .addImm(subReg)
@@ -1342,7 +1360,7 @@ public:
   /// returns NoHazard. If, even though there is no hazard, it would be better
   /// to schedule another available instruction, this callback should return
   /// true.
-  bool ShouldPreferAnother(SUnit *SU) override {
+  bool ShouldPreferAnother(SUnit *SU) const override {
     for (unsigned i = 0; i < SU->getInstr()->getNumOperands(); ++i) {
       // Current Post RA scheduler is top down, If the instruction defines
       // A/AX schedule it as late as possible, this means fewer exchange

@@ -18,6 +18,7 @@
 #include "ResourceScriptToken.h"
 
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <system_error>
@@ -47,7 +48,6 @@ public:
 
   private:
     std::string CurMessage;
-    LocIter ErrorLoc, FileEnd;
   };
 
   explicit RCParser(std::vector<RCToken> TokenList);
@@ -87,6 +87,7 @@ private:
   // Helper integer expression parsing methods.
   Expected<IntWithNotMask> parseIntExpr1();
   Expected<IntWithNotMask> parseIntExpr2();
+  Expected<IntWithNotMask> parseIntExpr3();
 
   // Advance the state by one, discarding the current token.
   // If the discarded token had an incorrect type, fail.
@@ -143,6 +144,7 @@ private:
   ParseType parseIconResource();
   ParseType parseHTMLResource();
   ParseType parseMenuResource();
+  ParseType parseMenuExResource();
   ParseType parseStringTableResource();
   ParseType parseUserDefinedResource(IntOrString Type);
   ParseType parseVersionInfoResource();
@@ -152,6 +154,9 @@ private:
 
   // Helper MENU parser.
   Expected<MenuDefinitionList> parseMenuItemsList();
+
+  // Helper MENUEX parser.
+  Expected<MenuDefinitionList> parseMenuExItemsList();
 
   // Helper VERSIONINFO parser - read the contents of a single BLOCK statement,
   // from BEGIN to END.
@@ -171,6 +176,7 @@ private:
   ParseOptionType parseExStyleStmt();
   ParseOptionType parseFontStmt(OptStmtType DialogType);
   ParseOptionType parseStyleStmt();
+  ParseOptionType parseMenuStmt();
 
   // Raises an error. If IsAlreadyRead = false (default), this complains about
   // the token that couldn't be parsed. If the flag is on, this complains about
@@ -181,6 +187,9 @@ private:
   std::vector<RCToken> Tokens;
   LocIter CurLoc;
   const LocIter End;
+
+  BumpPtrAllocator Alloc;
+  StringSaver Saver{Alloc};
 };
 
 } // namespace rc

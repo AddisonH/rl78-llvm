@@ -11,15 +11,11 @@ In Polly |version| the following important changes have been incorporated.
     the new features that have recently been committed to our development
     branch.
 
+ * ScopInliner has been updated for the New Pass Manager.
 
-- Support for -polly-vectorizer=polly has been removed. Polly's internal
-  vectorizer is not well maintained and is known to not work in some cases
-  such as region ScopStmts. Unlike LLVM's LoopVectorize pass it also does
-  not have a target-dependent cost heuristics, and we recommend using
-  LoopVectorize instead of -polly-vectorizer=polly.
+ * Polly now is a monolithic pass split into phases.
 
-  In the future we hope that Polly can collaborate better with LoopVectorize,
-  like Polly marking a loop is safe to vectorize with a specific simd width,
-  instead of replicating its functionality.
+ * Polly's support for the legacy pass manager has been removed.
 
-- Polly-ACC has been removed.
+ * The infrastructure around ScopPasses has been removed.
+

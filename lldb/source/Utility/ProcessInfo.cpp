@@ -42,12 +42,8 @@ void ProcessInfo::Clear() {
   m_scripted_metadata_sp.reset();
 }
 
-const char *ProcessInfo::GetName() const {
-  return m_executable.GetFilename().GetCString();
-}
-
-llvm::StringRef ProcessInfo::GetNameAsStringRef() const {
-  return m_executable.GetFilename().GetStringRef();
+llvm::StringRef ProcessInfo::GetName() const {
+  return m_executable.GetFilename();
 }
 
 void ProcessInfo::Dump(Stream &s, Platform *platform) const {
@@ -121,11 +117,11 @@ void ProcessInstanceInfo::Dump(Stream &s, UserIDResolver &resolver) const {
   if (m_pid != LLDB_INVALID_PROCESS_ID)
     s.Printf("    pid = %" PRIu64 "\n", m_pid);
 
-  if (m_parent_pid != LLDB_INVALID_PROCESS_ID)
-    s.Printf(" parent = %" PRIu64 "\n", m_parent_pid);
+  if (ParentProcessIDIsValid())
+    s.Printf(" parent = %" PRIu64 "\n", GetParentProcessID());
 
   if (m_executable) {
-    s.Printf("   name = %s\n", m_executable.GetFilename().GetCString());
+    s.Format("   name = {0}\n", m_executable.GetFilename());
     s.PutCString("   file = ");
     m_executable.Dump(s.AsRawOstream());
     s.EOL();
@@ -193,7 +189,8 @@ void ProcessInstanceInfo::DumpTableHeader(Stream &s, bool show_args,
 void ProcessInstanceInfo::DumpAsTableRow(Stream &s, UserIDResolver &resolver,
                                          bool show_args, bool verbose) const {
   if (m_pid != LLDB_INVALID_PROCESS_ID) {
-    s.Printf("%-6" PRIu64 " %-6" PRIu64 " ", m_pid, m_parent_pid);
+    s.Printf("%-6" PRIu64 " %-6" PRIu64 " ", m_pid,
+             (ParentProcessIDIsValid()) ? GetParentProcessID() : 0);
 
     StreamString arch_strm;
     if (m_arch.IsValid())
@@ -255,11 +252,11 @@ bool ProcessInstanceInfoMatch::ArchitectureMatches(
          m_match_info.GetArchitecture().IsCompatibleMatch(arch_spec);
 }
 
-bool ProcessInstanceInfoMatch::NameMatches(const char *process_name) const {
+bool ProcessInstanceInfoMatch::NameMatches(llvm::StringRef process_name) const {
   if (m_name_match_type == NameMatch::Ignore)
     return true;
-  const char *match_name = m_match_info.GetName();
-  if (!match_name)
+  llvm::StringRef match_name = m_match_info.GetName();
+  if (match_name.empty())
     return true;
 
   return lldb_private::NameMatches(process_name, m_name_match_type, match_name);

@@ -50,22 +50,16 @@
 #ifdef HAVE_BACKTRACE
 #include BACKTRACE_HEADER // For backtrace().
 #endif
-#if HAVE_SIGNAL_H
 #include <signal.h>
-#endif
-#if HAVE_SYS_STAT_H
 #include <sys/stat.h>
-#endif
-#if HAVE_DLFCN_H
 #include <dlfcn.h>
-#endif
 #if HAVE_MACH_MACH_H
 #include <mach/mach.h>
 #endif
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-#if HAVE_LINK_H
+#if __has_include(<link.h>)
 #include <link.h>
 #endif
 #ifdef HAVE__UNWIND_BACKTRACE
@@ -79,11 +73,21 @@
 #undef HAVE__UNWIND_BACKTRACE
 #endif
 #endif
+#if ENABLE_BACKTRACES && defined(__MVS__)
+#include "llvm/Support/ConvertEBCDIC.h"
+#include <__le_cwi.h>
+#endif
+
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 
 using namespace llvm;
 
-static void SignalHandler(int Sig);     // defined below.
+static void SignalHandler(int Sig, siginfo_t *Info, void *Context);
+static void SignalHandlerTerminate(int Sig, siginfo_t *Info, void *Context);
 static void InfoSignalHandler(int Sig); // defined below.
+static void InfoSignalHandlerTerminate(int Sig); // defined below.
 
 using SignalHandlerFunctionType = void (*)();
 /// The function to call if ctrl-c is pressed.
@@ -94,6 +98,10 @@ static std::atomic<SignalHandlerFunctionType> OneShotPipeSignalFunction =
     nullptr;
 
 namespace {
+/// Sentinel stored in a node after the signal handler has removed the file;
+/// not a valid path, never freed.
+static char InvalidPathSentinel[] = "\01\02\03\04";
+
 /// Signal-safe removal of files.
 /// Inserting and erasing from the list isn't signal-safe, but removal of files
 /// themselves is signal-safe. Memory is freed when the head is freed, deletion
@@ -103,8 +111,8 @@ class FileToRemoveList {
   std::atomic<FileToRemoveList *> Next = nullptr;
 
   FileToRemoveList() = default;
-  // Not signal-safe.
-  FileToRemoveList(const std::string &str) : Filename(strdup(str.c_str())) {}
+  // Takes ownership of \p filename.
+  FileToRemoveList(char *filename) : Filename(filename) {}
 
 public:
   // Not signal-safe.
@@ -112,19 +120,35 @@ public:
     if (FileToRemoveList *N = Next.exchange(nullptr))
       delete N;
     if (char *F = Filename.exchange(nullptr))
-      free(F);
+      if (F != InvalidPathSentinel)
+        free(F);
   }
 
   // Not signal-safe.
   static void insert(std::atomic<FileToRemoveList *> &Head,
                      const std::string &Filename) {
-    // Insert the new file at the end of the list.
-    FileToRemoveList *NewHead = new FileToRemoveList(Filename);
+    // Reuse a node with a null filename (left behind by erase) if one exists.
+    // There are two cases where Filename can be special:
+    // - nullptr: a node left behind by a previous file that we had to remove
+    // - InvalidPathSentinel: a node whose file is actively being removed by a
+    //   signal handler right now, in which case it's OK if this file doesn't
+    //   get removed.
+    char *NewFilename = strdup(Filename.c_str());
     std::atomic<FileToRemoveList *> *InsertionPoint = &Head;
-    FileToRemoveList *OldHead = nullptr;
-    while (!InsertionPoint->compare_exchange_strong(OldHead, NewHead)) {
-      InsertionPoint = &OldHead->Next;
-      OldHead = nullptr;
+    for (FileToRemoveList *Current = Head.load(); Current;
+         Current = Current->Next.load()) {
+      char *NullFilename = nullptr;
+      if (Current->Filename.compare_exchange_strong(NullFilename, NewFilename))
+        return; // Reused a slot.
+      InsertionPoint = &Current->Next;
+    }
+
+    // Append the new node at the end; on CAS failure, advance to the new tail.
+    FileToRemoveList *NewNode = new FileToRemoveList(NewFilename);
+    FileToRemoveList *OldNext = nullptr;
+    while (!InsertionPoint->compare_exchange_strong(OldNext, NewNode)) {
+      InsertionPoint = &OldNext->Next;
+      OldNext = nullptr;
     }
   }
 
@@ -141,47 +165,57 @@ public:
       if (char *OldFilename = Current->Filename.load()) {
         if (OldFilename != Filename)
           continue;
-        // Leave an empty filename.
-        OldFilename = Current->Filename.exchange(nullptr);
-        // The filename might have become null between the time we
-        // compared it and we exchanged it.
-        if (OldFilename)
+        // Leave an empty filename. Use CAS to avoid racing with the signal
+        // handler (which can't take the writer lock); only clear and free
+        // if we still own the pointer.
+        char *Expected = OldFilename;
+        while (!Current->Filename.compare_exchange_strong(Expected, nullptr)) {
+          if (Expected == nullptr || Expected == InvalidPathSentinel)
+            break;
+        }
+        if (Expected == OldFilename)
           free(OldFilename);
       }
     }
   }
 
+  static void removeFile(char *path) {
+    // Get the status so we can determine if it's a file or directory. If we
+    // can't stat the file, ignore it.
+    struct stat buf;
+    if (stat(path, &buf) != 0)
+      return;
+
+    // If this is not a regular file, ignore it. We want to prevent removal
+    // of special files like /dev/null, even if the compiler is being run
+    // with the super-user permissions.
+    if (!S_ISREG(buf.st_mode))
+      return;
+
+    // Otherwise, remove the file. We ignore any errors here as there is
+    // nothing else we can do.
+    unlink(path);
+  }
+
   // Signal-safe.
   static void removeAllFiles(std::atomic<FileToRemoveList *> &Head) {
-    // If cleanup were to occur while we're removing files we'd have a bad time.
-    // Make sure we're OK by preventing cleanup from doing anything while we're
-    // removing files. If cleanup races with us and we win we'll have a leak,
-    // but we won't crash.
+    // This signal-safe code cannot acquire the writer lock, and needs to defend
+    // against racing writes from the `erase` method above.
     FileToRemoveList *OldHead = Head.exchange(nullptr);
 
     for (FileToRemoveList *currentFile = OldHead; currentFile;
          currentFile = currentFile->Next.load()) {
-      // If erasing was occuring while we're trying to remove files we'd look
-      // at free'd data. Take away the path and put it back when done.
-      if (char *path = currentFile->Filename.exchange(nullptr)) {
-        // Get the status so we can determine if it's a file or directory. If we
-        // can't stat the file, ignore it.
-        struct stat buf;
-        if (stat(path, &buf) != 0)
-          continue;
-
-        // If this is not a regular file, ignore it. We want to prevent removal
-        // of special files like /dev/null, even if the compiler is being run
-        // with the super-user permissions.
-        if (!S_ISREG(buf.st_mode))
-          continue;
-
-        // Otherwise, remove the file. We ignore any errors here as there is
-        // nothing else we can do.
-        unlink(path);
-
-        // We're done removing the file, erasing can safely proceed.
-        currentFile->Filename.exchange(path);
+      // Take exclusive ownership by swapping in the sentinel (signal-safe: no
+      // allocation or free). Then put the path back so we don't leak.
+      char *Path = currentFile->Filename.exchange(InvalidPathSentinel);
+      if (!Path) {
+        // Restore an empty slot so future insertions can reuse it.
+        currentFile->Filename.exchange(nullptr);
+      } else if (Path != InvalidPathSentinel) {
+        removeFile(Path);
+        // Add the path back to the list to create a global root referencing the
+        // heap allocation, which will pacify leak checkers that run at exit.
+        currentFile->Filename.exchange(Path);
       }
     }
 
@@ -286,10 +320,11 @@ static void CreateSigAltStack() {
 static void CreateSigAltStack() {}
 #endif
 
-static void RegisterHandlers() { // Not signal-safe.
+static void RegisterHandlers(
+    bool NeedsPOSIXUtilitySignalHandling = false) { // Not signal-safe.
   // The mutex prevents other threads from registering handlers while we're
   // doing it. We also have to protect the handlers and their count because
-  // a signal handler could fire while we're registeting handlers.
+  // a signal handler could fire while we're registering handlers.
   static ManagedStatic<sys::SmartMutex<true>> SignalHandlerRegistrationMutex;
   sys::SmartScopedLock<true> Guard(*SignalHandlerRegistrationMutex);
 
@@ -311,18 +346,34 @@ static void RegisterHandlers() { // Not signal-safe.
 
     switch (Kind) {
     case SignalKind::IsKill:
-      NewHandler.sa_handler = SignalHandler;
-      NewHandler.sa_flags = SA_NODEFER | SA_RESETHAND | SA_ONSTACK;
+      if (NeedsPOSIXUtilitySignalHandling)
+        // If POSIX signal-handling semantics are followed, the signal handler
+        // resignal itself to terminate after handling the signal.
+        NewHandler.sa_sigaction = SignalHandlerTerminate;
+      else
+        NewHandler.sa_sigaction = SignalHandler;
+      NewHandler.sa_flags = SA_NODEFER | SA_RESETHAND | SA_ONSTACK | SA_SIGINFO;
       break;
     case SignalKind::IsInfo:
-      NewHandler.sa_handler = InfoSignalHandler;
+      if (NeedsPOSIXUtilitySignalHandling)
+        // If POSIX signal-handling semantics are followed, the signal handler
+        // resignal itself to terminate after handling the signal.
+        NewHandler.sa_handler = InfoSignalHandlerTerminate;
+      else
+        NewHandler.sa_handler = InfoSignalHandler;
       NewHandler.sa_flags = SA_ONSTACK;
       break;
     }
     sigemptyset(&NewHandler.sa_mask);
 
-    // Install the new handler, save the old one in RegisteredSignalInfo.
-    sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA);
+    if (NeedsPOSIXUtilitySignalHandling) {
+      // Don't install the new handler if the signal disposition is SIG_IGN.
+      struct sigaction act;
+      if (sigaction(Signal, NULL, &act) == 0 && act.sa_handler != SIG_IGN)
+        sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA);
+    } else {
+      sigaction(Signal, &NewHandler, &RegisteredSignalInfo[Index].SA);
+    }
     RegisteredSignalInfo[Index].SigNo = Signal;
     ++NumRegisteredSignals;
   };
@@ -352,6 +403,9 @@ static void RemoveFilesToRemove() {
 }
 
 void sys::CleanupOnSignal(uintptr_t Context) {
+  // Let's not interfere with stack trace symbolication and friends.
+  auto BypassSandbox = sandbox::scopedDisable();
+
   int Sig = (int)Context;
 
   if (llvm::is_contained(InfoSigs, Sig)) {
@@ -368,7 +422,7 @@ void sys::CleanupOnSignal(uintptr_t Context) {
 }
 
 // The signal handler that runs.
-static void SignalHandler(int Sig) {
+static void SignalHandler(int Sig, siginfo_t *Info, void *Context) {
   // Restore the signal behavior to default, so that the program actually
   // crashes when we return and the signal reissues.  This also ensures that if
   // we crash in our signal handler that the program will terminate immediately
@@ -410,6 +464,31 @@ static void SignalHandler(int Sig) {
   if (Sig == SIGILL || Sig == SIGFPE || Sig == SIGTRAP)
     raise(Sig);
 #endif
+
+#if defined(__linux__)
+  // Re-raising a signal via `raise` loses the original siginfo. Recent
+  // versions of linux (>= 3.9) support processes sending a signal to itself
+  // with arbitrary signal information using a syscall. If this syscall is
+  // unsupported, errno will be set to EPERM and `raise` will be used instead.
+  int retval =
+      syscall(SYS_rt_tgsigqueueinfo, getpid(), syscall(SYS_gettid), Sig, Info);
+  if (retval != 0 && errno == EPERM)
+    raise(Sig);
+#else
+  // Signal sent from another userspace process, do not assume that continuing
+  // the execution would re-raise it.
+  if (Info->si_pid != getpid() && Info->si_pid != 0)
+    raise(Sig);
+#endif
+}
+
+static void SignalHandlerTerminate(int Sig, siginfo_t *Info, void *Context) {
+  SignalHandler(Sig, Info, Context);
+
+  // Resignal if it is a kill signal so that the exit code contains the
+  // terminating signal number.
+  if (llvm::is_contained(KillSigs, Sig))
+    raise(Sig); // Execute the default handler.
 }
 
 static void InfoSignalHandler(int Sig) {
@@ -418,7 +497,21 @@ static void InfoSignalHandler(int Sig) {
     CurrentInfoFunction();
 }
 
-void llvm::sys::RunInterruptHandlers() { RemoveFilesToRemove(); }
+static void InfoSignalHandlerTerminate(int Sig) {
+  InfoSignalHandler(Sig);
+
+  if (Sig == SIGUSR1) {
+    sys::unregisterHandlers();
+    raise(Sig);
+  }
+}
+
+void sys::RunInterruptHandlers() {
+  // Let's not interfere with stack trace symbolication and friends.
+  auto BypassSandbox = sandbox::scopedDisable();
+
+  RemoveFilesToRemove();
+}
 
 void llvm::sys::SetInterruptFunction(void (*IF)()) {
   InterruptFunction.exchange(IF);
@@ -458,15 +551,17 @@ void llvm::sys::DontRemoveFileOnSignal(StringRef Filename) {
 /// Add a function to be called when a signal is delivered to the process. The
 /// handler can have a cookie passed to it to identify what instance of the
 /// handler it is.
-void llvm::sys::AddSignalHandler(sys::SignalHandlerCallback FnPtr,
-                                 void *Cookie) { // Signal-safe.
+void llvm::sys::AddSignalHandler(sys::SignalHandlerCallback FnPtr, void *Cookie,
+                                 bool NeedsPOSIXUtilitySignalHandling) {
+  // Signal-safe.
   insertSignalHandler(FnPtr, Cookie);
-  RegisterHandlers();
+  RegisterHandlers(NeedsPOSIXUtilitySignalHandling);
 }
 
-#if ENABLE_BACKTRACES && defined(HAVE_BACKTRACE) && HAVE_LINK_H &&             \
+#if ENABLE_BACKTRACES && defined(HAVE_BACKTRACE) &&                            \
     (defined(__linux__) || defined(__FreeBSD__) ||                             \
-     defined(__FreeBSD_kernel__) || defined(__NetBSD__))
+     defined(__FreeBSD_kernel__) || defined(__NetBSD__) ||                     \
+     defined(__OpenBSD__) || defined(__DragonFly__))
 struct DlIteratePhdrData {
   void **StackTrace;
   int depth;
@@ -499,6 +594,21 @@ static int dl_iterate_phdr_cb(dl_phdr_info *info, size_t size, void *arg) {
   return 0;
 }
 
+#if LLVM_ENABLE_DEBUGLOC_TRACKING_ORIGIN
+#if !defined(HAVE_BACKTRACE)
+#error DebugLoc origin-tracking currently requires `backtrace()`.
+#endif
+namespace llvm {
+namespace sys {
+template <unsigned long MaxDepth>
+int getStackTrace(std::array<void *, MaxDepth> &StackTrace) {
+  return backtrace(StackTrace.data(), MaxDepth);
+}
+template int getStackTrace<16ul>(std::array<void *, 16ul> &);
+} // namespace sys
+} // namespace llvm
+#endif
+
 /// If this is an ELF platform, we can find all loaded modules and their virtual
 /// addresses with dl_iterate_phdr.
 static bool findModulesAndOffsets(void **StackTrace, int Depth,
@@ -510,6 +620,118 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
   dl_iterate_phdr(dl_iterate_phdr_cb, &data);
   return true;
 }
+
+class DSOMarkupPrinter {
+  llvm::raw_ostream &OS;
+  const char *MainExecutableName;
+  size_t ModuleCount = 0;
+  bool IsFirst = true;
+
+public:
+  DSOMarkupPrinter(llvm::raw_ostream &OS, const char *MainExecutableName)
+      : OS(OS), MainExecutableName(MainExecutableName) {}
+
+  /// Print llvm-symbolizer markup describing the layout of the given DSO.
+  void printDSOMarkup(dl_phdr_info *Info) {
+    bool WasFirst = IsFirst;
+    IsFirst = false;
+    ArrayRef<uint8_t> BuildID = findBuildID(Info);
+    if (BuildID.empty())
+      return;
+    OS << format("{{{module:%d:%s:elf:", ModuleCount,
+                 WasFirst ? MainExecutableName : Info->dlpi_name);
+    for (uint8_t X : BuildID)
+      OS << format("%02x", X);
+    OS << "}}}\n";
+
+    for (int I = 0; I < Info->dlpi_phnum; I++) {
+      const auto *Phdr = &Info->dlpi_phdr[I];
+      if (Phdr->p_type != PT_LOAD)
+        continue;
+      uintptr_t StartAddress = Info->dlpi_addr + Phdr->p_vaddr;
+      uintptr_t ModuleRelativeAddress = Phdr->p_vaddr;
+      std::array<char, 4> ModeStr = modeStrFromFlags(Phdr->p_flags);
+      OS << format("{{{mmap:%#016x:%#x:load:%d:%s:%#016x}}}\n", StartAddress,
+                   Phdr->p_memsz, ModuleCount, &ModeStr[0],
+                   ModuleRelativeAddress);
+    }
+    ModuleCount++;
+  }
+
+  /// Callback for use with dl_iterate_phdr. The last dl_iterate_phdr argument
+  /// must be a pointer to an instance of this class.
+  static int printDSOMarkup(dl_phdr_info *Info, size_t Size, void *Arg) {
+    static_cast<DSOMarkupPrinter *>(Arg)->printDSOMarkup(Info);
+    return 0;
+  }
+
+  // Returns the build ID for the given DSO as an array of bytes. Returns an
+  // empty array if none could be found.
+  ArrayRef<uint8_t> findBuildID(dl_phdr_info *Info) {
+    for (int I = 0; I < Info->dlpi_phnum; I++) {
+      const auto *Phdr = &Info->dlpi_phdr[I];
+      if (Phdr->p_type != PT_NOTE)
+        continue;
+
+      ArrayRef<uint8_t> Notes(
+          reinterpret_cast<const uint8_t *>(Info->dlpi_addr + Phdr->p_vaddr),
+          Phdr->p_memsz);
+      while (Notes.size() > 12) {
+        uint32_t NameSize = *reinterpret_cast<const uint32_t *>(Notes.data());
+        Notes = Notes.drop_front(4);
+        uint32_t DescSize = *reinterpret_cast<const uint32_t *>(Notes.data());
+        Notes = Notes.drop_front(4);
+        uint32_t Type = *reinterpret_cast<const uint32_t *>(Notes.data());
+        Notes = Notes.drop_front(4);
+
+        ArrayRef<uint8_t> Name = Notes.take_front(NameSize);
+        auto CurPos = reinterpret_cast<uintptr_t>(Notes.data());
+        uint32_t BytesUntilDesc =
+            alignToPowerOf2(CurPos + NameSize, 4) - CurPos;
+        if (BytesUntilDesc >= Notes.size())
+          break;
+        Notes = Notes.drop_front(BytesUntilDesc);
+
+        ArrayRef<uint8_t> Desc = Notes.take_front(DescSize);
+        CurPos = reinterpret_cast<uintptr_t>(Notes.data());
+        uint32_t BytesUntilNextNote =
+            alignToPowerOf2(CurPos + DescSize, 4) - CurPos;
+        if (BytesUntilNextNote > Notes.size())
+          break;
+        Notes = Notes.drop_front(BytesUntilNextNote);
+
+        if (Type == 3 /*NT_GNU_BUILD_ID*/ && Name.size() >= 3 &&
+            Name[0] == 'G' && Name[1] == 'N' && Name[2] == 'U')
+          return Desc;
+      }
+    }
+    return {};
+  }
+
+  // Returns a symbolizer markup string describing the permissions on a DSO
+  // with the given p_flags.
+  std::array<char, 4> modeStrFromFlags(uint32_t Flags) {
+    std::array<char, 4> Mode;
+    char *Cur = &Mode[0];
+    if (Flags & PF_R)
+      *Cur++ = 'r';
+    if (Flags & PF_W)
+      *Cur++ = 'w';
+    if (Flags & PF_X)
+      *Cur++ = 'x';
+    *Cur = '\0';
+    return Mode;
+  }
+};
+
+static bool printMarkupContext(llvm::raw_ostream &OS,
+                               const char *MainExecutableName) {
+  OS << "{{{reset}}}\n";
+  DSOMarkupPrinter MP(OS, MainExecutableName);
+  dl_iterate_phdr(DSOMarkupPrinter::printDSOMarkup, &MP);
+  return true;
+}
+
 #elif ENABLE_BACKTRACES && defined(__APPLE__) && defined(__LP64__)
 static bool findModulesAndOffsets(void **StackTrace, int Depth,
                                   const char **Modules, intptr_t *Offsets,
@@ -544,6 +766,11 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
   }
   return true;
 }
+
+static bool printMarkupContext(llvm::raw_ostream &OS,
+                               const char *MainExecutableName) {
+  return false;
+}
 #else
 /// Backtraces are not enabled or we don't yet know how to find all loaded DSOs
 /// on this platform.
@@ -551,6 +778,11 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
                                   const char **Modules, intptr_t *Offsets,
                                   const char *MainExecutableName,
                                   StringSaver &StrPool) {
+  return false;
+}
+
+static bool printMarkupContext(llvm::raw_ostream &OS,
+                               const char *MainExecutableName) {
   return false;
 }
 #endif // ENABLE_BACKTRACES && ... (findModulesAndOffsets variants)
@@ -587,6 +819,76 @@ static int unwindBacktrace(void **StackTrace, int MaxEntries) {
 }
 #endif
 
+#if ENABLE_BACKTRACES && defined(__MVS__)
+static void zosbacktrace(raw_ostream &OS) {
+  // A function name in the PPA1 can have length 16k.
+  constexpr size_t MAX_ENTRY_NAME = UINT16_MAX;
+  // Limit all other strings to 8 byte.
+  constexpr size_t MAX_OTHER = 8;
+  int32_t dsa_format = -1;                  // Input/Output
+  void *caaptr = _gtca();                   // Input
+  int32_t member_id;                        // Output
+  char compile_unit_name[MAX_OTHER];        // Output
+  void *compile_unit_address;               // Output
+  void *call_instruction_address = nullptr; // Input/Output
+  char entry_name[MAX_ENTRY_NAME];          // Output
+  void *entry_address;                      // Output
+  void *callers_instruction_address;        // Output
+  void *callers_dsaptr;                     // Output
+  int32_t callers_dsa_format;               // Output
+  char statement_id[MAX_OTHER];             // Output
+  void *cibptr;                             // Output
+  int32_t main_program;                     // Output
+  _FEEDBACK fc;                             // Output
+
+  // The DSA pointer is the value of the stack pointer r4.
+  // __builtin_frame_address() returns a pointer to the stack frame, so the
+  // stack bias has to be considered to get the expected DSA value.
+  void *dsaptr = static_cast<char *>(__builtin_frame_address(0)) - 2048;
+  int count = 0;
+  OS << " DSA  Adr                EP                 +EP         DSA           "
+        "     Entry\n";
+  while (1) {
+    // After the call, these variables contain the length of the string.
+    int32_t compile_unit_name_length = sizeof(compile_unit_name);
+    int32_t entry_name_length = sizeof(entry_name);
+    int32_t statement_id_length = sizeof(statement_id);
+    // See
+    // https://www.ibm.com/docs/en/zos/3.1.0?topic=cwicsa6a-celqtbck-also-known-as-celqtbck-64-bit-traceback-service
+    // for documentation of the parameters.
+    __CELQTBCK(&dsaptr, &dsa_format, &caaptr, &member_id, &compile_unit_name[0],
+               &compile_unit_name_length, &compile_unit_address,
+               &call_instruction_address, &entry_name[0], &entry_name_length,
+               &entry_address, &callers_instruction_address, &callers_dsaptr,
+               &callers_dsa_format, &statement_id[0], &statement_id_length,
+               &cibptr, &main_program, &fc);
+    if (fc.tok_sev) {
+      OS << format("error: CELQTBCK returned severity %d message %d\n",
+                   fc.tok_sev, fc.tok_msgno);
+      break;
+    }
+
+    if (count) { // Omit first entry.
+      uintptr_t diff = reinterpret_cast<uintptr_t>(call_instruction_address) -
+                       reinterpret_cast<uintptr_t>(entry_address);
+      OS << format(" %3d. 0x%016lX", count, call_instruction_address);
+      OS << format(" 0x%016lX +0x%08lX 0x%016lX", entry_address, diff, dsaptr);
+      SmallString<256> Str;
+      ConverterEBCDIC::convertToUTF8(StringRef(entry_name, entry_name_length),
+                                     Str);
+      OS << ' ' << Str << '\n';
+    }
+    ++count;
+    if (callers_dsaptr) {
+      dsaptr = callers_dsaptr;
+      dsa_format = callers_dsa_format;
+      call_instruction_address = callers_instruction_address;
+    } else
+      break;
+  }
+}
+#endif
+
 // In the case of a program crash or fault, print out a stack trace so that the
 // user has an indication of why and where we died.
 //
@@ -594,6 +896,9 @@ static int unwindBacktrace(void **StackTrace, int MaxEntries) {
 // doesn't demangle symbols.
 void llvm::sys::PrintStackTrace(raw_ostream &OS, int Depth) {
 #if ENABLE_BACKTRACES
+#ifdef __MVS__
+  zosbacktrace(OS);
+#else
   static void *StackTrace[256];
   int depth = 0;
 #if defined(HAVE_BACKTRACE)
@@ -613,39 +918,47 @@ void llvm::sys::PrintStackTrace(raw_ostream &OS, int Depth) {
   // backtrace() for printing a symbolized stack trace.
   if (!Depth)
     Depth = depth;
+  if (printMarkupStackTrace(Argv0, StackTrace, Depth, OS))
+    return;
   if (printSymbolizedStackTrace(Argv0, StackTrace, Depth, OS))
     return;
   OS << "Stack dump without symbol names (ensure you have llvm-symbolizer in "
         "your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point "
         "to it):\n";
-#if HAVE_DLFCN_H && HAVE_DLADDR
+#if HAVE_DLOPEN && !defined(_AIX)
   int width = 0;
   for (int i = 0; i < depth; ++i) {
     Dl_info dlinfo;
-    dladdr(StackTrace[i], &dlinfo);
-    const char *name = strrchr(dlinfo.dli_fname, '/');
-
     int nwidth;
-    if (!name)
-      nwidth = strlen(dlinfo.dli_fname);
-    else
-      nwidth = strlen(name) - 1;
+    if (dladdr(StackTrace[i], &dlinfo) == 0) {
+      nwidth = 7; // "(error)"
+    } else {
+      const char *name = strrchr(dlinfo.dli_fname, '/');
 
-    if (nwidth > width)
-      width = nwidth;
+      if (!name)
+        nwidth = strlen(dlinfo.dli_fname);
+      else
+        nwidth = strlen(name) - 1;
+    }
+
+    width = std::max(nwidth, width);
   }
 
   for (int i = 0; i < depth; ++i) {
     Dl_info dlinfo;
-    dladdr(StackTrace[i], &dlinfo);
 
     OS << format("%-2d", i);
 
-    const char *name = strrchr(dlinfo.dli_fname, '/');
-    if (!name)
-      OS << format(" %-*s", width, dlinfo.dli_fname);
-    else
-      OS << format(" %-*s", width, name + 1);
+    if (dladdr(StackTrace[i], &dlinfo) == 0) {
+      OS << format(" %-*s", width, static_cast<const char *>("(error)"));
+      dlinfo.dli_sname = nullptr;
+    } else {
+      const char *name = strrchr(dlinfo.dli_fname, '/');
+      if (!name)
+        OS << format(" %-*s", width, dlinfo.dli_fname);
+      else
+        OS << format(" %-*s", width, name + 1);
+    }
 
     OS << format(" %#0*lx", (int)(sizeof(void *) * 2) + 2,
                  (unsigned long)StackTrace[i]);
@@ -666,6 +979,7 @@ void llvm::sys::PrintStackTrace(raw_ostream &OS, int Depth) {
   }
 #elif defined(HAVE_BACKTRACE)
   backtrace_symbols_fd(StackTrace, Depth, STDERR_FILENO);
+#endif
 #endif
 #endif
 }

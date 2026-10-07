@@ -36,9 +36,9 @@ define i32 @foo(ptr %ptr, i32 %x, i64 %y) !dbg !3 {
 ; CHECK-NEXT:    b.eq LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %else
 ; CHECK-NEXT:    mul w9, w0, w1
-; CHECK-NEXT:    mov w10, #10
 ; CHECK-NEXT:    mul w0, w9, w1
-; CHECK-NEXT:    str w10, [x8]
+; CHECK-NEXT:    mov w9, #10 ; =0xa
+; CHECK-NEXT:    str w9, [x8]
 ; CHECK-NEXT:  LBB0_2: ; %common.ret
 ; CHECK-NEXT:    ; kill: def $w0 killed $w0 killed $x0
 ; CHECK-NEXT:    ret
@@ -60,12 +60,14 @@ else:
   ret i32 %res.2, !dbg !6
 }
 !llvm.dbg.cu = !{!0}
+!7 = !{null}
+!8 = !DISubroutineType(types: !7)
 !llvm.module.flags = !{!2}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1)
 !1 = !DIFile(filename: "arm64-instruction-mix-remarks.ll", directory: "")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
-!3 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 5, scopeLine: 5, unit: !0)
+!3 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 5, scopeLine: 5, type: !8, unit: !0)
 !4 = distinct !DILocation(line: 10, column: 10, scope: !3)
 !5 = distinct !DILocation(line: 20, column: 20, scope: !3)
 !6 = distinct !DILocation(line: 30, column: 30, scope: !3)

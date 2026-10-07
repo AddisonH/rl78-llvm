@@ -31,7 +31,9 @@ std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
       // this works also for the default AS which is far with -mfar-data
       isFar = GV->getParent()->getDataLayout().getPointerSizeInBits(
                   GV->getAddressSpace()) == 32;
-    } else if (GF) {
+    } else if (GF && Kind.isText()) {
+      // Only the function's own code follows its address space; anything
+      // else named after a function (e.g. its jump tables) stays near.
       isFar = GF->getAddressSpace() == RL78AS::FarCode ||
               GF->getAddressSpace() == RL78AS::FarData;
     }

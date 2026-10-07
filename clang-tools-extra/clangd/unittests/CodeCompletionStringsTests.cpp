@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeCompletionStrings.h"
+#include "Config.h"
 #include "TestTU.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
 #include "gmock/gmock.h"
@@ -25,11 +26,13 @@ public:
 protected:
   void computeSignature(const CodeCompletionString &CCS,
                         CodeCompletionResult::ResultKind ResultKind =
-                            CodeCompletionResult::ResultKind::RK_Declaration) {
+                            CodeCompletionResult::ResultKind::RK_Declaration,
+                        bool IncludeFunctionArguments = true) {
     Signature.clear();
     Snippet.clear();
     getSignature(CCS, &Signature, &Snippet, ResultKind,
                  /*CursorKind=*/CXCursorKind::CXCursor_NotImplemented,
+                 /*IncludeFunctionArguments=*/IncludeFunctionArguments,
                  /*RequiredQualifiers=*/nullptr);
   }
 
@@ -65,6 +68,59 @@ TEST_F(CompletionStringTest, GetDeclCommentBadUTF8) {
   auto AST = TU.build();
   EXPECT_EQ("x\xef\xbf\xbdy",
             getDeclComment(AST.getASTContext(), findDecl(AST, "X")));
+}
+
+TEST_F(CompletionStringTest, GetDeclCommentForParam) {
+  auto TU =
+      TestTU::withCode("/** @param a this is param a */\nvoid func(int a);");
+  auto AST = TU.build();
+  Config Cfg;
+  Cfg.Documentation.CommentFormat = Config::CommentFormatPolicy::Doxygen;
+  WithContextValue WithCfg(Config::Key, std::move(Cfg));
+  const auto &FD = llvm::cast<FunctionDecl>(findDecl(AST, "func"));
+  EXPECT_EQ(FD.getNumParams(), 1UL);
+  EXPECT_EQ("this is param a",
+            getDeclComment(AST.getASTContext(), *FD.parameters()[0]));
+}
+
+TEST_F(CompletionStringTest, GetDeclCommentForMultipleParams) {
+  auto TU = TestTU::withCode("/** @param a this is param a\n * @param b this "
+                             "is param b\n */\nvoid func(int a, int b);");
+  auto AST = TU.build();
+  Config Cfg;
+  Cfg.Documentation.CommentFormat = Config::CommentFormatPolicy::Doxygen;
+  WithContextValue WithCfg(Config::Key, std::move(Cfg));
+  const auto &FD = llvm::cast<FunctionDecl>(findDecl(AST, "func"));
+  EXPECT_EQ(FD.getNumParams(), 2UL);
+  EXPECT_EQ("this is param a",
+            getDeclComment(AST.getASTContext(), *FD.parameters()[0]));
+  EXPECT_EQ("this is param b",
+            getDeclComment(AST.getASTContext(), *FD.parameters()[1]));
+}
+
+TEST_F(CompletionStringTest, GetDeclCommentForUndocumentedParam) {
+  auto TU =
+      TestTU::withCode("/** @param c this is param c */\nvoid func(int a);");
+  auto AST = TU.build();
+  Config Cfg;
+  Cfg.Documentation.CommentFormat = Config::CommentFormatPolicy::Doxygen;
+  WithContextValue WithCfg(Config::Key, std::move(Cfg));
+  const auto &FD = llvm::cast<FunctionDecl>(findDecl(AST, "func"));
+  EXPECT_EQ(FD.getNumParams(), 1UL);
+  EXPECT_EQ("", getDeclComment(AST.getASTContext(), *FD.parameters()[0]));
+}
+
+TEST_F(CompletionStringTest, GetDeclCommentForParamWithUnknownDoxygenCommand) {
+  auto TU = TestTU::withCode("/** @param a this is param a and an\n * @unknown "
+                             "command\n */\nvoid func(int a);");
+  auto AST = TU.build();
+  Config Cfg;
+  Cfg.Documentation.CommentFormat = Config::CommentFormatPolicy::Doxygen;
+  WithContextValue WithCfg(Config::Key, std::move(Cfg));
+  const auto &FD = llvm::cast<FunctionDecl>(findDecl(AST, "func"));
+  EXPECT_EQ(FD.getNumParams(), 1UL);
+  EXPECT_EQ("this is param a and an\n@unknown command",
+            getDeclComment(AST.getASTContext(), *FD.parameters()[0]));
 }
 
 TEST_F(CompletionStringTest, MultipleAnnotations) {
@@ -154,6 +210,28 @@ TEST_F(CompletionStringTest, SnippetsInPatterns) {
   computeSignature(MakeCCS(),
                    /*ResultKind=*/CodeCompletionResult::ResultKind::RK_Pattern);
   EXPECT_EQ(Snippet, " ${1:name} = $0;");
+}
+
+TEST_F(CompletionStringTest, DropFunctionArguments) {
+  Builder.AddTypedTextChunk("foo");
+  Builder.AddChunk(CodeCompletionString::CK_LeftAngle);
+  Builder.AddPlaceholderChunk("typename T");
+  Builder.AddChunk(CodeCompletionString::CK_Comma);
+  Builder.AddPlaceholderChunk("int U");
+  Builder.AddChunk(CodeCompletionString::CK_RightAngle);
+  Builder.AddChunk(CodeCompletionString::CK_LeftParen);
+  Builder.AddPlaceholderChunk("arg1");
+  Builder.AddChunk(CodeCompletionString::CK_Comma);
+  Builder.AddPlaceholderChunk("arg2");
+  Builder.AddChunk(CodeCompletionString::CK_RightParen);
+
+  computeSignature(
+      *Builder.TakeString(),
+      /*ResultKind=*/CodeCompletionResult::ResultKind::RK_Declaration,
+      /*IncludeFunctionArguments=*/false);
+  // Arguments dropped from snippet, kept in signature.
+  EXPECT_EQ(Signature, "<typename T, int U>(arg1, arg2)");
+  EXPECT_EQ(Snippet, "<${1:typename T}, ${2:int U}>");
 }
 
 TEST_F(CompletionStringTest, IgnoreInformativeQualifier) {

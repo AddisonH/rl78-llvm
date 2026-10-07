@@ -6,20 +6,34 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC_SUPPORT_CPP_STRING_H
-#define LLVM_LIBC_SRC_SUPPORT_CPP_STRING_H
+#ifndef LLVM_LIBC_SRC___SUPPORT_CPP_STRING_H
+#define LLVM_LIBC_SRC___SUPPORT_CPP_STRING_H
 
+#include "hdr/func/free.h"
+#include "hdr/func/malloc.h"
+#include "hdr/func/realloc.h"
 #include "src/__support/CPP/string_view.h"
 #include "src/__support/integer_to_string.h" // IntegerToString
+#include "src/__support/macros/config.h"
+#include "src/__support/macros/null_check.h"
 #include "src/string/memory_utils/inline_memcpy.h"
 #include "src/string/memory_utils/inline_memset.h"
 #include "src/string/string_utils.h" // string_length
 
 #include <stddef.h> // size_t
-#include <stdlib.h> // malloc, free
 
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE_DECL {
 namespace cpp {
+namespace {
+
+char *realloc_or_die(char *ptr, size_t size) {
+  void *new_ptr = ::realloc(ptr, size);
+  // Out of memory: this is not handled in current implementation, so crash.
+  LIBC_CRASH_ON_NULLPTR(new_ptr);
+  return reinterpret_cast<char *>(new_ptr);
+}
+
+} // namespace
 
 // This class mimics std::string but does not intend to be a full fledged
 // implementation. Most notably it does not provide support for character traits
@@ -58,11 +72,14 @@ public:
     resize(count);
     inline_memcpy(buffer_, cstr, count);
   }
+  LIBC_INLINE string(const string_view &view)
+      : string(view.data(), view.size()) {}
   LIBC_INLINE string(const char *cstr)
-      : string(cstr, ::__llvm_libc::internal::string_length(cstr)) {}
+      : string(cstr, ::LIBC_NAMESPACE::internal::string_length(cstr)) {}
   LIBC_INLINE string(size_t size_, char value) {
     resize(size_);
-    inline_memset((void *)buffer_, value, size_);
+    static_assert(sizeof(char) == sizeof(uint8_t));
+    inline_memset((void *)buffer_, static_cast<uint8_t>(value), size_);
   }
 
   LIBC_INLINE string &operator=(const string &other) {
@@ -70,12 +87,24 @@ public:
     return (*this) += other;
   }
 
+  LIBC_INLINE string &operator=(char other) {
+    resize(0);
+    return (*this) += other;
+  }
+
   LIBC_INLINE string &operator=(string &&other) {
+    if (buffer_ != get_empty_string())
+      ::free(buffer_);
+
     buffer_ = other.buffer_;
     size_ = other.size_;
     capacity_ = other.capacity_;
     other.reset_no_deallocate();
     return *this;
+  }
+
+  LIBC_INLINE string &operator=(const string_view &view) {
+    return *this = string(view);
   }
 
   LIBC_INLINE ~string() {
@@ -122,22 +151,42 @@ public:
     // by 8 is cheap. We guard the extension so the operation doesn't overflow.
     if (new_capacity < SIZE_MAX / 11)
       new_capacity = new_capacity * 11 / 8;
-    if (void *Ptr = ::realloc(buffer_ == get_empty_string() ? nullptr : buffer_,
-                              new_capacity)) {
-      buffer_ = static_cast<char *>(Ptr);
-      capacity_ = new_capacity;
-    } else {
-      __builtin_unreachable(); // out of memory
-    }
+
+    buffer_ = realloc_or_die(buffer_ == get_empty_string() ? nullptr : buffer_,
+                             new_capacity);
+    capacity_ = new_capacity;
   }
 
   LIBC_INLINE void resize(size_t size) {
-    if (size > capacity_) {
+    // Avoid growing out of the static empty string during `resize(0)`,
+    // which may happen in string constructors.
+    if (size == size_)
+      return;
+
+    if (size >= capacity_) {
       reserve(size);
       const size_t size_extension = size - size_;
       inline_memset(data() + size_, '\0', size_extension);
     }
     set_size_and_add_null_character(size);
+  }
+
+  // Releases the backing C-string.
+  //
+  // The returned pointer must be free'd by the caller.
+  // This is a non-standard extension to std::string.
+  LIBC_INLINE char *release_c_str() {
+    if (buffer_ == get_empty_string()) {
+      // Ensure the buffer is heap allocated,
+      // so that it may later be passed to `free`.
+      char *res = realloc_or_die(nullptr, 1);
+      res[0] = '\0';
+      return res;
+    }
+
+    char *res = buffer_;
+    reset_no_deallocate();
+    return res;
   }
 
   LIBC_INLINE string &operator+=(const string &rhs) {
@@ -189,10 +238,8 @@ LIBC_INLINE string operator+(const char *lhs, const string &rhs) {
 
 namespace internal {
 template <typename T> string to_dec_string(T value) {
-  char dec_buf[IntegerToString::dec_bufsize<T>()];
-  auto maybe_string_view = IntegerToString::dec(value, dec_buf);
-  const auto &string_view = *maybe_string_view;
-  return string(string_view.data(), string_view.size());
+  const IntegerToString<T> buffer(value);
+  return buffer.view();
 }
 } // namespace internal
 
@@ -221,6 +268,6 @@ LIBC_INLINE string to_string(unsigned long long value) {
 // LIBC_INLINE string to_string(long double value);
 
 } // namespace cpp
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE_DECL
 
-#endif // LLVM_LIBC_SRC_SUPPORT_CPP_STRING_H
+#endif // LLVM_LIBC_SRC___SUPPORT_CPP_STRING_H

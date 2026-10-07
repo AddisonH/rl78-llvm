@@ -75,7 +75,7 @@ void RL78InsertNOPWithLabelPass::parseInsertInfo(StringRef InsertInfo) {
   // the range is from 1 to 4294967295.
   StringRef lineArg = ParseArgs[1];
   bool isLineValid = true;
-  if (lineArg.startswith("0x") || lineArg.startswith("0X")) {
+  if (lineArg.starts_with("0x") || lineArg.starts_with("0X")) {
     if (lineArg.drop_front(2).getAsInteger(16, lineNumber) || lineNumber < 1)
       isLineValid = false;
   } else {

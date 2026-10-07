@@ -110,7 +110,7 @@ public:
     return (AddrSpace == LangAS::__near)? 16 : 32;
   }
 
-  bool setCPU(const std::string &Name) override {
+  bool setCPU(StringRef Name) override {
     if ((Name.compare("RL78_S1") == 0) || (Name.compare("RL78_S2") == 0) ||
         (Name.compare("RL78_S3") == 0)) {
       CPUName = Name;
@@ -165,9 +165,24 @@ public:
 
   ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override;
 
-  ArrayRef<Builtin::Info> getTargetBuiltins() const override;
+  llvm::SmallVector<Builtin::InfosShard> getTargetBuiltins() const override;
 
   bool allowsLargerPreferedTypeAlignment() const override { return false; }
+
+  /// Default (near or far, depending on the data model), __near, __far_data
+  /// and __far_code convert into each other as the vendor compiler allowed:
+  /// Default <-> __near, and __far_data/__far_code are supersets of both and
+  /// of each other.
+  bool isAddressSpaceSupersetOf(LangAS A, LangAS B) const override {
+    auto IsNearOrDefault = [](LangAS AS) {
+      return AS == LangAS::Default || AS == LangAS::__near;
+    };
+    auto IsFar = [](LangAS AS) {
+      return AS == LangAS::__far_data || AS == LangAS::__far_code;
+    };
+    return A == B || (IsNearOrDefault(A) && IsNearOrDefault(B)) ||
+           (IsFar(A) && (IsNearOrDefault(B) || IsFar(B)));
+  }
 
   BuiltinVaListKind getBuiltinVaListKind() const override {
     return TargetInfo::VoidPtrBuiltinVaList;
@@ -176,7 +191,8 @@ public:
   // Returns a string of target-specific clobbers, in LLVM format.
   std::string_view getClobbers() const override { return ""; }
 
-  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts) override;
+  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
+              const TargetInfo *Aux) override;
 };
 
 } // namespace targets

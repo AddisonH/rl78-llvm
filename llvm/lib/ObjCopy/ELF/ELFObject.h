@@ -109,7 +109,7 @@ protected:
   WritableMemoryBuffer &Out;
 
 public:
-  virtual ~SectionWriter() = default;
+  ~SectionWriter() override = default;
 
   Error visit(const Section &Sec) override;
   Error visit(const OwnedDataSection &Sec) override;
@@ -134,7 +134,7 @@ private:
   using Elf_Sym = typename ELFT::Sym;
 
 public:
-  virtual ~ELFSectionWriter() {}
+  ~ELFSectionWriter() override = default;
   Error visit(const SymbolTableSection &Sec) override;
   Error visit(const RelocationSection &Sec) override;
   Error visit(const GnuDebugLinkSection &Sec) override;
@@ -172,14 +172,15 @@ public:
   friend class SectionWriter;                                                  \
   friend class IHexSectionWriterBase;                                          \
   friend class IHexSectionWriter;                                              \
-  friend class SRecSectionWriterBase;                                          \
-  friend class SRecSectionWriter;                                              \
+  friend class SRECSectionWriter;                                              \
+  friend class SRECSectionWriterBase;                                          \
+  friend class SRECSizeCalculator;                                             \
   template <class ELFT> friend class ELFSectionWriter;                         \
   template <class ELFT> friend class ELFSectionSizer;
 
 class BinarySectionWriter : public SectionWriter {
 public:
-  virtual ~BinarySectionWriter() {}
+  ~BinarySectionWriter() override = default;
 
   Error visit(const SymbolTableSection &Sec) override;
   Error visit(const RelocationSection &Sec) override;
@@ -306,134 +307,6 @@ public:
   Error visit(const StringTableSection &Sec) override;
 };
 
-struct SRecRecord {
-  // Memory address of the record.
-  uint16_t Addr;
-  // Record type (see below).
-  uint16_t Type;
-  // Record data in hexadecimal form.
-  StringRef HexData;
-
-  // Helper method to get file length of the record
-  // including newline character
-  // 
-  static size_t getLength(size_t DataSize, uint32_t Addr, uint8_t Type,
-                          uint8_t *NewType = nullptr,
-                          uint8_t *AddrSize = nullptr) {
-    uint8_t newType;
-    // S0 record is the only record we emmit for now which doesn't depend
-    // on the address.
-    uint8_t addrSize = 2;
-    if (Type == InvalidType) {
-      if (DataSize) {
-        if (Addr <= 0xFFFFU) {
-          newType = SRecRecord::S1;
-          addrSize = 2;
-        } else if (Addr <= 0xFFFFFFU) {
-          newType = SRecRecord::S2;
-          addrSize = 3;
-        } else {
-          newType = SRecRecord::S3;
-          addrSize = 4;
-        }
-      } else {
-        if (Addr <= 0xFFFFU) {
-          newType = SRecRecord::S9;
-          addrSize = 2;
-        } else if (Addr <= 0xFFFFFFU) {
-          newType = SRecRecord::S8;
-          addrSize = 3;
-        } else {
-          newType = SRecRecord::S7;
-          addrSize = 4;
-        }
-      }
-    }
-    if (NewType)
-      *NewType = (Type == InvalidType)? newType : Type;
-    if (AddrSize)
-      *AddrSize = addrSize;
-    // STLL[AA...AA][DD...DD]CC'
-    return 2 + 2 + addrSize * 2 + DataSize * 2 + 2;
-  }
-
-  // Gets length of line in a file (getLength + CRLF).
-  static size_t getLineLength(size_t DataSize, uint32_t Addr, uint8_t Type,
-                              uint8_t *NewType = nullptr,
-                              uint8_t *AddrSize = nullptr) {
-    return getLength(DataSize, Addr, Type, NewType, AddrSize) + 2;
-  }
-
-  // Given type, address and data returns line which can
-  // be written to output file.
-  static IHexLineData getLine(uint8_t Type, uint32_t Addr,
-                              ArrayRef<uint8_t> Data);
-
-  // Calculates checksum of stringified record representation
-  // S must NOT contain the type (S[0-9]) and trailing whitespace
-  // characters
-  static uint8_t getChecksum(StringRef S);
-
-  enum Type {
-    // This record contains vendor specific ASCII text comment represented 
-    // as a series of hex digit pairs. It is common to see the data for this 
-    // record in the format of a null-terminated string.
-    S0 = 0,
-    // This record contains data that starts at a 16-bit address.
-    S1 = 1,
-    // This record contains data that starts at a 24-bit address.
-    S2 = 2,
-    // This record contains data that starts at a 32 - bit address.
-    S3 = 3,
-    // This record is reserved.
-    S4 = 4,
-    // This optional record contains a 16-bit count of S1/S2/S3 records.
-    S5 = 5,
-    // This optional record contains a 24-bit count of S1/S2/S3 records.
-    S6 = 6,
-    // This record contains the starting execution location at a 32-bit address.
-    S7 = 7,
-    // This record contains the starting execution location at a 24-bit address.
-    S8 = 8,
-    // This record contains the starting execution location at a 16-bit address.
-    S9 = 9,
-    // We have no other valid types.
-    InvalidType = 10
-  };
-};
-
-// Base class for SRecSectionWriter. This class implements writing algorithm,
-// but doesn't actually write records. It is used for output buffer size
-// calculation in SRecWriter::finalize.
-class SRecSectionWriterBase : public BinarySectionWriter {
-protected:
-  // Offset in the output buffer
-  uint64_t Offset = 0;
-
-  void writeSection(const SectionBase *Sec, ArrayRef<uint8_t> Data);
-  virtual void writeData(uint8_t Type, uint32_t Addr, ArrayRef<uint8_t> Data);
-
-public:
-  explicit SRecSectionWriterBase(WritableMemoryBuffer &Buf) : BinarySectionWriter(Buf) {}
-
-  uint64_t getBufferOffset() const { return Offset; }
-  void setBufferOffset(uint64_t offset) {  Offset = offset; }
-  Error visit(const Section &Sec) final;
-  Error visit(const OwnedDataSection &Sec) final;
-  Error visit(const StringTableSection &Sec) override;
-  Error visit(const DynamicRelocationSection &Sec) final;
-  using BinarySectionWriter::visit;
-};
-
-// Real SREC section writer
-class SRecSectionWriter : public SRecSectionWriterBase {
-public:
-  SRecSectionWriter(WritableMemoryBuffer &Buf) : SRecSectionWriterBase(Buf) {}
-
-  void writeData(uint8_t Type, uint32_t Addr, ArrayRef<uint8_t> Data) override;
-  Error visit(const StringTableSection &Sec) override;
-};
-
 class Writer {
 protected:
   Object &Obj;
@@ -473,7 +346,7 @@ private:
   size_t totalSize() const;
 
 public:
-  virtual ~ELFWriter() {}
+  ~ELFWriter() override = default;
   bool WriteSectionHeaders;
 
   // For --only-keep-debug, select an alternative section/segment layout
@@ -487,59 +360,150 @@ public:
 
 class BinaryWriter : public Writer {
 private:
+  const uint8_t GapFill;
+  const uint64_t PadTo;
   std::unique_ptr<BinarySectionWriter> SecWriter;
 
   uint64_t TotalSize = 0;
 
 public:
-  ~BinaryWriter() {}
+  ~BinaryWriter() override = default;
   Error finalize() override;
   Error write() override;
-  BinaryWriter(Object &Obj, raw_ostream &Out) : Writer(Obj, Out) {}
+  BinaryWriter(Object &Obj, raw_ostream &Out, const CommonConfig &Config)
+      : Writer(Obj, Out), GapFill(Config.GapFill), PadTo(Config.PadTo) {}
 };
 
-class IHexWriter : public Writer {
-  struct SectionCompare {
-    bool operator()(const SectionBase *Lhs, const SectionBase *Rhs) const;
-  };
+// A base class for writing ascii hex formats such as srec and ihex.
+class ASCIIHexWriter : public Writer {
+public:
+  ASCIIHexWriter(Object &Obj, raw_ostream &OS, StringRef OutputFile)
+      : Writer(Obj, OS), OutputFileName(OutputFile) {}
+  Error finalize() override;
 
-  std::set<const SectionBase *, SectionCompare> Sections;
+protected:
+  StringRef OutputFileName;
   size_t TotalSize = 0;
+  std::vector<const SectionBase *> Sections;
 
-  Error checkSection(const SectionBase &Sec);
+  Error checkSection(const SectionBase &S) const;
+  virtual Expected<size_t>
+  getTotalSize(WritableMemoryBuffer &EmptyBuffer) const = 0;
+};
+
+class IHexWriter : public ASCIIHexWriter {
+public:
+  Error write() override;
+  IHexWriter(Object &Obj, raw_ostream &Out, StringRef OutputFile)
+      : ASCIIHexWriter(Obj, Out, OutputFile) {}
+
+private:
   uint64_t writeEntryPointRecord(uint8_t *Buf);
   uint64_t writeEndOfFileRecord(uint8_t *Buf);
-
-public:
-  ~IHexWriter() {}
-  Error finalize() override;
-  Error write() override;
-  IHexWriter(Object &Obj, raw_ostream &Out) : Writer(Obj, Out) {}
+  Expected<size_t>
+  getTotalSize(WritableMemoryBuffer &EmptyBuffer) const override;
 };
 
-class SRecWriter : public Writer {
-  StringRef OutputFilename;
-  bool SymbolSRec;
-  std::string SymbolsStr;
-
-  struct SectionCompare {
-    bool operator()(const SectionBase *Lhs, const SectionBase *Rhs) const;
-  };
-
-  std::set<const SectionBase *, SectionCompare> Sections;
-  size_t TotalSize = 0;
-
-  Error checkSection(const SectionBase &Sec);
-  uint64_t writeEntryPointRecord(char *Buf);
-  uint64_t writeS0Record(char *Buf);
-  uint64_t writeSymbols();
-
+class SRECWriter : public ASCIIHexWriter {
 public:
-  ~SRecWriter() {}
-  Error finalize() override;
+  SRECWriter(Object &Obj, raw_ostream &OS, StringRef OutputFile)
+      : ASCIIHexWriter(Obj, OS, OutputFile) {}
   Error write() override;
-  SRecWriter(StringRef OutputFilename, Object &Obj, raw_ostream &Out, bool symbolSRec)
-      : Writer(Obj, Out), OutputFilename(OutputFilename), SymbolSRec(symbolSRec) {}
+
+private:
+  size_t writeHeader(uint8_t *Buf);
+  size_t writeTerminator(uint8_t *Buf, uint8_t Type);
+  Expected<size_t>
+  getTotalSize(WritableMemoryBuffer &EmptyBuffer) const override;
+};
+
+using SRecLineData = SmallVector<char, 64>;
+struct SRecord {
+  uint8_t Type;
+  uint32_t Address;
+  ArrayRef<uint8_t> Data;
+  SRecLineData toString() const;
+  uint8_t getCount() const;
+  // Get address size in characters.
+  uint8_t getAddressSize() const;
+  uint8_t getChecksum() const;
+  size_t getSize() const;
+  static SRecord getHeader(StringRef FileName);
+  static uint8_t getType(uint32_t Address);
+
+  enum Type : uint8_t {
+    // Vendor specific text comment.
+    S0 = 0,
+    // Data that starts at a 16 bit address.
+    S1 = 1,
+    // Data that starts at a 24 bit address.
+    S2 = 2,
+    // Data that starts at a 32 bit address.
+    S3 = 3,
+    // Reserved.
+    S4 = 4,
+    // 16 bit count of S1/S2/S3 records (optional).
+    S5 = 5,
+    // 32 bit count of S1/S2/S3 records (optional).
+    S6 = 6,
+    // Terminates a series of S3 records.
+    S7 = 7,
+    // Terminates a series of S2 records.
+    S8 = 8,
+    // Terminates a series of S1 records.
+    S9 = 9
+  };
+};
+
+class SRECSectionWriterBase : public BinarySectionWriter {
+public:
+  explicit SRECSectionWriterBase(WritableMemoryBuffer &Buf,
+                                 uint64_t StartOffset)
+      : BinarySectionWriter(Buf), Offset(StartOffset), HeaderSize(StartOffset) {
+  }
+
+  using BinarySectionWriter::visit;
+
+  void writeRecords(uint32_t Entry);
+  uint64_t getBufferOffset() const { return Offset; }
+  Error visit(const Section &S) override;
+  Error visit(const OwnedDataSection &S) override;
+  Error visit(const StringTableSection &S) override;
+  Error visit(const DynamicRelocationSection &S) override;
+  uint8_t getType() const { return Type; };
+
+protected:
+  // Offset in the output buffer.
+  uint64_t Offset;
+  // Sections start after the header.
+  uint64_t HeaderSize;
+  // Type of records to write.
+  uint8_t Type = SRecord::S1;
+  std::vector<SRecord> Records;
+
+  void writeSection(const SectionBase &S, ArrayRef<uint8_t> Data);
+  virtual void writeRecord(SRecord &Record, uint64_t Off) = 0;
+};
+
+// An SRECSectionWriterBase that visits sections but does not write anything.
+// This class is only used to calculate the size of the output file.
+class SRECSizeCalculator : public SRECSectionWriterBase {
+public:
+  SRECSizeCalculator(WritableMemoryBuffer &EmptyBuffer, uint64_t Offset)
+      : SRECSectionWriterBase(EmptyBuffer, Offset) {}
+
+protected:
+  void writeRecord(SRecord &Record, uint64_t Off) override {}
+};
+
+class SRECSectionWriter : public SRECSectionWriterBase {
+public:
+  SRECSectionWriter(WritableMemoryBuffer &Buf, uint64_t Offset)
+      : SRECSectionWriterBase(Buf, Offset) {}
+  Error visit(const StringTableSection &Sec) override;
+
+protected:
+  void writeRecord(SRecord &Record, uint64_t Off) override;
 };
 
 class SectionBase {
@@ -585,6 +549,7 @@ public:
   virtual void
   replaceSectionReferences(const DenseMap<SectionBase *, SectionBase *> &);
   virtual bool hasContents() const { return false; }
+  virtual ArrayRef<uint8_t> getContents() const { return {}; }
   // Notify the section that it is subject to removal.
   virtual void onRemove();
 
@@ -655,6 +620,8 @@ public:
   bool hasContents() const override {
     return Type != ELF::SHT_NOBITS && Type != ELF::SHT_NULL;
   }
+  ArrayRef<uint8_t> getContents() const override { return Contents; }
+
   void restoreSymTabLink(SymbolTableSection &SymTab) override;
 };
 
@@ -690,6 +657,7 @@ public:
   Error accept(SectionVisitor &Sec) const override;
   Error accept(MutableSectionVisitor &Visitor) override;
   bool hasContents() const override { return true; }
+  ArrayRef<uint8_t> getContents() const override { return Data; }
 };
 
 class CompressedSection : public SectionBase {
@@ -816,7 +784,7 @@ private:
   SymbolTableSection *Symbols = nullptr;
 
 public:
-  virtual ~SectionIndexSection() {}
+  ~SectionIndexSection() override = default;
   void addIndex(uint32_t Index) {
     assert(Size > 0);
     Indexes.push_back(Index);
@@ -917,7 +885,8 @@ public:
   StringRef getNamePrefix() const;
 
   static bool classof(const SectionBase *S) {
-    return S->OriginalType == ELF::SHT_REL || S->OriginalType == ELF::SHT_RELA;
+    return is_contained({ELF::SHT_REL, ELF::SHT_RELA, ELF::SHT_CREL},
+                        S->OriginalType);
   }
 };
 
@@ -946,7 +915,7 @@ class RelocationSection
 
 public:
   RelocationSection(const Object &O) : Obj(O) {}
-  void addRelocation(Relocation Rel) { Relocations.push_back(Rel); }
+  void addRelocation(const Relocation &Rel) { Relocations.push_back(Rel); }
   Error accept(SectionVisitor &Visitor) const override;
   Error accept(MutableSectionVisitor &Visitor) override;
   Error removeSectionReferences(
@@ -961,7 +930,7 @@ public:
   static bool classof(const SectionBase *S) {
     if (S->OriginalFlags & ELF::SHF_ALLOC)
       return false;
-    return S->OriginalType == ELF::SHT_REL || S->OriginalType == ELF::SHT_RELA;
+    return RelocationSectionBase::classof(S);
   }
 };
 
@@ -976,6 +945,9 @@ class GroupSection : public SectionBase {
   SmallVector<SectionBase *, 3> GroupMembers;
 
 public:
+  template <class T>
+  using ConstRange = iterator_range<
+      pointee_iterator<typename llvm::SmallVector<T *, 3>::const_iterator>>;
   // TODO: Contents is present in several classes of the hierarchy.
   // This needs to be refactored to avoid duplication.
   ArrayRef<uint8_t> Contents;
@@ -998,6 +970,10 @@ public:
   void replaceSectionReferences(
       const DenseMap<SectionBase *, SectionBase *> &FromTo) override;
   void onRemove() override;
+
+  ConstRange<SectionBase> members() const {
+    return make_pointee_range(GroupMembers);
+  }
 
   static bool classof(const SectionBase *S) {
     return S->OriginalType == ELF::SHT_GROUP;
@@ -1083,7 +1059,8 @@ protected:
   Error initSections();
 
 public:
-  BasicELFBuilder() : Obj(std::make_unique<Object>()) {}
+  BasicELFBuilder();
+  ~BasicELFBuilder();
 };
 
 class BinaryELFBuilder : public BasicELFBuilder {
@@ -1192,6 +1169,8 @@ private:
     return Sec.Flags & ELF::SHF_ALLOC;
   };
 
+  Error updateSectionData(SecPtr &Sec, ArrayRef<uint8_t> Data);
+
 public:
   template <class T>
   using ConstRange = iterator_range<pointee_iterator<
@@ -1234,6 +1213,7 @@ public:
 
   const auto &getUpdatedSections() const { return UpdatedSections; }
   Error updateSection(StringRef Name, ArrayRef<uint8_t> Data);
+  Error updateSectionData(SectionBase &S, ArrayRef<uint8_t> Data);
 
   SectionBase *findSection(StringRef Name) {
     auto SecIt =
@@ -1246,6 +1226,7 @@ public:
 
   Error removeSections(bool AllowBrokenLinks,
                        std::function<bool(const SectionBase &)> ToRemove);
+  Error compressOrDecompressSections(const CommonConfig &Config);
   Error replaceSections(const DenseMap<SectionBase *, SectionBase *> &FromTo);
   Error removeSymbols(function_ref<bool(const Symbol &)> ToRemove);
   template <class T, class... Ts> T &addSection(Ts &&...Args) {

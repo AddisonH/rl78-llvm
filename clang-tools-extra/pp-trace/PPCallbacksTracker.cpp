@@ -44,7 +44,7 @@ static std::string getSourceLocationString(Preprocessor &PP,
     std::string Result = SS.str();
 
     // YAML treats backslash as escape, so use forward slashes.
-    std::replace(Result.begin(), Result.end(), '\\', '/');
+    llvm::replace(Result, '\\', '/');
 
     return Result;
   }
@@ -60,8 +60,9 @@ static const char *const FileChangeReasonStrings[] = {
 };
 
 // CharacteristicKind strings.
-static const char *const CharacteristicKindStrings[] = { "C_User", "C_System",
-                                                         "C_ExternCSystem" };
+static const char *const CharacteristicKindStrings[] = {
+    "C_User", "C_System", "C_ExternCSystem", "C_User_ModuleMap",
+    "C_System_ModuleMap"};
 
 // MacroDirective::Kind strings.
 static const char *const MacroDirectiveKindStrings[] = {
@@ -135,7 +136,8 @@ void PPCallbacksTracker::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, llvm::StringRef FileName,
     bool IsAngled, CharSourceRange FilenameRange, OptionalFileEntryRef File,
     llvm::StringRef SearchPath, llvm::StringRef RelativePath,
-    const Module *Imported, SrcMgr::CharacteristicKind FileType) {
+    const Module *SuggestedModule, bool ModuleImported,
+    SrcMgr::CharacteristicKind FileType) {
   beginCallback("InclusionDirective");
   appendArgument("HashLoc", HashLoc);
   appendArgument("IncludeTok", IncludeTok);
@@ -145,7 +147,8 @@ void PPCallbacksTracker::InclusionDirective(
   appendArgument("File", File);
   appendFilePathArgument("SearchPath", SearchPath);
   appendFilePathArgument("RelativePath", RelativePath);
-  appendArgument("Imported", Imported);
+  appendArgument("SuggestedModule", SuggestedModule);
+  appendArgument("ModuleImported", ModuleImported);
 }
 
 // Callback invoked whenever there was an explicit module-import
@@ -476,7 +479,8 @@ void PPCallbacksTracker::appendArgument(const char *Name, FileID Value) {
     appendArgument(Name, "(invalid)");
     return;
   }
-  const FileEntry *FileEntry = PP.getSourceManager().getFileEntryForID(Value);
+  OptionalFileEntryRef FileEntry =
+      PP.getSourceManager().getFileEntryRefForID(Value);
   if (!FileEntry) {
     appendArgument(Name, "(getFileEntryForID failed)");
     return;
@@ -544,8 +548,8 @@ void PPCallbacksTracker::appendArgument(const char *Name, ModuleIdPath Value) {
     if (I)
       SS << ", ";
     SS << "{"
-       << "Name: " << Value[I].first->getName() << ", "
-       << "Loc: " << getSourceLocationString(PP, Value[I].second) << "}";
+       << "Name: " << Value[I].getIdentifierInfo()->getName() << ", "
+       << "Loc: " << getSourceLocationString(PP, Value[I].getLoc()) << "}";
   }
   SS << "]";
   appendArgument(Name, SS.str());
@@ -601,7 +605,7 @@ void PPCallbacksTracker::appendArgument(const char *Name,
   llvm::raw_string_ostream SS(Str);
   SS << "[";
 
-  // Each argument is is a series of contiguous Tokens, terminated by a eof.
+  // Each argument is a series of contiguous Tokens, terminated by a eof.
   // Go through each argument printing tokens until we reach eof.
   for (unsigned I = 0; I < Value->getNumMacroArguments(); ++I) {
     const Token *Current = Value->getUnexpArgument(I);
@@ -650,7 +654,7 @@ void PPCallbacksTracker::appendFilePathArgument(const char *Name,
                                                 llvm::StringRef Value) {
   std::string Path(Value);
   // YAML treats backslash as escape, so use forward slashes.
-  std::replace(Path.begin(), Path.end(), '\\', '/');
+  llvm::replace(Path, '\\', '/');
   appendQuotedArgument(Name, Path);
 }
 

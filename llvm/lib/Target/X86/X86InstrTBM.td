@@ -46,11 +46,11 @@ multiclass tbm_binary_rm<bits<8> opc, Format FormReg, Format FormMem,
 let hasSideEffects = 0 in {
   def rr : I<opc,  FormReg, (outs RC:$dst), (ins RC:$src),
              !strconcat(OpcodeStr,"\t{$src, $dst|$dst, $src}"), []>,
-             XOP_4V, XOP9, Sched<[Sched]>;
+             XOP, VVVV, XOP9, Sched<[Sched]>;
   let mayLoad = 1 in
   def rm : I<opc,  FormMem, (outs RC:$dst), (ins x86memop:$src),
              !strconcat(OpcodeStr,"\t{$src, $dst|$dst, $src}"), []>,
-             XOP_4V, XOP9, Sched<[Sched.Folded]>;
+             XOP, VVVV, XOP9, Sched<[Sched.Folded]>;
 }
 }
 
@@ -124,6 +124,11 @@ let Predicates = [HasTBM] in {
             (BLSFILL32rr GR32:$src)>;
   def : Pat<(or GR64:$src, (add GR64:$src, -1)),
             (BLSFILL64rr GR64:$src)>;
+
+  def : Pat<(xor (and GR32:$src, (ineg GR32:$src)), -1),
+            (BLSIC32rr GR32:$src)>;
+  def : Pat<(xor (and GR64:$src, (ineg GR64:$src)), -1),
+            (BLSIC64rr GR64:$src)>;
 
   def : Pat<(or (not GR32:$src), (add GR32:$src, -1)),
             (BLSIC32rr GR32:$src)>;

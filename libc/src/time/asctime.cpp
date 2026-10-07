@@ -8,15 +8,24 @@
 
 #include "src/time/asctime.h"
 #include "src/__support/common.h"
+#include "src/__support/libc_errno.h"
+#include "src/__support/macros/config.h"
+#include "src/__support/macros/null_check.h"
+#include "src/time/time_constants.h"
 #include "src/time/time_utils.h"
 
-namespace __llvm_libc {
-
-using __llvm_libc::time_utils::TimeConstants;
+namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(char *, asctime, (const struct tm *timeptr)) {
-  static char buffer[TimeConstants::ASCTIME_BUFFER_SIZE];
-  return time_utils::asctime(timeptr, buffer, TimeConstants::ASCTIME_MAX_BYTES);
+  LIBC_CRASH_ON_NULLPTR(timeptr);
+  static char buffer[time_constants::ASCTIME_BUFFER_SIZE];
+  auto res =
+      time_utils::asctime(timeptr, buffer, time_constants::ASCTIME_MAX_BYTES);
+  if (!res) {
+    libc_errno = res.error();
+    return nullptr;
+  }
+  return res.value();
 }
 
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE_DECL

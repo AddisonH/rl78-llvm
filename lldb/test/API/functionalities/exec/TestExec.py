@@ -8,6 +8,7 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
+@skipIfWasm  # no exec() on WebAssembly
 class ExecTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -44,6 +45,8 @@ class ExecTestCase(TestBase):
 
         # Create the target
         target = self.dbg.CreateTarget(exe)
+
+        lldbutil.install_to_target(self, secondprog)
 
         # Create any breakpoints we need
         breakpoint1 = target.BreakpointCreateBySourceRegex(
@@ -142,6 +145,8 @@ class ExecTestCase(TestBase):
         self.build()
         exe = self.getBuildArtifact("a.out")
         target = self.dbg.CreateTarget(exe)
+
+        lldbutil.install_to_target(self, self.getBuildArtifact("secondprog"))
 
         (target, process, thread, breakpoint1) = lldbutil.run_to_source_breakpoint(
             self, "Set breakpoint 1 here", lldb.SBFileSpec("main.c", False)

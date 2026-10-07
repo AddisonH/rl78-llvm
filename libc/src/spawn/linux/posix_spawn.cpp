@@ -7,68 +7,47 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/spawn/posix_spawn.h"
-
-#include "src/__support/CPP/optional.h"
+#include "src/__support/OSUtil/linux/syscall_wrappers/dup2.h"
+#include "src/__support/OSUtil/linux/syscall_wrappers/open.h"
 #include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 #include "src/spawn/file_actions.h"
 
-#include <fcntl.h>
+#include "hdr/fcntl_macros.h"
+#include "hdr/types/mode_t.h"
+#include "src/signal/linux/signal_utils.h"
 #include <signal.h> // For SIGCHLD
 #include <spawn.h>
 #include <sys/syscall.h> // For syscall numbers.
 
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE_DECL {
 
 namespace {
 
 pid_t fork() {
+  // Block signal and stop abort sigaction modification.
+  SigAbortGuard guard(/*exclusive=*/false);
   // TODO: Use only the clone syscall and use a sperate small stack in the child
   // to avoid duplicating the complete stack from the parent. A new stack will
   // be created on exec anyway so duplicating the full stack is unnecessary.
 #ifdef SYS_fork
-  return __llvm_libc::syscall_impl(SYS_fork);
+  return LIBC_NAMESPACE::syscall_impl<pid_t>(SYS_fork);
 #elif defined(SYS_clone)
-  return __llvm_libc::syscall_impl(SYS_clone, SIGCHLD, 0);
+  return LIBC_NAMESPACE::syscall_impl<pid_t>(SYS_clone, SIGCHLD, 0);
 #else
 #error "fork or clone syscalls not available."
 #endif
 }
 
-cpp::optional<int> open(const char *path, int oflags, mode_t mode) {
-#ifdef SYS_open
-  int fd = __llvm_libc::syscall_impl(SYS_open, path, oflags, mode);
-#else
-  int fd = __llvm_libc::syscall_impl(SYS_openat, AT_FDCWD, path, oflags, mode);
-#endif
-  if (fd > 0)
-    return fd;
-  // The open function is called as part of the child process' preparatory
-  // steps. If an open fails, the child process just exits. So, unlike
-  // the public open function, we do not need to set errno here.
-  return cpp::nullopt;
-}
-
-void close(int fd) { __llvm_libc::syscall_impl(SYS_close, fd); }
-
-// We use dup3 if dup2 is not available, similar to our implementation of dup2
-bool dup2(int fd, int newfd) {
-#ifdef SYS_dup2
-  long ret = __llvm_libc::syscall_impl(SYS_dup2, fd, newfd);
-#elif defined(SYS_dup3)
-  long ret = __llvm_libc::syscall_impl(SYS_dup3, fd, newfd, 0);
-#else
-#error "dup2 and dup3 syscalls not available."
-#endif
-  return ret < 0 ? false : true;
-}
+void close(int fd) { LIBC_NAMESPACE::syscall_impl<long>(SYS_close, fd); }
 
 // All exits from child_process are error exits. So, we use a simple
 // exit implementation which exits with code 127.
 void exit() {
   for (;;) {
-    __llvm_libc::syscall_impl(SYS_exit_group, 127);
-    __llvm_libc::syscall_impl(SYS_exit, 127);
+    LIBC_NAMESPACE::syscall_impl<long>(SYS_exit_group, 127);
+    LIBC_NAMESPACE::syscall_impl<long>(SYS_exit, 127);
   }
 }
 
@@ -88,12 +67,14 @@ void child_process(const char *__restrict path,
       switch (act->type) {
       case BaseSpawnFileAction::OPEN: {
         auto *open_act = reinterpret_cast<SpawnFileOpenAction *>(act);
-        auto fd = open(open_act->path, open_act->oflag, open_act->mode);
+        ErrorOr<int> fd = linux_syscalls::open(open_act->path, open_act->oflag,
+                                               open_act->mode);
         if (!fd)
           exit();
         int actual_fd = *fd;
         if (actual_fd != open_act->fd) {
-          bool dup2_result = dup2(actual_fd, open_act->fd);
+          bool dup2_result =
+              linux_syscalls::dup2(actual_fd, open_act->fd).has_value();
           close(actual_fd); // The old fd is not needed anymore.
           if (!dup2_result)
             exit();
@@ -107,7 +88,7 @@ void child_process(const char *__restrict path,
       }
       case BaseSpawnFileAction::DUP2: {
         auto *dup2_act = reinterpret_cast<SpawnFileDup2Action *>(act);
-        if (!dup2(dup2_act->fd, dup2_act->newfd))
+        if (!linux_syscalls::dup2(dup2_act->fd, dup2_act->newfd).has_value())
           exit();
         break;
       }
@@ -116,7 +97,7 @@ void child_process(const char *__restrict path,
     }
   }
 
-  if (__llvm_libc::syscall_impl(SYS_execve, path, argv, envp) < 0)
+  if (LIBC_NAMESPACE::syscall_impl<long>(SYS_execve, path, argv, envp) < 0)
     exit();
 }
 
@@ -144,4 +125,4 @@ LLVM_LIBC_FUNCTION(int, posix_spawn,
   return 0;
 }
 
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE_DECL

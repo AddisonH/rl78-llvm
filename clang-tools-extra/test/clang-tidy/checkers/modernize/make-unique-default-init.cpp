@@ -1,13 +1,11 @@
 // RUN: %check_clang_tidy -std=c++14-or-later %s modernize-make-unique %t -- \
 // RUN:   -config="{CheckOptions: \
-// RUN:             [{key: modernize-make-unique.IgnoreDefaultInitialization, \
-// RUN:               value: 'false'}] \
-// RUN:             }" \
-// RUN:   -- -I %S/Inputs/smart-ptr
+// RUN:             {modernize-make-unique.IgnoreDefaultInitialization: \
+// RUN:              'false'}} \
+// RUN:             }"
 
-#include "initializer_list.h"
-#include "unique_ptr.h"
-// CHECK-FIXES: #include <memory>
+#include <memory>
+#include <vector>
 
 void basic() {
   std::unique_ptr<int> P1 = std::unique_ptr<int>(new int());

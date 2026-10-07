@@ -11,16 +11,16 @@
 #
 # Required Packages:
 # * Fedora:
-#   * dnf install doxygen python3-sphinx texlive-epstopdf ghostscript \
+#   * dnf install doxygen texlive-epstopdf ghostscript \
 #                 ninja-build gcc-c++
-#   * pip install sphinx-markdown-tables
+#   * pip install --user -r ./llvm/docs/requirements.txt
 # * Ubuntu:
-#   * apt-get install doxygen sphinx-common python3-recommonmark \
+#   * apt-get install doxygen \
 #             ninja-build graphviz texlive-font-utils
-#   * pip install sphinx-markdown-tables
+#   * pip install --user -r ./llvm/docs/requirements.txt
 #===------------------------------------------------------------------------===#
 
-set -ex
+set -e
 
 builddir=docs-build
 srcdir=$(readlink -f $(dirname "$(readlink -f "$0")")/../..)
@@ -34,6 +34,9 @@ usage() {
   echo "                documentation from that source."
   echo " -srcdir  <dir> Path to llvm source directory with CMakeLists.txt"
   echo "                (optional) default: $srcdir"
+  echo " -no-doxygen    Don't build Doxygen docs"
+  echo " -no-sphinx     Don't build Spinx docs"
+  echo " -no-man-pages  Don't build man pages"
 }
 
 package_doxygen() {
@@ -56,6 +59,15 @@ while [ $# -gt 0 ]; do
     -srcdir )
       shift
       custom_srcdir=$1
+      ;;
+    -no-doxygen )
+      no_doxygen="yes"
+      ;;
+    -no-sphinx )
+      no_sphinx="yes"
+      ;;
+    -no-man-pages )
+      no_man_pages="yes"
       ;;
     * )
       echo "unknown option: $1"
@@ -89,41 +101,84 @@ if [ -n "$release" ]; then
   srcdir="./llvm-project/llvm"
 fi
 
-cmake -G Ninja $srcdir -B $builddir \
-               -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;polly;flang" \
-               -DCMAKE_BUILD_TYPE=Release \
-               -DLLVM_ENABLE_DOXYGEN=ON \
-               -DLLVM_ENABLE_SPHINX=ON \
-               -DLLVM_BUILD_DOCS=ON \
-               -DLLVM_DOXYGEN_SVG=ON \
-               -DSPHINX_WARNINGS_AS_ERRORS=OFF
+if [ "$no_doxygen" == "yes" ] && [ "$no_sphinx" == "yes" ] && [ "$no_man_pages" == "yes" ]; then
+  echo "You can't specify -no-doxygen, -no-sphinx, and -no-man_pages, we have nothing to build then!"
+  exit 1
+fi
 
-ninja -C $builddir \
-               docs-clang-html \
-               docs-clang-tools-html \
-               docs-flang-html \
-               docs-lld-html \
-               docs-llvm-html \
-               docs-polly-html \
-               doxygen-clang \
-               doxygen-clang-tools \
-               doxygen-flang \
-               doxygen-llvm \
-               doxygen-mlir \
-               doxygen-polly
+# Try to determine the release from the current git directory if none is given
+# and format it like this: 23.0.0-gc823de88d51f58
+if [ -z "$release" ]; then
+  release=$(git -C $srcdir show HEAD:cmake/Modules/LLVMVersion.cmake | grep -ioP 'set\(\s*LLVM_VERSION_(MAJOR|MINOR|PATCH)\s\K[0-9]+' | paste -sd '.')
+  git_rev=$(git rev-parse HEAD)
+  release="$release-g${git_rev:0:14}"
+fi
+
+if [ "$no_sphinx" != "yes" ]; then
+  echo "Sphinx: enabled"
+  sphinx_targets="docs-clang-html docs-clang-tools-html docs-flang-html docs-lld-html docs-llvm-html docs-polly-html"
+  sphinx_flag=" -DLLVM_ENABLE_SPHINX=ON -DSPHINX_WARNINGS_AS_ERRORS=OFF"
+else
+  echo "Sphinx: disabled"
+fi
+
+if [ "${no_man_pages}" != "yes" ]; then
+  echo "Man pages: enabled"
+  man_page_targets="install-docs-clang-man install-docs-clang-tools-man install-docs-dsymutil-man install-docs-flang-man install-docs-lldb-man install-docs-llvm-dwarfdump-man install-docs-llvm-man install-docs-polly-man"
+  install_prefix=${builddir}/install
+  man_page_flag=" -DLLVM_ENABLE_SPHINX=ON -DSPHINX_WARNINGS_AS_ERRORS=OFF -DSPHINX_OUTPUT_MAN:BOOL=ON -DCMAKE_INSTALL_PREFIX=${install_prefix}"
+  extra_man_page_projects=";lldb;mlir;bolt"
+  extra_man_page_runtimes=";compiler-rt;openmp;"
+else
+  echo "Man pages: disabled"
+fi
+
+if [ "$no_doxygen" != "yes" ]; then
+  echo "Doxygen: enabled"
+  doxygen_targets="$docs_target doxygen-clang doxygen-clang-tools doxygen-flang doxygen-llvm doxygen-mlir doxygen-polly"
+  doxygen_flag=" -DLLVM_ENABLE_DOXYGEN=ON"
+else
+   echo "Doxygen: disabled"
+fi
+
+cmake -G Ninja $srcdir -B $builddir \
+               -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;polly;flang${extra_man_page_projects}" \
+               -DCMAKE_BUILD_TYPE=Release \
+               -DLLVM_BUILD_DOCS=ON \
+               $sphinx_flag \
+               $doxygen_flag \
+               $man_page_flag
+
+ninja -C $builddir $sphinx_targets $doxygen_targets $man_page_targets
 
 cmake -G Ninja $srcdir/../runtimes -B $builddir/runtimes-doc \
-               -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+               -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;${extra_man_page_runtimes}" \
                -DLLVM_ENABLE_SPHINX=ON \
+               -DLLVM_BUILD_DOCS=ON \
                -DSPHINX_WARNINGS_AS_ERRORS=OFF
 
 ninja -C $builddir/runtimes-doc \
-               docs-libcxx-html \
+               docs-libcxx-html
 
-package_doxygen llvm .
-package_doxygen clang tools/clang
-package_doxygen clang-tools-extra tools/clang/tools/extra
-package_doxygen flang tools/flang
+if [ "${no_man_page}" != "yes" ]; then
+  output="llvm_man_pages-${release}"
+  # The LLD man_page is not installed automatically even when running the
+  # "install-docs-lld-man" target.
+  cp -v ${srcdir}/../lld/docs/ld.lld.1 ${install_prefix}/share/man/man1
+  mv ${install_prefix}/share/man/man1 ${output}
+  tar -cJf ${output}.tar.xz ${output}
+fi
+
+if [ "$no_doxygen" != "yes" ]; then
+  package_doxygen llvm .
+  package_doxygen clang tools/clang
+  package_doxygen clang-tools-extra tools/clang/tools/extra
+  package_doxygen flang tools/flang
+fi
+
+if [ "$no_sphinx" == "yes" ]; then
+  exit 0
+fi
 
 html_dir=$builddir/html-export/
 

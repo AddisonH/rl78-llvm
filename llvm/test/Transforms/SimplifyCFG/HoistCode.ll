@@ -17,6 +17,27 @@ F:              ; preds = %0
   ret void
 }
 
+define void @foo_switch(i64 %C, ptr %P) {
+; CHECK-LABEL: @foo_switch(
+; CHECK-NEXT:  common.ret:
+; CHECK-NEXT:    store i32 7, ptr [[P:%.*]], align 4
+; CHECK-NEXT:    ret void
+;
+  switch i64 %C, label %bb0 [
+  i64 1, label %bb1
+  i64 2, label %bb2
+  ]
+bb0:              ; preds = %0
+  store i32 7, ptr %P
+  ret void
+bb1:              ; preds = %0
+  store i32 7, ptr %P
+  ret void
+bb2:              ; preds = %0
+  store i32 7, ptr %P
+  ret void
+}
+
 define float @PR39535min(float %x) {
 ; CHECK-LABEL: @PR39535min(
 ; CHECK-NEXT:  entry:
@@ -44,14 +65,12 @@ define float @PR39535min_switch(i64 %i, float %x) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    switch i64 [[I:%.*]], label [[END:%.*]] [
 ; CHECK-NEXT:      i64 1, label [[BB1:%.*]]
-; CHECK-NEXT:      i64 2, label [[BB2:%.*]]
+; CHECK-NEXT:      i64 2, label [[BB1]]
 ; CHECK-NEXT:    ]
 ; CHECK:       bb1:
 ; CHECK-NEXT:    br label [[END]]
-; CHECK:       bb2:
-; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
-; CHECK-NEXT:    [[COND:%.*]] = phi fast float [ [[X:%.*]], [[BB1]] ], [ [[X]], [[BB2]] ], [ 0.000000e+00, [[ENTRY:%.*]] ]
+; CHECK-NEXT:    [[COND:%.*]] = phi fast float [ 0.000000e+00, [[ENTRY:%.*]] ], [ [[X:%.*]], [[BB1]] ]
 ; CHECK-NEXT:    ret float [[COND]]
 ;
 entry:
@@ -102,6 +121,37 @@ T:
 F:
   %z2 = zext i8 %x to i32
   ret i32 %z2
+}
+
+
+define float @hoist_uitofp_flags_preserve(i1 %C, i8 %x) {
+; CHECK-LABEL: @hoist_uitofp_flags_preserve(
+; CHECK-NEXT:  common.ret:
+; CHECK-NEXT:    [[Z1:%.*]] = uitofp nneg i8 [[X:%.*]] to float
+; CHECK-NEXT:    ret float [[Z1]]
+;
+  br i1 %C, label %T, label %F
+T:
+  %z1 = uitofp nneg i8 %x to float
+  ret float %z1
+F:
+  %z2 = uitofp nneg i8 %x to float
+  ret float %z2
+}
+
+define float @hoist_uitofp_flags_drop(i1 %C, i8 %x) {
+; CHECK-LABEL: @hoist_uitofp_flags_drop(
+; CHECK-NEXT:  common.ret:
+; CHECK-NEXT:    [[Z1:%.*]] = uitofp i8 [[X:%.*]] to float
+; CHECK-NEXT:    ret float [[Z1]]
+;
+  br i1 %C, label %T, label %F
+T:
+  %z1 = uitofp nneg i8 %x to float
+  ret float %z1
+F:
+  %z2 = uitofp i8 %x to float
+  ret float %z2
 }
 
 define i32 @hoist_or_flags_preserve(i1 %C, i32 %x, i32 %y) {
@@ -222,4 +272,34 @@ T:
 F:
   %gep2 = getelementptr nuw i8, ptr %p, i64 1
   ret ptr %gep2
+}
+
+define i1 @hoist_icmp_flags_preserve(i1 %C, i32 %x, i32 %y) {
+; CHECK-LABEL: @hoist_icmp_flags_preserve(
+; CHECK-NEXT:  common.ret:
+; CHECK-NEXT:    [[Z1:%.*]] = icmp samesign ult i32 [[X:%.*]], [[Y:%.*]]
+; CHECK-NEXT:    ret i1 [[Z1]]
+;
+  br i1 %C, label %T, label %F
+T:
+  %z1 = icmp samesign ult i32 %x, %y
+  ret i1 %z1
+F:
+  %z2 = icmp samesign ult i32 %x, %y
+  ret i1 %z2
+}
+
+define i1 @hoist_icmp_flags_drop(i1 %C, i32 %x, i32 %y) {
+; CHECK-LABEL: @hoist_icmp_flags_drop(
+; CHECK-NEXT:  common.ret:
+; CHECK-NEXT:    [[Z1:%.*]] = icmp ult i32 [[X:%.*]], [[Y:%.*]]
+; CHECK-NEXT:    ret i1 [[Z1]]
+;
+  br i1 %C, label %T, label %F
+T:
+  %z1 = icmp ult i32 %x, %y
+  ret i1 %z1
+F:
+  %z2 = icmp samesign ult i32 %x, %y
+  ret i1 %z2
 }

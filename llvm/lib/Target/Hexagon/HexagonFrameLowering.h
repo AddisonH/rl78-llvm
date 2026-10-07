@@ -26,7 +26,8 @@ class HexagonRegisterInfo;
 class MachineFunction;
 class MachineInstr;
 class MachineRegisterInfo;
-class TargetRegisterClass;
+class MCRegisterClass;
+using TargetRegisterClass = MCRegisterClass;
 
 class HexagonFrameLowering : public TargetFrameLowering {
 public:
@@ -34,6 +35,10 @@ public:
   int FirstVarArgSavedReg;
   explicit HexagonFrameLowering()
       : TargetFrameLowering(StackGrowsDown, Align(8), 0, Align(1), true) {}
+
+  void
+  orderFrameObjects(const MachineFunction &MF,
+                    SmallVectorImpl<int> &ObjectsToAllocate) const override;
 
   // All of the prolog/epilog functionality, including saving and restoring
   // callee-saved registers is handled in emitPrologue. This is to have the
@@ -85,7 +90,6 @@ public:
 
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
                                      Register &FrameReg) const override;
-  bool hasFP(const MachineFunction &MF) const override;
 
   const SpillSlot *getCalleeSavedSpillSlots(unsigned &NumEntries)
       const override {
@@ -110,11 +114,18 @@ public:
 
   void insertCFIInstructions(MachineFunction &MF) const;
 
+  void inlineStackProbe(MachineFunction &MF,
+                        MachineBasicBlock &PrologueMBB) const override;
+
+protected:
+  bool hasFPImpl(const MachineFunction &MF) const override;
+
 private:
   using CSIVect = std::vector<CalleeSavedInfo>;
 
-  void expandAlloca(MachineInstr *AI, const HexagonInstrInfo &TII,
-      Register SP, unsigned CF) const;
+  void expandAlloca(MachineInstr *AI, MachineFunction &MF,
+                    const HexagonInstrInfo &TII, Register SP,
+                    unsigned CF) const;
   void insertPrologueInBlock(MachineBasicBlock &MBB, bool PrologueStubs) const;
   void insertEpilogueInBlock(MachineBasicBlock &MBB) const;
   void insertAllocframe(MachineBasicBlock &MBB,

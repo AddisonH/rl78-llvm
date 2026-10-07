@@ -14,6 +14,7 @@
 #include "RL78MCExpr.h"
 #include "RL78.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCObjectStreamer.h"
 #include "llvm/MC/MCSymbolELF.h"
@@ -39,8 +40,7 @@ const RL78MCExpr *RL78MCExpr::create(VariantKind Kind, const MCExpr *Expr,
 void RL78MCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
   bool closeParen = printVariantKind(OS, VKind);
 
-  const MCExpr *Expr = getSubExpr();
-  Expr->print(OS, MAI);
+  MAI->printExpr(OS, *getSubExpr());
 
   if (closeParen)
     OS << ')';
@@ -191,39 +191,35 @@ bool GetAbsValueForVariant(RL78MCExpr::VariantKind Kind, int64_t &AbsVal) {
 
 
 bool RL78MCExpr::evaluateAsRelocatableImpl(MCValue &Res,
-                                           const MCAsmLayout *Layout,
-                                           const MCFixup *Fixup) const {
-
-  bool subExprRelocatable =
-      getSubExpr()->evaluateAsRelocatable(Res, Layout, Fixup);
-  if (!subExprRelocatable)
-    return false;
-
-  // evaluateAsAbsolute() and evaluateAsValue() require that we evaluate the
-  // %hi/%lo/etc. here. Fixup is a null pointer when either of these is the
-  // caller.
-  if (Res.isAbsolute() && Fixup == nullptr) {
-    int64_t AbsVal = Res.getConstant();
-   if(!GetAbsValueForVariant(VKind, AbsVal))
-       return false;
-    Res = MCValue::get(AbsVal);
+                                           const MCAssembler *Asm) const {
+  if (VKind == VariantKind::VK_RL78_IMM_SYM) {
+    Res = MCValue::get(&cast<MCSymbolRefExpr>(getSubExpr())->getSymbol(),
+                       nullptr, 0, VKind);
     return true;
   }
 
-  if (VKind == VariantKind::VK_RL78_IMM_SYM) {
-    Res = MCValue::get(cast<MCSymbolRefExpr>(getSubExpr()), nullptr, 0, VKind);
+  if (!getSubExpr()->evaluateAsRelocatable(Res, Asm))
+    return false;
+
+  // Fold HIGH/LOW/HIGHW/LOWW of an absolute value. LLVM 17 did this only
+  // outside fixup evaluation (Fixup == nullptr); fixups never carry these
+  // operators (createFixupsForExpression turns them into OP* relocations), so
+  // the distinction is gone along with the parameter.
+  if (Res.isAbsolute()) {
+    int64_t AbsVal = Res.getConstant();
+    if (!GetAbsValueForVariant(VKind, AbsVal))
+      return false;
+    Res = MCValue::get(AbsVal);
     return true;
   }
 
   // We want to defer it for relocatable expressions since the constant is
   // applied to the whole symbol value.
   //
-  // The value of getKind() that is given to MCValue is only intended to aid
-  // debugging when inspecting MCValue objects. It shouldn't be relied upon
-  // for decision making.
-  Res =
-      MCValue::get(Res.getSymA(), Res.getSymB(), Res.getConstant(), VKind);
-
+  // The specifier given to MCValue is only intended to aid debugging when
+  // inspecting MCValue objects. It shouldn't be relied upon for decision
+  // making.
+  Res.setSpecifier(VKind);
   return true;
 }
 
@@ -331,7 +327,7 @@ bool RL78MCExpr::FoldBitPositionalExpression(const MCExpr *Value,
     const RL78MCExpr *TargetExpr = static_cast<const RL78MCExpr *>(Value);
     if (TargetExpr->getVariantKind() == VK_RL78_BITPOSITIONAL) {
       return TargetExpr->getBitPositionalAddressSubExpr()
-                 ->evaluateAsRelocatable(AddressValue, nullptr, nullptr) &&
+                 ->evaluateAsRelocatable(AddressValue, nullptr) &&
              TargetExpr->getBitPositionalBitPostionSubExpr()
                  ->evaluateAsAbsolute(BitPosition);
     }
@@ -378,25 +374,25 @@ bool RL78MCExpr::FoldBitPositionalExpression(const MCExpr *Value,
                    !RHSAddressValue.isAbsolute() && Op == MCBinaryExpr::Add) {
           // Const + Sym(.B)
           AddressValue = MCValue::get(
-              RHSAddressValue.getSymA(), RHSAddressValue.getSymB(),
+              RHSAddressValue.getAddSym(), RHSAddressValue.getSubSym(),
               RHSAddressValue.getConstant() + LHSAddressValue.getConstant());
           return true;
         } else if (!LHSAddressValue.isAbsolute() &&
                    RHSAddressValue.isAbsolute() && Op == MCBinaryExpr::Sub) {
           // Sym - Const(.B)
           AddressValue = MCValue::get(
-              LHSAddressValue.getSymA(), LHSAddressValue.getSymB(),
+              LHSAddressValue.getAddSym(), LHSAddressValue.getSubSym(),
               LHSAddressValue.getConstant() - RHSAddressValue.getConstant());
           return true;
         }
       }
 
       if (!LHSAddressValue.isAbsolute() && !RHSAddressValue.isAbsolute() &&
-          Op == MCBinaryExpr::Sub && !LHSAddressValue.getSymB() &&
-          !RHSAddressValue.getSymB() && LHSBitPosition == -1) {
+          Op == MCBinaryExpr::Sub && !LHSAddressValue.getSubSym() &&
+          !RHSAddressValue.getSubSym() && LHSBitPosition == -1) {
         // Sym - Sym(.B)
         AddressValue = MCValue::get(
-            LHSAddressValue.getSymA(), RHSAddressValue.getSymA(),
+            LHSAddressValue.getAddSym(), RHSAddressValue.getAddSym(),
             LHSAddressValue.getConstant() - RHSAddressValue.getConstant());
         BitPosition = RHSBitPosition;
         return true;
@@ -434,7 +430,7 @@ bool RL78MCExpr::FoldBitPositionalExpression(const MCExpr *Value,
   default:
     break;
   }
-  return Value->evaluateAsRelocatable(AddressValue, nullptr, nullptr);
+  return Value->evaluateAsRelocatable(AddressValue, nullptr);
 }
 
 RL78MCExpr::ConversionStatus RL78MCExpr::HandleBinaryRelAbsOp(
@@ -464,16 +460,11 @@ RL78MCExpr::ConversionStatus RL78MCExpr::HandleBinaryRelAbsOp(
     AbsSymbol->setUsedInReloc();
     NeedsPop = true;
     CurrentStatus.VariantKind = RL78MCExpr::VK_RL78_IMM_SYM;
-    fixups.push_back(MCFixup::create(
-        offset,
-        RL78MCExpr::create(RL78MCExpr::VK_RL78_IMM_SYM,
-                           MCSymbolRefExpr::create(AbsSymbol, Ctx), Ctx),
-        (MCFixupKind)RL78::Fixups::fixup_RL78_SYM, Loc));
+    fixups.push_back(RL78::createFixup(offset, RL78MCExpr::create(RL78MCExpr::VK_RL78_IMM_SYM,
+                           MCSymbolRefExpr::create(AbsSymbol, Ctx), Ctx), RL78::Fixups::fixup_RL78_SYM));
     fixups.push_back(
-        MCFixup::create(offset, MCConstantExpr::create(0, Ctx),
-                        (MCFixupKind)(IsAdd ? RL78::Fixups::fixup_RL78_OPadd
-                                            : RL78::Fixups::fixup_RL78_OPsub),
-                        Loc));
+        RL78::createFixup(offset, MCConstantExpr::create(0, Ctx), (IsAdd ? RL78::Fixups::fixup_RL78_OPadd
+                                            : RL78::Fixups::fixup_RL78_OPsub)));
   }
   return CurrentStatus;
 }
@@ -641,9 +632,7 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
         } else
           ExprValue = MCConstantExpr::create(0, Ctx);
 
-        fixups.push_back(MCFixup::create(
-            offset, ExprValue ? ExprValue : MCConstantExpr::create(0, Ctx),
-            (MCFixupKind)Fixup, Loc));
+        fixups.push_back(RL78::createFixup(offset, ExprValue ? ExprValue : MCConstantExpr::create(0, Ctx), Fixup));
       } else {
         CurrentStatus.SymWithPossibleOffset = SubExpr;
       }
@@ -695,9 +684,7 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
               (RHS.VariantKind == RL78MCExpr::VK_RL78_STARTOF &&
                   LHS.VariantKind == RL78MCExpr::VK_RL78_SIZEOF)) {
             NeedsPop = true;
-            fixups.push_back(MCFixup::create(
-                offset, MCConstantExpr::create(0, Ctx),
-                (MCFixupKind)RL78::Fixups::fixup_RL78_OPadd, Loc));
+            fixups.push_back(RL78::createFixup(offset, MCConstantExpr::create(0, Ctx), RL78::Fixups::fixup_RL78_OPadd));
             CurrentStatus.Success = true;
             CurrentStatus.WasSizeOfPlusStartOf = true;
             CurrentStatus.VariantKind = RL78MCExpr::VK_RL78_STARTOF;
@@ -732,14 +719,10 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
           CurrentStatus.Success = true;
           CurrentStatus.VariantKind = VK_RL78_REL_DIFF;
           fixups.push_back(
-              MCFixup::create(offset, LHS.SymWithPossibleOffset,
-                              (MCFixupKind)RL78::Fixups::fixup_RL78_SYM, Loc));
+              RL78::createFixup(offset, LHS.SymWithPossibleOffset, RL78::Fixups::fixup_RL78_SYM));
           fixups.push_back(
-              MCFixup::create(offset, RHS.SymWithPossibleOffset,
-                              (MCFixupKind)RL78::Fixups::fixup_RL78_SYM, Loc));
-          fixups.push_back(MCFixup::create(
-              offset, MCConstantExpr::create(0, Ctx),
-              (MCFixupKind)RL78::Fixups::fixup_RL78_OPsub, Loc));
+              RL78::createFixup(offset, RHS.SymWithPossibleOffset, RL78::Fixups::fixup_RL78_SYM));
+          fixups.push_back(RL78::createFixup(offset, MCConstantExpr::create(0, Ctx), RL78::Fixups::fixup_RL78_OPsub));
           return CurrentStatus;
         }
         break;
@@ -830,14 +813,12 @@ void RL78MCExpr::createFixupsForExpression(const MCExpr *expression,
 
       if (NeedsPop) {
         // ConvertExpressionToFixups takes care of the push fixups.
-        fixups.push_back(MCFixup::create(offset, MCConstantExpr::create(0, Ctx),
-                                         (MCFixupKind)PopFixup, Loc));
+        fixups.push_back(RL78::createFixup(offset, MCConstantExpr::create(0, Ctx), PopFixup));
       } else {
         if (!Status.SymWithPossibleOffset) {
           Ctx.reportError(Status.Loc, "error during expression evaluation");
           return;
         }
-        fixups.push_back(MCFixup::create(offset, Status.SymWithPossibleOffset,
-                                         (MCFixupKind)DirectFixup, Loc));
+        fixups.push_back(RL78::createFixup(offset, Status.SymWithPossibleOffset, DirectFixup));
       }
 }

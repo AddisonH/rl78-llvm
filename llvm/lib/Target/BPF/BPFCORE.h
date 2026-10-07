@@ -10,6 +10,10 @@
 #define LLVM_LIB_TARGET_BPF_BPFCORE_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/Support/ErrorHandling.h"
 
 namespace llvm {
 
@@ -17,26 +21,20 @@ class BasicBlock;
 class Instruction;
 class Module;
 
+/// Return the bit offset used to order an element of a BTF structure record.
+inline uint64_t getBTFRecordElementOffset(const DINode *Element) {
+  switch (Element->getTag()) {
+  case dwarf::DW_TAG_member:
+    return cast<DIDerivedType>(Element)->getOffsetInBits();
+  case dwarf::DW_TAG_variant_part:
+    return cast<DICompositeType>(Element)->getOffsetInBits();
+  default:
+    llvm_unreachable("Unexpected DI tag of a struct element");
+  }
+}
+
 class BPFCoreSharedInfo {
 public:
-  enum PatchableRelocKind : uint32_t {
-    FIELD_BYTE_OFFSET = 0,
-    FIELD_BYTE_SIZE,
-    FIELD_EXISTENCE,
-    FIELD_SIGNEDNESS,
-    FIELD_LSHIFT_U64,
-    FIELD_RSHIFT_U64,
-    BTF_TYPE_ID_LOCAL,
-    BTF_TYPE_ID_REMOTE,
-    TYPE_EXISTENCE,
-    TYPE_SIZE,
-    ENUM_VALUE_EXISTENCE,
-    ENUM_VALUE,
-    TYPE_MATCH,
-
-    MAX_FIELD_RELOC_KIND,
-  };
-
   enum BTFTypeIdFlag : uint32_t {
     BTF_TYPE_ID_LOCAL_RELOC = 0,
     BTF_TYPE_ID_REMOTE_RELOC,
@@ -71,6 +69,9 @@ public:
   static Instruction *insertPassThrough(Module *M, BasicBlock *BB,
                                         Instruction *Input,
                                         Instruction *Before);
+  static void removeArrayAccessCall(CallInst *Call);
+  static void removeStructAccessCall(CallInst *Call);
+  static void removeUnionAccessCall(CallInst *Call);
 };
 
 } // namespace llvm

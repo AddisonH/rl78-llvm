@@ -15,7 +15,7 @@ movw HL, #0xDEF0
 
 
 
-# CHECK-INST: movw saddrp, #8738                      ; encoding: [0xc9,A,0x22'A',0x22]
+# CHECK-INST: movw saddrp, #8738                      ; encoding: [0xc9,A,0x22,0x22]
 movw saddrp, #0x2222     ; saddrp, #word
 
 # CHECK-INST: movw 0xffe20, #4369                     ; encoding: [0xc9,0x20,0x11,0x11]

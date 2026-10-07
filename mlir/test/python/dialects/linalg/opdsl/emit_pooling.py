@@ -81,7 +81,7 @@ with Context() as ctx, Location.unknown():
         # CHECK-SAME: indexing_maps = [#[[$POOL_MAP_I]], #[[$POOL_MAP_K]], #[[$POOL_MAP_O]]]
         # CHECK-SAME: iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction", "parallel"]
         # CHECK:      ^{{.*}}(%[[IN:.+]]: f32, %[[SHAPE:.+]]: f32, %[[OUT:.+]]: f32)
-        # CHECK-NEXT:   %[[MAX:.+]] = arith.maxf %[[OUT]], %[[IN:.+]] : f32
+        # CHECK-NEXT:   %[[MAX:.+]] = arith.maximumf %[[OUT]], %[[IN:.+]] : f32
         # CHECK-NEXT:   linalg.yield %[[MAX]] : f32
         # CHECK-NEXT: -> tensor<1x2x4x1xf32>
         @func.FuncOp.from_py_func(
@@ -132,7 +132,7 @@ with Context() as ctx, Location.unknown():
             )
 
         # CHECK-LABEL: @test_f32f32_min_pooling
-        # CHECK:   = arith.minf
+        # CHECK:   = arith.minimumf
         @func.FuncOp.from_py_func(
             RankedTensorType.get((1, 4, 16, 1), f32),
             RankedTensorType.get((2, 2), f32),
@@ -150,3 +150,51 @@ with Context() as ctx, Location.unknown():
 
 
 print(module)
+
+with Context() as ctx, Location.unknown():
+    module = Module.create()
+    with InsertionPoint(module.body):
+        f32 = F32Type.get()
+        bool_t = IntegerType.get_signless(1)
+
+        # CHECK: bool_max_unsigned_error: Unsupported 'max_unsigned' operands
+        @func.FuncOp.from_py_func(
+            RankedTensorType.get((1, 4, 16, 1), f32),
+            RankedTensorType.get((2, 2), f32),
+            RankedTensorType.get((1, 2, 4, 1), bool_t),
+        )
+        def test_bool_i1_max_unsigned_pooling_error(input, shape, init_result):
+            try:
+                pooling_poly(
+                    input,
+                    shape,
+                    outs=[init_result],
+                    reduce=BinaryFn.max_unsigned,
+                    cast=TypeFn.cast_unsigned,
+                    strides=[2, 4],
+                    dilations=[1, 2],
+                )
+            except NotImplementedError as e:
+                print(f"bool_max_unsigned_error: {e}")
+            return init_result
+
+        # CHECK: float_max_unsigned_error: Unsupported 'max_unsigned' operands
+        @func.FuncOp.from_py_func(
+            RankedTensorType.get((1, 4, 16, 1), f32),
+            RankedTensorType.get((2, 2), f32),
+            RankedTensorType.get((1, 2, 4, 1), f32),
+        )
+        def test_f32f32_max_unsigned_pooling_error(input, shape, init_result):
+            try:
+                pooling_poly(
+                    input,
+                    shape,
+                    outs=[init_result],
+                    reduce=BinaryFn.max_unsigned,
+                    cast=TypeFn.cast_unsigned,
+                    strides=[2, 4],
+                    dilations=[1, 2],
+                )
+            except NotImplementedError as e:
+                print(f"float_max_unsigned_error: {e}")
+            return init_result

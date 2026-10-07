@@ -56,6 +56,17 @@ enum Fixups {
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
 };
+
+inline bool isPCRelFixup(unsigned Kind) {
+  return Kind == fixup_RL78_DIR8S_PCREL || Kind == fixup_RL78_DIR16S_PCREL;
+}
+
+/// MCFixup carries PC-relativity per fixup since LLVM 21 (no FKF_IsPCRel);
+/// every RL78 fixup is created through here so it follows from the kind.
+inline MCFixup createFixup(uint32_t Offset, const MCExpr *Value,
+                           unsigned Kind) {
+  return MCFixup::create(Offset, Value, MCFixupKind(Kind), isPCRelFixup(Kind));
+}
 }
 } // end namespace llvm
 

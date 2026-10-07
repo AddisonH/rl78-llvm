@@ -13,7 +13,6 @@
 #ifndef LLVM_LIB_TARGET_AARCH64_MCTARGETDESC_AARCH64ADDRESSINGMODES_H
 #define LLVM_LIB_TARGET_AARCH64_MCTARGETDESC_AARCH64ADDRESSINGMODES_H
 
-#include "AArch64ExpandImm.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/bit.h"
@@ -48,6 +47,19 @@ enum ShiftExtendType {
   SXTW,
   SXTX,
 };
+
+/// isSignExtendShiftType - Returns true if \p Type is sign extending.
+static inline bool isSignExtendShiftType(AArch64_AM::ShiftExtendType Type) {
+  switch (Type) {
+  case AArch64_AM::SXTB:
+  case AArch64_AM::SXTH:
+  case AArch64_AM::SXTW:
+  case AArch64_AM::SXTX:
+    return true;
+  default:
+    return false;
+  }
+}
 
 /// getShiftName - Get the string encoding for the shift type.
 static inline const char *getShiftExtendName(AArch64_AM::ShiftExtendType ST) {
@@ -98,7 +110,7 @@ static inline unsigned getShiftValue(unsigned Imm) {
 ///   {5-0}  = imm
 static inline unsigned getShifterImm(AArch64_AM::ShiftExtendType ST,
                                      unsigned Imm) {
-  assert((Imm & 0x3f) == Imm && "Illegal shifted immedate value!");
+  assert((Imm & 0x3f) == Imm && "Illegal shifted immediate value!");
   unsigned STEnc = 0;
   switch (ST) {
   default:  llvm_unreachable("Invalid shift requested");
@@ -170,7 +182,7 @@ inline unsigned getExtendEncoding(AArch64_AM::ShiftExtendType ET) {
 ///   {2-0}  = imm3
 static inline unsigned getArithExtendImm(AArch64_AM::ShiftExtendType ET,
                                          unsigned Imm) {
-  assert((Imm & 0x7) == Imm && "Illegal shifted immedate value!");
+  assert((Imm & 0x7) == Imm && "Illegal shifted immediate value!");
   return (getExtendEncoding(ET) << 3) | (Imm & 0x7);
 }
 
@@ -336,6 +348,28 @@ static inline bool isValidDecodeLogicalImmediate(uint64_t val,
     return false;
 
   return true;
+}
+
+/// isLegalArithImmed - \returns true if \p C is a legal immediate operand for
+/// an arithmetic instruction.
+constexpr bool isLegalArithImmed(const uint64_t C) {
+  return (C >> 12 == 0) || ((C & 0xFFFULL) == 0 && C >> 24 == 0);
+}
+
+/// getArithImmedShift - assumes \p C is a legal immediate for arithmetic
+/// instructions and \returns the required shift for this immediate.
+constexpr unsigned getArithImmedShift(const uint64_t C) {
+  assert(isLegalArithImmed(C) &&
+         "Tried to get the shift amount for an illegal immediate");
+  return C >> 12 == 0 ? 0 : 12;
+}
+
+/// isLegalCmpImmed - \returns true if \p C is a legal immediate operand for a
+/// comparison instruction.
+static inline bool isLegalCmpImmed(const APInt &C) {
+  // Works for negative immediates too, as it can be written as an ADDS
+  // instruction with a negated immediate.
+  return isLegalArithImmed(C.abs().getZExtValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -592,6 +626,27 @@ static inline uint64_t decodeAdvSIMDModImmType9(uint8_t Imm) {
 // aaaaaaaa bbbbbbbb cccccccc dddddddd eeeeeeee ffffffff gggggggg hhhhhhhh
 // cmode: 1110, op: 1
 static inline bool isAdvSIMDModImmType10(uint64_t Imm) {
+#if defined(_MSC_VER) && _MSC_VER == 1937 && !defined(__clang__) &&            \
+    defined(_M_ARM64)
+  // The MSVC compiler 19.37 for ARM64 has an optimization bug that
+  // causes an incorrect behavior with the original version. Work around
+  // by using a slightly different variation.
+  // https://developercommunity.visualstudio.com/t/C-ARM64-compiler-optimization-bug/10481261
+  constexpr uint64_t Mask = 0xFFULL;
+  uint64_t ByteA = (Imm >> 56) & Mask;
+  uint64_t ByteB = (Imm >> 48) & Mask;
+  uint64_t ByteC = (Imm >> 40) & Mask;
+  uint64_t ByteD = (Imm >> 32) & Mask;
+  uint64_t ByteE = (Imm >> 24) & Mask;
+  uint64_t ByteF = (Imm >> 16) & Mask;
+  uint64_t ByteG = (Imm >> 8) & Mask;
+  uint64_t ByteH = Imm & Mask;
+
+  return (ByteA == 0ULL || ByteA == Mask) && (ByteB == 0ULL || ByteB == Mask) &&
+         (ByteC == 0ULL || ByteC == Mask) && (ByteD == 0ULL || ByteD == Mask) &&
+         (ByteE == 0ULL || ByteE == Mask) && (ByteF == 0ULL || ByteF == Mask) &&
+         (ByteG == 0ULL || ByteG == Mask) && (ByteH == 0ULL || ByteH == Mask);
+#else
   uint64_t ByteA = Imm & 0xff00000000000000ULL;
   uint64_t ByteB = Imm & 0x00ff000000000000ULL;
   uint64_t ByteC = Imm & 0x0000ff0000000000ULL;
@@ -609,6 +664,7 @@ static inline bool isAdvSIMDModImmType10(uint64_t Imm) {
          (ByteF == 0ULL || ByteF == 0x0000000000ff0000ULL) &&
          (ByteG == 0ULL || ByteG == 0x000000000000ff00ULL) &&
          (ByteH == 0ULL || ByteH == 0x00000000000000ffULL);
+#endif
 }
 
 static inline uint8_t encodeAdvSIMDModImmType10(uint64_t Imm) {
@@ -748,7 +804,7 @@ static inline uint64_t decodeAdvSIMDModImmType12(uint8_t Imm) {
   if (Imm & 0x04) EncVal |= 0x0004000000000000ULL;
   if (Imm & 0x02) EncVal |= 0x0002000000000000ULL;
   if (Imm & 0x01) EncVal |= 0x0001000000000000ULL;
-  return (EncVal << 32) | EncVal;
+  return EncVal;
 }
 
 /// Returns true if Imm is the concatenation of a repeating pattern of type T.
@@ -848,6 +904,64 @@ inline static bool isAnyMOVWMovAlias(uint64_t Value, int RegWidth) {
     Value &= 0xffffffffULL;
 
   return isAnyMOVZMovAlias(Value, RegWidth);
+}
+
+static inline bool isSVECpyDupImm(int SizeInBits, int64_t Val, int32_t &Imm,
+                                  int32_t &Shift) {
+  switch (SizeInBits) {
+  case 8:
+    // All immediates are supported.
+    Shift = 0;
+    Imm = Val & 0xFF;
+    return true;
+  case 16:
+  case 32:
+  case 64:
+    // Support 8bit signed immediates.
+    if (Val >= -128 && Val <= 127) {
+      Shift = 0;
+      Imm = Val & 0xFF;
+      return true;
+    }
+    // Support 16bit signed immediates that are a multiple of 256.
+    if (Val >= -32768 && Val <= 32512 && Val % 256 == 0) {
+      Shift = 8;
+      Imm = (Val >> 8) & 0xFF;
+      return true;
+    }
+    break;
+  default:
+    break;
+  }
+  return false;
+}
+
+static inline bool isSVELogicalImm(unsigned SizeInBits, uint64_t ImmVal,
+                                   uint64_t &Encoding) {
+  // Shift mask depending on type size.
+  switch (SizeInBits) {
+  case 8:
+    ImmVal &= 0xFF;
+    ImmVal |= ImmVal << 8;
+    ImmVal |= ImmVal << 16;
+    ImmVal |= ImmVal << 32;
+    break;
+  case 16:
+    ImmVal &= 0xFFFF;
+    ImmVal |= ImmVal << 16;
+    ImmVal |= ImmVal << 32;
+    break;
+  case 32:
+    ImmVal &= 0xFFFFFFFF;
+    ImmVal |= ImmVal << 32;
+    break;
+  case 64:
+    break;
+  default:
+    llvm_unreachable("Unexpected size");
+  }
+
+  return processLogicalImmediate(ImmVal, 64, Encoding);
 }
 
 } // end namespace AArch64_AM

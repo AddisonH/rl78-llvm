@@ -156,7 +156,7 @@ void testAllocatorOperationsCalled() {
 
 template <class T>
 struct AllocatorWithPattern {
-  constexpr static char pattern = 0xDE;
+  constexpr static char pattern = static_cast<char>(0xDE);
 
   using value_type = T;
 
@@ -206,6 +206,12 @@ void test() {
   testTypeWithDefaultCtor();
   testAllocatorOperationsCalled();
   testNotValueInitialized();
+
+  { // Make sure that the allocator isn't instantiated with an incomplete type
+    (void)std::allocate_shared_for_overwrite<int>(complete_type_allocator<int>{});
+    (void)std::allocate_shared_for_overwrite<int[]>(complete_type_allocator<int>{}, 1);
+    (void)std::allocate_shared_for_overwrite<int[1]>(complete_type_allocator<int>{});
+  }
 }
 
 int main(int, char**) {

@@ -15,16 +15,22 @@
 #include "CGCXXABI.h"
 #include "CodeGenFunction.h"
 #include "CodeGenModule.h"
+#include "clang/AST/CharUnits.h"
 #include "clang/AST/Decl.h"
 #include "clang/Basic/Cuda.h"
 #include "clang/CodeGen/CodeGenABITypes.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Frontend/Offloading/Utility.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/ReplaceConstant.h"
+#include "llvm/ProfileData/InstrProf.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/VirtualFileSystem.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -35,10 +41,13 @@ constexpr unsigned HIPFatMagic = 0x48495046; // "HIPF"
 
 class CGNVCUDARuntime : public CGCUDARuntime {
 
+  /// The prefix used for function calls and section names (CUDA, HIP, LLVM)
+  StringRef Prefix;
+
 private:
   llvm::IntegerType *IntTy, *SizeTy;
   llvm::Type *VoidTy;
-  llvm::PointerType *CharPtrTy, *VoidPtrTy, *VoidPtrPtrTy;
+  llvm::PointerType *PtrTy;
 
   /// Convenience reference to LLVM Context
   llvm::LLVMContext &Context;
@@ -66,12 +75,20 @@ private:
   /// ModuleCtorFunction() and used to create corresponding cleanup calls in
   /// ModuleDtorFunction()
   llvm::GlobalVariable *GpuBinaryHandle = nullptr;
+  /// Host-side shadow for the per-TU __llvm_profile_sections_<CUID> global,
+  /// emitted only for HIP host compiles when PGO is on. Registered via
+  /// __hipRegisterVar (non-RDC) or an offloading entry (RDC) so the runtime
+  /// can locate the device-side table by name.
+  llvm::GlobalVariable *OffloadProfShadow = nullptr;
+  struct OffloadProfSectionShadowInfo {
+    llvm::GlobalVariable *Shadow;
+    std::string DeviceName;
+  };
+  llvm::SmallVector<OffloadProfSectionShadowInfo, 16> OffloadProfSectionShadows;
   /// Whether we generate relocatable device code.
   bool RelocatableDeviceCode;
   /// Mangle context for device.
   std::unique_ptr<MangleContext> DeviceMC;
-  /// Some zeros used for GEPs.
-  llvm::Constant *Zeros[2];
 
   llvm::FunctionCallee getSetupArgumentFn() const;
   llvm::FunctionCallee getLaunchFn() const;
@@ -90,9 +107,7 @@ private:
   /// where the C code specifies const char*.
   llvm::Constant *makeConstantString(const std::string &Str,
                                      const std::string &Name = "") {
-    auto ConstStr = CGM.GetAddrOfConstantCString(Str, Name.c_str());
-    return llvm::ConstantExpr::getGetElementPtr(ConstStr.getElementType(),
-                                                ConstStr.getPointer(), Zeros);
+    return CGM.GetAddrOfConstantCString(Str, Name).getPointer();
   }
 
   /// Helper function which generates an initialized constant array from Str,
@@ -116,7 +131,7 @@ private:
     }
     if (Alignment)
       GV->setAlignment(llvm::Align(Alignment));
-    return llvm::ConstantExpr::getGetElementPtr(GV->getValueType(), GV, Zeros);
+    return GV;
   }
 
   /// Helper function that generates an empty dummy function returning void.
@@ -135,6 +150,9 @@ private:
     return DummyFunc;
   }
 
+  Address prepareKernelArgs(CodeGenFunction &CGF, FunctionArgList &Args);
+  Address prepareKernelArgsLLVMOffload(CodeGenFunction &CGF,
+                                       FunctionArgList &Args);
   void emitDeviceStubBodyLegacy(CodeGenFunction &CGF, FunctionArgList &Args);
   void emitDeviceStubBodyNew(CodeGenFunction &CGF, FunctionArgList &Args);
   std::string getDeviceSideName(const NamedDecl *ND) override;
@@ -171,6 +189,14 @@ private:
   void transformManagedVars();
   /// Create offloading entries to register globals in RDC mode.
   void createOffloadingEntries();
+  /// For HIP+PGO, emit the per-TU __llvm_profile_sections_<CUID> global.
+  /// On the device side, InstrProfiling emits the populated section-bounds
+  /// table only when the TU has real profile data. On the host side it is a
+  /// placeholder void* shadow stored in
+  /// OffloadProfShadow, registered later by makeRegisterGlobalsFn (non-RDC)
+  /// or createOffloadingEntries (RDC) so the runtime can locate the
+  /// device-side table by name.
+  void emitOffloadProfilingSections();
 
 public:
   CGNVCUDARuntime(CodeGenModule &CGM);
@@ -194,15 +220,11 @@ public:
 } // end anonymous namespace
 
 std::string CGNVCUDARuntime::addPrefixToName(StringRef FuncName) const {
-  if (CGM.getLangOpts().HIP)
-    return ((Twine("hip") + Twine(FuncName)).str());
-  return ((Twine("cuda") + Twine(FuncName)).str());
+  return (Prefix + FuncName).str();
 }
 std::string
 CGNVCUDARuntime::addUnderscoredPrefixToName(StringRef FuncName) const {
-  if (CGM.getLangOpts().HIP)
-    return ((Twine("__hip") + Twine(FuncName)).str());
-  return ((Twine("__cuda") + Twine(FuncName)).str());
+  return ("__" + Prefix + FuncName).str();
 }
 
 static std::unique_ptr<MangleContext> InitDeviceMC(CodeGenModule &CGM) {
@@ -226,23 +248,22 @@ CGNVCUDARuntime::CGNVCUDARuntime(CodeGenModule &CGM)
       TheModule(CGM.getModule()),
       RelocatableDeviceCode(CGM.getLangOpts().GPURelocatableDeviceCode),
       DeviceMC(InitDeviceMC(CGM)) {
-  CodeGen::CodeGenTypes &Types = CGM.getTypes();
-  ASTContext &Ctx = CGM.getContext();
-
   IntTy = CGM.IntTy;
   SizeTy = CGM.SizeTy;
   VoidTy = CGM.VoidTy;
-  Zeros[0] = llvm::ConstantInt::get(SizeTy, 0);
-  Zeros[1] = Zeros[0];
+  PtrTy = CGM.DefaultPtrTy;
 
-  CharPtrTy = llvm::PointerType::getUnqual(Types.ConvertType(Ctx.CharTy));
-  VoidPtrTy = cast<llvm::PointerType>(Types.ConvertType(Ctx.VoidPtrTy));
-  VoidPtrPtrTy = llvm::PointerType::getUnqual(CGM.getLLVMContext());
+  if (CGM.getLangOpts().OffloadViaLLVM)
+    Prefix = "llvm";
+  else if (CGM.getLangOpts().HIP)
+    Prefix = "hip";
+  else
+    Prefix = "cuda";
 }
 
 llvm::FunctionCallee CGNVCUDARuntime::getSetupArgumentFn() const {
   // cudaError_t cudaSetupArgument(void *, size_t, size_t)
-  llvm::Type *Params[] = {VoidPtrTy, SizeTy, SizeTy};
+  llvm::Type *Params[] = {PtrTy, SizeTy, SizeTy};
   return CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(IntTy, Params, false),
       addPrefixToName("SetupArgument"));
@@ -252,24 +273,24 @@ llvm::FunctionCallee CGNVCUDARuntime::getLaunchFn() const {
   if (CGM.getLangOpts().HIP) {
     // hipError_t hipLaunchByPtr(char *);
     return CGM.CreateRuntimeFunction(
-        llvm::FunctionType::get(IntTy, CharPtrTy, false), "hipLaunchByPtr");
+        llvm::FunctionType::get(IntTy, PtrTy, false), "hipLaunchByPtr");
   }
   // cudaError_t cudaLaunch(char *);
-  return CGM.CreateRuntimeFunction(
-      llvm::FunctionType::get(IntTy, CharPtrTy, false), "cudaLaunch");
+  return CGM.CreateRuntimeFunction(llvm::FunctionType::get(IntTy, PtrTy, false),
+                                   "cudaLaunch");
 }
 
 llvm::FunctionType *CGNVCUDARuntime::getRegisterGlobalsFnTy() const {
-  return llvm::FunctionType::get(VoidTy, VoidPtrPtrTy, false);
+  return llvm::FunctionType::get(VoidTy, PtrTy, false);
 }
 
 llvm::FunctionType *CGNVCUDARuntime::getCallbackFnTy() const {
-  return llvm::FunctionType::get(VoidTy, VoidPtrTy, false);
+  return llvm::FunctionType::get(VoidTy, PtrTy, false);
 }
 
 llvm::FunctionType *CGNVCUDARuntime::getRegisterLinkedBinaryFnTy() const {
-  llvm::Type *Params[] = {llvm::PointerType::getUnqual(Context), VoidPtrTy,
-                          VoidPtrTy, llvm::PointerType::getUnqual(Context)};
+  llvm::Type *Params[] = {llvm::PointerType::getUnqual(Context), PtrTy, PtrTy,
+                          llvm::PointerType::getUnqual(Context)};
   return llvm::FunctionType::get(VoidTy, Params, false);
 }
 
@@ -316,10 +337,70 @@ void CGNVCUDARuntime::emitDeviceStub(CodeGenFunction &CGF,
   }
   if (CudaFeatureEnabled(CGM.getTarget().getSDKVersion(),
                          CudaFeature::CUDA_USES_NEW_LAUNCH) ||
-      (CGF.getLangOpts().HIP && CGF.getLangOpts().HIPUseNewLaunchAPI))
+      (CGF.getLangOpts().HIP && CGF.getLangOpts().HIPUseNewLaunchAPI) ||
+      (CGF.getLangOpts().OffloadViaLLVM))
     emitDeviceStubBodyNew(CGF, Args);
   else
     emitDeviceStubBodyLegacy(CGF, Args);
+}
+
+/// Build the input as a sized array of pointers so that it can be launched by
+/// the offloading runtime.
+Address CGNVCUDARuntime::prepareKernelArgsLLVMOffload(CodeGenFunction &CGF,
+                                                      FunctionArgList &Args) {
+  SmallVector<llvm::Type *> ArgTypes, KernelLaunchParamsTypes;
+  for (auto &Arg : Args)
+    ArgTypes.push_back(CGF.ConvertTypeForMem(Arg->getType()));
+  llvm::StructType *KernelArgsTy = llvm::StructType::create(ArgTypes);
+  llvm::Type *KernelArgsPtrsTy = llvm::ArrayType::get(PtrTy, Args.size());
+
+  auto *Int32Ty = CGF.Builder.getInt32Ty();
+  KernelLaunchParamsTypes.push_back(Int32Ty);
+  KernelLaunchParamsTypes.push_back(PtrTy);
+
+  llvm::StructType *KernelLaunchParamsTy =
+      llvm::StructType::create(KernelLaunchParamsTypes);
+  Address KernelArgs = CGF.CreateTempAllocaWithoutCast(
+      KernelArgsTy, CharUnits::fromQuantity(16), "kernel_args");
+  Address KernelArgsPtrs = CGF.CreateTempAllocaWithoutCast(
+      KernelArgsPtrsTy, CharUnits::fromQuantity(16), "kernel_args_ptrs");
+  Address KernelLaunchParams = CGF.CreateTempAllocaWithoutCast(
+      KernelLaunchParamsTy, CharUnits::fromQuantity(16),
+      "kernel_launch_params");
+
+  CGF.Builder.CreateStore(llvm::ConstantInt::get(Int32Ty, Args.size()),
+                          CGF.Builder.CreateStructGEP(KernelLaunchParams, 0));
+  CGF.Builder.CreateStore(KernelArgsPtrs.emitRawPointer(CGF),
+                          CGF.Builder.CreateStructGEP(KernelLaunchParams, 1));
+
+  for (unsigned i = 0; i < Args.size(); ++i) {
+    auto *ArgVal = CGF.Builder.CreateLoad(CGF.GetAddrOfLocalVar(Args[i]));
+    Address ArgAddr = CGF.Builder.CreateStructGEP(KernelArgs, i);
+    CGF.Builder.CreateStore(ArgVal, ArgAddr);
+    CGF.Builder.CreateStore(ArgAddr.emitRawPointer(CGF),
+                            CGF.Builder.CreateConstArrayGEP(KernelArgsPtrs, i));
+  }
+
+  return KernelLaunchParams;
+}
+
+Address CGNVCUDARuntime::prepareKernelArgs(CodeGenFunction &CGF,
+                                           FunctionArgList &Args) {
+  // Calculate amount of space we will need for all arguments.  If we have no
+  // args, allocate a single pointer so we still have a valid pointer to the
+  // argument array that we can pass to runtime, even if it will be unused.
+  Address KernelArgs = CGF.CreateTempAlloca(
+      PtrTy, LangAS::Default, CharUnits::fromQuantity(16), "kernel_args",
+      llvm::ConstantInt::get(SizeTy, std::max<size_t>(1, Args.size())));
+  // Store pointers to the arguments in a locally allocated launch_args.
+  for (unsigned i = 0; i < Args.size(); ++i) {
+    llvm::Value *VarPtr = CGF.GetAddrOfLocalVar(Args[i]).emitRawPointer(CGF);
+    llvm::Value *VoidVarPtr = CGF.Builder.CreatePointerCast(VarPtr, PtrTy);
+    CGF.Builder.CreateDefaultAlignedStore(
+        VoidVarPtr, CGF.Builder.CreateConstGEP1_32(
+                        PtrTy, KernelArgs.emitRawPointer(CGF), i));
+  }
+  return KernelArgs;
 }
 
 // CUDA 9.0+ uses new way to launch kernels. Parameters are packed in a local
@@ -327,21 +408,9 @@ void CGNVCUDARuntime::emitDeviceStub(CodeGenFunction &CGF,
 void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
                                             FunctionArgList &Args) {
   // Build the shadow stack entry at the very start of the function.
-
-  // Calculate amount of space we will need for all arguments.  If we have no
-  // args, allocate a single pointer so we still have a valid pointer to the
-  // argument array that we can pass to runtime, even if it will be unused.
-  Address KernelArgs = CGF.CreateTempAlloca(
-      VoidPtrTy, CharUnits::fromQuantity(16), "kernel_args",
-      llvm::ConstantInt::get(SizeTy, std::max<size_t>(1, Args.size())));
-  // Store pointers to the arguments in a locally allocated launch_args.
-  for (unsigned i = 0; i < Args.size(); ++i) {
-    llvm::Value* VarPtr = CGF.GetAddrOfLocalVar(Args[i]).getPointer();
-    llvm::Value *VoidVarPtr = CGF.Builder.CreatePointerCast(VarPtr, VoidPtrTy);
-    CGF.Builder.CreateDefaultAlignedStore(
-        VoidVarPtr,
-        CGF.Builder.CreateConstGEP1_32(VoidPtrTy, KernelArgs.getPointer(), i));
-  }
+  Address KernelArgs = CGF.getLangOpts().OffloadViaLLVM
+                           ? prepareKernelArgsLLVMOffload(CGF, Args)
+                           : prepareKernelArgs(CGF, Args);
 
   llvm::BasicBlock *EndBlock = CGF.createBasicBlock("setup.end");
 
@@ -366,7 +435,7 @@ void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
       KernelLaunchAPI = KernelLaunchAPI + "_ptsz";
   }
   auto LaunchKernelName = addPrefixToName(KernelLaunchAPI);
-  IdentifierInfo &cudaLaunchKernelII =
+  const IdentifierInfo &cudaLaunchKernelII =
       CGM.getContext().Idents.get(LaunchKernelName);
   FunctionDecl *cudaLaunchKernelFD = nullptr;
   for (auto *Result : DC->lookup(&cudaLaunchKernelII)) {
@@ -382,14 +451,14 @@ void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
   // Create temporary dim3 grid_dim, block_dim.
   ParmVarDecl *GridDimParam = cudaLaunchKernelFD->getParamDecl(1);
   QualType Dim3Ty = GridDimParam->getType();
-  Address GridDim =
-      CGF.CreateMemTemp(Dim3Ty, CharUnits::fromQuantity(8), "grid_dim");
-  Address BlockDim =
-      CGF.CreateMemTemp(Dim3Ty, CharUnits::fromQuantity(8), "block_dim");
-  Address ShmemSize =
-      CGF.CreateTempAlloca(SizeTy, CGM.getSizeAlign(), "shmem_size");
-  Address Stream =
-      CGF.CreateTempAlloca(VoidPtrTy, CGM.getPointerAlign(), "stream");
+  Address GridDim = CGF.CreateMemTempWithoutCast(
+      Dim3Ty, CharUnits::fromQuantity(8), "grid_dim");
+  Address BlockDim = CGF.CreateMemTempWithoutCast(
+      Dim3Ty, CharUnits::fromQuantity(8), "block_dim");
+  Address ShmemSize = CGF.CreateTempAlloca(SizeTy, LangAS::Default,
+                                           CGM.getSizeAlign(), "shmem_size");
+  Address Stream = CGF.CreateTempAlloca(PtrTy, LangAS::Default,
+                                        CGM.getPointerAlign(), "stream");
   llvm::FunctionCallee cudaPopConfigFn = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(IntTy,
                               {/*gridDim=*/GridDim.getType(),
@@ -399,19 +468,20 @@ void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
                               /*isVarArg=*/false),
       addUnderscoredPrefixToName("PopCallConfiguration"));
 
-  CGF.EmitRuntimeCallOrInvoke(cudaPopConfigFn,
-                              {GridDim.getPointer(), BlockDim.getPointer(),
-                               ShmemSize.getPointer(), Stream.getPointer()});
+  CGF.EmitRuntimeCallOrInvoke(cudaPopConfigFn, {GridDim.emitRawPointer(CGF),
+                                                BlockDim.emitRawPointer(CGF),
+                                                ShmemSize.emitRawPointer(CGF),
+                                                Stream.emitRawPointer(CGF)});
 
   // Emit the call to cudaLaunch
-  llvm::Value *Kernel = CGF.Builder.CreatePointerCast(
-      KernelHandles[CGF.CurFn->getName()], VoidPtrTy);
+  llvm::Value *Kernel =
+      CGF.Builder.CreatePointerCast(KernelHandles[CGF.CurFn->getName()], PtrTy);
   CallArgList LaunchKernelArgs;
   LaunchKernelArgs.add(RValue::get(Kernel),
                        cudaLaunchKernelFD->getParamDecl(0)->getType());
   LaunchKernelArgs.add(RValue::getAggregate(GridDim), Dim3Ty);
   LaunchKernelArgs.add(RValue::getAggregate(BlockDim), Dim3Ty);
-  LaunchKernelArgs.add(RValue::get(KernelArgs.getPointer()),
+  LaunchKernelArgs.add(RValue::get(KernelArgs, CGF),
                        cudaLaunchKernelFD->getParamDecl(3)->getType());
   LaunchKernelArgs.add(RValue::get(CGF.Builder.CreateLoad(ShmemSize)),
                        cudaLaunchKernelFD->getParamDecl(4)->getType());
@@ -429,6 +499,33 @@ void CGNVCUDARuntime::emitDeviceStubBodyNew(CodeGenFunction &CGF,
       CGM.CreateRuntimeFunction(FTy, LaunchKernelName);
   CGF.EmitCall(FI, CGCallee::forDirect(cudaLaunchKernelFn), ReturnValueSlot(),
                LaunchKernelArgs);
+
+  // To prevent CUDA device stub functions from being merged by ICF in MSVC
+  // environment, create an unique global variable for each kernel and write to
+  // the variable in the device stub.
+  if (CGM.getContext().getTargetInfo().getCXXABI().isMicrosoft() &&
+      !CGF.getLangOpts().HIP) {
+    llvm::Function *KernelFunction = llvm::cast<llvm::Function>(Kernel);
+    std::string GlobalVarName = (KernelFunction->getName() + ".id").str();
+
+    llvm::GlobalVariable *HandleVar =
+        CGM.getModule().getNamedGlobal(GlobalVarName);
+    if (!HandleVar) {
+      HandleVar = new llvm::GlobalVariable(
+          CGM.getModule(), CGM.Int8Ty,
+          /*Constant=*/false, KernelFunction->getLinkage(),
+          llvm::ConstantInt::get(CGM.Int8Ty, 0), GlobalVarName);
+      HandleVar->setDSOLocal(KernelFunction->isDSOLocal());
+      HandleVar->setVisibility(KernelFunction->getVisibility());
+      if (KernelFunction->hasComdat())
+        HandleVar->setComdat(CGM.getModule().getOrInsertComdat(GlobalVarName));
+    }
+
+    CGF.Builder.CreateAlignedStore(llvm::ConstantInt::get(CGM.Int8Ty, 1),
+                                   HandleVar, CharUnits::One(),
+                                   /*IsVolatile=*/true);
+  }
+
   CGF.EmitBranch(EndBlock);
 
   CGF.EmitBlock(EndBlock);
@@ -444,8 +541,8 @@ void CGNVCUDARuntime::emitDeviceStubBodyLegacy(CodeGenFunction &CGF,
     auto TInfo = CGM.getContext().getTypeInfoInChars(A->getType());
     Offset = Offset.alignTo(TInfo.Align);
     llvm::Value *Args[] = {
-        CGF.Builder.CreatePointerCast(CGF.GetAddrOfLocalVar(A).getPointer(),
-                                      VoidPtrTy),
+        CGF.Builder.CreatePointerCast(
+            CGF.GetAddrOfLocalVar(A).emitRawPointer(CGF), PtrTy),
         llvm::ConstantInt::get(SizeTy, TInfo.Width.getQuantity()),
         llvm::ConstantInt::get(SizeTy, Offset.getQuantity()),
     };
@@ -460,8 +557,8 @@ void CGNVCUDARuntime::emitDeviceStubBodyLegacy(CodeGenFunction &CGF,
 
   // Emit the call to cudaLaunch
   llvm::FunctionCallee cudaLaunchFn = getLaunchFn();
-  llvm::Value *Arg = CGF.Builder.CreatePointerCast(
-      KernelHandles[CGF.CurFn->getName()], CharPtrTy);
+  llvm::Value *Arg =
+      CGF.Builder.CreatePointerCast(KernelHandles[CGF.CurFn->getName()], PtrTy);
   CGF.EmitRuntimeCallOrInvoke(cudaLaunchFn, Arg);
   CGF.EmitBranch(EndBlock);
 
@@ -489,15 +586,16 @@ static void replaceManagedVar(llvm::GlobalVariable *Var,
     }
     if (auto *I = dyn_cast<llvm::Instruction>(U)) {
       llvm::Value *OldV = Var;
-      llvm::Instruction *NewV =
-          new llvm::LoadInst(Var->getType(), ManagedVar, "ld.managed", false,
-                             llvm::Align(Var->getAlignment()), I);
+      llvm::Instruction *NewV = new llvm::LoadInst(
+          Var->getType(), ManagedVar, "ld.managed", false,
+          llvm::Align(Var->getAlignment()), I->getIterator());
       WorkItem.pop_back();
       // Replace constant expressions directly or indirectly using the managed
       // variable with instructions.
       for (auto &&Op : WorkItem) {
         auto *CE = cast<llvm::ConstantExpr>(Op);
-        auto *NewInst = CE->getAsInstruction(I);
+        auto *NewInst = CE->getAsInstruction();
+        NewInst->insertBefore(*I->getParent(), I->getIterator());
         NewInst->replaceUsesOfWith(OldV, NewV);
         OldV = CE;
         NewV = NewInst;
@@ -539,11 +637,8 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
   // void __cudaRegisterFunction(void **, const char *, char *, const char *,
   //                             int, uint3*, uint3*, dim3*, dim3*, int*)
   llvm::Type *RegisterFuncParams[] = {
-      VoidPtrPtrTy, CharPtrTy,
-      CharPtrTy,    CharPtrTy,
-      IntTy,        VoidPtrTy,
-      VoidPtrTy,    VoidPtrTy,
-      VoidPtrTy,    llvm::PointerType::getUnqual(Context)};
+      PtrTy, PtrTy, PtrTy, PtrTy, IntTy,
+      PtrTy, PtrTy, PtrTy, PtrTy, llvm::PointerType::getUnqual(Context)};
   llvm::FunctionCallee RegisterFunc = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(IntTy, RegisterFuncParams, false),
       addUnderscoredPrefixToName("RegisterFunction"));
@@ -555,13 +650,13 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
   for (auto &&I : EmittedKernels) {
     llvm::Constant *KernelName =
         makeConstantString(getDeviceSideName(cast<NamedDecl>(I.D)));
-    llvm::Constant *NullPtr = llvm::ConstantPointerNull::get(VoidPtrTy);
+    llvm::Constant *NullPtr = llvm::ConstantPointerNull::get(PtrTy);
     llvm::Value *Args[] = {
         &GpuBinaryHandlePtr,
-        Builder.CreateBitCast(KernelHandles[I.Kernel->getName()], VoidPtrTy),
+        KernelHandles[I.Kernel->getName()],
         KernelName,
         KernelName,
-        llvm::ConstantInt::get(IntTy, -1),
+        llvm::ConstantInt::getAllOnesValue(IntTy),
         NullPtr,
         NullPtr,
         NullPtr,
@@ -578,16 +673,15 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
 
   // void __cudaRegisterVar(void **, char *, char *, const char *,
   //                        int, int, int, int)
-  llvm::Type *RegisterVarParams[] = {VoidPtrPtrTy, CharPtrTy, CharPtrTy,
-                                     CharPtrTy,    IntTy,     VarSizeTy,
-                                     IntTy,        IntTy};
+  llvm::Type *RegisterVarParams[] = {PtrTy, PtrTy,     PtrTy, PtrTy,
+                                     IntTy, VarSizeTy, IntTy, IntTy};
   llvm::FunctionCallee RegisterVar = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(VoidTy, RegisterVarParams, false),
       addUnderscoredPrefixToName("RegisterVar"));
   // void __hipRegisterManagedVar(void **, char *, char *, const char *,
   //                              size_t, unsigned)
-  llvm::Type *RegisterManagedVarParams[] = {VoidPtrPtrTy, CharPtrTy, CharPtrTy,
-                                            CharPtrTy,    VarSizeTy, IntTy};
+  llvm::Type *RegisterManagedVarParams[] = {PtrTy, PtrTy,     PtrTy,
+                                            PtrTy, VarSizeTy, IntTy};
   llvm::FunctionCallee RegisterManagedVar = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(VoidTy, RegisterManagedVarParams, false),
       addUnderscoredPrefixToName("RegisterManagedVar"));
@@ -595,16 +689,13 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
   //                            const void **, const char *, int, int);
   llvm::FunctionCallee RegisterSurf = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(
-          VoidTy, {VoidPtrPtrTy, VoidPtrTy, CharPtrTy, CharPtrTy, IntTy, IntTy},
-          false),
+          VoidTy, {PtrTy, PtrTy, PtrTy, PtrTy, IntTy, IntTy}, false),
       addUnderscoredPrefixToName("RegisterSurface"));
   // void __cudaRegisterTexture(void **, const struct textureReference *,
   //                            const void **, const char *, int, int, int)
   llvm::FunctionCallee RegisterTex = CGM.CreateRuntimeFunction(
       llvm::FunctionType::get(
-          VoidTy,
-          {VoidPtrPtrTy, VoidPtrTy, CharPtrTy, CharPtrTy, IntTy, IntTy, IntTy},
-          false),
+          VoidTy, {PtrTy, PtrTy, PtrTy, PtrTy, IntTy, IntTy, IntTy}, false),
       addUnderscoredPrefixToName("RegisterTexture"));
   for (auto &&Info : DeviceVars) {
     llvm::GlobalVariable *Var = Info.Var;
@@ -617,24 +708,14 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
       uint64_t VarSize =
           CGM.getDataLayout().getTypeAllocSize(Var->getValueType());
       if (Info.Flags.isManaged()) {
-        auto *ManagedVar = new llvm::GlobalVariable(
-            CGM.getModule(), Var->getType(),
-            /*isConstant=*/false, Var->getLinkage(),
-            /*Init=*/Var->isDeclaration()
-                ? nullptr
-                : llvm::ConstantPointerNull::get(Var->getType()),
-            /*Name=*/"", /*InsertBefore=*/nullptr,
-            llvm::GlobalVariable::NotThreadLocal);
-        ManagedVar->setDSOLocal(Var->isDSOLocal());
-        ManagedVar->setVisibility(Var->getVisibility());
-        ManagedVar->setExternallyInitialized(true);
-        ManagedVar->takeName(Var);
-        Var->setName(Twine(ManagedVar->getName() + ".managed"));
-        replaceManagedVar(Var, ManagedVar);
+        assert(Var->getName().ends_with(".managed") &&
+               "HIP managed variables not transformed");
+        auto *ManagedVar = CGM.getModule().getNamedGlobal(
+            Var->getName().drop_back(StringRef(".managed").size()));
         llvm::Value *Args[] = {
             &GpuBinaryHandlePtr,
-            Builder.CreateBitCast(ManagedVar, VoidPtrTy),
-            Builder.CreateBitCast(Var, VoidPtrTy),
+            ManagedVar,
+            Var,
             VarName,
             llvm::ConstantInt::get(VarSizeTy, VarSize),
             llvm::ConstantInt::get(IntTy, Var->getAlignment())};
@@ -643,7 +724,7 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
       } else {
         llvm::Value *Args[] = {
             &GpuBinaryHandlePtr,
-            Builder.CreateBitCast(Var, VoidPtrTy),
+            Var,
             VarName,
             VarName,
             llvm::ConstantInt::get(IntTy, Info.Flags.isExtern()),
@@ -657,18 +738,68 @@ llvm::Function *CGNVCUDARuntime::makeRegisterGlobalsFn() {
     case DeviceVarFlags::Surface:
       Builder.CreateCall(
           RegisterSurf,
-          {&GpuBinaryHandlePtr, Builder.CreateBitCast(Var, VoidPtrTy), VarName,
-           VarName, llvm::ConstantInt::get(IntTy, Info.Flags.getSurfTexType()),
+          {&GpuBinaryHandlePtr, Var, VarName, VarName,
+           llvm::ConstantInt::get(IntTy, Info.Flags.getSurfTexType()),
            llvm::ConstantInt::get(IntTy, Info.Flags.isExtern())});
       break;
     case DeviceVarFlags::Texture:
       Builder.CreateCall(
           RegisterTex,
-          {&GpuBinaryHandlePtr, Builder.CreateBitCast(Var, VoidPtrTy), VarName,
-           VarName, llvm::ConstantInt::get(IntTy, Info.Flags.getSurfTexType()),
+          {&GpuBinaryHandlePtr, Var, VarName, VarName,
+           llvm::ConstantInt::get(IntTy, Info.Flags.getSurfTexType()),
            llvm::ConstantInt::get(IntTy, Info.Flags.isNormalized()),
            llvm::ConstantInt::get(IntTy, Info.Flags.isExtern())});
       break;
+    }
+  }
+
+  // Register the per-TU offload-profiling shadow so the host runtime can
+  // locate the matching device-side __llvm_profile_sections_<CUID>. We
+  // emit both __hipRegisterVar (so the HIP runtime can map the host
+  // shadow to the device symbol) and
+  // __llvm_profile_offload_register_shadow_variable (so the profile
+  // runtime adds the shadow to its drain list).
+  if (OffloadProfShadow) {
+    llvm::Constant *Name =
+        makeConstantString(std::string(OffloadProfShadow->getName()));
+    llvm::Constant *IntZero = llvm::ConstantInt::get(IntTy, 0);
+    llvm::Value *RegisterVarArgs[] = {
+        &GpuBinaryHandlePtr,
+        OffloadProfShadow,
+        Name,
+        Name,
+        IntZero,
+        llvm::ConstantInt::get(VarSizeTy,
+                               CGM.getDataLayout().getPointerSize(/*AS=*/0)),
+        IntZero,
+        IntZero};
+    Builder.CreateCall(RegisterVar, RegisterVarArgs);
+
+    llvm::FunctionCallee RegisterShadow = CGM.CreateRuntimeFunction(
+        llvm::FunctionType::get(VoidTy, {PtrTy}, false),
+        "__llvm_profile_offload_register_shadow_variable");
+    Builder.CreateCall(RegisterShadow, {OffloadProfShadow});
+  }
+
+  if (!OffloadProfSectionShadows.empty()) {
+    llvm::FunctionCallee RegisterSectionShadow = CGM.CreateRuntimeFunction(
+        llvm::FunctionType::get(VoidTy, {PtrTy}, false),
+        "__llvm_profile_offload_register_section_shadow_variable");
+    llvm::Constant *IntZero = llvm::ConstantInt::get(IntTy, 0);
+    for (const auto &Info : OffloadProfSectionShadows) {
+      llvm::Constant *Name = makeConstantString(Info.DeviceName);
+      llvm::Value *RegisterVarArgs[] = {
+          &GpuBinaryHandlePtr,
+          Info.Shadow,
+          Name,
+          Name,
+          IntZero,
+          llvm::ConstantInt::get(VarSizeTy,
+                                 CGM.getDataLayout().getPointerSize(/*AS=*/0)),
+          IntZero,
+          IntZero};
+      Builder.CreateCall(RegisterVar, RegisterVarArgs);
+      Builder.CreateCall(RegisterSectionShadow, {Info.Shadow});
     }
   }
 
@@ -715,11 +846,11 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
 
   // void ** __{cuda|hip}RegisterFatBinary(void *);
   llvm::FunctionCallee RegisterFatbinFunc = CGM.CreateRuntimeFunction(
-      llvm::FunctionType::get(VoidPtrPtrTy, VoidPtrTy, false),
+      llvm::FunctionType::get(PtrTy, PtrTy, false),
       addUnderscoredPrefixToName("RegisterFatBinary"));
   // struct { int magic, int version, void * gpu_binary, void * dont_care };
   llvm::StructType *FatbinWrapperTy =
-      llvm::StructType::get(IntTy, IntTy, VoidPtrTy, VoidPtrTy);
+      llvm::StructType::get(IntTy, IntTy, PtrTy, PtrTy);
 
   // Register GPU binary with the CUDA runtime, store returned handle in a
   // global variable and save a reference in GpuBinaryHandle to be cleaned up
@@ -755,10 +886,14 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
   llvm::Constant *FatBinStr;
   unsigned FatMagic;
   if (IsHIP) {
-    FatbinConstantName = ".hip_fatbin";
-    FatbinSectionName = ".hipFatBinSegment";
+    // On macOS (Mach-O), section names must be in "segment,section" format.
+    FatbinConstantName =
+        CGM.getTriple().isMacOSX() ? "__HIP,__hip_fatbin" : ".hip_fatbin";
+    FatbinSectionName =
+        CGM.getTriple().isMacOSX() ? "__HIP,__fatbin" : ".hipFatBinSegment";
 
-    ModuleIDSectionName = "__hip_module_id";
+    ModuleIDSectionName =
+        CGM.getTriple().isMacOSX() ? "__HIP,__module_id" : "__hip_module_id";
     ModuleIDPrefix = "__hip_";
 
     if (CudaGpuBinary) {
@@ -773,10 +908,12 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
       // to contain the fat binary but will be populated somewhere else,
       // e.g. by lld through link script.
       FatBinStr = new llvm::GlobalVariable(
-        CGM.getModule(), CGM.Int8Ty,
-        /*isConstant=*/true, llvm::GlobalValue::ExternalLinkage, nullptr,
-        "__hip_fatbin", nullptr,
-        llvm::GlobalVariable::NotThreadLocal);
+          CGM.getModule(), CGM.Int8Ty,
+          /*isConstant=*/true, llvm::GlobalValue::ExternalLinkage, nullptr,
+          "__hip_fatbin" + (CGM.getLangOpts().CUID.empty()
+                                ? ""
+                                : "_" + CGM.getContext().getCUIDHash()),
+          nullptr, llvm::GlobalVariable::NotThreadLocal);
       cast<llvm::GlobalVariable>(FatBinStr)->setSection(FatbinConstantName);
     }
 
@@ -815,11 +952,12 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
   // Data.
   Values.add(FatBinStr);
   // Unused in fatbin v1.
-  Values.add(llvm::ConstantPointerNull::get(VoidPtrTy));
+  Values.add(llvm::ConstantPointerNull::get(PtrTy));
   llvm::GlobalVariable *FatbinWrapper = Values.finishAndCreateGlobal(
       addUnderscoredPrefixToName("_fatbin_wrapper"), CGM.getPointerAlign(),
       /*constant*/ true);
   FatbinWrapper->setSection(FatbinSectionName);
+  CGM.getSanitizerMetadata()->disableSanitizerForGlobal(FatbinWrapper);
 
   // There is only one HIP fat binary per linked module, however there are
   // multiple constructor functions. Make sure the fat binary is registered
@@ -829,8 +967,8 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
   // thread safety of the loaded program. Therefore we can assume sequential
   // execution of constructor functions here.
   if (IsHIP) {
-    auto Linkage = CudaGpuBinary ? llvm::GlobalValue::InternalLinkage :
-        llvm::GlobalValue::LinkOnceAnyLinkage;
+    auto Linkage = RelocatableDeviceCode ? llvm::GlobalValue::ExternalLinkage
+                                         : llvm::GlobalValue::InternalLinkage;
     llvm::BasicBlock *IfBlock =
         llvm::BasicBlock::Create(Context, "if", ModuleCtorFunc);
     llvm::BasicBlock *ExitBlock =
@@ -838,19 +976,19 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
     // The name, size, and initialization pattern of this variable is part
     // of HIP ABI.
     GpuBinaryHandle = new llvm::GlobalVariable(
-        TheModule, VoidPtrPtrTy, /*isConstant=*/false,
-        Linkage,
-        /*Initializer=*/llvm::ConstantPointerNull::get(VoidPtrPtrTy),
-        "__hip_gpubin_handle");
-    if (Linkage == llvm::GlobalValue::LinkOnceAnyLinkage)
-      GpuBinaryHandle->setComdat(
-          CGM.getModule().getOrInsertComdat(GpuBinaryHandle->getName()));
+        TheModule, PtrTy, /*isConstant=*/false, Linkage,
+        /*Initializer=*/
+        !RelocatableDeviceCode ? llvm::ConstantPointerNull::get(PtrTy)
+                               : nullptr,
+        "__hip_gpubin_handle" + (CGM.getLangOpts().CUID.empty()
+                                     ? ""
+                                     : "_" + CGM.getContext().getCUIDHash()));
     GpuBinaryHandle->setAlignment(CGM.getPointerAlign().getAsAlign());
     // Prevent the weak symbol in different shared libraries being merged.
     if (Linkage != llvm::GlobalValue::InternalLinkage)
       GpuBinaryHandle->setVisibility(llvm::GlobalValue::HiddenVisibility);
     Address GpuBinaryAddr(
-        GpuBinaryHandle, VoidPtrPtrTy,
+        GpuBinaryHandle, PtrTy,
         CharUnits::fromQuantity(GpuBinaryHandle->getAlignment()));
     {
       auto *HandleValue = CtorBuilder.CreateLoad(GpuBinaryAddr);
@@ -862,9 +1000,8 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
     {
       CtorBuilder.SetInsertPoint(IfBlock);
       // GpuBinaryHandle = __hipRegisterFatBinary(&FatbinWrapper);
-      llvm::CallInst *RegisterFatbinCall = CtorBuilder.CreateCall(
-          RegisterFatbinFunc,
-          CtorBuilder.CreateBitCast(FatbinWrapper, VoidPtrTy));
+      llvm::CallInst *RegisterFatbinCall =
+          CtorBuilder.CreateCall(RegisterFatbinFunc, FatbinWrapper);
       CtorBuilder.CreateStore(RegisterFatbinCall, GpuBinaryAddr);
       CtorBuilder.CreateBr(ExitBlock);
     }
@@ -880,12 +1017,11 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
     // Register binary with CUDA runtime. This is substantially different in
     // default mode vs. separate compilation!
     // GpuBinaryHandle = __cudaRegisterFatBinary(&FatbinWrapper);
-    llvm::CallInst *RegisterFatbinCall = CtorBuilder.CreateCall(
-        RegisterFatbinFunc,
-        CtorBuilder.CreateBitCast(FatbinWrapper, VoidPtrTy));
+    llvm::CallInst *RegisterFatbinCall =
+        CtorBuilder.CreateCall(RegisterFatbinFunc, FatbinWrapper);
     GpuBinaryHandle = new llvm::GlobalVariable(
-        TheModule, VoidPtrPtrTy, false, llvm::GlobalValue::InternalLinkage,
-        llvm::ConstantPointerNull::get(VoidPtrPtrTy), "__cuda_gpubin_handle");
+        TheModule, PtrTy, false, llvm::GlobalValue::InternalLinkage,
+        llvm::ConstantPointerNull::get(PtrTy), "__cuda_gpubin_handle");
     GpuBinaryHandle->setAlignment(CGM.getPointerAlign().getAsAlign());
     CtorBuilder.CreateAlignedStore(RegisterFatbinCall, GpuBinaryHandle,
                                    CGM.getPointerAlign());
@@ -899,7 +1035,7 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
                            CudaFeature::CUDA_USES_FATBIN_REGISTER_END)) {
       // void __cudaRegisterFatBinaryEnd(void **);
       llvm::FunctionCallee RegisterFatbinEndFunc = CGM.CreateRuntimeFunction(
-          llvm::FunctionType::get(VoidTy, VoidPtrPtrTy, false),
+          llvm::FunctionType::get(VoidTy, PtrTy, false),
           "__cudaRegisterFatBinaryEnd");
       CtorBuilder.CreateCall(RegisterFatbinEndFunc, RegisterFatbinCall);
     }
@@ -907,9 +1043,12 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
     // Generate a unique module ID.
     SmallString<64> ModuleID;
     llvm::raw_svector_ostream OS(ModuleID);
-    OS << ModuleIDPrefix << llvm::format("%" PRIx64, FatbinWrapper->getGUID());
+    OS << ModuleIDPrefix
+       << llvm::format("%" PRIx64,
+                       llvm::GlobalValue::getGUIDAssumingExternalLinkage(
+                           FatbinWrapper->getName()));
     llvm::Constant *ModuleIDConstant = makeConstantArray(
-        std::string(ModuleID.str()), "", ModuleIDSectionName, 32, /*AddNull=*/true);
+        std::string(ModuleID), "", ModuleIDSectionName, 32, /*AddNull=*/true);
 
     // Create an alias for the FatbinWrapper that nvcc will look for.
     llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage,
@@ -923,9 +1062,7 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
         getRegisterLinkedBinaryFnTy(), RegisterLinkedBinaryName);
 
     assert(RegisterGlobalsFunc && "Expecting at least dummy function!");
-    llvm::Value *Args[] = {RegisterGlobalsFunc,
-                           CtorBuilder.CreateBitCast(FatbinWrapper, VoidPtrTy),
-                           ModuleIDConstant,
+    llvm::Value *Args[] = {RegisterGlobalsFunc, FatbinWrapper, ModuleIDConstant,
                            makeDummyFunction(getCallbackFnTy())};
     CtorBuilder.CreateCall(RegisterLinkedBinaryFunc, Args);
   }
@@ -973,7 +1110,7 @@ llvm::Function *CGNVCUDARuntime::makeModuleDtorFunction() {
 
   // void __cudaUnregisterFatBinary(void ** handle);
   llvm::FunctionCallee UnregisterFatbinFunc = CGM.CreateRuntimeFunction(
-      llvm::FunctionType::get(VoidTy, VoidPtrPtrTy, false),
+      llvm::FunctionType::get(VoidTy, PtrTy, false),
       addUnderscoredPrefixToName("UnregisterFatBinary"));
 
   llvm::Function *ModuleDtorFunc = llvm::Function::Create(
@@ -1071,7 +1208,7 @@ void CGNVCUDARuntime::handleVarRegistration(const VarDecl *D,
     // Builtin surfaces and textures and their template arguments are
     // also registered with CUDA runtime.
     const auto *TD = cast<ClassTemplateSpecializationDecl>(
-        D->getType()->castAs<RecordType>()->getDecl());
+        D->getType()->castAsCXXRecordDecl());
     const TemplateArgumentList &Args = TD->getTemplateArgs();
     if (TD->hasAttr<CUDADeviceBuiltinSurfaceTypeAttr>()) {
       assert(Args.size() == 2 &&
@@ -1110,7 +1247,9 @@ void CGNVCUDARuntime::transformManagedVars() {
               : llvm::ConstantPointerNull::get(Var->getType()),
           /*Name=*/"", /*InsertBefore=*/nullptr,
           llvm::GlobalVariable::NotThreadLocal,
-          CGM.getContext().getTargetAddressSpace(LangAS::cuda_device));
+          CGM.getContext().getTargetAddressSpace(CGM.getLangOpts().CUDAIsDevice
+                                                     ? LangAS::cuda_device
+                                                     : LangAS::Default));
       ManagedVar->setDSOLocal(Var->isDSOLocal());
       ManagedVar->setVisibility(Var->getVisibility());
       ManagedVar->setExternallyInitialized(true);
@@ -1119,7 +1258,7 @@ void CGNVCUDARuntime::transformManagedVars() {
       Var->setName(Twine(ManagedVar->getName()) + ".managed");
       // Keep managed variables even if they are not used in device code since
       // they need to be allocated by the runtime.
-      if (!Var->isDeclaration()) {
+      if (CGM.getLangOpts().CUDAIsDevice && !Var->isDeclaration()) {
         assert(!ManagedVar->isDeclaration());
         CGM.addCompilerUsedGlobal(Var);
         CGM.addCompilerUsedGlobal(ManagedVar);
@@ -1132,42 +1271,183 @@ void CGNVCUDARuntime::transformManagedVars() {
 // registered. The linker will provide a pointer to this section so we can
 // register the symbols with the linked device image.
 void CGNVCUDARuntime::createOffloadingEntries() {
-  llvm::OpenMPIRBuilder OMPBuilder(CGM.getModule());
-  OMPBuilder.initialize();
+  llvm::object::OffloadKind Kind = CGM.getLangOpts().HIP
+                                       ? llvm::object::OffloadKind::OFK_HIP
+                                       : llvm::object::OffloadKind::OFK_Cuda;
+  // For now, just spoof this as OpenMP because that's the runtime it uses.
+  if (CGM.getLangOpts().OffloadViaLLVM)
+    Kind = llvm::object::OffloadKind::OFK_OpenMP;
 
-  StringRef Section = CGM.getLangOpts().HIP ? "hip_offloading_entries"
-                                            : "cuda_offloading_entries";
+  llvm::Module &M = CGM.getModule();
   for (KernelInfo &I : EmittedKernels)
-    OMPBuilder.emitOffloadingEntry(KernelHandles[I.Kernel->getName()],
-                                   getDeviceSideName(cast<NamedDecl>(I.D)), 0,
-                                   DeviceVarFlags::OffloadGlobalEntry, Section);
+    llvm::offloading::emitOffloadingEntry(
+        M, Kind, KernelHandles[I.Kernel->getName()],
+        getDeviceSideName(cast<NamedDecl>(I.D)), /*Flags=*/0, /*Data=*/0,
+        llvm::offloading::OffloadGlobalEntry);
 
   for (VarInfo &I : DeviceVars) {
     uint64_t VarSize =
         CGM.getDataLayout().getTypeAllocSize(I.Var->getValueType());
+    int32_t Flags =
+        (I.Flags.isExtern()
+             ? static_cast<int32_t>(llvm::offloading::OffloadGlobalExtern)
+             : 0) |
+        (I.Flags.isConstant()
+             ? static_cast<int32_t>(llvm::offloading::OffloadGlobalConstant)
+             : 0) |
+        (I.Flags.isNormalized()
+             ? static_cast<int32_t>(llvm::offloading::OffloadGlobalNormalized)
+             : 0);
     if (I.Flags.getKind() == DeviceVarFlags::Variable) {
-      OMPBuilder.emitOffloadingEntry(
-          I.Var, getDeviceSideName(I.D), VarSize,
-          I.Flags.isManaged() ? DeviceVarFlags::OffloadGlobalManagedEntry
-                              : DeviceVarFlags::OffloadGlobalEntry,
-          Section);
+      if (I.Flags.isManaged()) {
+        assert(I.Var->getName().ends_with(".managed") &&
+               "HIP managed variables not transformed");
+
+        auto *ManagedVar = M.getNamedGlobal(
+            I.Var->getName().drop_back(StringRef(".managed").size()));
+        llvm::offloading::emitOffloadingEntry(
+            M, Kind, I.Var, getDeviceSideName(I.D), VarSize,
+            llvm::offloading::OffloadGlobalManagedEntry | Flags,
+            /*Data=*/I.Var->getAlignment(), ManagedVar);
+      } else {
+        llvm::offloading::emitOffloadingEntry(
+            M, Kind, I.Var, getDeviceSideName(I.D), VarSize,
+            llvm::offloading::OffloadGlobalEntry | Flags,
+            /*Data=*/0);
+      }
     } else if (I.Flags.getKind() == DeviceVarFlags::Surface) {
-      OMPBuilder.emitOffloadingEntry(I.Var, getDeviceSideName(I.D), VarSize,
-                                     DeviceVarFlags::OffloadGlobalSurfaceEntry,
-                                     Section);
+      llvm::offloading::emitOffloadingEntry(
+          M, Kind, I.Var, getDeviceSideName(I.D), VarSize,
+          llvm::offloading::OffloadGlobalSurfaceEntry | Flags,
+          I.Flags.getSurfTexType());
     } else if (I.Flags.getKind() == DeviceVarFlags::Texture) {
-      OMPBuilder.emitOffloadingEntry(I.Var, getDeviceSideName(I.D), VarSize,
-                                     DeviceVarFlags::OffloadGlobalTextureEntry,
-                                     Section);
+      llvm::offloading::emitOffloadingEntry(
+          M, Kind, I.Var, getDeviceSideName(I.D), VarSize,
+          llvm::offloading::OffloadGlobalTextureEntry | Flags,
+          I.Flags.getSurfTexType());
     }
+  }
+
+  // Register the per-TU offload-profiling shadow. The offloading entry
+  // makes the linker-wrapper emit the host __hipRegisterVar call in the
+  // combined ctor. Separately emit a per-TU ctor that registers the
+  // shadow with the profile runtime's drain list.
+  if (OffloadProfShadow) {
+    llvm::offloading::emitOffloadingEntry(
+        M, Kind, OffloadProfShadow, OffloadProfShadow->getName(),
+        CGM.getDataLayout().getPointerSize(/*AS=*/0),
+        llvm::offloading::OffloadGlobalEntry, /*Data=*/0);
+
+    llvm::LLVMContext &Ctx = M.getContext();
+    auto *PtrTy = llvm::PointerType::getUnqual(Ctx);
+    llvm::FunctionCallee RegisterShadow = CGM.CreateRuntimeFunction(
+        llvm::FunctionType::get(VoidTy, {PtrTy}, false),
+        "__llvm_profile_offload_register_shadow_variable");
+    llvm::FunctionCallee RegisterSectionShadow = CGM.CreateRuntimeFunction(
+        llvm::FunctionType::get(VoidTy, {PtrTy}, false),
+        "__llvm_profile_offload_register_section_shadow_variable");
+    auto *CtorFn = llvm::Function::Create(
+        llvm::FunctionType::get(VoidTy, false),
+        llvm::GlobalValue::InternalLinkage,
+        "__llvm_profile_register_shadow." + CGM.getContext().getCUIDHash(), &M);
+    auto *Entry = llvm::BasicBlock::Create(Ctx, "entry", CtorFn);
+    llvm::IRBuilder<> B(Entry);
+    B.CreateCall(RegisterShadow, {OffloadProfShadow});
+    for (const auto &Info : OffloadProfSectionShadows) {
+      llvm::offloading::emitOffloadingEntry(
+          M, Kind, Info.Shadow, Info.DeviceName,
+          CGM.getDataLayout().getPointerSize(/*AS=*/0),
+          llvm::offloading::OffloadGlobalEntry, /*Data=*/0);
+      B.CreateCall(RegisterSectionShadow, {Info.Shadow});
+    }
+    B.CreateRetVoid();
+    llvm::appendToGlobalCtors(M, CtorFn, /*Priority=*/65535);
+  }
+}
+
+// For HIP host+device compiles with PGO enabled, emit the host-side shadow for
+// the per-TU __llvm_profile_sections_<CUID> global. Device-side section table
+// emission is owned by InstrProfiling so it can be gated on real profile data.
+void CGNVCUDARuntime::emitOffloadProfilingSections() {
+  if (!CGM.getLangOpts().HIP)
+    return;
+  if (!CGM.getCodeGenOpts().hasProfileInstr())
+    return;
+
+  StringRef CUIDHash = CGM.getContext().getCUIDHash();
+  if (CUIDHash.empty())
+    return;
+
+  llvm::Module &M = CGM.getModule();
+  llvm::LLVMContext &Ctx = M.getContext();
+  std::string Name = ("__llvm_profile_sections_" + CUIDHash).str();
+
+  // If the global already exists (e.g. another TU was merged in), don't
+  // duplicate it.
+  if (M.getNamedValue(Name))
+    return;
+
+  if (CGM.getLangOpts().CUDAIsDevice) {
+    // Device side: emit only the per-TU names postfix marker. The sections
+    // struct is emitted later by the InstrProfiling pass, which emits it only
+    // when the TU has profile data, avoiding dangling section references.
+    unsigned GlobalAS = M.getDataLayout().getDefaultGlobalsAddressSpace();
+    std::string NamesVarPostfixVarName =
+        std::string(llvm::getInstrProfNamesVarPostfixVarName());
+    if (!M.getNamedValue(NamesVarPostfixVarName)) {
+      auto *NamesVarPostfix = llvm::ConstantDataArray::getString(
+          Ctx, (llvm::Twine("_") + CUIDHash).str(), true);
+      auto *NamesGV = new llvm::GlobalVariable(
+          M, NamesVarPostfix->getType(), /*isConstant=*/true,
+          llvm::GlobalValue::PrivateLinkage, NamesVarPostfix,
+          NamesVarPostfixVarName,
+          /*InsertBefore=*/nullptr, llvm::GlobalValue::NotThreadLocal,
+          GlobalAS);
+      CGM.addCompilerUsedGlobal(NamesGV);
+    }
+    return;
+  }
+
+  // Host side: emit an opaque void* shadow. Layout doesn't matter — the
+  // runtime locates it by name via hipGetSymbolAddress and treats it as
+  // the address of the device-side struct. Registration with the HIP
+  // runtime is added by makeRegisterGlobalsFn (non-RDC) or
+  // createOffloadingEntries (RDC).
+  auto *PtrTy = llvm::PointerType::getUnqual(Ctx);
+  OffloadProfShadow = new llvm::GlobalVariable(
+      M, PtrTy, /*isConstant=*/false, llvm::GlobalValue::ExternalLinkage,
+      llvm::ConstantPointerNull::get(PtrTy), Name);
+  CGM.addCompilerUsedGlobal(OffloadProfShadow);
+
+  auto AddSectionShadow = [&](StringRef Kind, const Twine &DeviceName) {
+    std::string ShadowName =
+        (Twine("__llvm_profile_shadow_") + Kind + "_" + CUIDHash + "_" +
+         Twine(OffloadProfSectionShadows.size()))
+            .str();
+    auto *Shadow = new llvm::GlobalVariable(
+        M, PtrTy, /*isConstant=*/false, llvm::GlobalValue::ExternalLinkage,
+        llvm::ConstantPointerNull::get(PtrTy), ShadowName);
+    CGM.addCompilerUsedGlobal(Shadow);
+    OffloadProfSectionShadows.push_back({Shadow, DeviceName.str()});
+  };
+
+  // Keep this order in sync with the runtime: data, counters, uniform counters,
+  // then names.
+  for (auto &&I : EmittedKernels) {
+    std::string KernelName = getDeviceSideName(cast<NamedDecl>(I.D));
+    AddSectionShadow("data", Twine("__profd_") + KernelName);
+    AddSectionShadow("cnts", Twine("__profc_") + KernelName);
+    AddSectionShadow("ucnts", Twine("__llvm_prf_unifcnt_") + KernelName);
+    AddSectionShadow("names",
+                     Twine(llvm::getInstrProfNamesVarName()) + "_" + CUIDHash);
   }
 }
 
 // Returns module constructor to be added.
 llvm::Function *CGNVCUDARuntime::finalizeModule() {
+  transformManagedVars();
+  emitOffloadProfilingSections();
   if (CGM.getLangOpts().CUDAIsDevice) {
-    transformManagedVars();
-
     // Mark ODR-used device variables as compiler used to prevent it from being
     // eliminated by optimization. This is necessary for device variables
     // ODR-used by host functions. Sema correctly marks them as ODR-used no
@@ -1191,7 +1471,8 @@ llvm::Function *CGNVCUDARuntime::finalizeModule() {
     }
     return nullptr;
   }
-  if (CGM.getLangOpts().OffloadingNewDriver && RelocatableDeviceCode)
+  if (CGM.getLangOpts().OffloadViaLLVM ||
+      (CGM.getLangOpts().OffloadingNewDriver && RelocatableDeviceCode))
     createOffloadingEntries();
   else
     return makeModuleCtorFunction();
@@ -1234,7 +1515,10 @@ llvm::GlobalValue *CGNVCUDARuntime::getKernelHandle(llvm::Function *F,
   Var->setAlignment(CGM.getPointerAlign().getAsAlign());
   Var->setDSOLocal(F->isDSOLocal());
   Var->setVisibility(F->getVisibility());
-  CGM.maybeSetTrivialComdat(*GD.getDecl(), *Var);
+  auto *FD = cast<FunctionDecl>(GD.getDecl());
+  auto *FT = FD->getPrimaryTemplate();
+  if (!FT || FT->isThisDeclarationADefinition())
+    CGM.maybeSetTrivialComdat(*FD, *Var);
   KernelHandles[F->getName()] = Var;
   KernelStubs[Var] = F;
   return Var;

@@ -19,6 +19,7 @@
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -55,9 +56,9 @@ bool isS3CoreType(const MCSubtargetInfo &STI) {
 RL78TargetELFStreamer::RL78TargetELFStreamer(MCStreamer &S,
                                              const MCSubtargetInfo &STI)
     : RL78TargetStreamer(S) {
-  MCAssembler &MCA = getStreamer().getAssembler();
+  ELFObjectWriter &W = getStreamer().getWriter();
   const FeatureBitset &Features = STI.getFeatureBits();
-  unsigned int EFlags = MCA.getELFHeaderEFlags();
+  unsigned int EFlags = W.getELFHeaderEFlags();
 
   EFlags |= isS2CoreType(STI) && !Features[RL78::FeatureDisableMDA]
                 ? ELF::EF_RL78_FU_EXIST
@@ -90,7 +91,7 @@ RL78TargetELFStreamer::RL78TargetELFStreamer(MCStreamer &S,
   else
     EFlags |= ELF::EF_RL78_RODATA_NEAR;
 
-  MCA.setELFHeaderEFlags(EFlags);
+  W.setELFHeaderEFlags(EFlags);
 }
 
 MCELFStreamer &RL78TargetELFStreamer::getStreamer() {
@@ -104,13 +105,10 @@ RL78ELFStreamer::RL78ELFStreamer(MCContext &Context,
     : MCELFStreamer(Context, std::move(TAB), std::move(OW),
                     std::move(Emitter)) {}
 
-void RL78ELFStreamer::initSections(bool NoExecStack, const MCSubtargetInfo &STI) {
+void RL78ELFStreamer::initSections(const MCSubtargetInfo &STI) {
   MCContext &Ctx = getContext();
   switchSection(Ctx.getObjectFileInfo()->getTextSection());
-  emitCodeAlignment(Align(1), &STI);
-
-  if (NoExecStack)
-    switchSection(Ctx.getAsmInfo()->getNonexecutableStackSection(Ctx));
+  emitCodeAlignment(Align(1), STI);
 }
 
 // We override to be able to emit multiple fixups for a given value (CC-RL
@@ -124,12 +122,14 @@ void RL78ELFStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
   }
 
   MCStreamer::emitValueImpl(Value, Size, Loc);
-  MCDataFragment *DF = getOrCreateDataFragment();
-  flushPendingLabels(DF, DF->getContents().size());
 
   MCDwarfLineEntry::make(this, getCurrentSectionOnly());
 
-  size_t FragmentSize = DF->getContents().size();
-  RL78MCExpr::createFixupsForExpression(Value, FragmentSize, Size * 8, DF->getFixups(), true, 0, getContext(), Loc);
-  DF->getContents().resize(DF->getContents().size() + Size, 0);
+  // Fixups and contents must land in the same fragment.
+  ensureHeadroom(Size);
+  SmallVector<MCFixup, 4> Fixups;
+  RL78MCExpr::createFixupsForExpression(Value, getCurFragSize(), Size * 8,
+                                        Fixups, true, 0, getContext(), Loc);
+  getCurrentFragment()->appendFixups(Fixups);
+  appendContents(Size, 0);
 }

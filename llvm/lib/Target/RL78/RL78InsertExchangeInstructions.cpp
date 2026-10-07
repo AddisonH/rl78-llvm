@@ -1046,7 +1046,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // Undo RP0 liveness hack
         if (MI.getOperand(0).getReg() == RL78::RP0) {
           BuildMI(MBB, MI, DL, TII->get(MI.getOpcode()))
-              .addReg(RL78::R1, MI.getOperand(0).isKill() ? RegState::Kill : 0)
+              .addReg(RL78::R1, MI.getOperand(0).isKill() ? RegState::Kill : RegState::NoFlags)
               .add(MI.getOperand(1));
           MI.eraseFromParent();
         }

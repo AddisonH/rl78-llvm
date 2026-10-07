@@ -621,7 +621,7 @@ sizeof...($TemplateParameter[[Elements]]);
       struct $Class_def[[Foo]] {
         int $Field_decl[[Waldo]];
         void $Method_def[[bar]]() {
-          $Class[[Foo]]().$Field_dependentName[[Waldo]];
+          $Class[[Foo]]().$Field[[Waldo]];
         }
         template $Bracket[[<]]typename $TemplateParameter_def[[U]]$Bracket[[>]]
         void $Method_def[[bar1]]() {
@@ -657,6 +657,7 @@ sizeof...($TemplateParameter[[Elements]]);
       void $Function_def[[Bar]]($Concept[[Fooable]] $TemplateParameter[[auto]] $Parameter_def[[x]]) {}
 
       template$Bracket[[<]]$Concept[[Fooable]] auto $TemplateParameter_def_readonly[[x]]$Bracket[[>]] void $Function_def[[Boo]]() {}
+      bool $Variable_def[[b]] = $Concept[[Fooable]]$Bracket[[<]]int$Bracket[[>]];
     )cpp",
       // Dependent template name
       R"cpp(
@@ -740,6 +741,7 @@ sizeof...($TemplateParameter[[Elements]]);
           $Class[[Foo]].$Field_static[[sharedInstance]].$Field[[someProperty]] $Operator[[=]] 1;
           self.$Field[[someProperty]] $Operator[[=]] self.$Field[[someProperty]] $Operator[[+]] self.$Field[[otherMethod]] $Operator[[+]] 1;
           self->$Field[[_someProperty]] $Operator[[=]] $Field[[_someProperty]] $Operator[[+]] 1;
+          return 0;
         }
         @end
       )cpp",
@@ -886,10 +888,10 @@ sizeof...($TemplateParameter[[Elements]]);
       // Issue 1222: readonly modifier for generic parameter
       R"cpp(
         template $Bracket[[<]]typename $TemplateParameter_def[[T]]$Bracket[[>]]
-        auto $Function_def[[foo]](const $TemplateParameter[[T]] $Parameter_def_readonly[[template_type]], 
-                                  const $TemplateParameter[[auto]] $Parameter_def_readonly[[auto_type]], 
+        auto $Function_def[[foo]](const $TemplateParameter[[T]] $Parameter_def_readonly[[template_type]],
+                                  const $TemplateParameter[[auto]] $Parameter_def_readonly[[auto_type]],
                                   const int $Parameter_def_readonly[[explicit_type]]) {
-            return $Parameter_readonly[[template_type]] 
+            return $Parameter_readonly[[template_type]]
                  $Operator_userDefined[[+]] $Parameter_readonly[[auto_type]]
                  $Operator_userDefined[[+]] $Parameter_readonly[[explicit_type]];
         }
@@ -1002,7 +1004,7 @@ $Bracket[[>]]$Bracket[[>]] $LocalVariable_def[[s6]];
         template $Bracket[[<]]class $TemplateParameter_def[[T]]$Bracket[[>]]
         class $Class_def[[B]] {
           template $Bracket[[<]]class $TemplateParameter_def[[U]]$Bracket[[>]] void $Method_def[[foo]]($TemplateParameter[[U]]) { }
-          template$Bracket[[<]]$Bracket[[>]] void $Method_def[[foo]]$Bracket[[<]]int$Bracket[[>]](int) { } 
+          template$Bracket[[<]]$Bracket[[>]] void $Method_def[[foo]]$Bracket[[<]]int$Bracket[[>]](int) { }
           friend void $Function_decl[[foo]]$Bracket[[<]]$Bracket[[>]]($TemplateParameter[[T]]);
         };
       )cpp",
@@ -1075,7 +1077,36 @@ $Bracket[[>]]$Bracket[[>]] $LocalVariable_def[[s6]];
             using $Class[[Y]]$Bracket[[<]]0$Bracket[[>]]::$Unknown_dependentName[[xxx]];
           };
         };
-    )cpp"};
+    )cpp",
+      // Heuristically resolved IndirectFieldDecl
+      R"cpp(
+        template $Bracket[[<]]typename $TemplateParameter_def[[T]]$Bracket[[>]]
+        struct $Class_def[[Base]] {
+          struct {
+            int $Field_decl[[waldo]];
+          };
+        };
+        template $Bracket[[<]]typename $TemplateParameter_def[[T]]$Bracket[[>]]
+        struct $Class_def[[Derived]] : $Class[[Base]]$Bracket[[<]]$TemplateParameter[[T]]$Bracket[[>]] {
+          using $Class[[Base]]$Bracket[[<]]$TemplateParameter[[T]]$Bracket[[>]]::$Field_dependentName[[waldo]];
+          void $Method_def[[foo]]() {
+            $Field_dependentName[[waldo]];
+          }
+        };
+    )cpp",
+      // Pointer-to-member with nested-name-specifiers
+      R"cpp(
+      struct $Class_def[[Outer]] {
+        struct $Class_def[[Inner]] {};
+      };
+      using $Typedef_decl[[Alias]] = void ($Class[[Outer]]::$Class[[Inner]]:: *)();
+    )cpp",
+      // Forwarded typedef
+      R"cpp(
+      using $Primitive_decl[[MyInt]] = int;
+      namespace $Namespace_decl[[N]] { using ::MyInt; }
+      using $Primitive_decl[[X]] = $Namespace[[N]]::$Primitive[[MyInt]];
+      )cpp"};
   for (const auto &TestCase : TestCases)
     // Mask off scope modifiers to keep the tests manageable.
     // They're tested separately.
@@ -1123,6 +1154,29 @@ $Bracket[[>]]$Bracket[[>]] $LocalVariable_def[[s6]];
     @end
   )cpp"}},
                      ~ScopeModifierMask, {"-isystemSystemSDK/"});
+}
+
+TEST(SemanticHighlighting, NoCrash) {
+  // Testcases where we are just testing that computation of the
+  // semantic tokens does not trigger a crash.
+  const char *TestCases[] = {
+      R"cpp(
+      template < template <> class a > using b = a<>;  // error-ok
+      template <class c>
+      using e = b<c::template d>
+    )cpp",
+      R"cpp(
+      constexpr auto v = 0;
+      template <decltype(v) t> class c {};
+    )cpp"};
+  for (const auto &TestCase : TestCases) {
+    TestTU TU;
+    TU.Code = TestCase;
+    TU.ExtraArgs.push_back("-std=c++20");
+    TU.ExtraArgs.push_back("-xobjective-c++");
+    auto AST = TU.build();
+    getSemanticHighlightings(AST, /*IncludeInactiveRegionTokens=*/true);
+  }
 }
 
 TEST(SemanticHighlighting, ScopeModifiers) {
@@ -1180,11 +1234,12 @@ TEST(SemanticHighlighting, ScopeModifiers) {
 std::vector<HighlightingToken> tokens(llvm::StringRef MarkedText) {
   Annotations A(MarkedText);
   std::vector<HighlightingToken> Results;
-  for (const Range& R : A.ranges())
+  for (const Range &R : A.ranges())
     Results.push_back({HighlightingKind::Variable, 0, R});
-  for (unsigned I = 0; I < static_cast<unsigned>(HighlightingKind::LastKind); ++I) {
+  for (unsigned I = 0; I < static_cast<unsigned>(HighlightingKind::LastKind);
+       ++I) {
     HighlightingKind Kind = static_cast<HighlightingKind>(I);
-    for (const Range& R : A.ranges(llvm::to_string(Kind)))
+    for (const Range &R : A.ranges(llvm::to_string(Kind)))
       Results.push_back({Kind, 0, R});
   }
   llvm::sort(Results);

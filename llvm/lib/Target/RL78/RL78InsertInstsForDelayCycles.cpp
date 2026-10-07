@@ -96,9 +96,12 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_5(
   //  .NextMBB:
   MachineBasicBlock *NextMBB = MBB.splitAt(MI);
   BuildMI(MBB, MI, DL, TII.get(RL78::CMP0_r)).addReg(RL78::R1);
+  // The second operand is the condition code (an immediate, printed as "nc");
+  // CY is read implicitly.
   BuildMI(MBB, MI, DL, TII.get(RL78::B_BNC))
       .addMBB(NextMBB)
-      .addReg(RL78::CCreg);
+      .addImm(RL78CC::RL78CC_NC)
+      .addReg(RL78::CCreg, RegState::Implicit);
   // Erase the pseudo instruction.
   MI.eraseFromParent();
 }

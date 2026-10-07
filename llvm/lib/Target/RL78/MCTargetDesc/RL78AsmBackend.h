@@ -12,7 +12,6 @@
 #include "MCTargetDesc/RL78FixupKinds.h"
 #include "MCTargetDesc/RL78MCTargetDesc.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 
 namespace llvm {
@@ -29,32 +28,20 @@ protected:
 
 public:
   RL78AsmBackend(const Target &T, const MCSubtargetInfo &STI)
-      : MCAsmBackend(support::little, RL78::fixup_RL78_RELAX),
-        TheTarget(T), STI(STI) {}
-
-  unsigned getNumFixupKinds() const override {
-    return RL78::NumTargetFixupKinds;
-  }
+      : MCAsmBackend(llvm::endianness::little), TheTarget(T), STI(STI) {}
 
   void setForceRelocs() { ForceRelocs = true; }
 
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
+  MCFixupKindInfo getFixupKindInfo(MCFixupKind Kind) const override;
 
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override;
+  bool shouldForceRelocation(const MCFixup &Fixup) const;
 
-  bool fixupNeedsRelaxationAdvanced(const MCFixup &Fixup, bool Resolved,
-                                    uint64_t Value,
-                                    const MCRelaxableFragment *DF,
-                                    const MCAsmLayout &Layout,
-                                    const bool WasForced) const override;
+  bool fixupNeedsRelaxationAdvanced(const MCFragment &, const MCFixup &Fixup,
+                                    const MCValue &, uint64_t Value,
+                                    bool Resolved) const override;
 
-  bool mayNeedRelaxation(const MCInst &Inst,
+  bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,
                          const MCSubtargetInfo &STI) const override;
-
-  bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
-                            const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const override;
 
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;

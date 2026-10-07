@@ -46,7 +46,7 @@ define half @test_reg_bitcast_to_half(i16 %in) {
 ; CHECK-LABEL: test_reg_bitcast_to_half:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    fmov s0, w0
-; CHECK-NEXT:    // kill: def $h0 killed $h0 killed $s0
+; CHECK-NEXT:    // kill: def $h0 killed $h0 killed $q0
 ; CHECK-NEXT:    ret
   %val = bitcast i16 %in to half
   ret half %val
@@ -99,16 +99,16 @@ define void @test_trunc64(double %in, ptr %addr) {
 define i16 @test_fccmp(i1 %a, i16 %in) {
 ; CHECK-LABEL: test_fccmp:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    mov w8, #24576
 ; CHECK-NEXT:    fmov s0, w1
+; CHECK-NEXT:    mov w8, #24576 // =0x6000
 ; CHECK-NEXT:    movk w8, #15974, lsl #16
-; CHECK-NEXT:    fcvt s0, h0
 ; CHECK-NEXT:    fmov s1, w8
-; CHECK-NEXT:    mov w8, #16384
+; CHECK-NEXT:    mov w8, #16384 // =0x4000
+; CHECK-NEXT:    fcvt s0, h0
 ; CHECK-NEXT:    movk w8, #15428, lsl #16
-; CHECK-NEXT:    fcmp s0, s1
 ; CHECK-NEXT:    fmov s2, w8
-; CHECK-NEXT:    mov w8, #4
+; CHECK-NEXT:    mov w8, #4 // =0x4
+; CHECK-NEXT:    fcmp s0, s1
 ; CHECK-NEXT:    fccmp s0, s2, #8, pl
 ; CHECK-NEXT:    csinc w8, w8, wzr, mi
 ; CHECK-NEXT:    fcmp s0, s1

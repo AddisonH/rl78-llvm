@@ -1,5 +1,7 @@
-; RUN: llc -march=amdgcn -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -march=amdgcn -mcpu=gfx906 -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN_DL %s
+; RUN: llc -mtriple=amdgpu6.00 -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu9.06 -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN_DL %s
+; RUN: llc -mtriple=amdgpu6.00 -enable-new-pm -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu9.06 -enable-new-pm -stop-after=amdgpu-isel < %s | FileCheck -check-prefix=GCN_DL %s
 
 ; GCN-LABEL: name:            uniform_xnor_i64
 ; GCN: S_XNOR_B64

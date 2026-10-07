@@ -14,7 +14,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "DefinitionBlockSeparator.h"
-#include "llvm/Support/Debug.h"
 #define DEBUG_TYPE "definition-block-separator"
 
 namespace clang {
@@ -89,6 +88,11 @@ void DefinitionBlockSeparator::separateBlocks(
       assert(TargetLine);
       assert(TargetToken);
 
+      // Lines should not be added in the disabled region.
+      if (TargetToken->is(tok::comment) &&
+          isClangFormatOn(TargetToken->TokenText)) {
+        return;
+      }
       // Do not handle EOF newlines.
       if (TargetToken->is(tok::eof))
         return;
@@ -137,25 +141,35 @@ void DefinitionBlockSeparator::separateBlocks(
     const auto MayPrecedeDefinition = [&](const int Direction = -1) {
       assert(Direction >= -1);
       assert(Direction <= 1);
+
+      if (Lines[OpeningLineIndex]->First->is(TT_CSharpGenericTypeConstraint))
+        return true;
+
       const size_t OperateIndex = OpeningLineIndex + Direction;
       assert(OperateIndex < Lines.size());
       const auto &OperateLine = Lines[OperateIndex];
       if (LikelyDefinition(OperateLine))
         return false;
 
-      if (OperateLine->First->is(tok::comment))
-        return true;
+      const auto *NextLine =
+          OperateIndex + 1 < Lines.size() ? Lines[OperateIndex + 1] : nullptr;
+
+      if (const auto *Tok = OperateLine->First;
+          Tok->is(tok::comment) && !isClangFormatOn(Tok->TokenText)) {
+        const bool IsEndComment = Tok->NewlinesBefore == 1 && NextLine &&
+                                  NextLine->First->NewlinesBefore > 1;
+        if (!IsEndComment)
+          return true;
+      }
 
       // A single line identifier that is not in the last line.
       if (OperateLine->First->is(tok::identifier) &&
-          OperateLine->First == OperateLine->Last &&
-          OperateIndex + 1 < Lines.size()) {
+          OperateLine->First == OperateLine->Last && NextLine) {
         // UnwrappedLineParser's recognition of free-standing macro like
         // Q_OBJECT may also recognize some uppercased type names that may be
         // used as return type as that kind of macros, which is a bit hard to
         // distinguish one from another purely from token patterns. Here, we
         // try not to add new lines below those identifiers.
-        AnnotatedLine *NextLine = Lines[OperateIndex + 1];
         if (NextLine->MightBeFunctionDecl &&
             NextLine->mightBeFunctionDefinition() &&
             NextLine->First->NewlinesBefore == 1 &&
@@ -164,7 +178,7 @@ void DefinitionBlockSeparator::separateBlocks(
         }
       }
 
-      if (Style.isCSharp() && OperateLine->First->is(TT_AttributeSquare))
+      if (Style.isCSharp() && OperateLine->First->is(TT_AttributeLSquare))
         return true;
       return false;
     };
@@ -185,13 +199,16 @@ void DefinitionBlockSeparator::separateBlocks(
         InsertReplacement(OpeningLineIndex != 0);
       TargetLine = CurrentLine;
       TargetToken = TargetLine->First;
-      while (TargetToken && !TargetToken->is(tok::r_brace))
+      while (TargetToken && TargetToken->isNot(tok::r_brace))
         TargetToken = TargetToken->Next;
       if (!TargetToken)
-        while (I < Lines.size() && !Lines[I]->First->is(tok::r_brace))
+        while (I < Lines.size() && Lines[I]->First->isNot(tok::r_brace))
           ++I;
     } else if (CurrentLine->First->closesScope()) {
       if (OpeningLineIndex > Lines.size())
+        continue;
+      // A function try block should be together.
+      if (CurrentLine->First->startsSequence(tok::r_brace, tok::kw_catch))
         continue;
       // Handling the case that opening brace has its own line, with checking
       // whether the last line already had an opening brace to guard against

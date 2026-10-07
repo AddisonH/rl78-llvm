@@ -2,35 +2,6 @@
 
 // RUN: fir-opt --split-input-file --fir-to-llvm-ir="target=x86_64-unknown-linux-gnu" --verify-diagnostics %s
 
-// Test `fir.zero` conversion failure with aggregate type.
-// Not implemented yet.
-
-func.func @zero_aggregate() {
-  // expected-error@+1{{failed to legalize operation 'fir.zero_bits'}}
-  %a = fir.zero_bits !fir.array<10xf32>
-  return
-}
-
-// -----
-
-// Verify that `fir.dt_entry` requires a parent op
-
-// expected-error@+1{{'fir.dt_entry' op expects parent op 'fir.dispatch_table'}}
-fir.dt_entry "method", @method_impl
-
-// -----
-
-// Test `fir.shape` conversion failure because the op has uses.
-
-func.func @shape_not_dead(%arg0: !fir.ref<!fir.array<?x?xf32>>, %i: index, %j: index) {
-  %c0 = arith.constant 1 : index
-  // expected-error@+1{{failed to legalize operation 'fir.shape'}}
-  %0 = fir.shape %c0, %c0 : (index, index) -> !fir.shape<2>
-  %1 = fir.array_coor %arg0(%0) %i, %j : (!fir.ref<!fir.array<?x?xf32>>, !fir.shape<2>, index, index) -> !fir.ref<f32>
-  return
-}
-
-// -----
 
 // Test `fir.slice` conversion failure because the op has uses.
 
@@ -51,18 +22,6 @@ func.func @shift_not_dead(%arg0: !fir.box<!fir.array<?xf32>>, %i: index) {
   // expected-error@+1{{failed to legalize operation 'fir.shift'}}
   %0 = fir.shift %c0 : (index) -> !fir.shift<1>
   %1 = fir.array_coor %arg0(%0) %i : (!fir.box<!fir.array<?xf32>>, !fir.shift<1>, index) -> !fir.ref<f32>
-  return
-}
-
-// -----
-
-// Test `fir.shape_shift` conversion failure because the op has uses.
-
-func.func @shape_shift_not_dead(%arg0: !fir.ref<!fir.array<?x?xf32>>, %i: index, %j: index) {
-  %c0 = arith.constant 1 : index
-  // expected-error@+1{{failed to legalize operation 'fir.shape_shift'}}
-  %0 = fir.shape_shift %c0, %c0, %c0, %c0 : (index, index, index, index) -> !fir.shapeshift<2>
-  %1 = fir.array_coor %arg0(%0) %i, %j : (!fir.ref<!fir.array<?x?xf32>>, !fir.shapeshift<2>, index, index) -> !fir.ref<f32>
   return
 }
 
@@ -93,8 +52,25 @@ func.func @bar_select_type(%arg : !fir.class<!fir.type<derivedst{a:f32}>>) -> i3
 
 // Verify that `fir.dt_entry` requires a parent op
 
-// expected-error@+1{{'fir.dt_entry' op expects parent op 'fir.dispatch_table'}}
+// expected-error@+1{{'fir.dt_entry' op expects parent op 'fir.type_info'}}
 fir.dt_entry "method", @method_impl
+
+// -----
+
+// expected-error@+1{{'fir.type_info' op type must be a fir.type}}
+fir.type_info @bad : i32
+
+// -----
+
+// expected-error@+1{{'fir.type_info' op parent_type must be a fir.type}}
+fir.type_info @bad extends f32 : !fir.type<t1{i:i32}>
+
+// -----
+
+fir.type_info @bad : !fir.type<bad{i:i32}> dispatch_table {
+  // expected-error@+1{{dispatch table must contain dt_entry}}
+  %zero = arith.constant 0 : i32
+}
 
 // -----
 

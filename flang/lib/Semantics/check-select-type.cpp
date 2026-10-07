@@ -8,8 +8,6 @@
 
 #include "check-select-type.h"
 #include "flang/Common/idioms.h"
-#include "flang/Common/reference.h"
-#include "flang/Evaluate/fold.h"
 #include "flang/Evaluate/type.h"
 #include "flang/Parser/parse-tree.h"
 #include "flang/Semantics/semantics.h"
@@ -120,31 +118,25 @@ private:
   bool PassesDerivedTypeChecks(const semantics::DerivedTypeSpec &derived,
       parser::CharBlock sourceLoc) const {
     for (const auto &pair : derived.parameters()) {
-      if (pair.second.isLen() && !pair.second.isAssumed()) { // C1160
+      if (pair.second.isLen() && !pair.second.isAssumed()) { // F'2023 C1165
         context_.Say(sourceLoc,
-            "The type specification statement must have "
-            "LEN type parameter as assumed"_err_en_US);
+            "The type specification statement must have LEN type parameter as assumed"_err_en_US);
         return false;
       }
     }
-    if (!IsExtensibleType(&derived)) { // C1161
+    if (!IsExtensibleType(&derived)) { // F'2023 C1166
       context_.Say(sourceLoc,
-          "The type specification statement must not specify "
-          "a type with a SEQUENCE attribute or a BIND attribute"_err_en_US);
+          "The type specification statement must not specify a type with a SEQUENCE attribute or a BIND attribute"_err_en_US);
       return false;
     }
-    if (!selectorType_.IsUnlimitedPolymorphic()) { // C1162
-      if (const semantics::Scope * guardScope{derived.typeSymbol().scope()}) {
-        if (const auto *selDerivedTypeSpec{
-                evaluate::GetDerivedTypeSpec(selectorType_)}) {
-          if (!derived.Match(*selDerivedTypeSpec) &&
-              !guardScope->FindComponent(selDerivedTypeSpec->name())) {
-            context_.Say(sourceLoc,
-                "Type specification '%s' must be an extension"
-                " of TYPE '%s'"_err_en_US,
-                derived.AsFortran(), selDerivedTypeSpec->AsFortran());
-            return false;
-          }
+    if (!selectorType_.IsUnlimitedPolymorphic()) { // F'2023 C1167
+      if (const auto *selDerivedTypeSpec{
+              evaluate::GetDerivedTypeSpec(selectorType_)}) {
+        if (!derived.MatchesOrExtends(*selDerivedTypeSpec)) {
+          context_.Say(sourceLoc,
+              "Type specification '%s' must be an extension of TYPE '%s'"_err_en_US,
+              derived.AsFortran(), selDerivedTypeSpec->AsFortran());
+          return false;
         }
       }
     }
@@ -258,6 +250,9 @@ void SelectTypeChecker::Enter(const parser::SelectTypeConstruct &construct) {
     if (IsProcedure(*selector)) {
       context_.Say(
           selectTypeStmt.source, "Selector may not be a procedure"_err_en_US);
+    } else if (IsAssumedRank(*selector)) {
+      context_.Say(selectTypeStmt.source,
+          "Assumed-rank variable may only be used as actual argument"_err_en_US);
     } else if (auto exprType{selector->GetType()}) {
       const auto &typeCaseList{
           std::get<std::list<parser::SelectTypeConstruct::TypeCase>>(

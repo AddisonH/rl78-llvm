@@ -1,5 +1,6 @@
 import("//llvm/tools/binutils_symlinks.gni")
 import("//llvm/utils/TableGen/tablegen.gni")
+import("//llvm/utils/gn/build/driver_executable.gni")
 import("//llvm/utils/gn/build/symlink_or_copy.gni")
 
 tablegen("Opts") {
@@ -27,7 +28,7 @@ group("symlinks") {
   }
 }
 
-executable("llvm-symbolizer") {
+driver_executable("llvm-symbolizer") {
   deps = [
     ":Opts",
     "//llvm/lib/DebugInfo/DWARF",
@@ -35,6 +36,7 @@ executable("llvm-symbolizer") {
     "//llvm/lib/DebugInfo/Symbolize",
     "//llvm/lib/Debuginfod",
     "//llvm/lib/Demangle",
+    "//llvm/lib/HTTP",
     "//llvm/lib/Object",
     "//llvm/lib/Option",
     "//llvm/lib/Support",

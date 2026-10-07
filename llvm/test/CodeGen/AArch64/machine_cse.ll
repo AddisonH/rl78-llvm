@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=aarch64-linux-gnuabi -O2 -tail-dup-placement=0 | FileCheck %s
+; RUN: llc < %s -mtriple=aarch64-linux-gnuabi -O2 -tail-dup-placement=0 -aarch64-br-merging-base-cost=-1 | FileCheck %s
 ; -tail-dup-placement causes tail duplication during layout. This breaks the
 ; assumptions of the test case as written (specifically, it creates an
 ; additional cmp instruction, creating a false positive), so we pass
@@ -11,7 +11,7 @@
 @d = external global i32
 @e = external global i32
 
-define void @combine-sign-comparisons-by-cse(ptr %arg) {
+define i32 @combine-sign-comparisons-by-cse(ptr %arg) {
 ; CHECK: cmp
 ; CHECK: b.ge
 ; CHECK-NOT: cmp
@@ -45,7 +45,7 @@ if.end:
 return:
   %retval.0 = phi i32 [ 0, %if.end ], [ 1, %land.lhs.true3 ], [ 1, %land.lhs.true ]
   store i32 %a, ptr %arg
-  ret void
+  ret i32 %retval.0
 }
 
 define void @combine_vector_zeros(ptr %p, ptr %q) {

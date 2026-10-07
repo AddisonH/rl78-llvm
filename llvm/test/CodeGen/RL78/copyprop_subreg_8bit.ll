@@ -31,6 +31,11 @@ define i16 @loop_carried_half_copy() {
   br i1 %cond, label %4, label %5
 
 4:
+  ; Keeps the branch on %2 alive. LLVM 23 otherwise deletes the whole
+  ; loop-carried byte (its only effect is the dead phi in %5), and the test no
+  ; longer reaches the copy it guards. Verified to fail with MOV_A_r/MOV_r_A
+  ; added back to isCopyInstrImpl.
+  call void asm sideeffect "", ""()
   br label %5
 
 5:

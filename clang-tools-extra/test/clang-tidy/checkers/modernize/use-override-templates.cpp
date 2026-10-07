@@ -1,5 +1,5 @@
 // RUN: %check_clang_tidy %s modernize-use-override %t -- \
-// RUN:   -config="{CheckOptions: [{key: modernize-use-override.IgnoreTemplateInstantiations, value: true}]}"
+// RUN:   -config="{CheckOptions: {modernize-use-override.IgnoreTemplateInstantiations: true}}"
 
 struct Base {
   virtual void foo();
@@ -43,5 +43,5 @@ struct Derived2 : BaseS<T>, BaseU {
   // should warn, comes from non-template BaseU
   virtual void boo3();
   // CHECK-MESSAGES: :[[@LINE-1]]:16: warning: prefer using 'override' or (rarely) 'final' instead of 'virtual' [modernize-use-override]
-  // CHECK-FIXES: {{^  }}void boo3() override;
+  // CHECK-FIXES: void boo3() override;
 };

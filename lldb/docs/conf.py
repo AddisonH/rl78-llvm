@@ -10,10 +10,13 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
-from __future__ import print_function
-
 import sys, os, re, shutil
 from datetime import date
+from pathlib import Path
+
+from llvm_sphinx import *  # see llvm-project/utils/docs/README.md
+
+globals().update(common_conf(tags, markdown=Markdown.EXCEPT_MAN))
 
 building_man_page = tags.has("builder-man")
 
@@ -37,35 +40,44 @@ automodapi_toctreedirnm = "python_api"
 
 # -- General configuration -----------------------------------------------------
 
-# If your documentation needs a minimal Sphinx version, state it here.
-# needs_sphinx = '1.0'
+# lldb specific sphinx extensions
+sys.path.append(str(Path("_ext").resolve()))
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ["sphinx.ext.todo", "sphinx.ext.mathjax", "sphinx.ext.intersphinx"]
+extensions += [
+    "sphinx.ext.todo",  # Support for todo items.
+    "sphinx.ext.mathjax",  # Render math via JavaScript.
+    "sphinx.ext.intersphinx",  # Link to other projects’ documentation.
+    "sphinx.ext.napoleon",  # Support for NumPy and Google style docstrings.
+    "lldb_setting",  # Support the lldbsetting directive (see _ext/lldb_setting.py)
+]
+if "LLDB_BUILD_DIR" in os.environ:
+    # Include a file from $LLDB_BUILD_DIR (see _ext/build_include.py)
+    extensions.append("build_include")
 
-autodoc_default_options = {
-    "special-members": "__int__, __len__, __hex__, __oct__, __iter__",
-}
+myst_enable_extensions += ["fieldlist", "colon_fence", "deflist"]
+
+autodoc_default_options = {"special-members": True}
 
 # Unless we only generate the basic manpage we need the plugin for generating
 # the Python API documentation.
 if not building_man_page:
+    try:
+        import sphinx_automodapi.automodapi
+    except ModuleNotFoundError:
+        print(
+            f"install sphinx_automodapi with {sys.executable} -m pip install sphinx_automodapi"
+        )
     extensions.append("sphinx_automodapi.automodapi")
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
-
-# The suffix of source filenames.
-source_suffix = {
-    ".rst": "restructuredtext",
-}
-
-# The encoding of source files.
-# source_encoding = 'utf-8-sig'
-
-# The master toctree document.
-master_doc = "index"
+    try:
+        import furo
+    except ModuleNotFoundError:
+        print(f"install sphinx furo theme with {sys.executable} -m pip install furo")
+    # The theme to use for HTML and HTML Help pages.  See the documentation for
+    # a list of builtin themes.
+    html_theme = "furo"
 
 # General information about the project.
 project = "LLDB"
@@ -127,15 +139,15 @@ pygments_style = "friendly"
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "alabaster"
+html_theme = "furo"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "font_size": "11pt",
-    # Don't generate any links to GitHub.
-    "github_button": "false",
+    "source_repository": "https://github.com/llvm/llvm-project",
+    "source_branch": "main",
+    "source_directory": "lldb/docs/",
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -143,7 +155,7 @@ html_theme_options = {
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-html_title = "The LLDB Debugger"
+html_title = "🐛 LLDB"
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 # html_short_title = None
@@ -161,10 +173,9 @@ html_title = "The LLDB Debugger"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-
-html_context = {
-    "css_files": ["_static/lldb.css"],
-}
+html_css_files = [
+    "lldb-setting.css",
+]
 
 html_extra_path = [".htaccess"]
 

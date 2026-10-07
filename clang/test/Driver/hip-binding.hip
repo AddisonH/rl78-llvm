@@ -1,12 +1,9 @@
-// REQUIRES: x86-registered-target
-// REQUIRES: amdgpu-registered-target
-
-// RUN: %clang -ccc-print-bindings --target=x86_64-linux-gnu \
+// RUN: %clang -Werror=openmp-target -ccc-print-bindings --target=x86_64-linux-gnu \
 // RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %s \
-// RUN:   -c 2>&1 | FileCheck -check-prefix=NRDCS %s
+// RUN:   --no-offload-new-driver -c 2>&1 | FileCheck -check-prefix=NRDCS %s
 // RUN: %clang -ccc-print-bindings --target=x86_64-linux-gnu --offload-new-driver \
 // RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %s \
-// RUN:   -c 2>&1 | FileCheck -check-prefix=NRDCS %s
+// RUN:   --no-offload-new-driver -c 2>&1 | FileCheck -check-prefix=NRDCS %s
 // NRDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[OBJ1:.*o]]"
 // NRDCS: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[OBJ1]]"], output: "[[IMG1:.*]]"
 // NRDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[OBJ2:.*o]]"
@@ -16,23 +13,23 @@
 
 // RUN: %clang -ccc-print-bindings --target=x86_64-linux-gnu \
 // RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %s \
-// RUN:   -c -fgpu-rdc 2>&1 | FileCheck -check-prefix=RDCS %s
-// RDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[BC1:.*bc]]"
-// RDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[BC2:.*bc]]"
+// RUN:   --no-offload-new-driver -c -fgpu-rdc 2>&1 | FileCheck -check-prefix=RDCS %s
+// RDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[OBJ1:.*o]]"
+// RDCS: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[IN:.*hip-binding.hip]]"], output: "[[OBJ2:.*o]]"
 // RDCS: # "x86_64-unknown-linux-gnu" - "clang", inputs: ["[[IN]]"], output: "[[HOSTOBJ:.*o]]"
-// RDCS: # "x86_64-unknown-linux-gnu" - "offload bundler", inputs: ["[[BC1]]", "[[BC2]]", "[[HOSTOBJ]]"], output: "{{.*}}"
+// RDCS: # "x86_64-unknown-linux-gnu" - "offload bundler", inputs: ["[[OBJ1]]", "[[OBJ2]]", "[[HOSTOBJ]]"], output: "{{.*}}"
 
 // RUN: %clang -ccc-print-bindings --target=x86_64-linux-gnu --offload-new-driver \
 // RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %s \
 // RUN:   -c -fgpu-rdc 2>&1 | FileCheck -check-prefix=RDCS-NEW %s
-// RDCS-NEW: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[HIP803:.+]]"
-// RDCS-NEW: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[HIP900:.+]]"
+// RDCS-NEW: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[HIP803:.*o]]"
+// RDCS-NEW: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[HIP900:.*o]]"
 // RDCS-NEW: # "x86_64-unknown-linux-gnu" - "Offload::Packager", inputs: ["[[HIP803]]", "[[HIP900]]"], output: "[[HIPFB:.+]]"
 // RDCS-NEW: # "x86_64-unknown-linux-gnu" - "clang", inputs: ["[[INPUT]]", "[[HIPFB]]"], output: "{{.*}}"
 
 // RUN: touch %t.o
 // RUN: %clang --hip-link -ccc-print-bindings --target=x86_64-linux-gnu \
-// RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 -fgpu-rdc %t.o\
+// RUN:   --no-offload-new-driver --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 -fgpu-rdc %t.o\
 // RUN: 2>&1 | FileCheck %s
 
 // CHECK: # "x86_64-unknown-linux-gnu" - "offload bundler", inputs: ["[[IN:.*o]]"], outputs: ["[[HOSTOBJ:.*o]]", "{{.*o}}", "{{.*o}}"]
@@ -46,7 +43,7 @@
 // CHECK: # "x86_64-unknown-linux-gnu" - "GNU::Linker", inputs: ["[[HOSTOBJ]]", "[[FATBINOBJ]]"], output: "a.out"
 
 // RUN: %clang --hip-link -ccc-print-bindings --target=x86_64-linux-gnu \
-// RUN:   --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %t.o\
+// RUN:   --no-offload-new-driver --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 %t.o\
 // RUN: 2>&1 | FileCheck -check-prefix=NORDC %s
 
 // NORDC-NOT: offload bundler
@@ -56,24 +53,41 @@
 // Check to make sure we can generate multiple outputs for device-only
 // compilation and fail with '-o'.
 //
-// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings \
+// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings -nogpulib -nogpuinc \
 // RUN:        --offload-arch=gfx90a --offload-arch=gfx908 --offload-device-only -c %s 2>&1 \
 // RUN: | FileCheck -check-prefix=MULTI-D-ONLY %s
 //      MULTI-D-ONLY: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[GFX908:.+]]"
 // MULTI-D-ONLY-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908]]"], output: "[[GFX908_OUT:.+]]"
 // MULTI-D-ONLY-NEXT: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[GFX90a:.+]]"
 // MULTI-D-ONLY-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX90a]]"], output: "[[GFX90a_OUT:.+]]"
+// MULTI-D-ONLY-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908_OUT]]", "[[GFX90a_OUT]]"], output: "{{.+}}"
 //
-// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings \
-// RUN:        --offload-arch=gfx90a --offload-arch=gfx908 --offload-device-only -c -o %t %s 2>&1 \
+// RUN: not %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings -nogpulib -nogpuinc -emit-llvm \
+// RUN:        --no-gpu-bundle-output --offload-arch=gfx90a --offload-arch=gfx908 --offload-device-only -c -o %t %s 2>&1 \
+// RUN: | FileCheck -check-prefix=MULTI-D-ONLY-NO-BUNDLE-O %s
+// MULTI-D-ONLY-NO-BUNDLE-O: error: cannot specify -o when generating multiple output files
+
+// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings -nogpulib -nogpuinc \
+// RUN:        --gpu-bundle-output --offload-arch=gfx90a --offload-arch=gfx908 --offload-device-only -c -o a.out %s 2>&1 \
 // RUN: | FileCheck -check-prefix=MULTI-D-ONLY-O %s
-// MULTI-D-ONLY-O: error: cannot specify -o when generating multiple output files
+//      MULTI-D-ONLY-O: "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[GFX908_OBJ:.+]]"
+// MULTI-D-ONLY-O-NEXT: "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908_OBJ]]"], output: "[[GFX908:.+]]"
+// MULTI-D-ONLY-O-NEXT: "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[GFX90A_OBJ:.+]]"
+// MULTI-D-ONLY-O-NEXT: "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX90A_OBJ]]"], output: "[[GFX90A:.+]]"
+// MULTI-D-ONLY-O-NEXT: "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908]]", "[[GFX90A]]"], output: "a.out"
+
+// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-bindings -nogpulib -nogpuinc -emit-llvm \
+// RUN:        --gpu-bundle-output --offload-arch=gfx90a --offload-arch=gfx908 --offload-device-only -c -o a.out %s 2>&1 \
+// RUN: | FileCheck -check-prefix=MULTI-D-ONLY-BC %s
+//      MULTI-D-ONLY-BC: "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[GFX908:.+]]"
+// MULTI-D-ONLY-BC-NEXT: "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[GFX90A:.+]]"
+// MULTI-D-ONLY-BC-NEXT: "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908]]", "[[GFX90A]]"], output: "a.out"
 
 //
 // Check to ensure that we can use '-fsyntax-only' for HIP output with the new
 // driver.
 // 
-// RUN: %clang -### -target x86_64-unknown-linux-gnu --offload-new-driver \
+// RUN: %clang -### --target=x86_64-unknown-linux-gnu --offload-new-driver -nogpulib -nogpuinc \
 // RUN:        -fsyntax-only --offload-arch=gfx90a --offload-arch=gfx908 -c %s 2>&1 \
 // RUN: | FileCheck -check-prefix=SYNTAX-ONLY %s
 // SYNTAX-ONLY: "-cc1" "-triple" "amdgcn-amd-amdhsa"{{.*}}"-fsyntax-only"
@@ -84,10 +98,10 @@
 // Check to ensure that we can use '-foffload' when not operating in RDC-mode.
 //
 // RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc --offload-new-driver -ccc-print-bindings \
-// RUN:        -foffload-lto --offload-arch=gfx90a --offload-arch=gfx908 -c %s 2>&1 \
+// RUN:        -nogpulib -nogpuinc -foffload-lto --offload-arch=gfx90a --offload-arch=gfx908 -c %s 2>&1 \
 // RUN: | FileCheck -check-prefix=LTO-NO-RDC %s
 //      LTO-NO-RDC: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[LTO_908:.+]]"
-// LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[LTO_908]]"], output: "[[OBJ_908:.+]]"
 // LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[INPUT]]"], output: "[[LTO_90A:.+]]"
-// LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[LTO_90A]]"], output: "[[OBJ_90A:.+]]"
-// LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[OBJ_908]]", "[[OBJ_90A]]"], output: "[[HIPFB:.+]]"
+// LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "Offload::Packager", inputs: ["[[LTO_908]]", "[[LTO_90A]]"], output: "[[PKG:.+]]"
+// LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "Offload::Linker", inputs: ["[[PKG]]"], output: "[[HIPFB:.+]]"
+// LTO-NO-RDC-NEXT: # "x86_64-unknown-linux-gnu" - "clang", inputs: ["[[INPUT]]", "[[HIPFB]]"], output: "hip-binding.o"

@@ -15,16 +15,15 @@
 #define LLVM_CLANG_LEX_LITERALSUPPORT_H
 
 #include "clang/Basic/CharInfo.h"
-#include "clang/Basic/LangOptions.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/TokenKinds.h"
-#include "clang/Lex/LiteralConverter.h"
+#include "clang/Lex/TextEncoding.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/CharSet.h"
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/TextEncoding.h"
 
 namespace clang {
 
@@ -38,6 +37,15 @@ class LangOptions;
 
 /// Copy characters from Input to Buf, expanding any UCNs.
 void expandUCNs(SmallVectorImpl<char> &Buf, StringRef Input);
+
+/// Return true if the token corresponds to a function local predefined macro,
+/// which expands to a string literal, that can be concatenated with other
+/// string literals (only in Microsoft mode).
+bool isFunctionLocalStringLiteralMacro(tok::TokenKind K, const LangOptions &LO);
+
+/// Return true if the token is a string literal, or a function local
+/// predefined macro, which expands to a string literal.
+bool tokenIsLikeStringLiteral(const Token &Tok, const LangOptions &LO);
 
 /// NumericLiteralParser - This performs strict semantic analysis of the content
 /// of a ppnumber, classifying it as either integer, floating, or erroneous,
@@ -74,9 +82,10 @@ public:
   bool isFloat128 : 1;      // 1.0q
   bool isFract : 1;         // 1.0hr/r/lr/uhr/ur/ulr
   bool isAccum : 1;         // 1.0hk/k/lk/uhk/uk/ulk
-  bool isBitInt : 1;        // 1wb, 1uwb (C2x)
-  uint8_t MicrosoftInteger; // Microsoft suffix extension i8, i16, i32, or i64.
-
+  bool isBitInt : 1;        // 1wb, 1uwb (C23) or 1__wb, 1__uwb (Clang extension in C++
+                            // mode)
+  uint8_t MicrosoftInteger; // Microsoft suffix extension i8, i16, i32, i64, or
+                            // i128.
 
   bool isFixedPointLiteral() const {
     return (saw_period || saw_exponent) && saw_fixed_point_suffix;
@@ -111,12 +120,10 @@ public:
   /// bits of the result and return true.  Otherwise, return false.
   bool GetIntegerValue(llvm::APInt &Val);
 
-  /// GetFloatValue - Convert this numeric literal to a floating value, using
-  /// the specified APFloat fltSemantics (specifying float, double, etc).
-  /// The optional bool isExact (passed-by-reference) has its value
-  /// set to true if the returned APFloat can represent the number in the
-  /// literal exactly, and false otherwise.
-  llvm::APFloat::opStatus GetFloatValue(llvm::APFloat &Result);
+  /// Convert this numeric literal to a floating value, using the specified
+  /// APFloat fltSemantics (specifying float, double, etc) and rounding mode.
+  llvm::APFloat::opStatus GetFloatValue(llvm::APFloat &Result,
+                                        llvm::RoundingMode RM);
 
   /// GetFixedPointValue - Convert this numeric literal value into a
   /// scaled integer that represents this value. Returns true if an overflow
@@ -177,8 +184,9 @@ private:
 
   /// SkipBinaryDigits - Read and skip over any binary digits, up to End.
   /// Return a pointer to the first non-binary digit or End.
-  const char *SkipBinaryDigits(const LangOptions &LangOpts, const char *ptr) {
-    // CC-RL permits only for binary numbers the _ as digit separator
+  const char *SkipBinaryDigits(const char *ptr) {
+    // CC-RL (-frenesas-extensions) also accepts '_' as a digit separator in
+    // binary literals.
     while (ptr != ThisTokEnd &&
            (*ptr == '0' || *ptr == '1' || isDigitSeparator(*ptr) ||
             (LangOpts.RenesasExt && *ptr == '_')))
@@ -230,7 +238,7 @@ class StringLiteralParser {
   const LangOptions &Features;
   const TargetInfo &Target;
   DiagnosticsEngine *Diags;
-  LiteralConverter *LiteralConv;
+  TextEncoding *TE;
 
   unsigned MaxTokenLength;
   unsigned SizeBound;
@@ -244,19 +252,19 @@ class StringLiteralParser {
   StringLiteralEvalMethod EvalMethod;
 
 public:
-  StringLiteralParser(ArrayRef<Token> StringToks, Preprocessor &PP,
-                      StringLiteralEvalMethod StringMethod =
-                          StringLiteralEvalMethod::Evaluated,
-                      ConversionAction Action = ToExecCharset);
+  StringLiteralParser(
+      ArrayRef<Token> StringToks, Preprocessor &PP,
+      StringLiteralEvalMethod StringMethod = StringLiteralEvalMethod::Evaluated,
+      ConversionAction Action = CA_NoConversion);
   StringLiteralParser(ArrayRef<Token> StringToks, const SourceManager &sm,
                       const LangOptions &features, const TargetInfo &target,
                       DiagnosticsEngine *diags = nullptr)
-      : SM(sm), Features(features), Target(target), Diags(diags),
+      : SM(sm), Features(features), Target(target), Diags(diags), TE(nullptr),
         MaxTokenLength(0), SizeBound(0), CharByteWidth(0), Kind(tok::unknown),
         ResultPtr(ResultBuf.data()),
         EvalMethod(StringLiteralEvalMethod::Evaluated), hadError(false),
         Pascal(false) {
-    init(StringToks, NoConversion);
+    init(StringToks, CA_NoConversion);
   }
 
   bool hadError;
@@ -306,7 +314,8 @@ public:
 private:
   void init(ArrayRef<Token> StringToks, ConversionAction Action);
   bool CopyStringFragment(const Token &Tok, const char *TokBegin,
-                          StringRef Fragment);
+                          StringRef Fragment,
+                          llvm::TextEncodingConverter *Converter);
   void DiagnoseLexingError(SourceLocation Loc);
 };
 

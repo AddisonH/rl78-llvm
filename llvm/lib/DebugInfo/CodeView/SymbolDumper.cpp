@@ -335,6 +335,22 @@ Error CVSymbolDumperImpl::visitKnownRecord(
 }
 
 Error CVSymbolDumperImpl::visitKnownRecord(
+    CVSymbol &CVR, DefRangeRegisterRelIndirSym &DefRangeRegisterRelIndir) {
+  W.printEnum("BaseRegister", uint16_t(DefRangeRegisterRelIndir.Hdr.Register),
+              getRegisterNames(CompilationCPUType));
+  W.printBoolean("HasSpilledUDTMember",
+                 DefRangeRegisterRelIndir.hasSpilledUDTMember());
+  W.printNumber("OffsetInParent", DefRangeRegisterRelIndir.offsetInParent());
+  W.printNumber("BasePointerOffset",
+                DefRangeRegisterRelIndir.Hdr.BasePointerOffset);
+  W.printNumber("OffsetInUDT", DefRangeRegisterRelIndir.Hdr.OffsetInUdt);
+  printLocalVariableAddrRange(DefRangeRegisterRelIndir.Range,
+                              DefRangeRegisterRelIndir.getRelocationOffset());
+  printLocalVariableAddrGap(DefRangeRegisterRelIndir.Gaps);
+  return Error::success();
+}
+
+Error CVSymbolDumperImpl::visitKnownRecord(
     CVSymbol &CVR, DefRangeRegisterSym &DefRangeRegister) {
   W.printEnum("Register", uint16_t(DefRangeRegister.Hdr.Register),
               getRegisterNames(CompilationCPUType));
@@ -589,7 +605,22 @@ Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
 }
 
 Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR, CallerSym &Caller) {
-  ListScope S(W, CVR.kind() == S_CALLEES ? "Callees" : "Callers");
+  llvm::StringRef ScopeName;
+  switch (CVR.kind()) {
+  case S_CALLEES:
+    ScopeName = "Callees";
+    break;
+  case S_CALLERS:
+    ScopeName = "Callers";
+    break;
+  case S_INLINEES:
+    ScopeName = "Inlinees";
+    break;
+  default:
+    return llvm::make_error<CodeViewError>(
+        "Unknown CV Record type for a CallerSym object!");
+  }
+  ListScope S(W, ScopeName);
   for (auto FuncID : Caller.Indices)
     printTypeIndex("FuncID", FuncID);
   return Error::success();
@@ -602,6 +633,17 @@ Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
   W.printEnum("Register", uint16_t(RegRel.Register),
               getRegisterNames(CompilationCPUType));
   W.printString("VarName", RegRel.Name);
+  return Error::success();
+}
+
+Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
+                                           RegRelativeIndirSym &RegRelIndir) {
+  W.printHex("Offset", RegRelIndir.Offset);
+  printTypeIndex("Type", RegRelIndir.Type);
+  W.printEnum("Register", uint16_t(RegRelIndir.Register),
+              getRegisterNames(CompilationCPUType));
+  W.printHex("OffsetInUdt", RegRelIndir.OffsetInUdt);
+  W.printString("VarName", RegRelIndir.Name);
   return Error::success();
 }
 
@@ -640,6 +682,27 @@ Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
   for (StringRef Str : Annot.Strings)
     W.printString(Str);
 
+  return Error::success();
+}
+
+Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
+                                           JumpTableSym &JumpTable) {
+  W.printHex("BaseOffset", JumpTable.BaseOffset);
+  W.printNumber("BaseSegment", JumpTable.BaseSegment);
+  W.printEnum("SwitchType", static_cast<uint16_t>(JumpTable.SwitchType),
+              getJumpTableEntrySizeNames());
+  W.printHex("BranchOffset", JumpTable.BranchOffset);
+  W.printHex("TableOffset", JumpTable.TableOffset);
+  W.printNumber("BranchSegment", JumpTable.BranchSegment);
+  W.printNumber("TableSegment", JumpTable.TableSegment);
+  W.printNumber("EntriesCount", JumpTable.EntriesCount);
+  return Error::success();
+}
+
+Error CVSymbolDumperImpl::visitKnownRecord(CVSymbol &CVR,
+                                           HotPatchFuncSym &HotPatchFunc) {
+  printTypeIndex("Function", HotPatchFunc.Function);
+  W.printString("Name", HotPatchFunc.Name);
   return Error::success();
 }
 

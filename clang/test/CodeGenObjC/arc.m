@@ -1,14 +1,14 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -Wno-objc-root-class -Wno-incompatible-pointer-types -Wno-arc-unsafe-retained-assign -emit-llvm -fblocks -fobjc-arc -fobjc-runtime-has-weak -O2 -disable-llvm-passes -o - %s | FileCheck %s
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -Wno-objc-root-class -Wno-incompatible-pointer-types -Wno-arc-unsafe-retained-assign -emit-llvm -fblocks -fobjc-arc -fobjc-runtime-has-weak -o - %s | FileCheck -check-prefix=CHECK-GLOBALS %s
 
-// rdar://13129783. Check both native/non-native arc platforms. Here we check
-// that they treat nonlazybind differently.
+// Check both native/non-native arc platforms. Here we check that they treat
+// nonlazybind differently.
 // RUN: %clang_cc1 -fobjc-runtime=macosx-10.6.0 -triple x86_64-apple-darwin10 -Wno-objc-root-class -Wno-incompatible-pointer-types -Wno-arc-unsafe-retained-assign -emit-llvm -fblocks -fobjc-arc -fobjc-runtime-has-weak -o - %s | FileCheck -check-prefix=ARC-ALIEN %s
 // RUN: %clang_cc1 -fobjc-runtime=macosx-10.7.0 -triple x86_64-apple-darwin11 -Wno-objc-root-class -Wno-incompatible-pointer-types -Wno-arc-unsafe-retained-assign -emit-llvm -fblocks -fobjc-arc -fobjc-runtime-has-weak -o - %s | FileCheck -check-prefix=ARC-NATIVE %s
 
 // ARC-ALIEN: declare extern_weak void @llvm.objc.storeStrong(ptr, ptr)
-// ARC-ALIEN: declare extern_weak ptr @llvm.objc.retain(ptr)
-// ARC-ALIEN: declare extern_weak ptr @llvm.objc.autoreleaseReturnValue(ptr)
+// ARC-ALIEN: declare extern_weak ptr @llvm.objc.retain(ptr returned)
+// ARC-ALIEN: declare extern_weak ptr @llvm.objc.autoreleaseReturnValue(ptr returned)
 // ARC-ALIEN: declare ptr @objc_msgSend(ptr, ptr, ...) [[NLB:#[0-9]+]]
 // ARC-ALIEN: declare extern_weak void @llvm.objc.release(ptr)
 // ARC-ALIEN: declare extern_weak ptr @llvm.objc.retainAutoreleasedReturnValue(ptr)
@@ -16,12 +16,12 @@
 // ARC-ALIEN: declare extern_weak ptr @llvm.objc.storeWeak(ptr, ptr)
 // ARC-ALIEN: declare extern_weak ptr @llvm.objc.loadWeakRetained(ptr)
 // ARC-ALIEN: declare extern_weak void @llvm.objc.destroyWeak(ptr)
-// ARC-ALIEN: declare extern_weak ptr @llvm.objc.autorelease(ptr)
-// ARC-ALIEN: declare extern_weak ptr @llvm.objc.retainAutorelease(ptr)
+// ARC-ALIEN: declare extern_weak ptr @llvm.objc.autorelease(ptr returned)
+// ARC-ALIEN: declare extern_weak ptr @llvm.objc.retainAutorelease(ptr returned)
 
 // ARC-NATIVE: declare void @llvm.objc.storeStrong(ptr, ptr)
-// ARC-NATIVE: declare ptr @llvm.objc.retain(ptr)
-// ARC-NATIVE: declare ptr @llvm.objc.autoreleaseReturnValue(ptr)
+// ARC-NATIVE: declare ptr @llvm.objc.retain(ptr returned)
+// ARC-NATIVE: declare ptr @llvm.objc.autoreleaseReturnValue(ptr returned)
 // ARC-NATIVE: declare ptr @objc_msgSend(ptr, ptr, ...) [[NLB:#[0-9]+]]
 // ARC-NATIVE: declare void @llvm.objc.release(ptr)
 // ARC-NATIVE: declare ptr @llvm.objc.retainAutoreleasedReturnValue(ptr)
@@ -29,8 +29,8 @@
 // ARC-NATIVE: declare ptr @llvm.objc.storeWeak(ptr, ptr)
 // ARC-NATIVE: declare ptr @llvm.objc.loadWeakRetained(ptr)
 // ARC-NATIVE: declare void @llvm.objc.destroyWeak(ptr)
-// ARC-NATIVE: declare ptr @llvm.objc.autorelease(ptr)
-// ARC-NATIVE: declare ptr @llvm.objc.retainAutorelease(ptr)
+// ARC-NATIVE: declare ptr @llvm.objc.autorelease(ptr returned)
+// ARC-NATIVE: declare ptr @llvm.objc.retainAutorelease(ptr returned)
 
 // CHECK-LABEL: define{{.*}} void @test0
 void test0(id x) {
@@ -48,13 +48,13 @@ id test1(id x) {
   // CHECK-NEXT: [[Y:%.*]] = alloca ptr
   // CHECK-NEXT: [[PARM:%.*]] = call ptr @llvm.objc.retain(ptr {{%.*}})
   // CHECK-NEXT: store ptr [[PARM]], ptr [[X]]
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[Y]])
   // CHECK-NEXT: store ptr null, ptr [[Y]]
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[Y]]
   // CHECK-NEXT: [[RET:%.*]] = call ptr @llvm.objc.retain(ptr [[T0]])
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[Y]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[Y]])
   // CHECK-NEXT: [[T1:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T1]])
   // CHECK-NEXT: [[T1:%.*]] = tail call ptr @llvm.objc.autoreleaseReturnValue(ptr [[RET]])
@@ -99,7 +99,7 @@ void test3_unelided(void) {
   extern void test3_helper(void);
 
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]], align
   Test3 *x;
 
@@ -118,14 +118,14 @@ void test3_unelided(void) {
 
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]]) [[NUW]]
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
 // CHECK-LABEL: define{{.*}} void @test3()
 void test3(void) {
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
 
   id x = [[Test3 alloc] initWith: 5];
 
@@ -155,7 +155,7 @@ void test3(void) {
   // Cleanup for x.
   // CHECK-NEXT: [[TMP:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[TMP]]) [[NUW]]
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -225,12 +225,12 @@ id test6_helper(void) __attribute__((ns_returns_retained));
 // CHECK-LABEL: define{{.*}} void @test6()
 void test6(void) {
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: [[CALL:%.*]] = call ptr @test6_helper()
   // CHECK-NEXT: store ptr [[CALL]], ptr [[X]]
   // CHECK-NEXT: [[T1:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T1]]) [[NUW]], !clang.imprecise_release
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
   id x = test6_helper();
 }
@@ -239,14 +239,14 @@ void test7_helper(id __attribute__((ns_consumed)));
 // CHECK-LABEL: define{{.*}} void @test7()
 void test7(void) {
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]]
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: [[T1:%.*]] = call ptr @llvm.objc.retain(ptr [[T0]]) [[NUW]]
   // CHECK-NEXT: call void @test7_helper(ptr noundef [[T1]])
   // CHECK-NEXT: [[T1:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T1]]) [[NUW]], !clang.imprecise_release
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
   id x;
   test7_helper(x);
@@ -256,11 +256,11 @@ id test8_helper(void) __attribute__((ns_returns_retained));
 void test8(void) {
   __unsafe_unretained id x = test8_helper();
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: [[T0:%.*]] = call ptr @test8_helper()
   // CHECK-NEXT: store ptr [[T0]], ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]]) [[NUW]], !clang.imprecise_release
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -274,9 +274,9 @@ void test10(void) {
   // CHECK-LABEL:      define{{.*}} void @test10()
   // CHECK:      [[X:%.*]] = alloca ptr, align
   // CHECK-NEXT: [[Y:%.*]] = alloca ptr, align
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]]
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[Y]])
   // CHECK-NEXT: load ptr, ptr [[X]], align
   // CHECK-NEXT: load ptr, ptr @OBJC_SELECTOR_REFERENCES_{{[0-9]*}}
   // CHECK-NEXT: [[V:%.*]] = call ptr @objc_msgSend{{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
@@ -288,10 +288,10 @@ void test10(void) {
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[V]])
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[Y]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[Y]])
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -300,13 +300,13 @@ void test11(id (*f)(void) __attribute__((ns_returns_retained))) {
   // CHECK:      [[F:%.*]] = alloca ptr, align
   // CHECK-NEXT: [[X:%.*]] = alloca ptr, align
   // CHECK-NEXT: store ptr {{%.*}}, ptr [[F]], align
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[F]], align
   // CHECK-NEXT: [[T1:%.*]] = call ptr [[T0]]()
   // CHECK-NEXT: store ptr [[T1]], ptr [[X]], align
   // CHECK-NEXT: [[T3:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T3]]) [[NUW]], !clang.imprecise_release
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
   id x = f();
 }
@@ -319,7 +319,7 @@ void test12(void) {
   // CHECK-NEXT: [[Y:%.*]] = alloca ptr, align
 
   __weak id x = test12_helper();
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: [[T1:%.*]] = call ptr @test12_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
   // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T1]])
   // CHECK-NEXT: call ptr @llvm.objc.initWeak(ptr [[X]], ptr [[T1]])
@@ -332,15 +332,15 @@ void test12(void) {
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T1]])
 
   id y = x;
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[Y]])
   // CHECK-NEXT: [[T2:%.*]] = call ptr @llvm.objc.loadWeakRetained(ptr [[X]])
   // CHECK-NEXT: store ptr [[T2]], ptr [[Y]], align
 
   // CHECK-NEXT: [[T4:%.*]] = load ptr, ptr [[Y]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T4]]) [[NUW]], !clang.imprecise_release
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[Y]])
   // CHECK-NEXT: call void @llvm.objc.destroyWeak(ptr [[X]])
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK: ret void
 }
 
@@ -348,7 +348,7 @@ void test12(void) {
 void test13(void) {
   // CHECK-LABEL:      define{{.*}} void @test13()
   // CHECK:      [[X:%.*]] = alloca ptr, align
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]], align
   id x;
 
@@ -362,7 +362,7 @@ void test13(void) {
 
   extern fnty ^test13_block;
   // CHECK-NEXT: [[TMP:%.*]] = load ptr, ptr @test13_block, align
-  // CHECK-NEXT: [[BLOCK_FN_PTR:%.*]] = getelementptr inbounds [[BLOCKTY:%.*]], ptr [[TMP]], i32 0, i32 3
+  // CHECK-NEXT: [[BLOCK_FN_PTR:%.*]] = getelementptr inbounds nuw [[BLOCKTY:%.*]], ptr [[TMP]], i32 0, i32 3
   // CHECK-NEXT: [[X_VAL:%.*]] = load ptr, ptr [[X]], align
   // CHECK-NEXT: [[X_TMP:%.*]] = call ptr @llvm.objc.retain(ptr [[X_VAL]]) [[NUW]]
   // CHECK-NEXT: [[BLOCK_FN_TMP:%.*]] = load ptr, ptr [[BLOCK_FN_PTR]]
@@ -371,7 +371,7 @@ void test13(void) {
 
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]]) [[NUW]]
-  // CHECK-NEXT: void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -483,7 +483,7 @@ void test20(unsigned n) {
   // CHECK-NEXT: [[DIM:%.*]] = zext i32 [[T0]] to i64
 
   // Save the stack pointer.
-  // CHECK-NEXT: [[T0:%.*]] = call ptr @llvm.stacksave()
+  // CHECK-NEXT: [[T0:%.*]] = call ptr @llvm.stacksave.p0()
   // CHECK-NEXT: store ptr [[T0]], ptr [[SAVED_STACK]]
 
   // Allocate the VLA.
@@ -509,7 +509,7 @@ void test20(unsigned n) {
   // CHECK-NEXT: br i1 [[EQ]],
 
   // CHECK:      [[T0:%.*]] = load ptr, ptr [[SAVED_STACK]]
-  // CHECK-NEXT: call void @llvm.stackrestore(ptr [[T0]])
+  // CHECK-NEXT: call void @llvm.stackrestore.p0(ptr [[T0]])
   // CHECK-NEXT: ret void
 }
 
@@ -526,7 +526,7 @@ void test21(unsigned n) {
   // CHECK-NEXT: [[T0:%.*]] = load i32, ptr [[N]], align 4
   // CHECK-NEXT: [[DIM:%.*]] = zext i32 [[T0]] to i64
 
-  // CHECK-NEXT: [[T0:%.*]] = call ptr @llvm.stacksave()
+  // CHECK-NEXT: [[T0:%.*]] = call ptr @llvm.stacksave.p0()
   // CHECK-NEXT: store ptr [[T0]], ptr [[SAVED_STACK]]
 
 
@@ -558,13 +558,11 @@ void test21(unsigned n) {
   // CHECK-NEXT: br i1 [[EQ]],
 
   // CHECK:      [[T0:%.*]] = load ptr, ptr [[SAVED_STACK]]
-  // CHECK-NEXT: call void @llvm.stackrestore(ptr [[T0]])
+  // CHECK-NEXT: call void @llvm.stackrestore.p0(ptr [[T0]])
   // CHECK-NEXT: ret void
 }
 
-// rdar://problem/8922540
 //   Note that we no longer emit .release_ivars flags.
-// rdar://problem/12492434
 //   Note that we set the flag saying that we need destruction *and*
 //   the flag saying that we don't also need construction.
 // CHECK-GLOBALS: @"_OBJC_CLASS_RO_$_Test23" = internal global [[RO_T:%.*]] { i32 390,
@@ -575,13 +573,11 @@ void test21(unsigned n) {
 @interface Test24 {} @end
 @implementation Test24 @end
 
-// rdar://problem/8941012
 @interface Test26 { id x[4]; } @end
 @implementation Test26 @end
 // CHECK:    define internal void @"\01-[Test26 .cxx_destruct]"(
 // CHECK:      [[SELF:%.*]] = load ptr, ptr
-// CHECK-NEXT: [[OFFSET:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test26.x"
-// CHECK-NEXT: [[T1:%.*]] = getelementptr inbounds i8, ptr [[SELF]], i64 [[OFFSET]]
+// CHECK-NEXT: [[T1:%.*]] = getelementptr inbounds i8, ptr [[SELF]], i64 0
 // CHECK-NEXT: [[BEGIN:%.*]] = getelementptr inbounds [4 x ptr], ptr [[T1]], i32 0, i32 0
 // CHECK-NEXT: [[END:%.*]] = getelementptr inbounds ptr, ptr [[BEGIN]], i64 4
 // CHECK-NEXT: br label
@@ -611,7 +607,6 @@ void test21(unsigned n) {
 
 @end
 
-// rdar://problem/8087194
 @interface Test28
 @property (copy) id prop;
 @end
@@ -620,8 +615,7 @@ void test21(unsigned n) {
 @end
 // CHECK:    define internal void @"\01-[Test28 .cxx_destruct]"
 // CHECK:      [[SELF:%.*]] = load ptr, ptr
-// CHECK-NEXT: [[OFFSET:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test28.prop"
-// CHECK-NEXT: [[T1:%.*]] = getelementptr inbounds i8, ptr [[SELF]], i64 [[OFFSET]]
+// CHECK-NEXT: [[T1:%.*]] = getelementptr inbounds i8, ptr [[SELF]], i64 0
 // CHECK-NEXT: call void @llvm.objc.storeStrong(ptr [[T1]], ptr null)
 // CHECK-NEXT: ret void
 
@@ -742,8 +736,7 @@ char *helper;
 
 // Assignment.
 // CHECK-NEXT: [[T1:%.*]] = load ptr, ptr [[SELF]]
-// CHECK-NEXT: [[IVAR:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test30.helper"
-// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T1]], i64 [[IVAR]]
+// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T1]], i64 0
 // CHECK-NEXT#: [[T5:%.*]] = load ptr, ptr [[T3]]
 // CHECK-NEXT#: [[T6:%.*]] = call ptr @llvm.objc.retain(ptr [[CALL]])
 // CHECK-NEXT#: call void @llvm.objc.release(ptr [[T5]])
@@ -893,7 +886,7 @@ void test37(void) {
   // CHECK-LABEL:    define{{.*}} void @test37()
   // CHECK:      [[VAR:%.*]] = alloca ptr,
   // CHECK-NEXT: [[TEMP:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[VAR]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[VAR]])
   // CHECK-NEXT: store ptr null, ptr [[VAR]]
 
   // CHECK-NEXT: [[W0:%.*]] = load ptr, ptr [[VAR]]
@@ -908,7 +901,7 @@ void test37(void) {
 
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[VAR]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[VAR]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[VAR]])
   // CHECK-NEXT: ret void
 }
 
@@ -933,7 +926,6 @@ void test37(void) {
 // CHECK:      [[CALL:%.*]] = tail call ptr @objc_getProperty(
 // CHECK-NEXT: ret ptr [[CALL]]
 
-// rdar://problem/9315552
 void test46(__weak id *wp, __weak volatile id *wvp) {
   extern id test46_helper(void);
 
@@ -958,14 +950,13 @@ void test46(__weak id *wp, __weak volatile id *wvp) {
   id y = *wvp = test46_helper();
 }
 
-// rdar://problem/9378887
 void test47(void) {
   extern id test47_helper(void);
   id x = x = test47_helper();
 
   // CHECK-LABEL:    define{{.*}} void @test47()
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]]
   // CHECK-NEXT: [[T0:%.*]] = call ptr @test47_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
   // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T0]])
@@ -978,7 +969,7 @@ void test47(void) {
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T3]])
   // CHECK-NEXT: [[T4:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T4]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -987,7 +978,7 @@ void test48(void) {
   __weak id x = x = test48_helper();
   // CHECK-LABEL:    define{{.*}} void @test48()
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: [[T0:%.*]] = call ptr @llvm.objc.initWeak(ptr [[X]], ptr null)
   // CHECK-NEXT: [[T2:%.*]] = call ptr @test48_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
   // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T2]])
@@ -995,7 +986,7 @@ void test48(void) {
   // CHECK-NEXT: [[T4:%.*]] = call ptr @llvm.objc.storeWeak(ptr [[X]], ptr [[T3]])
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T2]])
   // CHECK-NEXT: call void @llvm.objc.destroyWeak(ptr [[X]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
@@ -1004,7 +995,7 @@ void test49(void) {
   __autoreleasing id x = x = test49_helper();
   // CHECK-LABEL:    define{{.*}} void @test49()
   // CHECK:      [[X:%.*]] = alloca ptr
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK-NEXT: store ptr null, ptr [[X]]
   // CHECK-NEXT: [[T0:%.*]] = call ptr @test49_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
   // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T0]])
@@ -1012,11 +1003,10 @@ void test49(void) {
   // CHECK-NEXT: store ptr [[T1]], ptr [[X]]
   // CHECK-NEXT: [[T3:%.*]] = call ptr @llvm.objc.retainAutorelease(ptr [[T1]])
   // CHECK-NEXT: store ptr [[T3]], ptr [[X]]
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
-// rdar://9380136
 id x(void);
 void test50(id y) {
   ({x();});
@@ -1024,8 +1014,6 @@ void test50(id y) {
 // CHECK: call void @llvm.objc.release
 }
 
-
-// rdar://9400762
 struct CGPoint {
   float x;
   float y;
@@ -1040,7 +1028,6 @@ typedef struct CGPoint CGPoint;
 @synthesize point;
 @end
 
-// rdar://problem/9400398
 id test52(void) {
   id test52_helper(int) __attribute__((ns_returns_retained));
   return ({ int x = 5; test52_helper(x); });
@@ -1048,18 +1035,17 @@ id test52(void) {
 // CHECK-LABEL:    define{{.*}} ptr @test52()
 // CHECK:      [[X:%.*]] = alloca i32
 // CHECK-NEXT: [[TMPALLOCA:%.*]] = alloca ptr
-// CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 4, ptr [[X]])
+// CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
 // CHECK-NEXT: store i32 5, ptr [[X]],
 // CHECK-NEXT: [[T0:%.*]] = load i32, ptr [[X]],
 // CHECK-NEXT: [[T1:%.*]] = call ptr @test52_helper(i32 noundef [[T0]])
 // CHECK-NEXT: store ptr [[T1]], ptr [[TMPALLOCA]]
-// CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 4, ptr [[X]])
+// CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
 // CHECK-NEXT: [[T2:%.*]] = load ptr, ptr [[TMPALLOCA]]
 // CHECK-NEXT: [[T3:%.*]] = tail call ptr @llvm.objc.autoreleaseReturnValue(ptr [[T2]])
 // CHECK-NEXT: ret ptr [[T3]]
 }
 
-// rdar://problem/9400644
 void test53(void) {
   id test53_helper(void);
   id x = ({ id y = test53_helper(); y; });
@@ -1068,8 +1054,8 @@ void test53(void) {
 // CHECK:      [[X:%.*]] = alloca ptr,
 // CHECK-NEXT: [[Y:%.*]] = alloca ptr,
 // CHECK-NEXT: [[TMPALLOCA:%.*]] = alloca ptr,
-// CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
-// CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[Y]])
+// CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
+// CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[Y]])
 // CHECK-NEXT: [[T1:%.*]] = call ptr @test53_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
 // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T1]])
 // CHECK-NEXT: store ptr [[T1]], ptr [[Y]],
@@ -1078,17 +1064,16 @@ void test53(void) {
 // CHECK-NEXT: store ptr [[T1]], ptr [[TMPALLOCA]]
 // CHECK-NEXT: [[T2:%.*]] = load ptr, ptr [[Y]]
 // CHECK-NEXT: call void @llvm.objc.release(ptr [[T2]])
-// CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[Y]])
+// CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[Y]])
 // CHECK-NEXT: [[T3:%.*]] = load ptr, ptr [[TMPALLOCA]]
 // CHECK-NEXT: store ptr [[T3]], ptr [[X]],
 // CHECK-NEXT: load ptr, ptr [[X]],
 // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
 // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-// CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+// CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
 // CHECK-NEXT: ret void
 }
 
-// <rdar://problem/9758798>
 // CHECK-LABEL: define{{.*}} void @test54(i32 noundef %first, ...)
 void test54(int first, ...) {
   __builtin_va_list arglist;
@@ -1112,7 +1097,6 @@ void test54(int first, ...) {
 // CHECK-NOT: ret
 // CHECK:     call void @objc_msgSendSuper2(
 
-// rdar://problem/8024350
 @protocol Test56Protocol
 + (id) make __attribute__((ns_returns_retained));
 @end
@@ -1131,16 +1115,15 @@ void test56_test(void) {
   id x = [Test56 make];
   // CHECK-LABEL: define{{.*}} void @test56_test()
   // CHECK:      [[X:%.*]] = alloca ptr, align 8
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[X]])
   // CHECK:      [[T0:%.*]] = call ptr @objc_msgSend(
   // CHECK-NEXT: store ptr [[T0]], ptr [[X]]
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[X]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[X]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[X]])
   // CHECK-NEXT: ret void
 }
 
-// rdar://problem/9784964
 @interface Test57
 @property (nonatomic, strong) id strong;
 @property (nonatomic, weak) id weak;
@@ -1151,27 +1134,23 @@ void test56_test(void) {
 @end
 // CHECK: define internal ptr @"\01-[Test57 strong]"(
 // CHECK:      [[T0:%.*]] = load ptr, ptr {{%.*}}
-// CHECK-NEXT: [[T1:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test57.strong"
-// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 [[T1]]
+// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 0
 // CHECK-NEXT: [[T5:%.*]] = load ptr, ptr [[T3]]
 // CHECK-NEXT: ret ptr [[T5]]
 
 // CHECK: define internal ptr @"\01-[Test57 weak]"(
 // CHECK:      [[T0:%.*]] = load ptr, ptr {{%.*}}
-// CHECK-NEXT: [[T1:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test57.weak"
-// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 [[T1]]
+// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 8
 // CHECK-NEXT: [[T5:%.*]] = call ptr @llvm.objc.loadWeakRetained(ptr [[T3]])
 // CHECK-NEXT: [[T6:%.*]] = tail call ptr @llvm.objc.autoreleaseReturnValue(ptr [[T5]])
 // CHECK-NEXT: ret ptr [[T6]]
 
 // CHECK: define internal ptr @"\01-[Test57 unsafe]"(
 // CHECK:      [[T0:%.*]] = load ptr, ptr {{%.*}}
-// CHECK-NEXT: [[T1:%.*]] = load i64, ptr @"OBJC_IVAR_$_Test57.unsafe"
-// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 [[T1]]
+// CHECK-NEXT: [[T3:%.*]] = getelementptr inbounds i8, ptr [[T0]], i64 16
 // CHECK-NEXT: [[T5:%.*]] = load ptr, ptr [[T3]]
 // CHECK-NEXT: ret ptr [[T5]]
 
-// rdar://problem/9842343
 void test59(void) {
   extern id test59_getlock(void);
   extern void test59_body(void);
@@ -1190,7 +1169,6 @@ void test59(void) {
 }
 
 // Verify that we don't try to reclaim the result of performSelector.
-// rdar://problem/9887545
 @interface Test61
 - (id) performSelector: (SEL) selector;
 - (void) test61_void;
@@ -1210,7 +1188,7 @@ void test61(void) {
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T1]])
   [test61_make() performSelector: @selector(test61_void)];
 
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[Y]])
   // CHECK-NEXT: [[T1:%.*]] = call ptr @test61_make(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
   // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T1]])
   // CHECK-NEXT: [[T2:%.*]] = load ptr, ptr @OBJC_SELECTOR_REFERENCES_
@@ -1223,11 +1201,10 @@ void test61(void) {
 
   // CHECK-NEXT: [[T0:%.*]] = load ptr, ptr [[Y]]
   // CHECK-NEXT: call void @llvm.objc.release(ptr [[T0]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[Y]])
+  // CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[Y]])
   // CHECK-NEXT: ret void
 }
 
-// rdar://problem/9891815
 void test62(void) {
   // CHECK-LABEL:    define{{.*}} void @test62()
   // CHECK:      [[I:%.*]] = alloca i32, align 4
@@ -1236,7 +1213,7 @@ void test62(void) {
   extern id test62_make(void);
   extern void test62_body(void);
 
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 4, ptr [[I]])
+  // CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[I]])
   // CHECK-NEXT: store i32 0, ptr [[I]], align 4
   // CHECK-NEXT: br label
 
@@ -1277,7 +1254,6 @@ void test62(void) {
   // CHECK:      ret void
 }
 
-// rdar://9971982
 @class NSString;
 
 @interface Person  {
@@ -1318,17 +1294,16 @@ void test66(void) {
 // CHECK: call void @llvm.objc.release(ptr [[T3]])
 // CHECK-NEXT: ret void
 
-// rdar://problem/9953540
 Class test67_helper(void);
 void test67(void) {
   Class cl = test67_helper();
 }
 // CHECK-LABEL:    define{{.*}} void @test67()
 // CHECK:      [[CL:%.*]] = alloca ptr, align 8
-// CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[CL]])
+// CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[CL]])
 // CHECK-NEXT: [[T0:%.*]] = call ptr @test67_helper()
 // CHECK-NEXT: store ptr [[T0]], ptr [[CL]], align 8
-// CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[CL]])
+// CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[CL]])
 // CHECK-NEXT: ret void
 
 Class test68_helper(void);
@@ -1337,16 +1312,15 @@ void test68(void) {
 }
 // CHECK-LABEL:    define{{.*}} void @test68()
 // CHECK:      [[CL:%.*]] = alloca ptr, align 8
-// CHECK-NEXT: call void @llvm.lifetime.start.p0(i64 8, ptr [[CL]])
+// CHECK-NEXT: call void @llvm.lifetime.start.p0(ptr [[CL]])
 // CHECK-NEXT: [[T1:%.*]] = call ptr @test67_helper(){{.*}} [ "clang.arc.attachedcall"(ptr @llvm.objc.retainAutoreleasedReturnValue) ]
 // CHECK-NEXT: call void (...) @llvm.objc.clang.arc.noop.use(ptr [[T1]])
 // CHECK-NEXT: store ptr [[T1]], ptr [[CL]], align 8
 // CHECK-NEXT: [[T2:%.*]] = load ptr, ptr [[CL]]
 // CHECK-NEXT: call void @llvm.objc.release(ptr [[T2]])
-// CHECK-NEXT: call void @llvm.lifetime.end.p0(i64 8, ptr [[CL]])
+// CHECK-NEXT: call void @llvm.lifetime.end.p0(ptr [[CL]])
 // CHECK-NEXT: ret void
 
-// rdar://problem/10564852
 @interface Test69 @end
 @implementation Test69
 - (id) foo { return self; }
@@ -1356,7 +1330,6 @@ void test68(void) {
 // CHECK:      [[T0:%.*]] = load ptr, ptr [[SELF]], align 8
 // CHECK-NEXT: ret ptr [[T0]]
 
-// rdar://problem/10907547
 void test70(id i) {
   // CHECK-LABEL: define{{.*}} void @test70
   // CHECK: store ptr null, ptr
@@ -1378,14 +1351,14 @@ struct AggDtor getAggDtor(void);
 
 // CHECK-LABEL: define{{.*}} void @test71
 void test71(void) {
-  // CHECK: call void @llvm.lifetime.start.p0({{[^,]+}}, ptr %[[T:.*]])
-  // CHECK: call void @getAggDtor(ptr sret(%struct.AggDtor) align 8 %[[T]])
+  // CHECK: call void @llvm.lifetime.start.p0(ptr %[[T:.*]])
+  // CHECK: call void @getAggDtor(ptr dead_on_unwind writable sret(%struct.AggDtor) align 8 %[[T]])
   // CHECK: call void @__destructor_8_s40(ptr %[[T]])
-  // CHECK: call void @llvm.lifetime.end.p0({{[^,]+}}, ptr %[[T]])
-  // CHECK: call void @llvm.lifetime.start.p0({{[^,]+}}, ptr %[[T2:.*]])
-  // CHECK: call void @getAggDtor(ptr sret(%struct.AggDtor) align 8 %[[T2]])
+  // CHECK: call void @llvm.lifetime.end.p0(ptr %[[T]])
+  // CHECK: call void @llvm.lifetime.start.p0(ptr %[[T2:.*]])
+  // CHECK: call void @getAggDtor(ptr dead_on_unwind writable sret(%struct.AggDtor) align 8 %[[T2]])
   // CHECK: call void @__destructor_8_s40(ptr %[[T2]])
-  // CHECK: call void @llvm.lifetime.end.p0({{[^,]+}}, ptr %[[T2]])
+  // CHECK: call void @llvm.lifetime.end.p0(ptr %[[T2]])
   getAggDtor();
   getAggDtor();
 }
@@ -1398,14 +1371,13 @@ void test71(void) {
 // CHECK: %[[T:.*]] = alloca [2 x ptr], align 16
 // CHECK: %[[V0:.*]] = call ptr @llvm.objc.retain(ptr %[[A]])
 // CHECK: %[[V1:.*]] = call ptr @llvm.objc.retain(ptr %[[B]]) #2
-// CHECK: %[[ARRAYINIT_BEGIN:.*]] = getelementptr inbounds [2 x ptr], ptr %[[T]], i64 0, i64 0
-// CHECK: %[[V3:.*]] = load ptr, ptr %[[A_ADDR]], align 8, !tbaa !7
+// CHECK: %[[V3:.*]] = load ptr, ptr %[[A_ADDR]], align 8, !tbaa !{{[0-9]+}}
 // CHECK: %[[V4:.*]] = call ptr @llvm.objc.retain(ptr %[[V3]]) #2
-// CHECK: store ptr %[[V4]], ptr %[[ARRAYINIT_BEGIN]], align 8, !tbaa !7
-// CHECK: %[[ARRAYINIT_ELEMENT:.*]] = getelementptr inbounds ptr, ptr %[[ARRAYINIT_BEGIN]], i64 1
-// CHECK: %[[V5:.*]] = load ptr, ptr %[[B_ADDR]], align 8, !tbaa !7
+// CHECK: store ptr %[[V4]], ptr %[[T]], align 8, !tbaa !{{[0-9]+}}
+// CHECK: %[[ARRAYINIT_ELEMENT:.*]] = getelementptr inbounds ptr, ptr %[[T]], i64 1
+// CHECK: %[[V5:.*]] = load ptr, ptr %[[B_ADDR]], align 8, !tbaa !{{[0-9]+}}
 // CHECK: %[[V6:.*]] = call ptr @llvm.objc.retain(ptr %[[V5]]) #2
-// CHECK: store ptr %[[V6]], ptr %[[ARRAYINIT_ELEMENT]], align 8, !tbaa !7
+// CHECK: store ptr %[[V6]], ptr %[[ARRAYINIT_ELEMENT]], align 8, !tbaa !{{[0-9]+}}
 // CHECK: %[[ARRAY_BEGIN:.*]] = getelementptr inbounds [2 x ptr], ptr %[[T]], i32 0, i32 0
 // CHECK: %[[V7:.*]] = getelementptr inbounds ptr, ptr %[[ARRAY_BEGIN]], i64 2
 

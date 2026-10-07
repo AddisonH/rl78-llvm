@@ -13,14 +13,12 @@
 #include <memory>
 #include <system_error>
 
-#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/OffloadBinary.h"
 #include "llvm/Support/CommandLine.h"
-
-#include <unordered_set>
 
 namespace llvm {
 namespace object {
@@ -77,13 +75,15 @@ public:
   virtual void printFileHeaders() = 0;
   virtual void printSectionHeaders() = 0;
   virtual void printRelocations() = 0;
-  virtual void printSymbols(bool PrintSymbols, bool PrintDynamicSymbols) {
+  virtual void printSymbols(bool PrintSymbols, bool PrintDynamicSymbols,
+                            bool ExtraSymInfo) {
     if (PrintSymbols)
-      printSymbols();
+      printSymbols(ExtraSymInfo);
     if (PrintDynamicSymbols)
       printDynamicSymbols();
   }
   virtual void printSymbols(bool PrintSymbols, bool PrintDynamicSymbols,
+                            bool ExtraSymInfo,
                             std::optional<SymbolComparator> SymComp) {
     if (SymComp) {
       if (PrintSymbols)
@@ -91,14 +91,14 @@ public:
       if (PrintDynamicSymbols)
         printDynamicSymbols(SymComp);
     } else {
-      printSymbols(PrintSymbols, PrintDynamicSymbols);
+      printSymbols(PrintSymbols, PrintDynamicSymbols, ExtraSymInfo);
     }
   }
   virtual void printProgramHeaders(bool PrintProgramHeaders,
                                    cl::boolOrDefault PrintSectionMapping) {
     if (PrintProgramHeaders)
       printProgramHeaders();
-    if (PrintSectionMapping == cl::BOU_TRUE)
+    if (PrintSectionMapping == cl::boolOrDefault::BOU_TRUE)
       printSectionMapping();
   }
 
@@ -129,7 +129,10 @@ public:
   virtual void printGroupSections() {}
   virtual void printHashHistograms() {}
   virtual void printCGProfile() {}
-  virtual void printBBAddrMaps() {}
+  virtual void printCallGraphInfo() {}
+  // If PrettyPGOAnalysis is true, prints BFI as relative frequency and BPI as
+  // percentage. Otherwise raw values are displayed.
+  virtual void printBBAddrMaps(bool PrettyPGOAnalysis) {}
   virtual void printAddrsig() {}
   virtual void printNotes() {}
   virtual void printELFLinkerOptions() {}
@@ -137,12 +140,14 @@ public:
   virtual void printSectionDetails() {}
   virtual void printArchSpecificInfo() {}
   virtual void printMemtag() {}
+  virtual void printSectionsAsSFrame(ArrayRef<std::string> Sections) {}
 
   // Only implemented for PE/COFF.
   virtual void printCOFFImports() { }
   virtual void printCOFFExports() { }
   virtual void printCOFFDirectives() { }
   virtual void printCOFFBaseReloc() { }
+  virtual void printCOFFPseudoReloc() {}
   virtual void printCOFFDebugDirectory() { }
   virtual void printCOFFTLSDirectory() {}
   virtual void printCOFFResources() {}
@@ -155,8 +160,10 @@ public:
                      llvm::codeview::GlobalTypeTableBuilder &GlobalCVTypes,
                      bool GHash) {}
 
-  // Only implemented for XCOFF.
+  // Only implemented for XCOFF/COFF.
   virtual void printStringTable() {}
+
+  // Only implemented for XCOFF.
   virtual void printAuxiliaryHeader() {}
   virtual void printExceptionSection() {}
   virtual void printLoaderSection(bool PrintHeader, bool PrintSymbols,
@@ -175,26 +182,31 @@ public:
   void printAsStringList(StringRef StringContent, size_t StringDataOffset = 0);
 
   void printSectionsAsString(const object::ObjectFile &Obj,
-                             ArrayRef<std::string> Sections);
+                             ArrayRef<std::string> Sections, bool Decompress);
   void printSectionsAsHex(const object::ObjectFile &Obj,
-                          ArrayRef<std::string> Sections);
+                          ArrayRef<std::string> Sections, bool Decompress);
 
   std::function<Error(const Twine &Msg)> WarningHandler;
   void reportUniqueWarning(Error Err) const;
   void reportUniqueWarning(const Twine &Msg) const;
+  void printOffloading(const object::ObjectFile &Obj);
 
 protected:
   ScopedPrinter &W;
 
+  static std::vector<object::SectionRef>
+  getSectionRefsByNameOrIndex(const object::ObjectFile &Obj,
+                              ArrayRef<std::string> Sections);
+
 private:
-  virtual void printSymbols() {}
+  virtual void printSymbols(bool ExtraSymInfo) {}
   virtual void printSymbols(std::optional<SymbolComparator> Comp) {}
   virtual void printDynamicSymbols() {}
   virtual void printDynamicSymbols(std::optional<SymbolComparator> Comp) {}
   virtual void printProgramHeaders() {}
   virtual void printSectionMapping() {}
 
-  std::unordered_set<std::string> Warnings;
+  StringSet<> Warnings;
 };
 
 std::unique_ptr<ObjDumper> createCOFFDumper(const object::COFFObjectFile &Obj,

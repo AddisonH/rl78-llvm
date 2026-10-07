@@ -10,6 +10,7 @@
 #define LLDB_TARGET_REGISTERCONTEXT_H
 
 #include "lldb/Target/ExecutionContextScope.h"
+#include "lldb/Utility/RegisterInfo.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
@@ -50,6 +51,12 @@ public:
   virtual bool WriteAllRegisterValues(const lldb::DataBufferSP &data_sp) {
     return false;
   }
+
+  virtual bool RegisterWriteCausesReconfigure(const llvm::StringRef name) {
+    return false;
+  }
+
+  virtual bool ReconfigureRegisterInfo() { return false; }
 
   // These two functions are used to implement "push" and "pop" of register
   // states.  They are used primarily for expression evaluation, where we need
@@ -143,6 +150,10 @@ public:
                                       uint32_t reg_num);
 
   uint64_t GetPC(uint64_t fail_value = LLDB_INVALID_ADDRESS);
+
+  // Returns the register value containing thread specific data, like TLS data
+  // and other thread specific stuff.
+  uint64_t GetThreadPointer(uint64_t fail_value = LLDB_INVALID_ADDRESS);
 
   /// Get an address suitable for symbolication.
   /// When symbolicating -- computing line, block, function --

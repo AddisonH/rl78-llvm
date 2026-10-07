@@ -162,9 +162,19 @@
 #define ITT_ARCH_ARM64 6
 #endif /* ITT_ARCH_ARM64 */
 
+#ifndef ITT_ARCH_VE
+#define ITT_ARCH_VE 8
+#endif /* ITT_ARCH_VE */
+
+#ifndef ITT_ARCH_S390X
+#define ITT_ARCH_S390X 8
+#endif /* ITT_ARCH_S390X */
+
 #ifndef ITT_ARCH
 #if defined _M_IX86 || defined __i386__
 #define ITT_ARCH ITT_ARCH_IA32
+#elif defined _M_ARM64EC || defined __arm64ec__
+#define ITT_ARCH ITT_ARCH_ARM64
 #elif defined _M_X64 || defined _M_AMD64 || defined __x86_64__
 #define ITT_ARCH ITT_ARCH_IA32E
 #elif defined _M_IA64 || defined __ia64__
@@ -175,6 +185,10 @@
 #define ITT_ARCH ITT_ARCH_ARM64
 #elif defined __powerpc64__
 #define ITT_ARCH ITT_ARCH_PPC64
+#elif defined __ve__
+#define ITT_ARCH ITT_ARCH_VE
+#elif defined __s390x__
+#define ITT_ARCH ITT_ARCH_S390X
 #endif
 #endif
 

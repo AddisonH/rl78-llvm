@@ -55,7 +55,6 @@ int test10(int c) {
 }
 enum { Gronk = 5 };
 
-// rdar://9289603
 // CHECK: @test11
 // CHECK: select i1 {{.*}}, i32 4, i32 5
 int test11(int c) {
@@ -63,7 +62,7 @@ int test11(int c) {
 }
 
 // CHECK: @test12
-// CHECK: select i1 {{.*}}, double 4.0{{.*}}, double 2.0
+// CHECK: select i1 {{.*}}, double 4.000000e+00{{.*}}, double 2.000000e+00
 double test12(int c) {
   return c ? 4.0 : 2.0;
 }

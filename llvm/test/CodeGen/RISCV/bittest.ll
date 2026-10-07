@@ -187,14 +187,14 @@ define i64 @bittest_31_i64(i64 %a) nounwind {
 ;
 ; RV64ZBS-LABEL: bittest_31_i64:
 ; RV64ZBS:       # %bb.0:
-; RV64ZBS-NEXT:    not a0, a0
-; RV64ZBS-NEXT:    bexti a0, a0, 31
+; RV64ZBS-NEXT:    sraiw a0, a0, 31
+; RV64ZBS-NEXT:    seqz a0, a0
 ; RV64ZBS-NEXT:    ret
 ;
 ; RV64XTHEADBS-LABEL: bittest_31_i64:
 ; RV64XTHEADBS:       # %bb.0:
-; RV64XTHEADBS-NEXT:    not a0, a0
-; RV64XTHEADBS-NEXT:    th.tst a0, a0, 31
+; RV64XTHEADBS-NEXT:    sraiw a0, a0, 31
+; RV64XTHEADBS-NEXT:    seqz a0, a0
 ; RV64XTHEADBS-NEXT:    ret
   %shr = lshr i64 %a, 31
   %not = xor i64 %shr, -1
@@ -205,9 +205,10 @@ define i64 @bittest_31_i64(i64 %a) nounwind {
 define i64 @bittest_32_i64(i64 %a) nounwind {
 ; RV32-LABEL: bittest_32_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    not a0, a1
-; RV32-NEXT:    andi a0, a0, 1
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    li a1, 0
+; RV32-NEXT:    not a0, a0
+; RV32-NEXT:    andi a0, a0, 1
 ; RV32-NEXT:    ret
 ;
 ; RV64I-LABEL: bittest_32_i64:
@@ -237,9 +238,10 @@ define i64 @bittest_32_i64(i64 %a) nounwind {
 define i64 @bittest_63_i64(i64 %a) nounwind {
 ; RV32-LABEL: bittest_63_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    not a0, a1
-; RV32-NEXT:    srli a0, a0, 31
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    li a1, 0
+; RV32-NEXT:    not a0, a0
+; RV32-NEXT:    srli a0, a0, 31
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bittest_63_i64:
@@ -266,24 +268,17 @@ define i1 @bittest_constant_by_var_shr_i32(i32 signext %b) nounwind {
 ; RV64I-LABEL: bittest_constant_by_var_shr_i32:
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    lui a1, 301408
-; RV64I-NEXT:    addiw a1, a1, 722
+; RV64I-NEXT:    addi a1, a1, 722
 ; RV64I-NEXT:    srlw a0, a1, a0
 ; RV64I-NEXT:    andi a0, a0, 1
 ; RV64I-NEXT:    ret
 ;
-; RV32ZBS-LABEL: bittest_constant_by_var_shr_i32:
-; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    lui a1, 301408
-; RV32ZBS-NEXT:    addi a1, a1, 722
-; RV32ZBS-NEXT:    bext a0, a1, a0
-; RV32ZBS-NEXT:    ret
-;
-; RV64ZBS-LABEL: bittest_constant_by_var_shr_i32:
-; RV64ZBS:       # %bb.0:
-; RV64ZBS-NEXT:    lui a1, 301408
-; RV64ZBS-NEXT:    addiw a1, a1, 722
-; RV64ZBS-NEXT:    bext a0, a1, a0
-; RV64ZBS-NEXT:    ret
+; ZBS-LABEL: bittest_constant_by_var_shr_i32:
+; ZBS:       # %bb.0:
+; ZBS-NEXT:    lui a1, 301408
+; ZBS-NEXT:    addi a1, a1, 722
+; ZBS-NEXT:    bext a0, a1, a0
+; ZBS-NEXT:    ret
 ;
 ; RV32XTHEADBS-LABEL: bittest_constant_by_var_shr_i32:
 ; RV32XTHEADBS:       # %bb.0:
@@ -296,7 +291,7 @@ define i1 @bittest_constant_by_var_shr_i32(i32 signext %b) nounwind {
 ; RV64XTHEADBS-LABEL: bittest_constant_by_var_shr_i32:
 ; RV64XTHEADBS:       # %bb.0:
 ; RV64XTHEADBS-NEXT:    lui a1, 301408
-; RV64XTHEADBS-NEXT:    addiw a1, a1, 722
+; RV64XTHEADBS-NEXT:    addi a1, a1, 722
 ; RV64XTHEADBS-NEXT:    srlw a0, a1, a0
 ; RV64XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV64XTHEADBS-NEXT:    ret
@@ -319,24 +314,17 @@ define i1 @bittest_constant_by_var_shl_i32(i32 signext %b) nounwind {
 ; RV64I-LABEL: bittest_constant_by_var_shl_i32:
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    lui a1, 301408
-; RV64I-NEXT:    addiw a1, a1, 722
+; RV64I-NEXT:    addi a1, a1, 722
 ; RV64I-NEXT:    srlw a0, a1, a0
 ; RV64I-NEXT:    andi a0, a0, 1
 ; RV64I-NEXT:    ret
 ;
-; RV32ZBS-LABEL: bittest_constant_by_var_shl_i32:
-; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    lui a1, 301408
-; RV32ZBS-NEXT:    addi a1, a1, 722
-; RV32ZBS-NEXT:    bext a0, a1, a0
-; RV32ZBS-NEXT:    ret
-;
-; RV64ZBS-LABEL: bittest_constant_by_var_shl_i32:
-; RV64ZBS:       # %bb.0:
-; RV64ZBS-NEXT:    lui a1, 301408
-; RV64ZBS-NEXT:    addiw a1, a1, 722
-; RV64ZBS-NEXT:    bext a0, a1, a0
-; RV64ZBS-NEXT:    ret
+; ZBS-LABEL: bittest_constant_by_var_shl_i32:
+; ZBS:       # %bb.0:
+; ZBS-NEXT:    lui a1, 301408
+; ZBS-NEXT:    addi a1, a1, 722
+; ZBS-NEXT:    bext a0, a1, a0
+; ZBS-NEXT:    ret
 ;
 ; RV32XTHEADBS-LABEL: bittest_constant_by_var_shl_i32:
 ; RV32XTHEADBS:       # %bb.0:
@@ -349,7 +337,7 @@ define i1 @bittest_constant_by_var_shl_i32(i32 signext %b) nounwind {
 ; RV64XTHEADBS-LABEL: bittest_constant_by_var_shl_i32:
 ; RV64XTHEADBS:       # %bb.0:
 ; RV64XTHEADBS-NEXT:    lui a1, 301408
-; RV64XTHEADBS-NEXT:    addiw a1, a1, 722
+; RV64XTHEADBS-NEXT:    addi a1, a1, 722
 ; RV64XTHEADBS-NEXT:    srlw a0, a1, a0
 ; RV64XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV64XTHEADBS-NEXT:    ret
@@ -365,16 +353,16 @@ define i1 @bittest_constant_by_var_shr_i64(i64 %b) nounwind {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a1, 301408
 ; RV32-NEXT:    addi a1, a1, 722
-; RV32-NEXT:    srl a1, a1, a0
-; RV32-NEXT:    addi a0, a0, -32
-; RV32-NEXT:    srli a0, a0, 31
-; RV32-NEXT:    and a0, a0, a1
+; RV32-NEXT:    addi a2, a0, -32
+; RV32-NEXT:    srl a0, a1, a0
+; RV32-NEXT:    srli a2, a2, 31
+; RV32-NEXT:    and a0, a2, a0
 ; RV32-NEXT:    ret
 ;
 ; RV64I-LABEL: bittest_constant_by_var_shr_i64:
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    lui a1, 301408
-; RV64I-NEXT:    addiw a1, a1, 722
+; RV64I-NEXT:    addi a1, a1, 722
 ; RV64I-NEXT:    srl a0, a1, a0
 ; RV64I-NEXT:    andi a0, a0, 1
 ; RV64I-NEXT:    ret
@@ -382,14 +370,14 @@ define i1 @bittest_constant_by_var_shr_i64(i64 %b) nounwind {
 ; RV64ZBS-LABEL: bittest_constant_by_var_shr_i64:
 ; RV64ZBS:       # %bb.0:
 ; RV64ZBS-NEXT:    lui a1, 301408
-; RV64ZBS-NEXT:    addiw a1, a1, 722
+; RV64ZBS-NEXT:    addi a1, a1, 722
 ; RV64ZBS-NEXT:    bext a0, a1, a0
 ; RV64ZBS-NEXT:    ret
 ;
 ; RV64XTHEADBS-LABEL: bittest_constant_by_var_shr_i64:
 ; RV64XTHEADBS:       # %bb.0:
 ; RV64XTHEADBS-NEXT:    lui a1, 301408
-; RV64XTHEADBS-NEXT:    addiw a1, a1, 722
+; RV64XTHEADBS-NEXT:    addi a1, a1, 722
 ; RV64XTHEADBS-NEXT:    srl a0, a1, a0
 ; RV64XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV64XTHEADBS-NEXT:    ret
@@ -405,16 +393,16 @@ define i1 @bittest_constant_by_var_shl_i64(i64 %b) nounwind {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a1, 301408
 ; RV32-NEXT:    addi a1, a1, 722
-; RV32-NEXT:    srl a1, a1, a0
-; RV32-NEXT:    addi a0, a0, -32
-; RV32-NEXT:    srli a0, a0, 31
-; RV32-NEXT:    and a0, a0, a1
+; RV32-NEXT:    addi a2, a0, -32
+; RV32-NEXT:    srl a0, a1, a0
+; RV32-NEXT:    srli a2, a2, 31
+; RV32-NEXT:    and a0, a2, a0
 ; RV32-NEXT:    ret
 ;
 ; RV64I-LABEL: bittest_constant_by_var_shl_i64:
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    lui a1, 301408
-; RV64I-NEXT:    addiw a1, a1, 722
+; RV64I-NEXT:    addi a1, a1, 722
 ; RV64I-NEXT:    srl a0, a1, a0
 ; RV64I-NEXT:    andi a0, a0, 1
 ; RV64I-NEXT:    ret
@@ -422,14 +410,14 @@ define i1 @bittest_constant_by_var_shl_i64(i64 %b) nounwind {
 ; RV64ZBS-LABEL: bittest_constant_by_var_shl_i64:
 ; RV64ZBS:       # %bb.0:
 ; RV64ZBS-NEXT:    lui a1, 301408
-; RV64ZBS-NEXT:    addiw a1, a1, 722
+; RV64ZBS-NEXT:    addi a1, a1, 722
 ; RV64ZBS-NEXT:    bext a0, a1, a0
 ; RV64ZBS-NEXT:    ret
 ;
 ; RV64XTHEADBS-LABEL: bittest_constant_by_var_shl_i64:
 ; RV64XTHEADBS:       # %bb.0:
 ; RV64XTHEADBS-NEXT:    lui a1, 301408
-; RV64XTHEADBS-NEXT:    addiw a1, a1, 722
+; RV64XTHEADBS-NEXT:    addi a1, a1, 722
 ; RV64XTHEADBS-NEXT:    srl a0, a1, a0
 ; RV64XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV64XTHEADBS-NEXT:    ret
@@ -452,7 +440,7 @@ define void @bittest_switch(i32 signext %0) {
 ; RV32I-NEXT:    andi a0, a0, 1
 ; RV32I-NEXT:    beqz a0, .LBB14_3
 ; RV32I-NEXT:  # %bb.2:
-; RV32I-NEXT:    tail bar@plt
+; RV32I-NEXT:    tail bar
 ; RV32I-NEXT:  .LBB14_3:
 ; RV32I-NEXT:    ret
 ;
@@ -462,13 +450,13 @@ define void @bittest_switch(i32 signext %0) {
 ; RV64I-NEXT:    bltu a1, a0, .LBB14_3
 ; RV64I-NEXT:  # %bb.1:
 ; RV64I-NEXT:    lui a1, 2048
-; RV64I-NEXT:    addiw a1, a1, 51
+; RV64I-NEXT:    addi a1, a1, 51
 ; RV64I-NEXT:    slli a1, a1, 8
 ; RV64I-NEXT:    srl a0, a1, a0
 ; RV64I-NEXT:    andi a0, a0, 1
 ; RV64I-NEXT:    beqz a0, .LBB14_3
 ; RV64I-NEXT:  # %bb.2:
-; RV64I-NEXT:    tail bar@plt
+; RV64I-NEXT:    tail bar
 ; RV64I-NEXT:  .LBB14_3:
 ; RV64I-NEXT:    ret
 ;
@@ -482,7 +470,7 @@ define void @bittest_switch(i32 signext %0) {
 ; RV32ZBS-NEXT:    bext a0, a1, a0
 ; RV32ZBS-NEXT:    beqz a0, .LBB14_3
 ; RV32ZBS-NEXT:  # %bb.2:
-; RV32ZBS-NEXT:    tail bar@plt
+; RV32ZBS-NEXT:    tail bar
 ; RV32ZBS-NEXT:  .LBB14_3:
 ; RV32ZBS-NEXT:    ret
 ;
@@ -492,12 +480,12 @@ define void @bittest_switch(i32 signext %0) {
 ; RV64ZBS-NEXT:    bltu a1, a0, .LBB14_3
 ; RV64ZBS-NEXT:  # %bb.1:
 ; RV64ZBS-NEXT:    lui a1, 2048
-; RV64ZBS-NEXT:    addiw a1, a1, 51
+; RV64ZBS-NEXT:    addi a1, a1, 51
 ; RV64ZBS-NEXT:    slli a1, a1, 8
 ; RV64ZBS-NEXT:    bext a0, a1, a0
 ; RV64ZBS-NEXT:    beqz a0, .LBB14_3
 ; RV64ZBS-NEXT:  # %bb.2:
-; RV64ZBS-NEXT:    tail bar@plt
+; RV64ZBS-NEXT:    tail bar
 ; RV64ZBS-NEXT:  .LBB14_3:
 ; RV64ZBS-NEXT:    ret
 ;
@@ -512,7 +500,7 @@ define void @bittest_switch(i32 signext %0) {
 ; RV32XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV32XTHEADBS-NEXT:    beqz a0, .LBB14_3
 ; RV32XTHEADBS-NEXT:  # %bb.2:
-; RV32XTHEADBS-NEXT:    tail bar@plt
+; RV32XTHEADBS-NEXT:    tail bar
 ; RV32XTHEADBS-NEXT:  .LBB14_3:
 ; RV32XTHEADBS-NEXT:    ret
 ;
@@ -522,13 +510,13 @@ define void @bittest_switch(i32 signext %0) {
 ; RV64XTHEADBS-NEXT:    bltu a1, a0, .LBB14_3
 ; RV64XTHEADBS-NEXT:  # %bb.1:
 ; RV64XTHEADBS-NEXT:    lui a1, 2048
-; RV64XTHEADBS-NEXT:    addiw a1, a1, 51
+; RV64XTHEADBS-NEXT:    addi a1, a1, 51
 ; RV64XTHEADBS-NEXT:    slli a1, a1, 8
 ; RV64XTHEADBS-NEXT:    srl a0, a1, a0
 ; RV64XTHEADBS-NEXT:    andi a0, a0, 1
 ; RV64XTHEADBS-NEXT:    beqz a0, .LBB14_3
 ; RV64XTHEADBS-NEXT:  # %bb.2:
-; RV64XTHEADBS-NEXT:    tail bar@plt
+; RV64XTHEADBS-NEXT:    tail bar
 ; RV64XTHEADBS-NEXT:  .LBB14_3:
 ; RV64XTHEADBS-NEXT:    ret
   switch i32 %0, label %3 [
@@ -698,11 +686,12 @@ define signext i32 @bit_20_nz_select_i32(i32 signext %a, i32 signext %b, i32 sig
 define signext i32 @bit_31_z_select_i32(i32 signext %a, i32 signext %b, i32 signext %c) {
 ; RV32-LABEL: bit_31_z_select_i32:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    bgez a0, .LBB21_2
-; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    mv a1, a2
-; RV32-NEXT:  .LBB21_2:
+; RV32-NEXT:    mv a3, a0
 ; RV32-NEXT:    mv a0, a1
+; RV32-NEXT:    bgez a3, .LBB21_2
+; RV32-NEXT:  # %bb.1:
+; RV32-NEXT:    mv a0, a2
+; RV32-NEXT:  .LBB21_2:
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_31_z_select_i32:
@@ -751,10 +740,10 @@ define signext i32 @bit_31_nz_select_i32(i32 signext %a, i32 signext %b, i32 sig
 define i64 @bit_10_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_10_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a0, 1024
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 1024
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB23_2
+; RV32-NEXT:    beqz a3, .LBB23_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -779,11 +768,11 @@ define i64 @bit_10_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_10_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_10_nz_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a0, a0, 21
-; RV32I-NEXT:    srli a6, a0, 31
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a0, a0, 21
+; RV32I-NEXT:    srli a3, a0, 31
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    bnez a6, .LBB24_2
+; RV32I-NEXT:    bnez a3, .LBB24_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -802,10 +791,10 @@ define i64 @bit_10_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_10_nz_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bexti a6, a0, 10
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bexti a3, a0, 10
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    bnez a6, .LBB24_2
+; RV32ZBS-NEXT:    bnez a3, .LBB24_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -814,10 +803,10 @@ define i64 @bit_10_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_10_nz_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    th.tst a6, a0, 10
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    th.tst a3, a0, 10
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    bnez a6, .LBB24_2
+; RV32XTHEADBS-NEXT:    bnez a3, .LBB24_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -832,10 +821,10 @@ define i64 @bit_10_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_11_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_11_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 20
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 20
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bgez a6, .LBB25_2
+; RV32-NEXT:    bgez a3, .LBB25_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -860,11 +849,11 @@ define i64 @bit_11_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_11_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_11_nz_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a0, a0, 20
-; RV32I-NEXT:    srli a6, a0, 31
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a0, a0, 20
+; RV32I-NEXT:    srli a3, a0, 31
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    bnez a6, .LBB26_2
+; RV32I-NEXT:    bnez a3, .LBB26_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -883,10 +872,10 @@ define i64 @bit_11_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_11_nz_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bexti a6, a0, 11
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bexti a3, a0, 11
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    bnez a6, .LBB26_2
+; RV32ZBS-NEXT:    bnez a3, .LBB26_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -895,10 +884,10 @@ define i64 @bit_11_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_11_nz_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    th.tst a6, a0, 11
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    th.tst a3, a0, 11
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    bnez a6, .LBB26_2
+; RV32XTHEADBS-NEXT:    bnez a3, .LBB26_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -913,10 +902,10 @@ define i64 @bit_11_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_20_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_20_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 11
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 11
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bgez a6, .LBB27_2
+; RV32-NEXT:    bgez a3, .LBB27_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -941,11 +930,11 @@ define i64 @bit_20_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_20_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_20_nz_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a0, a0, 11
-; RV32I-NEXT:    srli a6, a0, 31
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a0, a0, 11
+; RV32I-NEXT:    srli a3, a0, 31
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    bnez a6, .LBB28_2
+; RV32I-NEXT:    bnez a3, .LBB28_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -964,10 +953,10 @@ define i64 @bit_20_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_20_nz_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bexti a6, a0, 20
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bexti a3, a0, 20
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    bnez a6, .LBB28_2
+; RV32ZBS-NEXT:    bnez a3, .LBB28_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -976,10 +965,10 @@ define i64 @bit_20_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_20_nz_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    th.tst a6, a0, 20
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    th.tst a3, a0, 20
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    bnez a6, .LBB28_2
+; RV32XTHEADBS-NEXT:    bnez a3, .LBB28_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -994,13 +983,14 @@ define i64 @bit_20_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_31_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_31_z_select_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    mv a6, a0
 ; RV32-NEXT:    mv a1, a3
-; RV32-NEXT:    bgez a0, .LBB29_2
+; RV32-NEXT:    mv a0, a2
+; RV32-NEXT:    bgez a6, .LBB29_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    mv a2, a4
+; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
 ; RV32-NEXT:  .LBB29_2:
-; RV32-NEXT:    mv a0, a2
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_31_z_select_i64:
@@ -1021,10 +1011,10 @@ define i64 @bit_31_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_31_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_31_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    srli a6, a0, 31
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    srli a3, a0, 31
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB30_2
+; RV32-NEXT:    bnez a3, .LBB30_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -1049,10 +1039,11 @@ define i64 @bit_31_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_32_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_32_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a1, 1
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 1
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB31_2
+; RV32-NEXT:    beqz a3, .LBB31_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -1077,10 +1068,11 @@ define i64 @bit_32_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_32_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_32_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a1, 1
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 1
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB32_2
+; RV32-NEXT:    bnez a3, .LBB32_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -1105,10 +1097,11 @@ define i64 @bit_32_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_55_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_55_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a1, 8
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 8
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bgez a6, .LBB33_2
+; RV32-NEXT:    bgez a3, .LBB33_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -1133,11 +1126,12 @@ define i64 @bit_55_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_55_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_55_nz_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a1, a1, 8
-; RV32I-NEXT:    srli a6, a1, 31
+; RV32I-NEXT:    mv a0, a1
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a0, a0, 8
+; RV32I-NEXT:    srli a3, a0, 31
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    bnez a6, .LBB34_2
+; RV32I-NEXT:    bnez a3, .LBB34_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -1156,10 +1150,11 @@ define i64 @bit_55_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_55_nz_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bexti a6, a1, 23
+; RV32ZBS-NEXT:    mv a0, a1
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bexti a3, a0, 23
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    bnez a6, .LBB34_2
+; RV32ZBS-NEXT:    bnez a3, .LBB34_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -1168,10 +1163,11 @@ define i64 @bit_55_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_55_nz_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    th.tst a6, a1, 23
+; RV32XTHEADBS-NEXT:    mv a0, a1
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    th.tst a3, a0, 23
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    bnez a6, .LBB34_2
+; RV32XTHEADBS-NEXT:    bnez a3, .LBB34_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -1186,22 +1182,24 @@ define i64 @bit_55_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_63_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_63_z_select_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    mv a6, a1
+; RV32-NEXT:    mv a1, a3
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bgez a1, .LBB35_2
+; RV32-NEXT:    bgez a6, .LBB35_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
-; RV32-NEXT:    mv a3, a5
+; RV32-NEXT:    mv a1, a5
 ; RV32-NEXT:  .LBB35_2:
-; RV32-NEXT:    mv a1, a3
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_63_z_select_i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    bgez a0, .LBB35_2
-; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    mv a1, a2
-; RV64-NEXT:  .LBB35_2:
+; RV64-NEXT:    mv a3, a0
 ; RV64-NEXT:    mv a0, a1
+; RV64-NEXT:    bgez a3, .LBB35_2
+; RV64-NEXT:  # %bb.1:
+; RV64-NEXT:    mv a0, a2
+; RV64-NEXT:  .LBB35_2:
 ; RV64-NEXT:    ret
   %1 = and i64 %a, 9223372036854775808
   %2 = icmp eq i64 %1, 0
@@ -1212,10 +1210,11 @@ define i64 @bit_63_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_63_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_63_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    srli a6, a1, 31
+; RV32-NEXT:    mv a0, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    srli a3, a0, 31
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB36_2
+; RV32-NEXT:    bnez a3, .LBB36_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -1243,7 +1242,7 @@ define void @bit_10_z_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:    andi a0, a0, 1024
 ; CHECK-NEXT:    bnez a0, .LBB37_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB37_2:
 ; CHECK-NEXT:    ret
   %2 = and i32 %0, 1024
@@ -1264,7 +1263,7 @@ define void @bit_10_nz_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:    andi a0, a0, 1024
 ; CHECK-NEXT:    beqz a0, .LBB38_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB38_2:
 ; CHECK-NEXT:    ret
   %2 = and i32 %0, 1024
@@ -1285,7 +1284,7 @@ define void @bit_11_z_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 20
 ; RV32-NEXT:    bltz a0, .LBB39_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB39_2:
 ; RV32-NEXT:    ret
 ;
@@ -1294,7 +1293,7 @@ define void @bit_11_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 52
 ; RV64-NEXT:    bltz a0, .LBB39_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB39_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 2048
@@ -1315,7 +1314,7 @@ define void @bit_11_nz_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 20
 ; RV32-NEXT:    bgez a0, .LBB40_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB40_2:
 ; RV32-NEXT:    ret
 ;
@@ -1324,7 +1323,7 @@ define void @bit_11_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 52
 ; RV64-NEXT:    bgez a0, .LBB40_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB40_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 2048
@@ -1345,7 +1344,7 @@ define void @bit_24_z_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 7
 ; RV32-NEXT:    bltz a0, .LBB41_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB41_2:
 ; RV32-NEXT:    ret
 ;
@@ -1354,7 +1353,7 @@ define void @bit_24_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 39
 ; RV64-NEXT:    bltz a0, .LBB41_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB41_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 16777216
@@ -1375,7 +1374,7 @@ define void @bit_24_nz_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 7
 ; RV32-NEXT:    bgez a0, .LBB42_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB42_2:
 ; RV32-NEXT:    ret
 ;
@@ -1384,7 +1383,7 @@ define void @bit_24_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 39
 ; RV64-NEXT:    bgez a0, .LBB42_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB42_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 16777216
@@ -1404,7 +1403,7 @@ define void @bit_31_z_branch_i32(i32 signext %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bltz a0, .LBB43_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB43_2:
 ; RV32-NEXT:    ret
 ;
@@ -1414,7 +1413,7 @@ define void @bit_31_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    and a0, a0, a1
 ; RV64-NEXT:    bnez a0, .LBB43_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB43_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 2147483648
@@ -1434,7 +1433,7 @@ define void @bit_31_nz_branch_i32(i32 signext %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bgez a0, .LBB44_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB44_2:
 ; RV32-NEXT:    ret
 ;
@@ -1444,7 +1443,7 @@ define void @bit_31_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    and a0, a0, a1
 ; RV64-NEXT:    beqz a0, .LBB44_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB44_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 2147483648
@@ -1465,7 +1464,7 @@ define void @bit_10_z_branch_i64(i64 %0) {
 ; CHECK-NEXT:    andi a0, a0, 1024
 ; CHECK-NEXT:    bnez a0, .LBB45_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB45_2:
 ; CHECK-NEXT:    ret
   %2 = and i64 %0, 1024
@@ -1486,7 +1485,7 @@ define void @bit_10_nz_branch_i64(i64 %0) {
 ; CHECK-NEXT:    andi a0, a0, 1024
 ; CHECK-NEXT:    beqz a0, .LBB46_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB46_2:
 ; CHECK-NEXT:    ret
   %2 = and i64 %0, 1024
@@ -1507,7 +1506,7 @@ define void @bit_11_z_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 20
 ; RV32-NEXT:    bltz a0, .LBB47_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB47_2:
 ; RV32-NEXT:    ret
 ;
@@ -1516,7 +1515,7 @@ define void @bit_11_z_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 52
 ; RV64-NEXT:    bltz a0, .LBB47_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB47_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 2048
@@ -1537,7 +1536,7 @@ define void @bit_11_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 20
 ; RV32-NEXT:    bgez a0, .LBB48_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB48_2:
 ; RV32-NEXT:    ret
 ;
@@ -1546,7 +1545,7 @@ define void @bit_11_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 52
 ; RV64-NEXT:    bgez a0, .LBB48_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB48_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 2048
@@ -1567,7 +1566,7 @@ define void @bit_24_z_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 7
 ; RV32-NEXT:    bltz a0, .LBB49_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB49_2:
 ; RV32-NEXT:    ret
 ;
@@ -1576,7 +1575,7 @@ define void @bit_24_z_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 39
 ; RV64-NEXT:    bltz a0, .LBB49_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB49_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 16777216
@@ -1597,7 +1596,7 @@ define void @bit_24_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 7
 ; RV32-NEXT:    bgez a0, .LBB50_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB50_2:
 ; RV32-NEXT:    ret
 ;
@@ -1606,7 +1605,7 @@ define void @bit_24_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 39
 ; RV64-NEXT:    bgez a0, .LBB50_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB50_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 16777216
@@ -1626,7 +1625,7 @@ define void @bit_31_z_branch_i64(i64 %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bltz a0, .LBB51_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB51_2:
 ; RV32-NEXT:    ret
 ;
@@ -1635,7 +1634,7 @@ define void @bit_31_z_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 32
 ; RV64-NEXT:    bltz a0, .LBB51_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB51_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 2147483648
@@ -1655,7 +1654,7 @@ define void @bit_31_nz_branch_i64(i64 %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bgez a0, .LBB52_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB52_2:
 ; RV32-NEXT:    ret
 ;
@@ -1664,7 +1663,7 @@ define void @bit_31_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 32
 ; RV64-NEXT:    bgez a0, .LBB52_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB52_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 2147483648
@@ -1685,7 +1684,7 @@ define void @bit_32_z_branch_i64(i64 %0) {
 ; RV32-NEXT:    andi a1, a1, 1
 ; RV32-NEXT:    bnez a1, .LBB53_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB53_2:
 ; RV32-NEXT:    ret
 ;
@@ -1694,7 +1693,7 @@ define void @bit_32_z_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 31
 ; RV64-NEXT:    bltz a0, .LBB53_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB53_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4294967296
@@ -1715,7 +1714,7 @@ define void @bit_32_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    andi a1, a1, 1
 ; RV32-NEXT:    beqz a1, .LBB54_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB54_2:
 ; RV32-NEXT:    ret
 ;
@@ -1724,7 +1723,7 @@ define void @bit_32_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 31
 ; RV64-NEXT:    bgez a0, .LBB54_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB54_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4294967296
@@ -1745,7 +1744,7 @@ define void @bit_62_z_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a1, a1, 1
 ; RV32-NEXT:    bltz a1, .LBB55_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB55_2:
 ; RV32-NEXT:    ret
 ;
@@ -1754,7 +1753,7 @@ define void @bit_62_z_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 1
 ; RV64-NEXT:    bltz a0, .LBB55_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB55_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4611686018427387904
@@ -1775,7 +1774,7 @@ define void @bit_62_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a1, a1, 1
 ; RV32-NEXT:    bgez a1, .LBB56_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB56_2:
 ; RV32-NEXT:    ret
 ;
@@ -1784,7 +1783,7 @@ define void @bit_62_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 1
 ; RV64-NEXT:    bgez a0, .LBB56_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB56_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4611686018427387904
@@ -1804,7 +1803,7 @@ define void @bit_63_z_branch_i64(i64 %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bltz a1, .LBB57_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB57_2:
 ; RV32-NEXT:    ret
 ;
@@ -1812,7 +1811,7 @@ define void @bit_63_z_branch_i64(i64 %0) {
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    bltz a0, .LBB57_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB57_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 9223372036854775808
@@ -1832,7 +1831,7 @@ define void @bit_63_nz_branch_i64(i64 %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    bgez a1, .LBB58_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB58_2:
 ; RV32-NEXT:    ret
 ;
@@ -1840,7 +1839,7 @@ define void @bit_63_nz_branch_i64(i64 %0) {
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    bgez a0, .LBB58_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB58_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 9223372036854775808
@@ -2078,11 +2077,12 @@ define signext i32 @bit_31_1_nz_select_i32(i32 signext %a, i32 signext %b, i32 s
 define signext i32 @bit_32_1_z_select_i32(i32 signext %a, i32 signext %b, i32 signext %c) {
 ; CHECK-LABEL: bit_32_1_z_select_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    beqz a0, .LBB69_2
-; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    mv a1, a2
-; CHECK-NEXT:  .LBB69_2:
+; CHECK-NEXT:    mv a3, a0
 ; CHECK-NEXT:    mv a0, a1
+; CHECK-NEXT:    beqz a3, .LBB69_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    mv a0, a2
+; CHECK-NEXT:  .LBB69_2:
 ; CHECK-NEXT:    ret
   %1 = and i32 %a, 4294967295
   %2 = icmp eq i32 %1, 0
@@ -2093,11 +2093,12 @@ define signext i32 @bit_32_1_z_select_i32(i32 signext %a, i32 signext %b, i32 si
 define signext i32 @bit_32_1_nz_select_i32(i32 signext %a, i32 signext %b, i32 signext %c) {
 ; CHECK-LABEL: bit_32_1_nz_select_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    bnez a0, .LBB70_2
-; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    mv a1, a2
-; CHECK-NEXT:  .LBB70_2:
+; CHECK-NEXT:    mv a3, a0
 ; CHECK-NEXT:    mv a0, a1
+; CHECK-NEXT:    bnez a3, .LBB70_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    mv a0, a2
+; CHECK-NEXT:  .LBB70_2:
 ; CHECK-NEXT:    ret
   %1 = and i32 %a, 4294967295
   %2 = icmp ne i32 %1, 0
@@ -2108,10 +2109,10 @@ define signext i32 @bit_32_1_nz_select_i32(i32 signext %a, i32 signext %b, i32 s
 define i64 @bit_10_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_10_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a0, 1023
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 1023
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB71_2
+; RV32-NEXT:    beqz a3, .LBB71_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2136,10 +2137,10 @@ define i64 @bit_10_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_10_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_10_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a0, 1023
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 1023
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB72_2
+; RV32-NEXT:    bnez a3, .LBB72_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2164,10 +2165,10 @@ define i64 @bit_10_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_11_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_11_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a0, 2047
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 2047
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB73_2
+; RV32-NEXT:    beqz a3, .LBB73_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2192,10 +2193,10 @@ define i64 @bit_11_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_11_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_11_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    andi a6, a0, 2047
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    andi a3, a0, 2047
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB74_2
+; RV32-NEXT:    bnez a3, .LBB74_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2220,10 +2221,10 @@ define i64 @bit_11_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_16_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_16_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 16
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 16
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB75_2
+; RV32-NEXT:    beqz a3, .LBB75_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2248,13 +2249,14 @@ define i64 @bit_16_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_16_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_16_1_nz_select_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    mv a6, a0
 ; RV32-NEXT:    mv a1, a3
-; RV32-NEXT:    bnez a0, .LBB76_2
+; RV32-NEXT:    mv a0, a2
+; RV32-NEXT:    bnez a6, .LBB76_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    mv a2, a4
+; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
 ; RV32-NEXT:  .LBB76_2:
-; RV32-NEXT:    mv a0, a2
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_16_1_nz_select_i64:
@@ -2276,10 +2278,10 @@ define i64 @bit_16_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_20_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_20_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 12
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 12
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB77_2
+; RV32-NEXT:    beqz a3, .LBB77_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2304,10 +2306,10 @@ define i64 @bit_20_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_20_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_20_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 12
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 12
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB78_2
+; RV32-NEXT:    bnez a3, .LBB78_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2332,10 +2334,10 @@ define i64 @bit_20_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_31_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_31_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 1
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB79_2
+; RV32-NEXT:    beqz a3, .LBB79_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2360,10 +2362,10 @@ define i64 @bit_31_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_31_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_31_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a6, a0, 1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a3, a0, 1
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB80_2
+; RV32-NEXT:    bnez a3, .LBB80_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2388,13 +2390,14 @@ define i64 @bit_31_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_32_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_32_1_z_select_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    mv a6, a0
 ; RV32-NEXT:    mv a1, a3
-; RV32-NEXT:    beqz a0, .LBB81_2
+; RV32-NEXT:    mv a0, a2
+; RV32-NEXT:    beqz a6, .LBB81_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    mv a2, a4
+; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
 ; RV32-NEXT:  .LBB81_2:
-; RV32-NEXT:    mv a0, a2
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_32_1_z_select_i64:
@@ -2415,13 +2418,14 @@ define i64 @bit_32_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_32_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_32_1_nz_select_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    mv a6, a0
 ; RV32-NEXT:    mv a1, a3
-; RV32-NEXT:    bnez a0, .LBB82_2
+; RV32-NEXT:    mv a0, a2
+; RV32-NEXT:    bnez a6, .LBB82_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    mv a2, a4
+; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
 ; RV32-NEXT:  .LBB82_2:
-; RV32-NEXT:    mv a0, a2
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bit_32_1_nz_select_i64:
@@ -2442,12 +2446,13 @@ define i64 @bit_32_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_55_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_55_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a1, a1, 9
-; RV32-NEXT:    srli a1, a1, 9
-; RV32-NEXT:    or a6, a0, a1
+; RV32-NEXT:    mv a6, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a6, a6, 9
+; RV32-NEXT:    srli a3, a6, 9
+; RV32-NEXT:    or a3, a0, a3
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB83_2
+; RV32-NEXT:    beqz a3, .LBB83_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2472,12 +2477,13 @@ define i64 @bit_55_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_55_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_55_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    slli a1, a1, 9
-; RV32-NEXT:    srli a1, a1, 9
-; RV32-NEXT:    or a6, a0, a1
+; RV32-NEXT:    mv a6, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    slli a6, a6, 9
+; RV32-NEXT:    srli a3, a6, 9
+; RV32-NEXT:    or a3, a0, a3
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB84_2
+; RV32-NEXT:    bnez a3, .LBB84_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2502,12 +2508,13 @@ define i64 @bit_55_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_63_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_63_1_z_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a1, a1, 1
-; RV32I-NEXT:    srli a1, a1, 1
-; RV32I-NEXT:    or a6, a0, a1
+; RV32I-NEXT:    mv a6, a1
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a6, a6, 1
+; RV32I-NEXT:    srli a3, a6, 1
+; RV32I-NEXT:    or a3, a0, a3
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    beqz a6, .LBB85_2
+; RV32I-NEXT:    beqz a3, .LBB85_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -2526,11 +2533,12 @@ define i64 @bit_63_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_63_1_z_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bclri a1, a1, 31
-; RV32ZBS-NEXT:    or a6, a0, a1
+; RV32ZBS-NEXT:    mv a6, a1
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bclri a3, a6, 31
+; RV32ZBS-NEXT:    or a3, a0, a3
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    beqz a6, .LBB85_2
+; RV32ZBS-NEXT:    beqz a3, .LBB85_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -2539,12 +2547,13 @@ define i64 @bit_63_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_63_1_z_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    slli a1, a1, 1
-; RV32XTHEADBS-NEXT:    srli a1, a1, 1
-; RV32XTHEADBS-NEXT:    or a6, a0, a1
+; RV32XTHEADBS-NEXT:    mv a6, a1
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    slli a6, a6, 1
+; RV32XTHEADBS-NEXT:    srli a3, a6, 1
+; RV32XTHEADBS-NEXT:    or a3, a0, a3
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    beqz a6, .LBB85_2
+; RV32XTHEADBS-NEXT:    beqz a3, .LBB85_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -2559,12 +2568,13 @@ define i64 @bit_63_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_63_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32I-LABEL: bit_63_1_nz_select_i64:
 ; RV32I:       # %bb.0:
-; RV32I-NEXT:    slli a1, a1, 1
-; RV32I-NEXT:    srli a1, a1, 1
-; RV32I-NEXT:    or a6, a0, a1
+; RV32I-NEXT:    mv a6, a1
 ; RV32I-NEXT:    mv a1, a3
+; RV32I-NEXT:    slli a6, a6, 1
+; RV32I-NEXT:    srli a3, a6, 1
+; RV32I-NEXT:    or a3, a0, a3
 ; RV32I-NEXT:    mv a0, a2
-; RV32I-NEXT:    bnez a6, .LBB86_2
+; RV32I-NEXT:    bnez a3, .LBB86_2
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    mv a0, a4
 ; RV32I-NEXT:    mv a1, a5
@@ -2583,11 +2593,12 @@ define i64 @bit_63_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32ZBS-LABEL: bit_63_1_nz_select_i64:
 ; RV32ZBS:       # %bb.0:
-; RV32ZBS-NEXT:    bclri a1, a1, 31
-; RV32ZBS-NEXT:    or a6, a0, a1
+; RV32ZBS-NEXT:    mv a6, a1
 ; RV32ZBS-NEXT:    mv a1, a3
+; RV32ZBS-NEXT:    bclri a3, a6, 31
+; RV32ZBS-NEXT:    or a3, a0, a3
 ; RV32ZBS-NEXT:    mv a0, a2
-; RV32ZBS-NEXT:    bnez a6, .LBB86_2
+; RV32ZBS-NEXT:    bnez a3, .LBB86_2
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    mv a0, a4
 ; RV32ZBS-NEXT:    mv a1, a5
@@ -2596,12 +2607,13 @@ define i64 @bit_63_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV32XTHEADBS-LABEL: bit_63_1_nz_select_i64:
 ; RV32XTHEADBS:       # %bb.0:
-; RV32XTHEADBS-NEXT:    slli a1, a1, 1
-; RV32XTHEADBS-NEXT:    srli a1, a1, 1
-; RV32XTHEADBS-NEXT:    or a6, a0, a1
+; RV32XTHEADBS-NEXT:    mv a6, a1
 ; RV32XTHEADBS-NEXT:    mv a1, a3
+; RV32XTHEADBS-NEXT:    slli a6, a6, 1
+; RV32XTHEADBS-NEXT:    srli a3, a6, 1
+; RV32XTHEADBS-NEXT:    or a3, a0, a3
 ; RV32XTHEADBS-NEXT:    mv a0, a2
-; RV32XTHEADBS-NEXT:    bnez a6, .LBB86_2
+; RV32XTHEADBS-NEXT:    bnez a3, .LBB86_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    mv a0, a4
 ; RV32XTHEADBS-NEXT:    mv a1, a5
@@ -2616,10 +2628,11 @@ define i64 @bit_63_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_64_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_64_1_z_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    or a6, a0, a1
+; RV32-NEXT:    mv a6, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    or a3, a0, a6
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    beqz a6, .LBB87_2
+; RV32-NEXT:    beqz a3, .LBB87_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2628,11 +2641,12 @@ define i64 @bit_64_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV64-LABEL: bit_64_1_z_select_i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    beqz a0, .LBB87_2
-; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    mv a1, a2
-; RV64-NEXT:  .LBB87_2:
+; RV64-NEXT:    mv a3, a0
 ; RV64-NEXT:    mv a0, a1
+; RV64-NEXT:    beqz a3, .LBB87_2
+; RV64-NEXT:  # %bb.1:
+; RV64-NEXT:    mv a0, a2
+; RV64-NEXT:  .LBB87_2:
 ; RV64-NEXT:    ret
   %1 = and i64 %a, 18446744073709551615
   %2 = icmp eq i64 %1, 0
@@ -2643,10 +2657,11 @@ define i64 @bit_64_1_z_select_i64(i64 %a, i64 %b, i64 %c) {
 define i64 @bit_64_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ; RV32-LABEL: bit_64_1_nz_select_i64:
 ; RV32:       # %bb.0:
-; RV32-NEXT:    or a6, a0, a1
+; RV32-NEXT:    mv a6, a1
 ; RV32-NEXT:    mv a1, a3
+; RV32-NEXT:    or a3, a0, a6
 ; RV32-NEXT:    mv a0, a2
-; RV32-NEXT:    bnez a6, .LBB88_2
+; RV32-NEXT:    bnez a3, .LBB88_2
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    mv a0, a4
 ; RV32-NEXT:    mv a1, a5
@@ -2655,11 +2670,12 @@ define i64 @bit_64_1_nz_select_i64(i64 %a, i64 %b, i64 %c) {
 ;
 ; RV64-LABEL: bit_64_1_nz_select_i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    bnez a0, .LBB88_2
-; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    mv a1, a2
-; RV64-NEXT:  .LBB88_2:
+; RV64-NEXT:    mv a3, a0
 ; RV64-NEXT:    mv a0, a1
+; RV64-NEXT:    bnez a3, .LBB88_2
+; RV64-NEXT:  # %bb.1:
+; RV64-NEXT:    mv a0, a2
+; RV64-NEXT:  .LBB88_2:
 ; RV64-NEXT:    ret
   %1 = and i64 %a, 18446744073709551615
   %2 = icmp ne i64 %1, 0
@@ -2675,7 +2691,7 @@ define void @bit_10_1_z_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB89_2:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
   %2 = and i32 %0, 1023
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2694,7 +2710,7 @@ define void @bit_10_1_nz_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:    andi a0, a0, 1023
 ; CHECK-NEXT:    beqz a0, .LBB90_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB90_2:
 ; CHECK-NEXT:    ret
   %2 = and i32 %0, 1023
@@ -2717,7 +2733,7 @@ define void @bit_11_1_z_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB91_2:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
   %2 = and i32 %0, 2047
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2736,7 +2752,7 @@ define void @bit_11_1_nz_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:    andi a0, a0, 2047
 ; CHECK-NEXT:    beqz a0, .LBB92_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB92_2:
 ; CHECK-NEXT:    ret
   %2 = and i32 %0, 2047
@@ -2759,7 +2775,7 @@ define void @bit_16_1_z_branch_i32(i32 signext %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB93_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_16_1_z_branch_i32:
 ; RV64:       # %bb.0:
@@ -2768,7 +2784,7 @@ define void @bit_16_1_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB93_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i32 %0, 65535
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2787,7 +2803,7 @@ define void @bit_16_1_nz_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 16
 ; RV32-NEXT:    beqz a0, .LBB94_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB94_2:
 ; RV32-NEXT:    ret
 ;
@@ -2796,7 +2812,7 @@ define void @bit_16_1_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 48
 ; RV64-NEXT:    beqz a0, .LBB94_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB94_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 65535
@@ -2819,7 +2835,7 @@ define void @bit_24_1_z_branch_i32(i32 signext %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB95_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_24_1_z_branch_i32:
 ; RV64:       # %bb.0:
@@ -2828,7 +2844,7 @@ define void @bit_24_1_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB95_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i32 %0, 16777215
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2847,7 +2863,7 @@ define void @bit_24_1_nz_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 8
 ; RV32-NEXT:    beqz a0, .LBB96_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB96_2:
 ; RV32-NEXT:    ret
 ;
@@ -2856,7 +2872,7 @@ define void @bit_24_1_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 40
 ; RV64-NEXT:    beqz a0, .LBB96_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB96_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 16777215
@@ -2879,7 +2895,7 @@ define void @bit_31_1_z_branch_i32(i32 signext %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB97_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_31_1_z_branch_i32:
 ; RV64:       # %bb.0:
@@ -2888,7 +2904,7 @@ define void @bit_31_1_z_branch_i32(i32 signext %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB97_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i32 %0, 2147483647
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2907,7 +2923,7 @@ define void @bit_31_1_nz_branch_i32(i32 signext %0) {
 ; RV32-NEXT:    slli a0, a0, 1
 ; RV32-NEXT:    beqz a0, .LBB98_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB98_2:
 ; RV32-NEXT:    ret
 ;
@@ -2916,7 +2932,7 @@ define void @bit_31_1_nz_branch_i32(i32 signext %0) {
 ; RV64-NEXT:    slli a0, a0, 33
 ; RV64-NEXT:    beqz a0, .LBB98_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB98_2:
 ; RV64-NEXT:    ret
   %2 = and i32 %0, 2147483647
@@ -2938,7 +2954,7 @@ define void @bit_32_1_z_branch_i32(i32 signext %0) {
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB99_2:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
   %2 = and i32 %0, 4294967295
   %3 = icmp eq i32 %2, 0
   br i1 %3, label %4, label %5
@@ -2956,7 +2972,7 @@ define void @bit_32_1_nz_branch_i32(i32 signext %0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    beqz a0, .LBB100_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB100_2:
 ; CHECK-NEXT:    ret
   %2 = and i32 %0, 4294967295
@@ -2980,7 +2996,7 @@ define void @bit_10_1_z_branch_i64(i64 %0) {
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB101_2:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
   %2 = and i64 %0, 1023
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -2999,7 +3015,7 @@ define void @bit_10_1_nz_branch_i64(i64 %0) {
 ; CHECK-NEXT:    andi a0, a0, 1023
 ; CHECK-NEXT:    beqz a0, .LBB102_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB102_2:
 ; CHECK-NEXT:    ret
   %2 = and i64 %0, 1023
@@ -3022,7 +3038,7 @@ define void @bit_11_1_z_branch_i64(i64 %0) {
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB103_2:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
   %2 = and i64 %0, 2047
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3041,7 +3057,7 @@ define void @bit_11_1_nz_branch_i64(i64 %0) {
 ; CHECK-NEXT:    andi a0, a0, 2047
 ; CHECK-NEXT:    beqz a0, .LBB104_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    tail bar@plt
+; CHECK-NEXT:    tail bar
 ; CHECK-NEXT:  .LBB104_2:
 ; CHECK-NEXT:    ret
   %2 = and i64 %0, 2047
@@ -3064,7 +3080,7 @@ define void @bit_16_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB105_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_16_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3073,7 +3089,7 @@ define void @bit_16_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB105_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 65535
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3092,7 +3108,7 @@ define void @bit_16_1_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 16
 ; RV32-NEXT:    beqz a0, .LBB106_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB106_2:
 ; RV32-NEXT:    ret
 ;
@@ -3101,7 +3117,7 @@ define void @bit_16_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 48
 ; RV64-NEXT:    beqz a0, .LBB106_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB106_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 65535
@@ -3124,7 +3140,7 @@ define void @bit_24_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB107_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_24_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3133,7 +3149,7 @@ define void @bit_24_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB107_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 16777215
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3152,7 +3168,7 @@ define void @bit_24_1_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 8
 ; RV32-NEXT:    beqz a0, .LBB108_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB108_2:
 ; RV32-NEXT:    ret
 ;
@@ -3161,7 +3177,7 @@ define void @bit_24_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 40
 ; RV64-NEXT:    beqz a0, .LBB108_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB108_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 16777215
@@ -3184,7 +3200,7 @@ define void @bit_31_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB109_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_31_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3193,7 +3209,7 @@ define void @bit_31_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB109_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 2147483647
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3212,7 +3228,7 @@ define void @bit_31_1_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    slli a0, a0, 1
 ; RV32-NEXT:    beqz a0, .LBB110_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB110_2:
 ; RV32-NEXT:    ret
 ;
@@ -3221,7 +3237,7 @@ define void @bit_31_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 33
 ; RV64-NEXT:    beqz a0, .LBB110_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB110_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 2147483647
@@ -3243,7 +3259,7 @@ define void @bit_32_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB111_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_32_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3252,7 +3268,7 @@ define void @bit_32_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB111_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 4294967295
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3270,7 +3286,7 @@ define void @bit_32_1_nz_branch_i64(i64 %0) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    beqz a0, .LBB112_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB112_2:
 ; RV32-NEXT:    ret
 ;
@@ -3279,7 +3295,7 @@ define void @bit_32_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    sext.w a0, a0
 ; RV64-NEXT:    beqz a0, .LBB112_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB112_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4294967295
@@ -3304,7 +3320,7 @@ define void @bit_62_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB113_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_62_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3313,7 +3329,7 @@ define void @bit_62_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB113_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 4611686018427387903
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3334,7 +3350,7 @@ define void @bit_62_1_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    or a0, a0, a1
 ; RV32-NEXT:    beqz a0, .LBB114_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB114_2:
 ; RV32-NEXT:    ret
 ;
@@ -3343,7 +3359,7 @@ define void @bit_62_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 2
 ; RV64-NEXT:    beqz a0, .LBB114_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB114_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 4611686018427387903
@@ -3368,7 +3384,7 @@ define void @bit_63_1_z_branch_i64(i64 %0) {
 ; RV32I-NEXT:  # %bb.1:
 ; RV32I-NEXT:    ret
 ; RV32I-NEXT:  .LBB115_2:
-; RV32I-NEXT:    tail bar@plt
+; RV32I-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_63_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3377,7 +3393,7 @@ define void @bit_63_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB115_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ;
 ; RV32ZBS-LABEL: bit_63_1_z_branch_i64:
 ; RV32ZBS:       # %bb.0:
@@ -3387,7 +3403,7 @@ define void @bit_63_1_z_branch_i64(i64 %0) {
 ; RV32ZBS-NEXT:  # %bb.1:
 ; RV32ZBS-NEXT:    ret
 ; RV32ZBS-NEXT:  .LBB115_2:
-; RV32ZBS-NEXT:    tail bar@plt
+; RV32ZBS-NEXT:    tail bar
 ;
 ; RV32XTHEADBS-LABEL: bit_63_1_z_branch_i64:
 ; RV32XTHEADBS:       # %bb.0:
@@ -3398,7 +3414,7 @@ define void @bit_63_1_z_branch_i64(i64 %0) {
 ; RV32XTHEADBS-NEXT:  # %bb.1:
 ; RV32XTHEADBS-NEXT:    ret
 ; RV32XTHEADBS-NEXT:  .LBB115_2:
-; RV32XTHEADBS-NEXT:    tail bar@plt
+; RV32XTHEADBS-NEXT:    tail bar
   %2 = and i64 %0, 9223372036854775807
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3419,7 +3435,7 @@ define void @bit_63_1_nz_branch_i64(i64 %0) {
 ; RV32I-NEXT:    or a0, a0, a1
 ; RV32I-NEXT:    beqz a0, .LBB116_2
 ; RV32I-NEXT:  # %bb.1:
-; RV32I-NEXT:    tail bar@plt
+; RV32I-NEXT:    tail bar
 ; RV32I-NEXT:  .LBB116_2:
 ; RV32I-NEXT:    ret
 ;
@@ -3428,7 +3444,7 @@ define void @bit_63_1_nz_branch_i64(i64 %0) {
 ; RV64-NEXT:    slli a0, a0, 1
 ; RV64-NEXT:    beqz a0, .LBB116_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB116_2:
 ; RV64-NEXT:    ret
 ;
@@ -3438,7 +3454,7 @@ define void @bit_63_1_nz_branch_i64(i64 %0) {
 ; RV32ZBS-NEXT:    or a0, a0, a1
 ; RV32ZBS-NEXT:    beqz a0, .LBB116_2
 ; RV32ZBS-NEXT:  # %bb.1:
-; RV32ZBS-NEXT:    tail bar@plt
+; RV32ZBS-NEXT:    tail bar
 ; RV32ZBS-NEXT:  .LBB116_2:
 ; RV32ZBS-NEXT:    ret
 ;
@@ -3449,7 +3465,7 @@ define void @bit_63_1_nz_branch_i64(i64 %0) {
 ; RV32XTHEADBS-NEXT:    or a0, a0, a1
 ; RV32XTHEADBS-NEXT:    beqz a0, .LBB116_2
 ; RV32XTHEADBS-NEXT:  # %bb.1:
-; RV32XTHEADBS-NEXT:    tail bar@plt
+; RV32XTHEADBS-NEXT:    tail bar
 ; RV32XTHEADBS-NEXT:  .LBB116_2:
 ; RV32XTHEADBS-NEXT:    ret
   %2 = and i64 %0, 9223372036854775807
@@ -3472,7 +3488,7 @@ define void @bit_64_1_z_branch_i64(i64 %0) {
 ; RV32-NEXT:  # %bb.1:
 ; RV32-NEXT:    ret
 ; RV32-NEXT:  .LBB117_2:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ;
 ; RV64-LABEL: bit_64_1_z_branch_i64:
 ; RV64:       # %bb.0:
@@ -3480,7 +3496,7 @@ define void @bit_64_1_z_branch_i64(i64 %0) {
 ; RV64-NEXT:  # %bb.1:
 ; RV64-NEXT:    ret
 ; RV64-NEXT:  .LBB117_2:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
   %2 = and i64 %0, 18446744073709551615
   %3 = icmp eq i64 %2, 0
   br i1 %3, label %4, label %5
@@ -3499,7 +3515,7 @@ define void @bit_64_1_nz_branch_i64(i64 %0) {
 ; RV32-NEXT:    or a0, a0, a1
 ; RV32-NEXT:    beqz a0, .LBB118_2
 ; RV32-NEXT:  # %bb.1:
-; RV32-NEXT:    tail bar@plt
+; RV32-NEXT:    tail bar
 ; RV32-NEXT:  .LBB118_2:
 ; RV32-NEXT:    ret
 ;
@@ -3507,7 +3523,7 @@ define void @bit_64_1_nz_branch_i64(i64 %0) {
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    beqz a0, .LBB118_2
 ; RV64-NEXT:  # %bb.1:
-; RV64-NEXT:    tail bar@plt
+; RV64-NEXT:    tail bar
 ; RV64-NEXT:  .LBB118_2:
 ; RV64-NEXT:    ret
   %2 = and i64 %0, 18446744073709551615
@@ -3522,3 +3538,75 @@ define void @bit_64_1_nz_branch_i64(i64 %0) {
   ret void
 }
 
+define i32 @bittest_31_andeq0_i64(i64 %x) {
+; RV32-LABEL: bittest_31_andeq0_i64:
+; RV32:       # %bb.0:
+; RV32-NEXT:    srli a0, a0, 31
+; RV32-NEXT:    seqz a0, a0
+; RV32-NEXT:    ret
+;
+; RV64-LABEL: bittest_31_andeq0_i64:
+; RV64:       # %bb.0:
+; RV64-NEXT:    sraiw a0, a0, 31
+; RV64-NEXT:    seqz a0, a0
+; RV64-NEXT:    ret
+  %and = and i64 %x, 2147483648
+  %cmp = icmp eq i64 %and, 0
+  %conv = zext i1 %cmp to i32
+  ret i32 %conv
+}
+
+define i32 @bittest_63_andeq0_i64(i64 %x) {
+; RV32-LABEL: bittest_63_andeq0_i64:
+; RV32:       # %bb.0:
+; RV32-NEXT:    srli a1, a1, 31
+; RV32-NEXT:    seqz a0, a1
+; RV32-NEXT:    ret
+;
+; RV64-LABEL: bittest_63_andeq0_i64:
+; RV64:       # %bb.0:
+; RV64-NEXT:    srli a0, a0, 63
+; RV64-NEXT:    seqz a0, a0
+; RV64-NEXT:    ret
+  %and = and i64 %x, 9223372036854775808
+  %cmp = icmp eq i64 %and, 0
+  %conv = zext i1 %cmp to i32
+  ret i32 %conv
+}
+
+define i32 @bittest_31_slt0_i32(i32 %x, i1 %y) {
+; RV32-LABEL: bittest_31_slt0_i32:
+; RV32:       # %bb.0:
+; RV32-NEXT:    srli a0, a0, 31
+; RV32-NEXT:    and a0, a0, a1
+; RV32-NEXT:    ret
+;
+; RV64-LABEL: bittest_31_slt0_i32:
+; RV64:       # %bb.0:
+; RV64-NEXT:    srliw a0, a0, 31
+; RV64-NEXT:    and a0, a0, a1
+; RV64-NEXT:    ret
+  %cmp = icmp slt i32 %x, 0
+  %and = and i1 %cmp, %y
+  %ext = zext i1 %and to i32
+  ret i32 %ext
+}
+
+define i32 @bittest_63_slt0_i64(i32 %x, i1 %y) {
+; RV32-LABEL: bittest_63_slt0_i64:
+; RV32:       # %bb.0:
+; RV32-NEXT:    srli a0, a0, 31
+; RV32-NEXT:    and a0, a0, a1
+; RV32-NEXT:    ret
+;
+; RV64-LABEL: bittest_63_slt0_i64:
+; RV64:       # %bb.0:
+; RV64-NEXT:    srliw a0, a0, 31
+; RV64-NEXT:    and a0, a0, a1
+; RV64-NEXT:    ret
+  %ext = sext i32 %x to i64
+  %cmp = icmp slt i64 %ext, 0
+  %and = and i1 %cmp, %y
+  %cond = zext i1 %and to i32
+  ret i32 %cond
+}

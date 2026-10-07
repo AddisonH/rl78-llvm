@@ -18,10 +18,16 @@
 namespace llvm {
 
 class raw_ostream;
+
+namespace dwarf_linker {
+namespace classic {
 class DwarfStreamer;
+}
+} // namespace dwarf_linker
 
 class DWARFDebugMacro {
-  friend DwarfStreamer;
+  friend dwarf_linker::classic::DwarfStreamer;
+  friend dwarf_linker::parallel::CompileUnit;
 
   /// DWARFv5 section 6.3.1 Macro Information Header.
   enum HeaderFlagMask {
@@ -56,16 +62,16 @@ class DWARFDebugMacro {
     uint64_t DebugLineOffset;
 
     /// Print the macro header from the debug_macro section.
-    void dumpMacroHeader(raw_ostream &OS) const;
+    LLVM_ABI void dumpMacroHeader(raw_ostream &OS) const;
 
     /// Parse the debug_macro header.
-    Error parseMacroHeader(DWARFDataExtractor Data, uint64_t *Offset);
+    LLVM_ABI Error parseMacroHeader(DWARFDataExtractor Data, uint64_t *Offset);
 
     /// Get the DWARF format according to the flags.
-    dwarf::DwarfFormat getDwarfFormat() const;
+    LLVM_ABI dwarf::DwarfFormat getDwarfFormat() const;
 
     /// Get the size of a reference according to the DWARF format.
-    uint8_t getOffsetByteSize() const;
+    LLVM_ABI uint8_t getOffsetByteSize() const;
   };
 
   /// A single macro entry within a macro list.
@@ -110,7 +116,7 @@ public:
   DWARFDebugMacro() = default;
 
   /// Print the macro list found within the debug_macinfo/debug_macro section.
-  void dump(raw_ostream &OS) const;
+  LLVM_ABI void dump(raw_ostream &OS) const;
 
   Error parseMacro(DWARFUnitVector::compile_unit_range Units,
                    DataExtractor StringExtractor,
@@ -136,9 +142,10 @@ public:
 private:
   /// Parse the debug_macinfo/debug_macro section accessible via the 'MacroData'
   /// parameter.
-  Error parseImpl(std::optional<DWARFUnitVector::compile_unit_range> Units,
-                  std::optional<DataExtractor> StringExtractor,
-                  DWARFDataExtractor Data, bool IsMacro);
+  LLVM_ABI Error
+  parseImpl(std::optional<DWARFUnitVector::compile_unit_range> Units,
+            std::optional<DataExtractor> StringExtractor,
+            DWARFDataExtractor Data, bool IsMacro);
 };
 
 } // end namespace llvm

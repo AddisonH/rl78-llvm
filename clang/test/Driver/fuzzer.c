@@ -8,7 +8,7 @@
 // CHECK-COVERAGE-SAME: -fsanitize-coverage-pc-table
 // CHECK-FUZZER-LIB: libclang_rt.fuzzer
 
-// RUN: %clang -fsanitize=fuzzer -target i386-unknown-linux -stdlib=platform %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-LINUX %s
+// RUN: %clang -fsanitize=fuzzer --target=i386-unknown-linux -stdlib=platform %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-LINUX %s
 //
 // CHECK-LIBCXX-LINUX: -lstdc++
 
@@ -18,7 +18,7 @@
 
 
 // Check that we don't link in libFuzzer.a when producing a shared object.
-// RUN: %clang -fsanitize=fuzzer %s -shared -o %t.so -### 2>&1 | FileCheck --check-prefixes=CHECK-NOLIB-SO %s
+// RUN: %clang --target=x86_64-linux-gnu -fsanitize=fuzzer %s -shared -### 2>&1 | FileCheck --check-prefixes=CHECK-NOLIB-SO %s
 // CHECK-NOLIB-SO-NOT: libclang_rt.libfuzzer
 
 // Check that we don't link in libFuzzer when compiling with -fsanitize=fuzzer-no-link.
@@ -26,25 +26,32 @@
 // CHECK-NOLIB-NOT: libclang_rt.libfuzzer
 // CHECK-COV: -fsanitize-coverage-inline-8bit-counters
 
-// RUN: %clang -fsanitize=fuzzer -fsanitize-coverage=trace-pc %s -### 2>&1 | FileCheck --check-prefixes=CHECK-MSG %s
-// CHECK-MSG-NOT: argument unused during compilation
-
-// Check that we respect whether thes tandard library should be linked
+// Check that we respect whether the standard library should be linked.
 // statically.
 //
-// RUN: %clang -fsanitize=fuzzer -target i386-unknown-linux -stdlib=libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBSTDCXX-DYNAMIC %s
+// RUN: %clang -fsanitize=fuzzer --target=i386-unknown-linux -stdlib=libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBSTDCXX-DYNAMIC %s
 // CHECK-LIBSTDCXX-DYNAMIC-NOT: -Bstatic
 // CHECK-LIBSTDCXX-DYNAMIC: -lstdc++
 //
-// RUN: %clang -fsanitize=fuzzer -target i386-unknown-linux -stdlib=libstdc++ -static-libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBSTDCXX-STATIC %s
+// RUN: %clang -fsanitize=fuzzer --target=i386-unknown-linux -stdlib=libstdc++ -static-libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBSTDCXX-STATIC %s
 // CHECK-LIBSTDCXX-STATIC: "-Bstatic" "-lstdc++"
 //
-// RUN: %clang -fsanitize=fuzzer -target i386-unknown-linux -stdlib=libc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-DYNAMIC %s
+// RUN: %clang -fsanitize=fuzzer --target=i386-unknown-linux -stdlib=libc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-DYNAMIC %s
 // CHECK-LIBCXX-DYNAMIC-NOT: -Bstatic
 // CHECK-LIBCXX-DYNAMIC: -lc++
 //
-// RUN: %clang -fsanitize=fuzzer -target i386-unknown-linux -stdlib=libc++ -static-libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-STATIC %s
+// RUN: %clang -fsanitize=fuzzer --target=i386-unknown-linux -stdlib=libc++ -static-libstdc++ %s -### 2>&1 | FileCheck --check-prefixes=CHECK-LIBCXX-STATIC %s
 // CHECK-LIBCXX-STATIC: "-Bstatic" "-lc++"
+
+// Check that we add required dependencies when linking the sanitizer runtime
+// (e.g. libFuzzer uses sqrt in libm).
+//
+// RUN: %clang -fsanitize=fuzzer -shared-libsan --target=x86_64-linux-gnu %s -### 2>&1 | FileCheck --check-prefixes=CHECK-SHARED-LIBSAN %s
+// CHECK-SHARED-LIBSAN: -lm
+// RUN: %clang -fsanitize=fuzzer -static-libsan --target=x86_64-linux-gnu %s -### 2>&1 | FileCheck --check-prefixes=CHECK-STATIC-LIBSAN %s
+// CHECK-STATIC-LIBSAN: -lm
+// RUN: %clang -fsanitize=fuzzer --target=x86_64-linux-gnu %s -### 2>&1 | FileCheck --check-prefixes=CHECK-DEFAULT-LIBSAN %s
+// CHECK-DEFAULT-LIBSAN: -lm
 
 int LLVMFuzzerTestOneInput(const char *Data, long Size) {
   return 0;

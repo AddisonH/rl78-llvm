@@ -12,21 +12,26 @@
 // The following are done for IR adjustment:
 //   - remove __builtin_bpf_passthrough builtins. Target independent IR
 //     optimizations are done and those builtins can be removed.
+//   - remove llvm.bpf.getelementptr.and.load builtins.
+//   - remove llvm.bpf.getelementptr.and.store builtins.
+//   - for loads and stores with base addresses from non-zero address space
+//     cast base address to zero address space (support for BPF address spaces).
 //
 //===----------------------------------------------------------------------===//
 
 #include "BPF.h"
 #include "BPFCORE.h"
-#include "BPFTargetMachine.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/Analysis.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsBPF.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/Type.h"
-#include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -37,32 +42,25 @@ using namespace llvm;
 
 namespace {
 
-class BPFCheckAndAdjustIR final : public ModulePass {
+class BPFCheckAndAdjustIRLegacy final : public ModulePass {
   bool runOnModule(Module &F) override;
 
 public:
   static char ID;
-  BPFCheckAndAdjustIR() : ModulePass(ID) {}
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const override;
-
-private:
-  void checkIR(Module &M);
-  bool adjustIR(Module &M);
-  bool removePassThroughBuiltin(Module &M);
-  bool removeCompareBuiltin(Module &M);
-  bool sinkMinMax(Module &M);
+  BPFCheckAndAdjustIRLegacy() : ModulePass(ID) {}
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
 };
 } // End anonymous namespace
 
-char BPFCheckAndAdjustIR::ID = 0;
-INITIALIZE_PASS(BPFCheckAndAdjustIR, DEBUG_TYPE, "BPF Check And Adjust IR",
-                false, false)
+char BPFCheckAndAdjustIRLegacy::ID = 0;
+INITIALIZE_PASS(BPFCheckAndAdjustIRLegacy, DEBUG_TYPE,
+                "BPF Check And Adjust IR", false, false)
 
-ModulePass *llvm::createBPFCheckAndAdjustIR() {
-  return new BPFCheckAndAdjustIR();
+ModulePass *llvm::createBPFCheckAndAdjustIRLegacyPass() {
+  return new BPFCheckAndAdjustIRLegacy();
 }
 
-void BPFCheckAndAdjustIR::checkIR(Module &M) {
+static void checkIR(Module &M) {
   // Ensure relocation global won't appear in PHI node
   // This may happen if the compiler generated the following code:
   //   B1:
@@ -95,7 +93,7 @@ void BPFCheckAndAdjustIR::checkIR(Module &M) {
       }
 }
 
-bool BPFCheckAndAdjustIR::removePassThroughBuiltin(Module &M) {
+static bool removePassThroughBuiltin(Module &M) {
   // Remove __builtin_bpf_passthrough()'s which are used to prevent
   // certain IR optimizations. Now major IR optimizations are done,
   // remove them.
@@ -115,7 +113,7 @@ bool BPFCheckAndAdjustIR::removePassThroughBuiltin(Module &M) {
         auto *GV = dyn_cast<GlobalValue>(Call->getCalledOperand());
         if (!GV)
           continue;
-        if (!GV->getName().startswith("llvm.bpf.passthrough"))
+        if (!GV->getName().starts_with("llvm.bpf.passthrough"))
           continue;
         Changed = true;
         Value *Arg = Call->getArgOperand(1);
@@ -125,7 +123,7 @@ bool BPFCheckAndAdjustIR::removePassThroughBuiltin(Module &M) {
   return Changed;
 }
 
-bool BPFCheckAndAdjustIR::removeCompareBuiltin(Module &M) {
+static bool removeCompareBuiltin(Module &M) {
   // Remove __builtin_bpf_compare()'s which are used to prevent
   // certain IR optimizations. Now major IR optimizations are done,
   // remove them.
@@ -145,7 +143,7 @@ bool BPFCheckAndAdjustIR::removeCompareBuiltin(Module &M) {
         auto *GV = dyn_cast<GlobalValue>(Call->getCalledOperand());
         if (!GV)
           continue;
-        if (!GV->getName().startswith("llvm.bpf.compare"))
+        if (!GV->getName().starts_with("llvm.bpf.compare"))
           continue;
 
         Changed = true;
@@ -157,7 +155,7 @@ bool BPFCheckAndAdjustIR::removeCompareBuiltin(Module &M) {
         CmpInst::Predicate Opcode = (CmpInst::Predicate)OpVal;
 
         auto *ICmp = new ICmpInst(Opcode, Arg1, Arg2);
-        ICmp->insertBefore(Call);
+        ICmp->insertBefore(Call->getIterator());
 
         Call->replaceAllUsesWith(ICmp);
         ToBeDeleted = Call;
@@ -335,14 +333,15 @@ static bool sinkMinMaxInBB(BasicBlock &BB,
 //
 // See also:
 //   https://lore.kernel.org/bpf/20230406164505.1046801-1-yhs@fb.com/
-bool BPFCheckAndAdjustIR::sinkMinMax(Module &M) {
+static bool sinkMinMax(Module &M,
+                       function_ref<LoopInfo &(Function &)> GetLoopInfo) {
   bool Changed = false;
 
   for (Function &F : M) {
     if (F.isDeclaration())
       continue;
 
-    LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+    LoopInfo &LI = GetLoopInfo(F);
     for (Loop *L : LI)
       for (BasicBlock *BB : L->blocks()) {
         // Filter out instructions coming from the same loop
@@ -357,18 +356,322 @@ bool BPFCheckAndAdjustIR::sinkMinMax(Module &M) {
   return Changed;
 }
 
-void BPFCheckAndAdjustIR::getAnalysisUsage(AnalysisUsage &AU) const {
+void BPFCheckAndAdjustIRLegacy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfoWrapperPass>();
 }
 
-bool BPFCheckAndAdjustIR::adjustIR(Module &M) {
-  bool Changed = removePassThroughBuiltin(M);
-  Changed = removeCompareBuiltin(M) || Changed;
-  Changed = sinkMinMax(M) || Changed;
+static void unrollGEPLoad(CallInst *Call) {
+  auto [GEP, Load] = BPFPreserveStaticOffsetPass::reconstructLoad(Call);
+  GEP->insertBefore(Call->getIterator());
+  Load->insertBefore(Call->getIterator());
+  Call->replaceAllUsesWith(Load);
+  Call->eraseFromParent();
+}
+
+static void unrollGEPStore(CallInst *Call) {
+  auto [GEP, Store] = BPFPreserveStaticOffsetPass::reconstructStore(Call);
+  GEP->insertBefore(Call->getIterator());
+  Store->insertBefore(Call->getIterator());
+  Call->eraseFromParent();
+}
+
+static bool removeGEPBuiltinsInFunc(Function &F) {
+  SmallVector<CallInst *> GEPLoads;
+  SmallVector<CallInst *> GEPStores;
+  for (auto &BB : F)
+    for (auto &Insn : BB)
+      if (auto *Call = dyn_cast<CallInst>(&Insn))
+        if (auto *Called = Call->getCalledFunction())
+          switch (Called->getIntrinsicID()) {
+          case Intrinsic::bpf_getelementptr_and_load:
+            GEPLoads.push_back(Call);
+            break;
+          case Intrinsic::bpf_getelementptr_and_store:
+            GEPStores.push_back(Call);
+            break;
+          }
+
+  if (GEPLoads.empty() && GEPStores.empty())
+    return false;
+
+  for_each(GEPLoads, unrollGEPLoad);
+  for_each(GEPStores, unrollGEPStore);
+
+  return true;
+}
+
+// Rewrites the following builtins:
+// - llvm.bpf.getelementptr.and.load
+// - llvm.bpf.getelementptr.and.store
+// As (load (getelementptr ...)) or (store (getelementptr ...)).
+static bool removeGEPBuiltins(Module &M) {
+  bool Changed = false;
+  for (auto &F : M)
+    Changed = removeGEPBuiltinsInFunc(F) || Changed;
   return Changed;
 }
 
-bool BPFCheckAndAdjustIR::runOnModule(Module &M) {
+// Wrap ToWrap with cast to address space zero:
+// - if ToWrap is a getelementptr,
+//   wrap it's base pointer instead and return a copy;
+// - if ToWrap is Instruction, insert address space cast
+//   immediately after ToWrap;
+// - if ToWrap is not an Instruction (function parameter
+//   or a global value), insert address space cast at the
+//   beginning of the Function F;
+// - use Cache to avoid inserting too many casts;
+static Value *aspaceWrapValue(DenseMap<Value *, Value *> &Cache, Function *F,
+                              Value *ToWrap) {
+  auto It = Cache.find(ToWrap);
+  if (It != Cache.end())
+    return It->getSecond();
+
+  if (auto *GEP = dyn_cast<GetElementPtrInst>(ToWrap)) {
+    Value *Ptr = GEP->getPointerOperand();
+    Value *WrappedPtr = aspaceWrapValue(Cache, F, Ptr);
+    auto *GEPTy = cast<PointerType>(GEP->getType());
+    auto *NewGEP = GEP->clone();
+    NewGEP->insertAfter(GEP->getIterator());
+    NewGEP->mutateType(PointerType::getUnqual(GEPTy->getContext()));
+    NewGEP->setOperand(GEP->getPointerOperandIndex(), WrappedPtr);
+    NewGEP->setName(GEP->getName());
+    Cache[ToWrap] = NewGEP;
+    return NewGEP;
+  }
+
+  IRBuilder IB(F->getContext());
+  if (Instruction *InsnPtr = dyn_cast<Instruction>(ToWrap))
+    IB.SetInsertPoint(*InsnPtr->getInsertionPointAfterDef());
+  else
+    IB.SetInsertPoint(F->getEntryBlock().getFirstInsertionPt());
+  auto *ASZeroPtrTy = IB.getPtrTy(0);
+  auto *ACast = IB.CreateAddrSpaceCast(ToWrap, ASZeroPtrTy, ToWrap->getName());
+  Cache[ToWrap] = ACast;
+  return ACast;
+}
+
+// Wrap a pointer operand OpNum of instruction I
+// with cast to address space zero
+static void aspaceWrapOperand(DenseMap<Value *, Value *> &Cache, Instruction *I,
+                              unsigned OpNum) {
+  Value *OldOp = I->getOperand(OpNum);
+  if (OldOp->getType()->getPointerAddressSpace() == 0)
+    return;
+
+  Value *NewOp = aspaceWrapValue(Cache, I->getFunction(), OldOp);
+  I->setOperand(OpNum, NewOp);
+  // Check if there are any remaining users of old GEP,
+  // delete those w/o users
+  for (;;) {
+    auto *OldGEP = dyn_cast<GetElementPtrInst>(OldOp);
+    if (!OldGEP)
+      break;
+    if (!OldGEP->use_empty())
+      break;
+    OldOp = OldGEP->getPointerOperand();
+    OldGEP->eraseFromParent();
+  }
+}
+
+static Value *wrapPtrIfASNotZero(DenseMap<Value *, Value *> &Cache,
+                                 CallInst *CI, Value *P) {
+  if (auto *PTy = dyn_cast<PointerType>(P->getType())) {
+    if (PTy->getAddressSpace() == 0)
+      return P;
+  }
+  return aspaceWrapValue(Cache, CI->getFunction(), P);
+}
+
+static Instruction *aspaceMemSet(Intrinsic::ID ID,
+                                 DenseMap<Value *, Value *> &Cache,
+                                 CallInst *CI) {
+  auto *MI = cast<MemIntrinsic>(CI);
+  IRBuilder<> B(CI);
+
+  Value *OldDst = CI->getArgOperand(0);
+  Value *NewDst = wrapPtrIfASNotZero(Cache, CI, OldDst);
+  if (OldDst == NewDst)
+    return nullptr;
+
+  // memset(new_dst, val, len, align, isvolatile, md)
+  Value *Val = CI->getArgOperand(1);
+  Value *Len = CI->getArgOperand(2);
+
+  auto *MS = cast<MemSetInst>(CI);
+  MaybeAlign Align = MS->getDestAlign();
+  bool IsVolatile = MS->isVolatile();
+
+  if (ID == Intrinsic::memset)
+    return B.CreateMemSet(NewDst, Val, Len, Align, IsVolatile,
+                          MI->getAAMetadata());
+  else
+    return B.CreateMemSetInline(NewDst, Align, Val, Len, IsVolatile,
+                                MI->getAAMetadata());
+}
+
+static Instruction *aspaceMemCpy(Intrinsic::ID ID,
+                                 DenseMap<Value *, Value *> &Cache,
+                                 CallInst *CI) {
+  auto *MI = cast<MemIntrinsic>(CI);
+  IRBuilder<> B(CI);
+
+  Value *OldDst = CI->getArgOperand(0);
+  Value *OldSrc = CI->getArgOperand(1);
+  Value *NewDst = wrapPtrIfASNotZero(Cache, CI, OldDst);
+  Value *NewSrc = wrapPtrIfASNotZero(Cache, CI, OldSrc);
+  if (OldDst == NewDst && OldSrc == NewSrc)
+    return nullptr;
+
+  // memcpy(new_dst, dst_align, new_src, src_align, len, isvolatile, md)
+  Value *Len = CI->getArgOperand(2);
+
+  auto *MT = cast<MemTransferInst>(CI);
+  MaybeAlign DstAlign = MT->getDestAlign();
+  MaybeAlign SrcAlign = MT->getSourceAlign();
+  bool IsVolatile = MT->isVolatile();
+
+  return B.CreateMemTransferInst(ID, NewDst, DstAlign, NewSrc, SrcAlign, Len,
+                                 IsVolatile, MI->getAAMetadata());
+}
+
+static Instruction *aspaceMemMove(DenseMap<Value *, Value *> &Cache,
+                                  CallInst *CI) {
+  auto *MI = cast<MemIntrinsic>(CI);
+  IRBuilder<> B(CI);
+
+  Value *OldDst = CI->getArgOperand(0);
+  Value *OldSrc = CI->getArgOperand(1);
+  Value *NewDst = wrapPtrIfASNotZero(Cache, CI, OldDst);
+  Value *NewSrc = wrapPtrIfASNotZero(Cache, CI, OldSrc);
+  if (OldDst == NewDst && OldSrc == NewSrc)
+    return nullptr;
+
+  // memmove(new_dst, dst_align, new_src, src_align, len, isvolatile, md)
+  Value *Len = CI->getArgOperand(2);
+
+  auto *MT = cast<MemTransferInst>(CI);
+  MaybeAlign DstAlign = MT->getDestAlign();
+  MaybeAlign SrcAlign = MT->getSourceAlign();
+  bool IsVolatile = MT->isVolatile();
+
+  return B.CreateMemMove(NewDst, DstAlign, NewSrc, SrcAlign, Len, IsVolatile,
+                         MI->getAAMetadata());
+}
+
+// Support for BPF address spaces:
+// - for each function in the module M, update pointer operand of
+//   each memory access instruction (load/store/cmpxchg/atomicrmw)
+//   or intrinsic call insns (memset/memcpy/memmove)
+//   by casting it from non-zero address space to zero address space, e.g:
+//
+//   (load (ptr addrspace (N) %p) ...)
+//     -> (load (addrspacecast ptr addrspace (N) %p to ptr))
+//
+// - assign section with name .addr_space.N for globals defined in
+//   non-zero address space N
+static bool insertASpaceCasts(Module &M) {
+  bool Changed = false;
+  for (Function &F : M) {
+    DenseMap<Value *, Value *> CastsCache;
+    for (BasicBlock &BB : F) {
+      for (Instruction &I : llvm::make_early_inc_range(BB)) {
+        unsigned PtrOpNum;
+
+        if (auto *LD = dyn_cast<LoadInst>(&I)) {
+          PtrOpNum = LD->getPointerOperandIndex();
+          aspaceWrapOperand(CastsCache, &I, PtrOpNum);
+          continue;
+        }
+        if (auto *ST = dyn_cast<StoreInst>(&I)) {
+          PtrOpNum = ST->getPointerOperandIndex();
+          aspaceWrapOperand(CastsCache, &I, PtrOpNum);
+          continue;
+        }
+        if (auto *CmpXchg = dyn_cast<AtomicCmpXchgInst>(&I)) {
+          PtrOpNum = CmpXchg->getPointerOperandIndex();
+          aspaceWrapOperand(CastsCache, &I, PtrOpNum);
+          continue;
+        }
+        if (auto *RMW = dyn_cast<AtomicRMWInst>(&I)) {
+          PtrOpNum = RMW->getPointerOperandIndex();
+          aspaceWrapOperand(CastsCache, &I, PtrOpNum);
+          continue;
+        }
+
+        auto *CI = dyn_cast<CallInst>(&I);
+        if (!CI)
+          continue;
+
+        Function *Callee = CI->getCalledFunction();
+        if (!Callee || !Callee->isIntrinsic())
+          continue;
+
+        // Check memset/memcpy/memmove
+        Intrinsic::ID ID = Callee->getIntrinsicID();
+        bool IsSet = ID == Intrinsic::memset || ID == Intrinsic::memset_inline;
+        bool IsCpy = ID == Intrinsic::memcpy || ID == Intrinsic::memcpy_inline;
+        bool IsMove = ID == Intrinsic::memmove;
+        if (!IsSet && !IsCpy && !IsMove)
+          continue;
+
+        Instruction *New;
+        if (IsSet)
+          New = aspaceMemSet(ID, CastsCache, CI);
+        else if (IsCpy)
+          New = aspaceMemCpy(ID, CastsCache, CI);
+        else
+          New = aspaceMemMove(CastsCache, CI);
+
+        if (!New)
+          continue;
+
+        I.replaceAllUsesWith(New);
+        New->takeName(&I);
+        I.eraseFromParent();
+      }
+    }
+    Changed |= !CastsCache.empty();
+  }
+  // Merge all globals within same address space into single
+  // .addr_space.<addr space no> section
+  for (GlobalVariable &G : M.globals()) {
+    if (G.getAddressSpace() == 0 || G.hasSection())
+      continue;
+    SmallString<16> SecName;
+    raw_svector_ostream OS(SecName);
+    OS << ".addr_space." << G.getAddressSpace();
+    G.setSection(SecName);
+    // Prevent having separate section for constants
+    G.setConstant(false);
+  }
+  return Changed;
+}
+
+static bool adjustIR(Module &M,
+                     function_ref<LoopInfo &(Function &)> GetLoopInfo) {
+  bool Changed = removePassThroughBuiltin(M);
+  Changed = removeCompareBuiltin(M) || Changed;
+  Changed = sinkMinMax(M, GetLoopInfo) || Changed;
+  Changed = removeGEPBuiltins(M) || Changed;
+  Changed = insertASpaceCasts(M) || Changed;
+  return Changed;
+}
+
+bool BPFCheckAndAdjustIRLegacy::runOnModule(Module &M) {
   checkIR(M);
-  return adjustIR(M);
+  return adjustIR(M, [&](Function &F) -> LoopInfo & {
+    return getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+  });
+}
+
+PreservedAnalyses BPFCheckAndAdjustIRPass::run(Module &M,
+                                               ModuleAnalysisManager &MAM) {
+  checkIR(M);
+  bool Changed = adjustIR(M, [&](Function &F) -> LoopInfo & {
+    return MAM.getResult<FunctionAnalysisManagerModuleProxy>(M)
+        .getManager()
+        .getResult<LoopAnalysis>(F);
+  });
+  return Changed ? PreservedAnalyses::none().preserveSet<CFGAnalyses>()
+                 : PreservedAnalyses::all();
 }

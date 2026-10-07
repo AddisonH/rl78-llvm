@@ -15,9 +15,7 @@ program openacc_clause_validity
   real(8) :: a(256)
   real(8) :: aa(256, 256)
 
-  !ERROR: A DO loop must follow the LOOP directive
-  !$acc loop
-  i = 1
+  i = 0
 
   !ERROR: DO loop after the LOOP directive must have loop control
   !$acc loop
@@ -87,7 +85,6 @@ program openacc_clause_validity
   end do
 
   !$acc parallel
-  !ERROR: TILE and COLLAPSE clause may not appear on loop construct associated with DO CONCURRENT
   !$acc loop collapse(2)
   do concurrent (i = 1:N, j = 1:N)
     aa(i, j) = 3.14
@@ -95,10 +92,31 @@ program openacc_clause_validity
   !$acc end parallel
 
   !$acc parallel
-  !ERROR: TILE and COLLAPSE clause may not appear on loop construct associated with DO CONCURRENT
+  !ERROR: TILE clause may not appear on loop construct associated with DO CONCURRENT
   !$acc loop tile(2, 2)
   do concurrent (i = 1:N, j = 1:N)
     aa(i, j) = 3.14
+  end do
+  !$acc end parallel
+
+  !$acc parallel
+  !ERROR: TILE clause may not appear on loop construct associated with DO CONCURRENT
+  !$acc loop tile(2, 2) collapse(2)
+  do concurrent (i = 1:N, j = 1:N)
+    aa(i, j) = 3.14
+  end do
+  !$acc end parallel
+
+  ! TILE with compiler directives between the ACC loop and the nested DO loops
+  ! (directives should be ignored when checking tightly-nested loops).
+  !$acc parallel
+  !$acc loop gang vector tile(128, 2)
+  !dir$ ivdep
+  do j = 1, N
+    !dir$ ivdep
+    do i = 1, N
+      aa(i, j) = aa(i, j) + 3.14
+    end do
   end do
   !$acc end parallel
 

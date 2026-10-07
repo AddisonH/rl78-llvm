@@ -1,24 +1,22 @@
-//===- RL78.cpp
-//------------------------------------------------------------===//
+//===- RL78.cpp -----------------------------------------------------------===//
 //
-//                             The LLVM Linker
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "InputFiles.h"
-#include "SyntheticSections.h"
+#include "LinkerScript.h"
 #include "OutputSections.h"
+#include "RelocScan.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
+#include "SyntheticSections.h"
 #include "Target.h"
-#include "lld/Common/ErrorHandler.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/TimeProfiler.h"
-#include "llvm/Support/Format.h"
 #include <stack>
 
 using namespace llvm;
@@ -28,315 +26,239 @@ using namespace llvm::support::endian;
 using namespace lld;
 using namespace lld::elf;
 
-RL78PltSection::RL78PltSection() {
+RL78PltSection::RL78PltSection(Ctx &ctx) : PltSection(ctx) {
   name = ".lowtext";
   addralign = 2;
 }
 
-void RL78PltSection::initAllocSize() {
-  config->rl78InhibitAssert = true;
-  script->assignAddresses();
-}
-
-// Used by RL78 to remove entries which don't require a PLT entry,
-// i.e. are in the lower 64KB of ROM; this saves space.
-bool RL78PltSection::updateAllocSize() {
-  llvm::DenseSet<std::pair<uint64_t, StringRef>> Seen;
-  size_t NumSyms = 0;
-  for (auto sym : entries) {
+// Removes the entries of functions that ended up in the lower 64 KiB of ROM:
+// they are reachable with a near address and need no trampoline.
+bool RL78PltSection::updateAllocSize(Ctx &ctx) {
+  llvm::DenseSet<std::pair<uint64_t, StringRef>> seen;
+  size_t numSyms = 0;
+  for (const Symbol *sym : entries) {
     // Ignore any possible duplicates.
-    if (!Seen.insert({sym->getVA(), sym->getName()}).second)
+    if (!seen.insert({sym->getVA(ctx), sym->getName()}).second)
       continue;
-    if (!(sym->getVA() >> 16)) {
-      symAux[sym->auxIdx].pltIdx = -1;
+    if (!(sym->getVA(ctx) >> 16)) {
+      ctx.symAux[sym->auxIdx].pltIdx = -1;
       continue;
     }
-    symAux[sym->auxIdx].pltIdx = NumSyms;
-    entries[NumSyms++] = sym;
+    ctx.symAux[sym->auxIdx].pltIdx = numSyms;
+    entries[numSyms++] = sym;
   }
-  if (NumSyms == entries.size())
+  if (numSyms == entries.size())
     return false;
-  entries.resize(NumSyms);
+  entries.resize(numSyms);
   return true;
-}
-
-void RL78PltSection::finiAllocSize() {
-  config->rl78InhibitAssert = false;
-  script->assignAddresses();
 }
 
 namespace {
 class RL78 final : public TargetInfo {
 public:
-  RL78();
-  void relocate(uint8_t *loc, const Relocation &rel,
-                uint64_t val) const override;
-  void relocateAlloc(InputSectionBase &sec, uint8_t *buf) const override;
+  RL78(Ctx &);
   uint32_t calcEFlags() const override;
-  RelExpr getRelExpr(RelType Type, const Symbol &S,
+  RelExpr getRelExpr(RelType type, const Symbol &s,
                      const uint8_t *loc) const override;
+  template <class ELFT, class RelTy>
+  void scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels,
+                       unsigned shard);
+  void scanSection(InputSectionBase &sec, unsigned shard) override {
+    elf::scanSection1<RL78, ELF32LE>(*this, sec, shard);
+  }
   void writePlt(uint8_t *buf, const Symbol &sym,
                 uint64_t pltEntryAddr) const override;
+  void relocate(uint8_t *loc, const Relocation &rel,
+                uint64_t val) const override;
+  void relocateAlloc(InputSection &sec, uint8_t *buf) const override;
   bool relaxOnce(int pass) const override;
+  void finalizeRelax(int passes) const override;
+
 private:
-  std::stack<uint64_t> relocationStack;
+  bool needsPltEntry(const Symbol &sym, RelType type) const;
   uint64_t checkAndPop(uint8_t *loc, const Relocation &rel, char bitSize = 0,
                        bool isSigned = false, uint64_t adj = 0) const;
-  void push(uint8_t *loc, uint64_t Value) const;
-  uint16_t checkAndConvertRAM(uint8_t *loc, const Relocation &rel,
-                              uint64_t val) const;
+  void push(uint64_t value) const;
 };
 } // namespace
 
-RL78::RL78() { pltEntrySize = 4; }
+// The CC-RL operator relocations (R_RL78_SYM, R_RL78_OP*, R_RL78_ABS*)
+// evaluate an expression on a stack. A sequence never spans input sections, but
+// sections are relocated in parallel, so each thread has its own stack.
+static thread_local std::stack<uint64_t> relocationStack;
 
-namespace {
-struct SymbolAnchor {
-  uint64_t offset;
-  Defined *d;
-  bool end; // This is set for the anchor of st_value+st_size.
-};
-} // namespace
-
-struct elf::RL78RelaxAux {
-  // This records symbol start and end offsets which will be adjusted according
-  // to the nearest relocDeltas element.
-  SmallVector<SymbolAnchor, 0> anchors;
-  // For relocations[i], the actual offset is r_offset - (i ? relocDeltas[i-1] :
-  // 0).
-  std::unique_ptr<uint32_t[]> relocDeltas;
-  // For relocations[i], the actual type is relocTypes[i].
-  std::unique_ptr<RelType[]> relocTypes;
-  SmallVector<uint32_t, 0> writes;
-};
-
-static void initSymbolAnchors() {
-  SmallVector<InputSection *, 0> storage;
-  for (OutputSection *osec : outputSections) {
-    if (!(osec->flags & SHF_EXECINSTR))
-      continue;
-    for (InputSection *sec : getInputSections(*osec, storage)) {
-      sec->rl78RelaxAux = make<RL78RelaxAux>();
-      if (sec->relocs().size()) {
-        sec->rl78RelaxAux->relocDeltas =
-            std::make_unique<uint32_t[]>(sec->relocs().size());
-        sec->rl78RelaxAux->relocTypes =
-            std::make_unique<RelType[]>(sec->relocs().size());
-      }
-    }
-  }
-  // Store anchors (st_value and st_value+st_size) for symbols relative to text
-  // sections.
-  //
-  // For a defined symbol foo, we may have `d->file != file` with --wrap=foo.
-  // We should process foo, as the defining object file's symbol table may not
-  // contain foo after redirectSymbols changed the foo entry to __wrap_foo. To
-  // avoid adding a Defined that is undefined in one object file, use
-  // `!d->scriptDefined` to exclude symbols that are definitely not wrapped.
-  //
-  // `relaxAux->anchors` may contain duplicate symbols, but that is fine.
-  for (InputFile *file : ctx.objectFiles)
-    for (Symbol *sym : file->getSymbols()) {
-      auto *d = dyn_cast<Defined>(sym);
-      if (!d || (d->file != file && !d->scriptDefined) || d->isSection())
-        continue;
-      if (auto *sec = dyn_cast_or_null<InputSection>(d->section))
-        if (sec->flags & SHF_EXECINSTR && sec->rl78RelaxAux) {
-          // If sec is discarded, relaxAux will be nullptr.
-          sec->rl78RelaxAux->anchors.push_back({d->value, d, false});
-          if (d->size)
-            sec->rl78RelaxAux->anchors.push_back({d->value + d->size, d, true});
-        }
-    }
-  // Sort anchors by offset so that we can find the closest relocation
-  // efficiently. For a zero size symbol, ensure that its start anchor precedes
-  // its end anchor. For two symbols with anchors at the same offset, their
-  // order does not matter.
-  for (OutputSection *osec : outputSections) {
-    if (!(osec->flags & SHF_EXECINSTR))
-      continue;
-    for (InputSection *sec : getInputSections(*osec, storage)) {
-      llvm::sort(sec->rl78RelaxAux->anchors, [](auto &a, auto &b) {
-        return std::make_pair(a.offset, a.end) <
-               std::make_pair(b.offset, b.end);
-      });
-    }
-  }
-}
+RL78::RL78(Ctx &ctx) : TargetInfo(ctx) { pltEntrySize = 4; }
 
 static uint32_t getEFlags(InputFile *file) {
   return cast<ObjFile<ELF32LE>>(file)->getObj().getHeader().e_flags;
 }
 
-static bool mergeFlags(uint32_t &mergedFlags, uint32_t newFlags, unsigned flag,
-                       const Twine &msg, InputFile *f) {
-  if ((mergedFlags & flag) == 0) { // if the merged flag is set to common
+static bool mergeFlags(Ctx &ctx, uint32_t &mergedFlags, uint32_t newFlags,
+                       unsigned flag, const char *msg, InputFile *f) {
+  if ((mergedFlags & flag) == 0) { // The merged flag is common.
     mergedFlags |= (newFlags & flag);
     return true;
-  } else if ((newFlags & flag) == 0) { // if the new flag is set to common
-    return true;
-  } else if ((mergedFlags & flag) !=
-             (newFlags & flag)) { // if both are non-common and non-matching
-    error(msg + toString(f));
-    return false;
-  } else {
-
-    return true;
   }
+  if ((newFlags & flag) == 0) // The new flag is common.
+    return true;
+  if ((mergedFlags & flag) != (newFlags & flag)) { // Both set, different.
+    Err(ctx) << msg << f;
+    return false;
+  }
+  return true;
 }
 
 uint32_t RL78::calcEFlags() const {
   assert(!ctx.objectFiles.empty());
   uint32_t mergedFlags = getEFlags(ctx.objectFiles[0]);
   bool mergeSucceeded = true;
-  // Verify that all input files have compatible flags
+  // Verify that all input files have compatible flags.
   for (InputFile *f : ArrayRef(ctx.objectFiles).slice(1)) {
     uint32_t newFlags = getEFlags(f);
     if (mergedFlags == newFlags)
       continue;
 
-    mergedFlags |= (newFlags & ELF::EF_RL78_FU_EXIST);
-    mergedFlags |= (newFlags & ELF::EF_RL78_EI_EXIST);
+    mergedFlags |= (newFlags & EF_RL78_FU_EXIST);
+    mergedFlags |= (newFlags & EF_RL78_EI_EXIST);
 
-    mergeSucceeded &= mergeFlags(mergedFlags, newFlags, ELF::EF_RL78_MAA_1,
+    mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_MAA_1,
                                  "incompatible MAA flags: ", f);
 
-    if ((mergedFlags & ELF::EF_RL78_CPU_16BIT) == 0) {
-      if ((newFlags & ELF::EF_RL78_CPU_16BIT) == 0) {
-        error("CPU flag can't be set to common for both input files: " +
-              toString(f));
+    if ((mergedFlags & EF_RL78_CPU_16BIT) == 0) {
+      if ((newFlags & EF_RL78_CPU_16BIT) == 0) {
+        Err(ctx) << "CPU flag can't be set to common for both input files: "
+                 << f;
         mergeSucceeded = false;
       } else {
-        mergedFlags |= (newFlags & ELF::EF_RL78_CPU_16BIT);
+        mergedFlags |= (newFlags & EF_RL78_CPU_16BIT);
       }
-    } else if ((newFlags & ELF::EF_RL78_CPU_16BIT) != 0 &&
-               (mergedFlags & ELF::EF_RL78_CPU_16BIT) !=
-                   (newFlags & ELF::EF_RL78_CPU_16BIT)) {
-      error("incompatible CPU flags: " + toString(f));
+    } else if ((newFlags & EF_RL78_CPU_16BIT) != 0 &&
+               (mergedFlags & EF_RL78_CPU_16BIT) !=
+                   (newFlags & EF_RL78_CPU_16BIT)) {
+      Err(ctx) << "incompatible CPU flags: " << f;
       mergeSucceeded = false;
     }
 
     // TODO change to size 8 if force option is specified
-    mergeSucceeded &= mergeFlags(mergedFlags, newFlags, ELF::EF_RL78_DOUBLE_8,
+    mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_DOUBLE_8,
                                  "incompatible double type size flags: ", f);
 
     // TODO change to far if force option is specified
-    mergeSucceeded &= mergeFlags(mergedFlags, newFlags, ELF::EF_RL78_TEXT_FAR,
+    mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_TEXT_FAR,
                                  "incompatible text area flags: ", f);
 
     // TODO change to far if force option is specified
-    mergeSucceeded &= mergeFlags(mergedFlags, newFlags, ELF::EF_RL78_DATA_FAR,
+    mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_DATA_FAR,
                                  "incompatible data area flags: ", f);
 
-    if ((mergedFlags & ELF::EF_RL78_RODATA_FAR) == 0) {
-      mergedFlags |= (newFlags & ELF::EF_RL78_RODATA_FAR);
-    } else if ((newFlags & ELF::EF_RL78_RODATA_FAR) != 0 &&
-               (mergedFlags & ELF::EF_RL78_RODATA_FAR) !=
-                   (newFlags & ELF::EF_RL78_RODATA_FAR)) {
-      warn("incompatible rodata area flags, changed to far:  " + toString(f));
-      mergedFlags |= (newFlags & ELF::EF_RL78_RODATA_FAR);
+    if ((mergedFlags & EF_RL78_RODATA_FAR) == 0) {
+      mergedFlags |= (newFlags & EF_RL78_RODATA_FAR);
+    } else if ((newFlags & EF_RL78_RODATA_FAR) != 0 &&
+               (mergedFlags & EF_RL78_RODATA_FAR) !=
+                   (newFlags & EF_RL78_RODATA_FAR)) {
+      Warn(ctx) << "incompatible rodata area flags, changed to far:  " << f;
+      mergedFlags |= (newFlags & EF_RL78_RODATA_FAR);
     }
   }
   return mergeSucceeded ? mergedFlags : 0;
 }
 
-static RelExpr getRelExpr(RelType Type) {
-  switch (Type) {
+static RelExpr getRelExpr(Ctx &ctx, RelType type) {
+  switch (type) {
   case R_RL78_DIR8S_PCREL:
   case R_RL78_DIR16S_PCREL:
   case R_RL78_ABS8S_PCREL:
   case R_RL78_ABS16S_PCREL:
     return R_PC;
   case R_RL78_RELAX:
-    return config->relax ? R_RELAX_HINT : R_NONE;
+    return ctx.arg.relax ? R_RELAX_HINT : R_NONE;
   default:
     return R_ABS;
   }
 }
 
-RelExpr RL78::getRelExpr(RelType Type, const Symbol &S,
+RelExpr RL78::getRelExpr(RelType type, const Symbol &s,
                          const uint8_t *loc) const {
-  return ::getRelExpr(Type);
+  return ::getRelExpr(ctx, type);
+}
+
+// Near (16-bit) references to code need a PLT entry (a trampoline in the low
+// 64 KiB) when the function ends up above 64 KiB. Every candidate gets an
+// entry here; RL78PltSection::updateAllocSize drops the unneeded ones once
+// addresses are known.
+bool RL78::needsPltEntry(const Symbol &sym, RelType type) const {
+  if (ctx.arg.rl78FarCode)
+    return false;
+  if (!(sym.hasNoType() || sym.isFunc() || sym.isSection()))
+    return false;
+  OutputSection *osec = sym.getOutputSection();
+  if (!osec || !(osec->flags & SHF_EXECINSTR) || sym.isInPlt(ctx))
+    return false;
+  if (type == R_RL78_DIR16U)
+    return true;
+  // FIXME: Is there a better way to handle test in ticket_2677?
+  return type == R_RL78_OPlowW &&
+         (!sym.isDefined() ||
+          cast<Defined>(sym).section->name.starts_with(".text"));
+}
+
+template <class ELFT, class RelTy>
+void RL78::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels,
+                           unsigned shard) {
+  RelocScan rs(ctx, &sec, shard);
+  sec.relocations.reserve(rels.size());
+  for (auto it = rels.begin(); it != rels.end(); ++it) {
+    RelType type = it->getType(false);
+    // R_RL78_NONE, and R_RL78_RELAX with --no-relax.
+    if (::getRelExpr(ctx, type) == R_NONE)
+      continue;
+    // Relocation scanning is serial for RL78 (see scanRelocations), so the PLT
+    // can be modified here.
+    Symbol &sym = sec.getFile<ELFT>()->getSymbol(it->getSymbol(false));
+    if (needsPltEntry(sym, type)) {
+      sym.allocateAux(ctx);
+      ctx.in.plt->addEntry(sym);
+    }
+    rs.scan<ELFT, RelTy>(it, type, rs.getAddend<ELFT>(*it, type));
+  }
 }
 
 void RL78::writePlt(uint8_t *buf, const Symbol &sym,
                     uint64_t pltEntryAddr) const {
-  write32le(buf, 0x000000EC | ((sym.getVA() & 0xFFFFF) << 8));
+  // br !!addr20
+  write32le(buf, 0x000000EC | ((sym.getVA(ctx) & 0xFFFFF) << 8));
 }
 
-inline void write3le(void *P, uint8_t V) {
-  write<uint8_t, llvm::support::little>(
-      P, (read<uint8_t, llvm::support::little>(P) & 0x8f) | ((V & 0x7) << 4));
+static void write3le(void *p, uint8_t v) {
+  write<uint8_t, llvm::endianness::little>(
+      p, (read<uint8_t, llvm::endianness::little>(p) & 0x8f) | ((v & 0x7) << 4));
 }
 
-inline void write8le(void *P, uint8_t V) {
-  write<uint8_t, llvm::support::little>(P, V);
+static void write8le(void *p, uint8_t v) {
+  write<uint8_t, llvm::endianness::little>(p, v);
 }
 
-inline void write24le(void *P, uint64_t V) {
-  write32le(P, (read32le(P) & 0xff00'0000) | (V & ~0xff00'0000));
+static void write24le(void *p, uint64_t v) {
+  write32le(p, (read32le(p) & 0xff00'0000) | (v & ~0xff00'0000));
 }
 
-static void relaxDIR20U(const InputSection &sec, size_t i, uint64_t loc,
-                        Relocation &r, uint32_t &remove) {
+// The relocation's target address, ignoring any PLT entry.
+static uint64_t getTargetVA(Ctx &ctx, const InputSection &sec,
+                            const Relocation &r, uint64_t loc) {
+  return sec.getRelocTargetVA(
+      ctx, Relocation{R_ABS, r.type, r.offset, r.addend, r.sym}, loc);
+}
+
+static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
+                        uint64_t loc, Relocation &r, uint32_t &remove) {
   // Handle only br/call !!addr20.
   const auto opc = sec.content().data()[r.offset - 1];
   if (opc != 0xEC && opc != 0xFC)
     return;
 
-  const auto brVA = loc - 1; // Note that 'loc' is the VA of the relocation (= brVA + 1).
-  const auto tgtVA = sec.getRelocTargetVA(sec.file, r.type, r.addend, loc, *r.sym, R_ABS);
-
-  // If the branch target is in the same input section after the branch, relaxing the branch
-  // will affect its address; if we don't consider this we fail to relax some branches that
-  // are just "at the boundary" e.g. at +127 bytes (max. 8-bit signed value).
-  const auto adjTgtVA = isa<Defined>(r.sym) &&
-                        cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
-
-  // Relative distance between the instructions.
-  const auto deltaVA = int64_t(tgtVA - brVA);
-
-  // For branches, try first to relax to br $addr20.
-  const auto disp8 = (deltaVA - 2)           // PC will be brVA+2 when relaxing to 2-byte
-                       - (adjTgtVA ? 2 : 0); // and adjusted tgtVA will be at -2.
-  if (opc == 0xEC && isInt<8>(disp8)) {
-    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
-    sec.rl78RelaxAux->writes.push_back(0xEF); // BR $addr20.
-    remove = 2;
-    return;
-  }
-
-  // Then, try br/call !addr16.
-  if (isUInt<16>(tgtVA)) {
-    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR16U;
-    sec.rl78RelaxAux->writes.push_back(opc + 1); // I.e. 0xED and 0xFD, resp.
-    remove = 1;
-    return;
-  }
-
-  // Lastly, try br/call $!addr20.
-  const auto disp16 = (deltaVA - 3)          // PC will be brVA+3 when relaxing to 3-byte
-                       - (adjTgtVA ? 1 : 0); // and adjusted tgtVA will be at -1.
-  if (isInt<16>(disp16)) {
-    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR16S_PCREL;
-    sec.rl78RelaxAux->writes.push_back(opc + 2); // I.e. 0xEE and 0xFE, respectively.
-    remove = 1;
-  }
-}
-
-template <bool PCRel>
-static void relaxDIR16(const InputSection &sec, size_t i, uint64_t loc,
-                       Relocation &r, uint32_t &remove) {
-  // Handle only the branches:
-  //   br !addr16   (PCRel = false)
-  //   br $!addr20  (PCRel = true)
-  // as the calls (call !addr16, resp. call $!addr20) cannot be relaxed further.
-  const auto opc = sec.content().data()[r.offset - 1];
-  if (opc != (PCRel ? 0xEE : 0xED))
-    return;
-
-  const auto brVA = loc - 1; // Note that 'loc' is the VA of the relocation (= brVA + 1).
-  const auto tgtVA = sec.getRelocTargetVA(sec.file, r.type, r.addend, loc, *r.sym, R_ABS);
+  // Note that 'loc' is the VA of the relocation (= brVA + 1).
+  const auto brVA = loc - 1;
+  const auto tgtVA = getTargetVA(ctx, sec, r, loc);
 
   // If the branch target is in the same input section after the branch,
   // relaxing the branch will affect its address; if we don't consider this we
@@ -348,22 +270,72 @@ static void relaxDIR16(const InputSection &sec, size_t i, uint64_t loc,
   // Relative distance between the instructions.
   const auto deltaVA = int64_t(tgtVA - brVA);
 
-  // Displacement if relaxation would be applied.
-  const auto disp8 = (deltaVA - 2)           // PC will be brVA+2 when relaxing to 2-byte
-                       - (adjTgtVA ? 1 : 0); // and adjusted tgtVA will be at -1.
-  if (isInt<8>(disp8)) {
-    sec.rl78RelaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
-    sec.rl78RelaxAux->writes.push_back(0xEF); // BR $addr20.
+  // For branches, try first to relax to br $addr20. PC will be brVA+2 when
+  // relaxing to 2 bytes, and an adjusted tgtVA will be at -2.
+  const auto disp8 = (deltaVA - 2) - (adjTgtVA ? 2 : 0);
+  if (opc == 0xEC && isInt<8>(disp8)) {
+    sec.relaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
+    sec.relaxAux->writes.push_back(0xEF); // BR $addr20.
+    remove = 2;
+    return;
+  }
+
+  // Then, try br/call !addr16.
+  if (isUInt<16>(tgtVA)) {
+    sec.relaxAux->relocTypes[i] = R_RL78_DIR16U;
+    sec.relaxAux->writes.push_back(opc + 1); // I.e. 0xED and 0xFD, resp.
+    remove = 1;
+    return;
+  }
+
+  // Lastly, try br/call $!addr20. PC will be brVA+3 when relaxing to 3 bytes,
+  // and an adjusted tgtVA will be at -1.
+  const auto disp16 = (deltaVA - 3) - (adjTgtVA ? 1 : 0);
+  if (isInt<16>(disp16)) {
+    sec.relaxAux->relocTypes[i] = R_RL78_DIR16S_PCREL;
+    sec.relaxAux->writes.push_back(opc + 2); // I.e. 0xEE and 0xFE, resp.
     remove = 1;
   }
 }
 
-static bool relax(InputSection &sec) {
+template <bool PCRel>
+static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
+                       uint64_t loc, Relocation &r, uint32_t &remove) {
+  // Handle only the branches:
+  //   br !addr16   (PCRel = false)
+  //   br $!addr20  (PCRel = true)
+  // as the calls (call !addr16, resp. call $!addr20) cannot be relaxed further.
+  const auto opc = sec.content().data()[r.offset - 1];
+  if (opc != (PCRel ? 0xEE : 0xED))
+    return;
+
+  // Note that 'loc' is the VA of the relocation (= brVA + 1).
+  const auto brVA = loc - 1;
+  const auto tgtVA = getTargetVA(ctx, sec, r, loc);
+
+  // See relaxDIR20U.
+  const auto adjTgtVA = isa<Defined>(r.sym) &&
+                        cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
+
+  // Relative distance between the instructions.
+  const auto deltaVA = int64_t(tgtVA - brVA);
+
+  // PC will be brVA+2 when relaxing to 2 bytes, and an adjusted tgtVA will be
+  // at -1.
+  const auto disp8 = (deltaVA - 2) - (adjTgtVA ? 1 : 0);
+  if (isInt<8>(disp8)) {
+    sec.relaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
+    sec.relaxAux->writes.push_back(0xEF); // BR $addr20.
+    remove = 1;
+  }
+}
+
+static bool relax(Ctx &ctx, InputSection &sec) {
   if (sec.relocs().empty())
     return false;
 
   const uint64_t secAddr = sec.getVA();
-  auto &aux = *sec.rl78RelaxAux;
+  auto &aux = *sec.relaxAux;
   bool changed = false;
 
   ArrayRef<SymbolAnchor> sa = aux.anchors;
@@ -382,25 +354,23 @@ static bool relax(InputSection &sec) {
   for (auto [i, r] : llvm::enumerate(sec.relocs())) {
     const uint64_t loc = secAddr + r.offset - delta;
     uint32_t &cur = aux.relocDeltas[i], remove = 0;
+    const bool relaxable = i + 1 != sec.relocs().size() &&
+                           sec.relocs()[i + 1].type == R_RL78_RELAX;
 
-    switch (r.type) {
-    case R_RL78_DIR20U:
-      if (i + 1 != sec.relocs().size() &&
-          sec.relocs()[i + 1].type == R_RL78_RELAX)
-        relaxDIR20U(sec, i, loc, r, remove);
-      break;
-    case R_RL78_DIR16U:
-      if (i + 1 != sec.relocs().size() &&
-          sec.relocs()[i + 1].type == R_RL78_RELAX)
-        relaxDIR16<0>(sec, i, loc, r, remove);
-      break;
-    case R_RL78_DIR16S_PCREL:
-      if (i + 1 != sec.relocs().size() &&
-          sec.relocs()[i + 1].type == R_RL78_RELAX)
-        relaxDIR16<1>(sec, i, loc, r, remove);
-      break;
-    default:
-      break;
+    if (relaxable) {
+      switch (r.type) {
+      case R_RL78_DIR20U:
+        relaxDIR20U(ctx, sec, i, loc, r, remove);
+        break;
+      case R_RL78_DIR16U:
+        relaxDIR16<false>(ctx, sec, i, loc, r, remove);
+        break;
+      case R_RL78_DIR16S_PCREL:
+        relaxDIR16<true>(ctx, sec, i, loc, r, remove);
+        break;
+      default:
+        break;
+      }
     }
 
     // For all anchors whose offsets are <= r.offset, they are preceded by
@@ -424,41 +394,41 @@ static bool relax(InputSection &sec) {
 }
 
 bool RL78::relaxOnce(int pass) const {
-  if (!config->relax)
+  if (!ctx.arg.relax)
     return false;
 
   llvm::TimeTraceScope timeScope("RL78 relaxOnce");
-  if (config->relocatable)
-    return false;
-
   if (pass == 0)
-    initSymbolAnchors();
+    initSymbolAnchors(ctx);
 
   SmallVector<InputSection *, 0> storage;
   bool changed = false;
-  for (OutputSection *osec : outputSections) {
+  for (OutputSection *osec : ctx.outputSections) {
     if (!(osec->flags & SHF_EXECINSTR))
       continue;
     for (InputSection *sec : getInputSections(*osec, storage))
-      changed |= relax(*sec);
+      if (sec->relaxAux)
+        changed |= relax(ctx, *sec);
   }
   return changed;
 }
 
-void elf::rl78FinalizeRelax(int passes) {
-  if (!config->relax)
+void RL78::finalizeRelax(int passes) const {
+  if (!ctx.arg.relax)
     return;
 
   llvm::TimeTraceScope timeScope("Finalize RL78 relaxation");
-  log("relaxation passes: " + Twine(passes));
+  Log(ctx) << "relaxation passes: " << passes;
   SmallVector<InputSection *, 0> storage;
 
-  for (OutputSection *osec : outputSections) {
+  for (OutputSection *osec : ctx.outputSections) {
     if (!(osec->flags & SHF_EXECINSTR))
       continue;
 
     for (InputSection *sec : getInputSections(*osec, storage)) {
-      RL78RelaxAux &aux = *sec->rl78RelaxAux;
+      if (!sec->relaxAux)
+        continue;
+      RelaxAux &aux = *sec->relaxAux;
       if (!aux.relocDeltas)
         continue;
 
@@ -466,7 +436,7 @@ void elf::rl78FinalizeRelax(int passes) {
       ArrayRef<uint8_t> old = sec->content();
       size_t newSize = old.size() - aux.relocDeltas[rels.size() - 1];
       size_t writesIdx = 0;
-      uint8_t *p = context().bAlloc.Allocate<uint8_t>(newSize);
+      uint8_t *p = ctx.bAlloc.Allocate<uint8_t>(newSize);
       uint64_t offset = 0;
       int64_t delta = 0;
       sec->content_ = p;
@@ -489,17 +459,14 @@ void elf::rl78FinalizeRelax(int passes) {
         if (RelType newType = aux.relocTypes[i]) {
           switch (newType) {
           case R_RL78_DIR16U:
-          case R_RL78_DIR16S_PCREL: {
-            uint32_t val = aux.writes[writesIdx++];
-            write24le(p - 1, val);
+          case R_RL78_DIR16S_PCREL:
+            write24le(p - 1, aux.writes[writesIdx++]);
             skip = 2;
             break;
-          }
-          case R_RL78_DIR8S_PCREL: {
+          case R_RL78_DIR8S_PCREL:
             write16le(p - 1, aux.writes[writesIdx++]);
             skip = 1;
             break;
-          }
           default:
             llvm_unreachable("unsupported type");
           }
@@ -519,19 +486,18 @@ void elf::rl78FinalizeRelax(int passes) {
           rels[i].offset -= delta;
           if (aux.relocTypes[i] != R_RL78_NONE) {
             rels[i].type = aux.relocTypes[i];
-            rels[i].expr = getRelExpr(rels[i].type);
+            rels[i].expr = ::getRelExpr(ctx, rels[i].type);
           }
-        }
-        while (++i != e && rels[i].offset == cur);
+        } while (++i != e && rels[i].offset == cur);
         delta = aux.relocDeltas[i - 1];
       }
     }
   }
 }
 
-static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
-                                          uint64_t val,
-                                          bool AllowOutOfRange = false) {
+static uint64_t checkAndConvertMirrorAddr(Ctx &ctx, uint8_t *loc,
+                                          const Relocation &rel, uint64_t val,
+                                          bool allowOutOfRange = false) {
   // clang-format off
   /*
   RL78-S1 core
@@ -546,15 +512,10 @@ static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
   */
   // clang-format on
 
-  ErrorPlace errPlace = getErrorPlace(loc);
-  uint32_t maaFlag = config->eflags & ELF::EF_RL78_MAA_1;
-
-  LinkerScript *linkerScript = script.get();
-  MapVector<llvm::StringRef, MemoryRegion*> memoryRegions = linkerScript->memoryRegions;
-  MemoryRegion *mirrorRegion = memoryRegions.lookup("MIRROR");
-
+  uint32_t maaFlag = ctx.arg.eflags & EF_RL78_MAA_1;
+  MemoryRegion *mirrorRegion = ctx.script->memoryRegions.lookup("MIRROR");
   if (!mirrorRegion) {
-    error(errPlace.loc + "memory region 'MIRROR' not declared");
+    Err(ctx) << getErrorLoc(ctx, loc) << "memory region 'MIRROR' not declared";
     return 0;
   }
 
@@ -564,8 +525,8 @@ static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
 
   if (!maaFlag) {
     // We need to know if the maaFlag was correct beforehand.
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          " is invalid when MAA mode flag in ELF is set to common!");
+    Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << rel.type
+             << " is invalid when MAA mode flag in ELF is set to common!";
     return 0;
   }
 
@@ -576,96 +537,80 @@ static uint64_t checkAndConvertMirrorAddr(uint8_t *loc, const Relocation &rel,
 
   if (!(mirrorRegion->getOrigin() & 0xF0000) ||
       mirrorRegion->getOrigin() < end) {
-    error(errPlace.loc + "memory region 'MIRROR' is not in a correct location");
+    Err(ctx) << getErrorLoc(ctx, loc)
+             << "memory region 'MIRROR' is not in a correct location";
     return 0;
   }
 
   // Get addend needed to put the the address in MIRROR.
   uint32_t correction = mirrorRegion->getOrigin() - start;
 
-  if (val >= start && val <= end) {
+  if (val >= start && val <= end)
     return val + correction;
-  } else if (AllowOutOfRange) {
-    // Return it unchanged, used for R_RL78_OPmir.
+  // Return it unchanged, used for R_RL78_OPmir.
+  if (allowOutOfRange)
     return val;
-  } else {
-    errorOrWarn(errPlace.loc + "relocation " + lld::toString(rel.type) +
-                " out of MIRROR range: " + Twine::utohexstr(val).str() +
-                " is not in [" + Twine::utohexstr(start).str() + ", " +
-                Twine::utohexstr(end).str() + "]");
-    return 0;
-  }
+  Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << rel.type
+           << " out of MIRROR range: " << Twine::utohexstr(val)
+           << " is not in [" << Twine::utohexstr(start) << ", "
+           << Twine::utohexstr(end) << "]";
+  return 0;
 }
 
-static uint8_t checkAndConvertSAddr(uint8_t *loc, const Relocation &rel,
-                                    uint64_t val) {
-  ErrorPlace errPlace = getErrorPlace(loc);
+static uint8_t checkAndConvertSAddr(Ctx &ctx, uint8_t *loc,
+                                    const Relocation &rel, uint64_t val) {
   uint32_t max1 = 0xff1f;
   uint32_t min1 = 0xfe20;
   uint32_t max2 = 0xfff1f;
   uint32_t min2 = 0xffe20;
-  if ((val >= min1 && val <= max1) || (val >= min2 && val <= max2)) {
+  if ((val >= min1 && val <= max1) || (val >= min2 && val <= max2))
     return val;
-  } else {
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          " out of SADDR(P) range: " + Twine(val).str() + " is not in [" +
-          Twine::utohexstr(min1).str() + ", " + Twine::utohexstr(max1).str() +
-          "] or [" + Twine::utohexstr(min2).str() + ", " +
-          Twine::utohexstr(max2).str() + "]");
-    return 0;
-  }
+  Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << rel.type
+           << " out of SADDR(P) range: " << val << " is not in ["
+           << Twine::utohexstr(min1) << ", " << Twine::utohexstr(max1)
+           << "] or [" << Twine::utohexstr(min2) << ", "
+           << Twine::utohexstr(max2) << "]";
+  return 0;
 }
 
-uint16_t RL78::checkAndConvertRAM(uint8_t *loc, const Relocation &rel,
-                                  uint64_t val) const {
-  ErrorPlace errPlace = getErrorPlace(loc);
-  LinkerScript *linkerScript = script.get();
-  MapVector<StringRef, MemoryRegion*> memoryRegions = linkerScript->memoryRegions;
-  MemoryRegion *ramRegion = memoryRegions.lookup("RAM");
-  if (!ramRegion)
-  {
-    error(errPlace.loc + "memory region 'RAM' not declared");
+static uint16_t checkAndConvertRAM(Ctx &ctx, uint8_t *loc,
+                                   const Relocation &rel, uint64_t val) {
+  MemoryRegion *ramRegion = ctx.script->memoryRegions.lookup("RAM");
+  if (!ramRegion) {
+    Err(ctx) << getErrorLoc(ctx, loc) << "memory region 'RAM' not declared";
     return 0;
   }
   uint32_t start = ramRegion->getOrigin();
   uint32_t end = start + ramRegion->getLength();
 
-  if (val >= start && val <= end) {
+  if (val >= start && val <= end)
     return val;
-  } else {
-    error(errPlace.loc + "relocation " + lld::toString(rel.type) +
-          " out of RAM range: " + Twine::utohexstr(val).str() + " is not in [" +
-          Twine::utohexstr(start).str() + ", " + Twine::utohexstr(end).str() +
-          "]");
-    return 0;
-  }
+  Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << rel.type
+           << " out of RAM range: " << Twine::utohexstr(val) << " is not in ["
+           << Twine::utohexstr(start) << ", " << Twine::utohexstr(end) << "]";
+  return 0;
 }
 
 uint64_t RL78::checkAndPop(uint8_t *loc, const Relocation &rel, char bitSize,
                            bool isSigned, uint64_t adj) const {
   if (relocationStack.empty()) {
-    error(getErrorPlace(loc).loc + "relocation " + lld::toString(rel.type) +
-          " is invalid: linker relocation stack is empty, nothing to pop!");
+    Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << rel.type
+             << " is invalid: linker relocation stack is empty, nothing to "
+                "pop!";
     return 0;
-  } else {
-    uint64_t t = relocationStack.top() - adj;
-
-    if (bitSize > 0) {
-      if (isSigned) {
-        checkInt(loc, t, bitSize, rel);
-      } else {
-        checkUInt(loc, t, bitSize, rel);
-      }
-    }
-
-    const_cast<RL78 *>(this)->relocationStack.pop();
-    return t;
   }
+  uint64_t t = relocationStack.top() - adj;
+  if (bitSize > 0) {
+    if (isSigned)
+      checkInt(ctx, loc, t, bitSize, rel);
+    else
+      checkUInt(ctx, loc, t, bitSize, rel);
+  }
+  relocationStack.pop();
+  return t;
 }
 
-void RL78::push(uint8_t *loc, uint64_t Value) const {
-  const_cast<RL78 *>(this)->relocationStack.push(Value);
-}
+void RL78::push(uint64_t value) const { relocationStack.push(value); }
 
 void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   // TODO Not sure if zero refers to boot cluster 0?
@@ -675,60 +620,60 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
 
   switch (rel.type) {
   case R_RL78_DIR3U:
-    checkUInt(loc, val, 3, rel);
+    checkUInt(ctx, loc, val, 3, rel);
     write3le(loc, val);
     break;
   case R_RL78_DIR8U:
-    checkUInt(loc, val, 8, rel);
+    checkUInt(ctx, loc, val, 8, rel);
     write8le(loc, val);
     break;
   case R_RL78_DIR16U:
-    // checkUInt(loc, val, 16, Type); - temporary revert
+    // checkUInt(ctx, loc, val, 16, rel); - temporary revert
     write16le(loc, val);
     break;
   case R_RL78_DIR20U:
-    checkUInt(loc, val, 20, rel);
+    checkUInt(ctx, loc, val, 20, rel);
     write24le(loc, val);
     break;
   case R_RL78_DIR20U_16:
-    checkUInt(loc, val, 20, rel);
+    checkUInt(ctx, loc, val, 20, rel);
     write16le(loc, val);
     break;
   case R_RL78_DIR20UW_16:
-    checkUInt(loc, val, 20, rel);
+    checkUInt(ctx, loc, val, 20, rel);
     write16le(loc, val & 0xfffe);
     break;
   case R_RL78_DIR32U:
-    checkUInt(loc, val, 32, rel);
+    checkUInt(ctx, loc, val, 32, rel);
     write32le(loc, val);
     break;
   case R_RL78_DIR8U_MIR:
-    write8le(loc, checkAndConvertMirrorAddr(loc, rel, val));
+    write8le(loc, checkAndConvertMirrorAddr(ctx, loc, rel, val));
     break;
   case R_RL78_DIR16U_MIR:
-    write16le(loc, checkAndConvertMirrorAddr(loc, rel, val));
+    write16le(loc, checkAndConvertMirrorAddr(ctx, loc, rel, val));
     break;
   case R_RL78_DIR16UW_MIR:
-    write16le(loc, checkAndConvertMirrorAddr(loc, rel, val) & 0xfffe);
+    write16le(loc, checkAndConvertMirrorAddr(ctx, loc, rel, val) & 0xfffe);
     break;
   case R_RL78_DIR8U_SAD:
-    write8le(loc, checkAndConvertSAddr(loc, rel, val) & 0xff);
+    write8le(loc, checkAndConvertSAddr(ctx, loc, rel, val) & 0xff);
     break;
   case R_RL78_DIR8UW_SAD:
-    write8le(loc, checkAndConvertSAddr(loc, rel, val) & 0xfe);
+    write8le(loc, checkAndConvertSAddr(ctx, loc, rel, val) & 0xfe);
     break;
   case R_RL78_DIR16U_RAM:
-    write16le(loc, checkAndConvertRAM(loc, rel, val) & 0xffff);
+    write16le(loc, checkAndConvertRAM(ctx, loc, rel, val) & 0xffff);
     break;
   case R_RL78_DIR16UW_RAM:
-    write16le(loc, checkAndConvertRAM(loc, rel, val) & 0xfffe);
+    write16le(loc, checkAndConvertRAM(ctx, loc, rel, val) & 0xfffe);
     break;
   case R_RL78_DIR8S_PCREL:
-    checkIntUInt(loc, val - 1, 8, rel);
+    checkIntUInt(ctx, loc, val - 1, 8, rel);
     write8le(loc, val - 1);
     break;
   case R_RL78_DIR16S_PCREL:
-    checkIntUInt(loc, val - 2, 16, rel);
+    checkIntUInt(ctx, loc, val - 2, 16, rel);
     write16le(loc, val - 2);
     break;
   case R_RL78_DIR_CALLT:
@@ -774,154 +719,138 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     write8le(loc, ((((savedVal - zeroCALLTST) & 0x30) >> 4) +
                    (((savedVal - CALLTST) & 0x0e) << 3)) |
                       0x84);
-  } break;
+    break;
+  }
   case R_RL78_REF:
     break;
   case R_RL78_SYM:
-    push(loc, val);
+    push(val);
     break;
   case R_RL78_SYM_MIR:
-    push(loc, checkAndConvertMirrorAddr(loc, rel, val));
+    push(checkAndConvertMirrorAddr(ctx, loc, rel, val));
     break;
   case R_RL78_OPadd: {
     uint64_t a = checkAndPop(loc, rel);
     uint64_t b = checkAndPop(loc, rel);
-    push(loc, a + b);
-  } break;
+    push(a + b);
+    break;
+  }
   case R_RL78_OPsub: {
     uint64_t a = checkAndPop(loc, rel);
     uint64_t b = checkAndPop(loc, rel);
-    push(loc, b - a);
-  } break;
+    push(b - a);
+    break;
+  }
   case R_RL78_OPsctsize:
   case R_RL78_OPscttop:
-    push(loc, val);
+    push(val);
     break;
   case R_RL78_OPlowH:
-    push(loc, (val & 0xFF00) >> 8);
+    push((val & 0xFF00) >> 8);
     break;
   case R_RL78_OPlowL:
-    push(loc, val & 0xff);
+    push(val & 0xff);
     break;
   case R_RL78_OPhighW:
-    push(loc, (val & 0xFFFF0000) >> 16);
+    push((val & 0xFFFF0000) >> 16);
     break;
   case R_RL78_OPlowW:
     // TODO currently we incorrectly use this for constant references too, it
     // should be R_RL78_OPlowW_MIR one possible solution to this might be at
     // ISelLowering::makeaddress, where we would insert a different node to
     // signal that it should be a constant access from the rom/mirror area
-    push(loc, val & 0xFFFF);
+    push(val & 0xFFFF);
     break;
   case R_RL78_OPhighW_MIR:
-    push(loc, (checkAndConvertMirrorAddr(loc, rel, val) & 0xFFFF0000) >> 16);
+    push((checkAndConvertMirrorAddr(ctx, loc, rel, val) & 0xFFFF0000) >> 16);
     break;
   case R_RL78_OPlowW_MIR:
-    push(loc, checkAndConvertMirrorAddr(loc, rel, val) & 0xFFFF);
+    push(checkAndConvertMirrorAddr(ctx, loc, rel, val) & 0xFFFF);
     break;
   case R_RL78_OPlowW_SMIR: {
     // For absolute symbols the value of the addend is passed from
-    // rellocateAlloc(), so it will be 0 here to not add it twice. Otherwise we
-    // get the addend here instead of taking it from rellocateAlloc().
+    // relocateAlloc(), so it will be 0 here to not add it twice. Otherwise we
+    // get the addend here instead of taking it from relocateAlloc().
     uint64_t addend = 0;
     if (rel.sym && rel.sym->isDefined())
       addend = rel.addend;
     // Only after we converted the address to mirror we will add the addend.
-    push(loc, (checkAndConvertMirrorAddr(loc, rel, val) + addend) & 0xFFFF);
+    push((checkAndConvertMirrorAddr(ctx, loc, rel, val) + addend) & 0xFFFF);
     break;
   }
   case R_RL78_OPmir: {
-    uint64_t T = checkAndPop(loc, rel);
-    push(loc, checkAndConvertMirrorAddr(loc, rel, T, true));
-  } break;
+    uint64_t t = checkAndPop(loc, rel);
+    push(checkAndConvertMirrorAddr(ctx, loc, rel, t, true));
+    break;
+  }
   case R_RL78_OPABSlowH:
-    push(loc, (checkAndPop(loc, rel) & 0xFF00) >> 8);
+    push((checkAndPop(loc, rel) & 0xFF00) >> 8);
     break;
   case R_RL78_OPABSlowL:
-    push(loc, checkAndPop(loc, rel) & 0xFF);
+    push(checkAndPop(loc, rel) & 0xFF);
     break;
   case R_RL78_OPABShighW:
-    push(loc, (checkAndPop(loc, rel) & 0xFFFF0000) >> 16);
+    push((checkAndPop(loc, rel) & 0xFFFF0000) >> 16);
     break;
   case R_RL78_OPABSlowW:
-    push(loc, checkAndPop(loc, rel) & 0xFFFF);
+    push(checkAndPop(loc, rel) & 0xFFFF);
     break;
   case R_RL78_RELAX:
     break;
   default:
-    error(getErrorLocation(loc) + "unrecognized relocation " + Twine(rel.type));
+    Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation "
+             << rel.type;
   }
 }
 
-void RL78::relocateAlloc(InputSectionBase &sec, uint8_t *buf) const {
-  const unsigned bits = config->is64 ? 64 : 32;
-  uint64_t secAddr = sec.getOutputSection()->addr;
-  uint64_t addend;
-  if (auto *s = dyn_cast<InputSection>(&sec))
-    secAddr += s->outSecOff;
+void RL78::relocateAlloc(InputSection &sec, uint8_t *buf) const {
+  uint64_t secAddr = sec.getOutputSection()->addr + sec.outSecOff;
   for (const Relocation &rel : sec.relocs()) {
     uint8_t *loc = buf + rel.offset;
-    addend = rel.addend;
-    // For R_RL78_OPlowW_SMIR without an absolute symbol the value will be 0,
-    // because conversion takes only the address to mirror, not the address with
-    // the addend.
+    Relocation r = rel;
+    // For R_RL78_OPlowW_SMIR against a defined symbol the addend is applied
+    // by relocate() after the address is converted to the mirror.
     if (rel.type == R_RL78_OPlowW_SMIR && rel.sym && rel.sym->isDefined())
-      addend = 0;
+      r.addend = 0;
     const uint64_t val = SignExtend64(
-        sec.getRelocTargetVA(sec.file, rel.type, addend, secAddr + rel.offset,
-                             *rel.sym, rel.expr),
-        bits);
-    if (rel.sym->isInPlt() && (rel.type == R_RL78_DIR16U ||
-        // The original check here was: sym in plt (a function) and reloc type
-        // is DIR16U, normally used by the 16-bit calls / branches.
-        // DIR16U was previously used also for function symbols appearing
-        // in data sections, but with the changes in the RL78AsmPrinter to use
-        // same types of relocations as CC-RL, we now generate R_RL78_OPlowW
-        // there... so, extended the check accordingly
-        // NOTE: R_RL78_OPhighW was included to prevent situations where the
-        // function symbol is in plt (the inclusion criterion in
-        // RelocationScanner::processAux() uses R_RL78_OPlowW), but the high part
-        // is used as well, and this seems to happen for -mfar-data, which does
-        // not have a setting similar to config->rl78FarCode that inhibits the
-        // plt altogether.
-        // TODO: rename config->rl78FarCode to config->rl78DisablePlt and
-        //       make it consider both -mfar-data and -mfar-code.
-        (!(sec.getOutputSection()->flags & SHF_EXECINSTR) &&
-         (rel.type == R_RL78_OPlowW || rel.type == R_RL78_OPhighW)))) {
-      target->relocate(loc, rel, rel.sym->getPltVA());
-    } else {
-      switch (rel.type) {
-      case R_RL78_ABS8S_PCREL:
-      case R_RL78_ABS16S_PCREL:
-        target->relocate(loc, rel, secAddr + rel.offset);
-        break;
-      case R_RL78_OPsctsize: {
-        auto symbol = lld::toString(*rel.sym);
-        if (Defined *d = dyn_cast<Defined>(rel.sym)) {
-          if (InputSection *isec = cast_or_null<InputSection>(d->section)) {
-            target->relocate(loc, rel, isec->getOutputSection()->size);
-          } else {
-            errorOrWarn(getErrorLocation(loc) + " symbol " + symbol +
-                        " is not a section symbol!");
-          }
-        } else {
-          errorOrWarn(getErrorLocation(loc) + " symbol " + symbol +
-                      " is not defined!");
-        }
-      } break;
-      default:
-        target->relocate(loc, rel, val);
-      }
+        sec.getRelocTargetVA(ctx, r, secAddr + rel.offset), 32);
+
+    // Near references to a function with a PLT entry go through the entry.
+    // R_RL78_DIR16U is used by 16-bit calls/branches. Function addresses in
+    // data use R_RL78_OPlowW (as CC-RL does); R_RL78_OPhighW is included
+    // because -mfar-data also uses the high part, and unlike -mfar-code it
+    // has no option that turns the PLT off.
+    // TODO: rename rl78FarCode to rl78DisablePlt and make it consider both
+    //       -mfar-data and -mfar-code.
+    if (rel.sym->isInPlt(ctx) &&
+        (rel.type == R_RL78_DIR16U ||
+         (!(sec.getOutputSection()->flags & SHF_EXECINSTR) &&
+          (rel.type == R_RL78_OPlowW || rel.type == R_RL78_OPhighW)))) {
+      relocate(loc, rel, rel.sym->getPltVA(ctx));
+      continue;
+    }
+
+    switch (rel.type) {
+    case R_RL78_ABS8S_PCREL:
+    case R_RL78_ABS16S_PCREL:
+      relocate(loc, rel, secAddr + rel.offset);
+      break;
+    case R_RL78_OPsctsize: {
+      auto *d = dyn_cast<Defined>(rel.sym);
+      if (!d)
+        Err(ctx) << getErrorLoc(ctx, loc) << " symbol " << rel.sym
+                 << " is not defined!";
+      else if (auto *isec = dyn_cast_or_null<InputSection>(d->section))
+        relocate(loc, rel, isec->getOutputSection()->size);
+      else
+        Err(ctx) << getErrorLoc(ctx, loc) << " symbol " << rel.sym
+                 << " is not a section symbol!";
+      break;
+    }
+    default:
+      relocate(loc, rel, val);
     }
   }
 }
 
-/*TargetInfo *TargetInfo::getRL78TargetInfo() {
-  static RL78 Target;
-  return &Target;
-}*/
-
-TargetInfo *elf::getRL78TargetInfo() {
-  static RL78 target;
-  return &target;
-}
+void elf::setRL78TargetInfo(Ctx &ctx) { ctx.target.reset(new RL78(ctx)); }

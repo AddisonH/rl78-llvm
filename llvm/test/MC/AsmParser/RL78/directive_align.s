@@ -7,7 +7,7 @@ TEST0:
         .align 2
 
 # CHECK: TEST1:
-# CHECK: .p2alignl 3, 0x0, 2
+# CHECK: .p2align 3, , 2
 TEST1:  
         .align32 8,,2
 

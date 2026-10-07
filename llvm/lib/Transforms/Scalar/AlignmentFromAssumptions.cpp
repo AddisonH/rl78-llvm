@@ -83,11 +83,7 @@ static Align getNewAlignment(const SCEV *AASCEV, const SCEV *AlignSCEV,
                              const SCEV *OffSCEV, Value *Ptr,
                              ScalarEvolution *SE) {
   const SCEV *PtrSCEV = SE->getSCEV(Ptr);
-  // On a platform with 32-bit allocas, but 64-bit flat/global pointer sizes
-  // (*cough* AMDGPU), the effective SCEV type of AASCEV and PtrSCEV
-  // may disagree. Trunc/extend so they agree.
-  PtrSCEV = SE->getTruncateOrZeroExtend(
-      PtrSCEV, SE->getEffectiveSCEVType(AASCEV->getType()));
+
   const SCEV *DiffSCEV = SE->getMinusSCEV(PtrSCEV, AASCEV);
   if (isa<SCEVCouldNotCompute>(DiffSCEV))
     return Align(1);
@@ -167,7 +163,7 @@ bool AlignmentFromAssumptionsPass::extractAlignmentInfo(CallInst *I,
                                                         const SCEV *&OffSCEV) {
   Type *Int64Ty = Type::getInt64Ty(I->getContext());
   OperandBundleUse AlignOB = I->getOperandBundleAt(Idx);
-  if (AlignOB.getTagName() != "align")
+  if (AlignOB.getTagID() != LLVMContext::OB_Align)
     return false;
   assert(AlignOB.Inputs.size() >= 2);
   AAPtr = AlignOB.Inputs[0].get();
@@ -178,6 +174,12 @@ bool AlignmentFromAssumptionsPass::extractAlignmentInfo(CallInst *I,
   if (!isa<SCEVConstant>(AlignSCEV))
     // Added to suppress a crash because consumer doesn't expect non-constant
     // alignments in the assume bundle.  TODO: Consider generalizing caller.
+    return false;
+  if (!cast<SCEVConstant>(AlignSCEV)->getAPInt().isPowerOf2())
+    // Only power of two alignments are supported.
+    return false;
+  if (cast<SCEVConstant>(AlignSCEV)->getAPInt().ugt(Value::MaximumAlignment))
+    // Alignment exceeds what LLVM instructions can represent; skip.
     return false;
   if (AlignOB.Inputs.size() == 3)
     OffSCEV = SE->getSCEV(AlignOB.Inputs[2].get());
@@ -209,6 +211,7 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
       continue;
 
     if (Instruction *K = dyn_cast<Instruction>(J))
+      if (K->getFunction() == ACall->getFunction())
         WorkList.push_back(K);
   }
 
@@ -264,11 +267,17 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
     // Now that we've updated that use of the pointer, look for other uses of
     // the pointer to update.
     Visited.insert(J);
-    for (User *UJ : J->users()) {
-      Instruction *K = cast<Instruction>(UJ);
-      if (!Visited.count(K))
-        WorkList.push_back(K);
-    }
+    if (isa<GetElementPtrInst>(J) || isa<PHINode>(J))
+      for (auto &U : J->uses()) {
+        if (U->getType()->isPointerTy()) {
+          Instruction *K = cast<Instruction>(U.getUser());
+          StoreInst *SI = dyn_cast<StoreInst>(K);
+          if (SI && SI->getPointerOperandIndex() != U.getOperandNo())
+            continue;
+          if (!Visited.count(K))
+            WorkList.push_back(K);
+        }
+      }
   }
 
   return true;

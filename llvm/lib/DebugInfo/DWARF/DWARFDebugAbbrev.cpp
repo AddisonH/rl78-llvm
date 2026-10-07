@@ -8,12 +8,24 @@
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugAbbrev.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 #include <cinttypes>
 #include <cstdint>
 
 using namespace llvm;
+
+bool llvm::readAbbrevAttribute(const DataExtractor &AbbrevData,
+                               uint64_t *Offset, dwarf::Attribute &Name,
+                               dwarf::Form &Form,
+                               std::optional<int64_t> &ImplicitConst) {
+  Name = static_cast<dwarf::Attribute>(AbbrevData.getULEB128(Offset));
+  Form = static_cast<dwarf::Form>(AbbrevData.getULEB128(Offset));
+  ImplicitConst = std::nullopt;
+  if (Form == dwarf::DW_FORM_implicit_const)
+    ImplicitConst = AbbrevData.getSLEB128(Offset);
+  return Name != 0 || Form != 0;
+}
 
 DWARFAbbreviationDeclarationSet::DWARFAbbreviationDeclarationSet() {
   clear();
@@ -50,6 +62,7 @@ Error DWARFAbbreviationDeclarationSet::extract(DataExtractor Data,
     PrevAbbrCode = AbbrDecl.getCode();
     Decls.push_back(std::move(AbbrDecl));
   }
+  Decls.shrink_to_fit();
   return Error::success();
 }
 
@@ -105,9 +118,9 @@ std::string DWARFAbbreviationDeclarationSet::getCodeRange() const {
 DWARFDebugAbbrev::DWARFDebugAbbrev(DataExtractor Data)
     : AbbrDeclSets(), PrevAbbrOffsetPos(AbbrDeclSets.end()), Data(Data) {}
 
-void DWARFDebugAbbrev::parse() const {
+Error DWARFDebugAbbrev::parse() const {
   if (!Data)
-    return;
+    return Error::success();
   uint64_t Offset = 0;
   auto I = AbbrDeclSets.begin();
   while (Data->isValidOffset(Offset)) {
@@ -116,17 +129,19 @@ void DWARFDebugAbbrev::parse() const {
     uint64_t CUAbbrOffset = Offset;
     DWARFAbbreviationDeclarationSet AbbrDecls;
     if (Error Err = AbbrDecls.extract(*Data, &Offset)) {
-      // FIXME: We should propagate the error upwards.
-      consumeError(std::move(Err));
-      break;
+      Data = std::nullopt;
+      return Err;
     }
     AbbrDeclSets.insert(I, std::make_pair(CUAbbrOffset, std::move(AbbrDecls)));
   }
   Data = std::nullopt;
+  return Error::success();
 }
 
 void DWARFDebugAbbrev::dump(raw_ostream &OS) const {
-  parse();
+  if (Error Err = parse())
+    // FIXME: We should propagate this error or otherwise display it.
+    llvm::consumeError(std::move(Err));
 
   if (AbbrDeclSets.empty()) {
     OS << "< EMPTY >\n";
@@ -134,7 +149,7 @@ void DWARFDebugAbbrev::dump(raw_ostream &OS) const {
   }
 
   for (const auto &I : AbbrDeclSets) {
-    OS << format("Abbrev table for offset: 0x%8.8" PRIx64 "\n", I.first);
+    OS << formatv("Abbrev table for offset: {0:x+8}\n", I.first);
     I.second.dump(OS);
   }
 }

@@ -34,7 +34,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   // Register the target.
   RegisterTargetMachine<RL78TargetMachine> X(getTheRL78Target());
   auto *PR = PassRegistry::getPassRegistry();
-  initializeRL78DAGToDAGISelPass(*PR);
+  initializeRL78DAGToDAGISelLegacyPass(*PR);
+  initializeRL78ExpandInlineAsmPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {
@@ -89,10 +90,10 @@ RL78TargetMachine::RL78TargetMachine(const Target &T, const Triple &TT,
                                      const TargetOptions &Options,
                                      std::optional<Reloc::Model> RM,
                                      std::optional<CodeModel::Model> CM,
-                                     CodeGenOpt::Level OL, bool JIT)
-    : LLVMTargetMachine(T, computeDataLayout(TT, FS), TT, CPU, FS, Options,
-                        getEffectiveRelocModel(RM),
-                        getEffectiveCodeModel(CM, CodeModel::Tiny), OL),
+                                     CodeGenOptLevel OL, bool JIT)
+    : CodeGenTargetMachineImpl(T, computeDataLayout(TT, FS), TT, CPU, FS,
+                               Options, getEffectiveRelocModel(RM),
+                               getEffectiveCodeModel(CM, CodeModel::Tiny), OL),
       TLOF(std::make_unique<RL78ELFTargetObjectFile>()) {
 
   // Bcause the optimizer is getting smarter in figuring out undefined behavior/poison
@@ -126,10 +127,6 @@ RL78TargetMachine::getSubtargetImpl(const Function &F) const {
 
   auto &I = SubtargetMap[CPU + FS];
   if (!I) {
-    // This needs to be done before we create a new subtarget since any
-    // creation will depend on the TM and the code generation flags on the
-    // function that reside in TargetOptions.
-    resetTargetOptions(F);
     Attribute TuneAttr = F.getFnAttribute("tune-cpu");
     std::string TuneCPU =
       TuneAttr.isValid() ? TuneAttr.getValueAsString().str() : CPU;
@@ -141,7 +138,7 @@ RL78TargetMachine::getSubtargetImpl(const Function &F) const {
 
 TargetTransformInfo
 RL78TargetMachine::getTargetTransformInfo(const Function &F) const {
-  return TargetTransformInfo(RL78TTIImpl(this, F));
+  return TargetTransformInfo(std::make_unique<RL78TTIImpl>(this, F));
 }
 
 MachineFunctionInfo *RL78TargetMachine::createMachineFunctionInfo(
@@ -200,9 +197,12 @@ bool RL78PassConfig::addPreISel() {
 }
 
 void RL78PassConfig::addIRPasses() {
+  // asm("nop"/"halt"/"stop"/"brk"/"ei"/"di") -> RL78 intrinsics (LLVM 17 did
+  // this in CodeGenPrepare via TargetLowering::ExpandInlineAsm).
+  addPass(createRL78ExpandInlineAsmPass());
   addPass(createNaryReassociatePass());
   addPass(createSinkingPass());
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOptLevel::None)
     addPass(createRL78NarrowDemandedOpsPass());
   TargetPassConfig::addIRPasses();
 }
@@ -233,7 +233,7 @@ void RL78PassConfig::addFastRegAlloc() {
 
 void RL78PassConfig::addPreRegAlloc() {
   addPass(createRL78AdjustMemRefsPass());
-  if (getOptLevel() != CodeGenOpt::None) {
+  if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
     addPass(&ProcessImplicitDefsID);
 

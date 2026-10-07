@@ -10,6 +10,8 @@ unittest("ObjectTests") {
   ]
   sources = [
     "ArchiveTest.cpp",
+    "BuildIDTest.cpp",
+    "COFFObjectFileTest.cpp",
     "DXContainerTest.cpp",
     "ELFObjectFileTest.cpp",
     "ELFTest.cpp",
@@ -17,6 +19,7 @@ unittest("ObjectTests") {
     "GOFFObjectFileTest.cpp",
     "MinidumpTest.cpp",
     "ObjectFileTest.cpp",
+    "OffloadingBundleTest.cpp",
     "OffloadingTest.cpp",
     "SymbolSizeTest.cpp",
     "SymbolicFileTest.cpp",

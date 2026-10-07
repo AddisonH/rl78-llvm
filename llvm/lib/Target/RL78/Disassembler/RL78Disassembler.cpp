@@ -18,6 +18,8 @@
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/MC/TargetRegistry.h"
 
+#include "llvm/Support/Compiler.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "RL78-disassembler"
@@ -48,13 +50,12 @@ static MCDisassembler *createRL78Disassembler(const Target &T,
   return new RL78Disassembler(STI, Ctx);
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Disassembler() {
+extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Disassembler() {
   // Register the disassembler.
   TargetRegistry::RegisterMCDisassembler(getTheRL78Target(),
                                          createRL78Disassembler);
 
 }
-#include "RL78GenDisassemblerTables.inc"
 
 namespace llvm {
 
@@ -2878,6 +2879,12 @@ static DecodeStatus handleMatch(uint64_t Address, InstructionInfo Match,
                                 ArrayRef<uint8_t> Bytes,
                                 const RL78Disassembler *Dis) {
   Size = Match.BitParts.size() + 1;
+  // The encoding is longer than what is left (e.g. data at the end of a
+  // section): fail instead of reading past the buffer.
+  if (Bytes.size() < Size) {
+    Size = Bytes.size();
+    return MCDisassembler::Fail;
+  }
   Instr.setOpcode(Match.OpCode);
   for (unsigned int op : Match.Operands)
     handleOperand(Address, Instr, Bytes, Match, op, Dis);

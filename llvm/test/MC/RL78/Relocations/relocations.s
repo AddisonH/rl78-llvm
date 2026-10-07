@@ -145,7 +145,7 @@
     # TODO: R_RL78_SYM_MIR
     
     # R_RL78_OPadd
-    # INSTR: addw ax, #(HIGHW(HIGH(addr16bit)))+1
+    # INSTR: addw ax, #HIGHW(HIGH(addr16bit))+1
     # RELOC: R_RL78_OPadd
     # FIXUP: fixup D - offset: 1, value: 0, kind: fixup_RL78_OPadd
     addw ax, #highw(high(addr16bit)) + 1

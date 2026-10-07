@@ -56,8 +56,8 @@ def testAttrEq():
         print("a1 == a2:", a1 == a2)
         # CHECK: a1 == a3: True
         print("a1 == a3:", a1 == a3)
-        # CHECK: a1 == None: False
-        print("a1 == None:", a1 == None)
+        # CHECK: a1 is None: False
+        print("a1 is None:", a1 is None)
 
 
 # CHECK-LABEL: TEST: testAttrHash
@@ -94,10 +94,10 @@ def testAttrIsInstance():
     with Context():
         a1 = Attribute.parse("42")
         a2 = Attribute.parse("[42]")
-        assert IntegerAttr.isinstance(a1)
-        assert not IntegerAttr.isinstance(a2)
-        assert not ArrayAttr.isinstance(a1)
-        assert ArrayAttr.isinstance(a2)
+        assert isinstance(a1, IntegerAttr)
+        assert not isinstance(a2, IntegerAttr)
+        assert not isinstance(a1, ArrayAttr)
+        assert isinstance(a2, ArrayAttr)
 
 
 # CHECK-LABEL: TEST: testAttrEqDoesNotRaise
@@ -109,9 +109,9 @@ def testAttrEqDoesNotRaise():
         # CHECK: False
         print(a1 == not_an_attr)
         # CHECK: False
-        print(a1 == None)
+        print(a1 is None)
         # CHECK: True
-        print(a1 != None)
+        print(a1 is not None)
 
 
 # CHECK-LABEL: TEST: testAttrCapsule
@@ -157,6 +157,24 @@ def testAffineMapAttr():
         # CHECK: affine_map<(d0, d1)[s0, s1, s2] -> ()>
         attr_built = AffineMapAttr.get(map0)
         print(str(attr_built))
+        assert attr_built.value == map0
+        attr_parsed = Attribute.parse(str(attr_built))
+        assert attr_built == attr_parsed
+
+
+# CHECK-LABEL: TEST: testIntegerSetAttr
+@run
+def testIntegerSetAttr():
+    with Context() as ctx:
+        d0 = AffineDimExpr.get(0)
+        d1 = AffineDimExpr.get(1)
+        s0 = AffineSymbolExpr.get(0)
+        c42 = AffineConstantExpr.get(42)
+        set0 = IntegerSet.get(2, 1, [d0 - d1, s0 - c42], [True, False])
+
+        # CHECK: affine_set<(d0, d1)[s0] : (d0 - d1 == 0, s0 - 42 >= 0)>
+        attr_built = IntegerSetAttr.get(set0)
+        print(str(attr_built))
 
         attr_parsed = Attribute.parse(str(attr_built))
         assert attr_built == attr_parsed
@@ -169,6 +187,8 @@ def testFloatAttr():
         fattr = FloatAttr(Attribute.parse("42.0 : f32"))
         # CHECK: fattr value: 42.0
         print("fattr value:", fattr.value)
+        # CHECK: fattr float: 42.0 <class 'float'>
+        print("fattr float:", float(fattr), type(float(fattr)))
 
         # Test factory methods.
         # CHECK: default_get: 4.200000e+01 : f32
@@ -196,15 +216,23 @@ def testIntegerAttr():
         print("i_attr value:", i_attr.value)
         # CHECK: i_attr type: i64
         print("i_attr type:", i_attr.type)
+        # CHECK: i_attr int: 42 <class 'int'>
+        print("i_attr int:", int(i_attr), type(int(i_attr)))
         si_attr = IntegerAttr(Attribute.parse("-1 : si8"))
         # CHECK: si_attr value: -1
         print("si_attr value:", si_attr.value)
         ui_attr = IntegerAttr(Attribute.parse("255 : ui8"))
+        # CHECK: i_attr int: -1 <class 'int'>
+        print("si_attr int:", int(si_attr), type(int(si_attr)))
         # CHECK: ui_attr value: 255
         print("ui_attr value:", ui_attr.value)
+        # CHECK: i_attr int: 255 <class 'int'>
+        print("ui_attr int:", int(ui_attr), type(int(ui_attr)))
         idx_attr = IntegerAttr(Attribute.parse("-1 : index"))
         # CHECK: idx_attr value: -1
         print("idx_attr value:", idx_attr.value)
+        # CHECK: idx_attr int: -1 <class 'int'>
+        print("idx_attr int:", int(idx_attr), type(int(idx_attr)))
 
         # Test factory methods.
         # CHECK: default_get: 42 : i32
@@ -218,6 +246,8 @@ def testBoolAttr():
         battr = BoolAttr(Attribute.parse("true"))
         # CHECK: iattr value: True
         print("iattr value:", battr.value)
+        # CHECK: iattr bool: True <class 'bool'>
+        print("iattr bool:", bool(battr), type(bool(battr)))
 
         # Test factory methods.
         # CHECK: default_get: true
@@ -336,6 +366,10 @@ def testDenseIntAttr():
         # CHECK: i1
         print(ShapedType(a.type).element_type)
 
+        shape = Attribute.parse("dense<[0, 1, 2, 3]> : vector<4xindex>")
+        # CHECK: attr: dense<[0, 1, 2, 3]>
+        print("attr:", shape)
+
 
 @run
 def testDenseArrayGetItem():
@@ -344,7 +378,7 @@ def testDenseArrayGetItem():
         print(f"{len(attr)}: {attr[0]}, {attr[1]}")
 
     with Context():
-        # CHECK: 2: 0, 1
+        # CHECK: 2: False, True
         print_item("array<i1: false, true>")
         # CHECK: 2: 2, 3
         print_item("array<i8: 2, 3>")
@@ -358,6 +392,72 @@ def testDenseArrayGetItem():
         print_item("array<f32: 1.0, 2.0>")
         # CHECK: 2: 3.{{0+}}, 4.{{0+}}
         print_item("array<f64: 3.0, 4.0>")
+
+        class MyBool:
+            def __bool__(self):
+                return True
+
+        # CHECK: myboolarray: array<i1: true>
+        print("myboolarray:", DenseBoolArrayAttr.get([MyBool()]))
+
+
+# CHECK-LABEL: TEST: testDenseArrayAttrConstruction
+@run
+def testDenseArrayAttrConstruction():
+    with Context(), Location.unknown():
+
+        def create_and_print(cls, x):
+            try:
+                darr = cls.get(x)
+                print(f"input: {x} ({type(x)}), result: {darr}")
+            except Exception as ex:
+                print(f"input: {x} ({type(x)}), error: {ex}")
+
+        # CHECK: input: [4, 2] (<class 'list'>),
+        # CHECK-SAME: result: array<i8: 4, 2>
+        create_and_print(DenseI8ArrayAttr, [4, 2])
+
+        # CHECK: input: [4, 2.0] (<class 'list'>),
+        # CHECK-SAME: error: get(): incompatible function arguments
+        create_and_print(DenseI8ArrayAttr, [4, 2.0])
+
+        # CHECK: input: [40000, 2] (<class 'list'>),
+        # CHECK-SAME: error: get(): incompatible function arguments
+        create_and_print(DenseI8ArrayAttr, [40000, 2])
+
+        # CHECK: input: range(0, 4) (<class 'range'>),
+        # CHECK-SAME: result: array<i8: 0, 1, 2, 3>
+        create_and_print(DenseI8ArrayAttr, range(4))
+
+        # CHECK: input: [IntegerAttr(4 : i64), IntegerAttr(2 : i64)] (<class 'list'>),
+        # CHECK-SAME: result: array<i8: 4, 2>
+        create_and_print(DenseI8ArrayAttr, [Attribute.parse(f"{x}") for x in [4, 2]])
+
+        # CHECK: input: [IntegerAttr(4000 : i64), IntegerAttr(2 : i64)] (<class 'list'>),
+        # CHECK-SAME: error: get(): incompatible function arguments
+        create_and_print(DenseI8ArrayAttr, [Attribute.parse(f"{x}") for x in [4000, 2]])
+
+        # CHECK: input: [IntegerAttr(4 : i64), FloatAttr(2.000000e+00 : f64)] (<class 'list'>),
+        # CHECK-SAME: error: get(): incompatible function arguments
+        create_and_print(DenseI8ArrayAttr, [Attribute.parse(f"{x}") for x in [4, 2.0]])
+
+        # CHECK: input: [IntegerAttr(4 : i8), IntegerAttr(2 : ui16)] (<class 'list'>),
+        # CHECK-SAME: result: array<i8: 4, 2>
+        create_and_print(
+            DenseI8ArrayAttr, [Attribute.parse(s) for s in ["4 : i8", "2 : ui16"]]
+        )
+
+        # CHECK: input: [FloatAttr(4.000000e+00 : f64), FloatAttr(2.000000e+00 : f64)] (<class 'list'>)
+        # CHECK-SAME: result: array<f32: 4.000000e+00, 2.000000e+00>
+        create_and_print(
+            DenseF32ArrayAttr, [Attribute.parse(f"{x}") for x in [4.0, 2.0]]
+        )
+
+        # CHECK: [BoolAttr(true), BoolAttr(false)] (<class 'list'>),
+        # CHECK-SAME: result: array<i1: true, false>
+        create_and_print(
+            DenseBoolArrayAttr, [Attribute.parse(f"{x}") for x in ["true", "false"]]
+        )
 
 
 # CHECK-LABEL: TEST: testDenseIntAttrGetItem
@@ -436,7 +536,7 @@ def testDictAttr():
 
         a = DictAttr.get(dict_attr)
 
-        # CHECK attr: {integerattr = 42 : i32, stringattr = "string"}
+        # CHECK: attr: {integerattr = 42 : i32, stringattr = "string"}
         print("attr:", a)
 
         assert len(a) == 2
@@ -468,7 +568,7 @@ def testDictAttr():
         else:
             assert False, "expected IndexError on accessing an out-of-bounds attribute"
 
-        # CHECK "empty: {}"
+        # CHECK: empty: {}
         print("empty: ", DictAttr.get())
 
 
@@ -613,8 +713,96 @@ def testConcreteTypesRoundTrip():
 @run
 def testConcreteAttributesRoundTrip():
     with Context(), Location.unknown():
-
         # CHECK: FloatAttr(4.200000e+01 : f32)
         print(repr(Attribute.parse("42.0 : f32")))
 
         assert IntegerAttr.static_typeid is not None
+
+
+# CHECK-LABEL: TEST: testAttrNames
+@run
+def testAttrNames():
+    with Context():
+        # CHECK: builtin.affine_map
+        print(AffineMapAttr.attr_name)
+        # CHECK: builtin.integer_set
+        print(IntegerSetAttr.attr_name)
+        # CHECK: builtin.array
+        print(ArrayAttr.attr_name)
+        # CHECK: builtin.integer
+        print(IntegerAttr.attr_name)
+        # CHECK: builtin.symbol_ref
+        print(SymbolRefAttr.attr_name)
+        # CHECK: builtin.opaque
+        print(OpaqueAttr.attr_name)
+        # CHECK: builtin.dictionary
+        print(DictAttr.attr_name)
+        # CHECK: builtin.type
+        print(TypeAttr.attr_name)
+        # CHECK: builtin.unit
+        print(UnitAttr.attr_name)
+        # CHECK: builtin.strided_layout
+        print(StridedLayoutAttr.attr_name)
+        # CHECK: builtin.dense_resource_elements
+        print(DenseResourceElementsAttr.attr_name)
+        # CHECK: builtin.string
+        print(StringAttr.attr_name)
+        # CHECK: builtin.float
+        print(FloatAttr.attr_name)
+
+
+# CHECK-LABEL: TEST: testLargeIntegerAttr
+@run
+def testLargeIntegerAttr():
+    with Context():
+        # Test 128-bit unsigned integer
+        i128_type = IntegerType.get_unsigned(128)
+        large_value_128 = (1 << 127) + 12345
+        attr_128 = IntegerAttr.get(i128_type, large_value_128)
+        # CHECK: 128-bit value matches: True
+        print("128-bit value matches:", int(attr_128) == large_value_128)
+
+        # Test 256-bit unsigned integer (BN254 field modulus example)
+        i256_type = IntegerType.get_unsigned(256)
+        bn254_modulus = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+        attr_256 = IntegerAttr.get(i256_type, bn254_modulus)
+        # CHECK: 256-bit value matches: True
+        print("256-bit value matches:", int(attr_256) == bn254_modulus)
+
+        # Test 256-bit signed integer (positive value)
+        si256_type = IntegerType.get_signed(256)
+        positive_signed = (1 << 200) + 999
+        attr_si256_pos = IntegerAttr.get(si256_type, positive_signed)
+        # CHECK: 256-bit signed positive matches: True
+        print(
+            "256-bit signed positive matches:", int(attr_si256_pos) == positive_signed
+        )
+
+        # Test 256-bit signed integer (negative value)
+        negative_signed = -((1 << 200) + 12345)
+        attr_si256_neg = IntegerAttr.get(si256_type, negative_signed)
+        # CHECK: 256-bit signed negative matches: True
+        print(
+            "256-bit signed negative matches:", int(attr_si256_neg) == negative_signed
+        )
+
+        # Test 64-bit boundary (should still work with fast path)
+        i64_type = IntegerType.get_signless(64)
+        value_64 = (1 << 63) - 1  # max signed 64-bit
+        attr_64 = IntegerAttr.get(i64_type, value_64)
+        # CHECK: 64-bit value matches: True
+        print("64-bit value matches:", int(attr_64) == value_64)
+
+        # Test edge case: 65-bit integer (just over 64-bit boundary)
+        i65_type = IntegerType.get_unsigned(65)
+        value_65 = (1 << 64) + 1
+        attr_65 = IntegerAttr.get(i65_type, value_65)
+        # CHECK: 65-bit value matches: True
+        print("65-bit value matches:", int(attr_65) == value_65)
+
+        # Test very large integer (512-bit)
+        i512_type = IntegerType.get_unsigned(512)
+        value_512 = (1 << 500) + (1 << 300) + (1 << 100) + 42
+        attr_512 = IntegerAttr.get(i512_type, value_512)
+        # CHECK: 512-bit value matches: True
+        print("512-bit value matches:", int(attr_512) == value_512)

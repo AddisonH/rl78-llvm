@@ -23,7 +23,7 @@ public:
   ~RL78ELFStreamer() override = default;
 
   // We override this to align text to 1 bytes
-  void initSections(bool NoExecStack, const MCSubtargetInfo &STI) override;
+  void initSections(const MCSubtargetInfo &STI) override;
 
   // We override this to be able to emit multiple fixups for a data directive
   void emitValueImpl(const MCExpr *Value, unsigned Size,

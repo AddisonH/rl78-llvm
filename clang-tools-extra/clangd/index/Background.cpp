@@ -96,7 +96,7 @@ BackgroundIndex::BackgroundIndex(
     : SwapIndex(std::make_unique<MemIndex>()), TFS(TFS), CDB(CDB),
       IndexingPriority(Opts.IndexingPriority),
       ContextProvider(std::move(Opts.ContextProvider)),
-      IndexedSymbols(IndexContents::All),
+      IndexedSymbols(IndexContents::All, Opts.SupportContainedRefs),
       Rebuilder(this, &IndexedSymbols, Opts.ThreadPoolSize),
       IndexStorageFactory(std::move(IndexStorageFactory)),
       Queue(std::move(Opts.OnProgress)),
@@ -157,7 +157,7 @@ static llvm::StringRef filenameWithoutExtension(llvm::StringRef Path) {
 
 BackgroundQueue::Task BackgroundIndex::indexFileTask(std::string Path) {
   std::string Tag = filenameWithoutExtension(Path).str();
-  uint64_t Key = llvm::xxHash64(Path);
+  uint64_t Key = llvm::xxh3_64bits(Path);
   BackgroundQueue::Task T([this, Path(std::move(Path))] {
     std::optional<WithContext> WithProvidedContext;
     if (ContextProvider)
@@ -309,10 +309,7 @@ llvm::Error BackgroundIndex::index(tooling::CompileCommand Cmd) {
 
   IndexFileIn Index;
   auto Action = createStaticIndexingAction(
-      IndexOpts, [&](SymbolSlab S) { Index.Symbols = std::move(S); },
-      [&](RefSlab R) { Index.Refs = std::move(R); },
-      [&](RelationSlab R) { Index.Relations = std::move(R); },
-      [&](IncludeGraph IG) { Index.Sources = std::move(IG); });
+      IndexOpts, [&](IndexFileIn Result) { Index = std::move(Result); });
 
   // We're going to run clang here, and it could potentially crash.
   // We could use CrashRecoveryContext to try to make indexing crashes nonfatal,

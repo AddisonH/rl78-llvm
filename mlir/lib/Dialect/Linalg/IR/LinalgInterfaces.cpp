@@ -13,15 +13,19 @@
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/IR/AffineMap.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include <algorithm>
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
+#include <optional>
 
 using namespace mlir;
 using namespace mlir::linalg;
@@ -32,6 +36,7 @@ using namespace mlir::linalg;
 //===----------------------------------------------------------------------===//
 // Interface utility functions
 //===----------------------------------------------------------------------===//
+
 bool linalg::detail::canOpOperandsBeDroppedImpl(
     linalg::LinalgOp linalgOp, ArrayRef<OpOperand *> droppedOperands) {
   SmallVector<AffineMap> indexingMaps;
@@ -45,7 +50,246 @@ bool linalg::detail::canOpOperandsBeDroppedImpl(
     // if the op has no loops.
     return linalgOp.getNumLoops() == 0;
   }
-  return inversePermutation(concatAffineMaps(indexingMaps)) != AffineMap();
+  return inversePermutation(concatAffineMaps(
+             indexingMaps, linalgOp.getContext())) != AffineMap();
+}
+
+//===----------------------------------------------------------------------===//
+// CopyOpInterface implementation
+//===----------------------------------------------------------------------===//
+
+bool linalg::isaCopyOpInterface(LinalgOp op) {
+  // Check all loops are parallel and linalgOp is single input and output.
+  if (!op.isAllParallelLoops() || !op.isSingleInputOutput())
+    return false;
+
+  auto mapRange = op.getIndexingMapsArray();
+  if (mapRange.size() != 2 || !mapRange.front().isIdentity() ||
+      !mapRange.back().isIdentity()) {
+    return false;
+  }
+  // Check yield first block argument.
+  Block *body = op.getBlock();
+  if (body->getOperations().size() != 1)
+    return false;
+  auto yieldOp = dyn_cast<linalg::YieldOp>(body->back());
+  if (!yieldOp || yieldOp.getNumOperands() != 1)
+    return false;
+  return yieldOp->getOperand(0) == body->getArgument(0);
+}
+
+//===----------------------------------------------------------------------===//
+// FillOpInterface implementation
+//===----------------------------------------------------------------------===//
+/// Detects if a linalg.generic operation represents a fill with an inlined
+/// constant. If so, returns the constant value. Otherwise, returns
+/// std::nullopt.
+static std::optional<Value> isaInlinedFillOp(GenericOp op) {
+  if (!op.isAllParallelLoops() || op.getNumDpsInits() != 1 ||
+      op.getNumDpsInputs() != 0)
+    return std::nullopt;
+
+  // Init should not be referenced.
+  if (op.payloadUsesValueFromOperand(op.getDpsInitOperand(0)))
+    return std::nullopt;
+
+  Block *body = op.getBody();
+  if (body->getOperations().size() != 1)
+    return std::nullopt;
+
+  auto yieldOp = dyn_cast<linalg::YieldOp>(body->back());
+  if (!yieldOp || yieldOp.getNumOperands() != 1)
+    return std::nullopt;
+
+  Value yieldOperand = yieldOp->getOperand(0);
+  if (!yieldOperand.getDefiningOp<arith::ConstantOp>() &&
+      !yieldOperand.getDefiningOp<complex::ConstantOp>())
+    return std::nullopt;
+
+  return yieldOperand;
+}
+
+/// Detects if a linalg.generic operation represents an external scalar input.
+/// If so, returns the constant value. Otherwise, returns std::nullopt.
+static std::optional<Value> isaExternalFillOp(GenericOp op) {
+  // Structural.
+  if (!op.isAllParallelLoops() || !op.isSingleInputOutput() ||
+      !op.isSingleYieldOp())
+    return std::nullopt;
+
+  // Input should be referenced and init should not.
+  if (!op.payloadUsesValueFromOperand(op.getDpsInputOperand(0)) ||
+      op.payloadUsesValueFromOperand(op.getDpsInitOperand(0)))
+    return std::nullopt;
+
+  OpOperand *value = op.getDpsInputOperand(0);
+  if (!op.isScalar(value))
+    return std::nullopt;
+  return value->get();
+}
+
+std::optional<Value> linalg::isaFillOpInterface(GenericOp op) {
+  if (auto fillVal = isaInlinedFillOp(op))
+    return fillVal;
+  return isaExternalFillOp(op);
+}
+
+//===----------------------------------------------------------------------===//
+// BroadcastOpInterface implementation
+//===----------------------------------------------------------------------===//
+std::optional<SmallVector<int64_t>>
+linalg::isaBroadcastOpInterface(LinalgOp linalgOp) {
+  if (auto broadcastOp = dyn_cast<BroadcastOp>(linalgOp.getOperation()))
+    return SmallVector<int64_t>(broadcastOp.getDimensions().begin(),
+                                broadcastOp.getDimensions().end());
+
+  auto op = dyn_cast<GenericOp>(linalgOp.getOperation());
+  if (!op)
+    return std::nullopt;
+
+  // Structural.
+  if (!op.isAllParallelLoops() || !op.isSingleInputOutput() ||
+      !op.isSingleYieldOp())
+    return std::nullopt;
+
+  auto srcTy = op.getDpsInputOperand(0)->get().getType();
+  auto dstTy = op.getDpsInitOperand(0)->get().getType();
+  if (!isa<MemRefType, RankedTensorType>(srcTy) ||
+      !isa<MemRefType, RankedTensorType>(dstTy))
+    return std::nullopt;
+
+  // Check output is identity map. Broadcast could additionally be
+  // employing permutation of indices and that would be expressible
+  // in linalg.generic but is not expressible for named broadcast op.
+  auto dstMap = op.getIndexingMapsArray()[1];
+  if (!dstMap.isIdentity())
+    return std::nullopt;
+
+  SmallVector<int64_t> position;
+  auto srcMap = op.getIndexingMapsArray()[0];
+
+  if (srcMap.getResults().size() >= dstMap.getResults().size())
+    return std::nullopt;
+
+  // Check input map is monotonically increasing DimIds.
+  for (unsigned i = 0; i < srcMap.getNumResults(); ++i) {
+    auto expr = llvm::dyn_cast<AffineDimExpr>(srcMap.getResults()[i]);
+    if (!expr)
+      return std::nullopt;
+    int64_t pos = expr.getPosition();
+    if (i > 0 && pos <= position[i - 1])
+      return std::nullopt;
+    position.push_back(expr.getPosition());
+  }
+
+  SmallVector<int64_t> broadcastedDims;
+  auto numDims = srcMap.getNumDims();
+  // This is quadratic but number of items is generally small.
+  for (auto dim : llvm::seq<int64_t>(0, numDims)) {
+    if (!llvm::is_contained(position, dim))
+      broadcastedDims.push_back(dim);
+  }
+  return broadcastedDims;
+}
+
+//===----------------------------------------------------------------------===//
+// TransposeOpInterface implementation
+//===----------------------------------------------------------------------===//
+std::optional<SmallVector<int64_t>>
+linalg::isaTransposeOpInterface(GenericOp op) {
+  // To specialize as a transpose op, the genericOp must be
+  // all parallel loops, single input, single output, and its body
+  // should be just a yield op, yielding input as output as is (no compute).
+  if (!op.isAllParallelLoops() || !op.isSingleInputOutput() ||
+      !op.isSingleYieldOp())
+    return std::nullopt;
+
+  auto mapRange = op.getIndexingMapsArray();
+  if (mapRange.size() != 2)
+    return std::nullopt;
+
+  auto mapOfInput = mapRange.front();
+  auto mapOfResult = mapRange.back();
+
+  // linalg.transpose permutes the dimensions of input using this
+  // rule: dim(result, i) = dim(input, permutation[i])
+  if (!mapOfResult.isIdentity() || !mapOfInput.isPermutation())
+    return std::nullopt;
+
+  SmallVector<int64_t> permutation(mapOfInput.getNumDims());
+  for (unsigned i = 0; i < mapOfInput.getNumDims(); ++i) {
+    auto expr = llvm::cast<AffineDimExpr>(mapOfInput.getResults()[i]);
+    permutation[expr.getPosition()] = i;
+  }
+  return permutation;
+}
+
+//===----------------------------------------------------------------------===//
+// Elementwise Single Unary/Binary-OpInterface implementation
+//===----------------------------------------------------------------------===//
+static bool
+isaElemwiseSingleUnaryOrBinaryOpInterface(linalg::GenericOp op, unsigned arity,
+                                          bool allowNonIdentityMaps) {
+  // Check all loops are parallel.
+  if (!op.isAllParallelLoops() || op.getNumLoops() < 1)
+    return false;
+
+  // Check there are arity-inputs, 1-output and all are identity-maps (unless
+  // requested otherwise).
+  if (op.getNumDpsInputs() != arity || op.getNumDpsInits() != 1 ||
+      (!allowNonIdentityMaps &&
+       !llvm::all_of(op.getIndexingMapsArray(),
+                     [](AffineMap map) { return map.isIdentity(); })))
+    return false;
+
+  // Init should not be referenced for elementwise operations.
+  if (op.payloadUsesValueFromOperand(op.getDpsInitOperand(0)))
+    return false;
+
+  // A linalg.generic could be series of elementwise ops e.g. exp(neg(x)) such
+  // as resulting from producer-consumer fusion. Here, we restrict to two ops in
+  // the body, where the first is the elementwise single op and the second a
+  // yield.
+  Block *body = op.getBody();
+  if (body->getOperations().size() != 2)
+    return false;
+
+  // The payload op must have one result and at least arity-many operands
+  // (otherwise not all inputs can be used). It can have additional operands
+  // from outside of the generic op (e.g. div(1, x) for linalg.reciprocal) or
+  // use an input more than once (e.g. mul(x, x) for linalg.square).
+  Operation *oper = &body->front();
+  if (oper->getNumOperands() < arity || oper->getNumResults() != 1)
+    return false;
+
+  auto yieldOp = dyn_cast<linalg::YieldOp>(body->back());
+  return !(!yieldOp || yieldOp.getNumOperands() != 1 ||
+           yieldOp->getOperand(0).getDefiningOp() != oper);
+}
+
+bool linalg::isaElemwiseSingleUnaryOpInterface(linalg::GenericOp op,
+                                               bool allowNonIdentityMaps) {
+  // All basic elemwise checks.
+  if (!isaElemwiseSingleUnaryOrBinaryOpInterface(op, 1, allowNonIdentityMaps))
+    return false;
+
+  // Check input is actually used.
+  if (!op.payloadUsesValueFromOperand(op.getDpsInputOperand(0)))
+    return false;
+  return true;
+}
+
+bool linalg::isaElemwiseSingleBinaryOpInterface(linalg::GenericOp op,
+                                                bool allowNonIdentityMaps) {
+  // All basic elemwise checks.
+  if (!isaElemwiseSingleUnaryOrBinaryOpInterface(op, 2, allowNonIdentityMaps))
+    return false;
+
+  // Check both inputs are used (elementwise).
+  OpOperand *inputOpOperand0 = op.getDpsInputOperand(0);
+  OpOperand *inputOpOperand1 = op.getDpsInputOperand(1);
+  return !(!op.payloadUsesValueFromOperand(inputOpOperand0) ||
+           !op.payloadUsesValueFromOperand(inputOpOperand1));
 }
 
 //===----------------------------------------------------------------------===//
@@ -89,7 +333,8 @@ bool mlir::linalg::detail::isContractionBody(
 
   Value yielded = getSourceSkipUnary(terminator->getOperand(0));
   Operation *reductionOp = yielded.getDefiningOp();
-  if (reductionOp->getNumResults() != 1 || reductionOp->getNumOperands() != 2) {
+  if (!reductionOp || reductionOp->getNumResults() != 1 ||
+      reductionOp->getNumOperands() != 2) {
     errs << "expected reduction op to be binary";
     return false;
   }
@@ -107,7 +352,7 @@ bool mlir::linalg::detail::isContractionBody(
   Value contributed = getSourceSkipUnary(
       isa<BlockArgument>(reductionLHS) ? reductionRHS : reductionLHS);
   Operation *elementwiseOp = contributed.getDefiningOp();
-  if (elementwiseOp->getNumResults() != 1 ||
+  if (!elementwiseOp || elementwiseOp->getNumResults() != 1 ||
       elementwiseOp->getNumOperands() != 2) {
     errs << "expected elementwise op to be binary";
     return false;
@@ -154,22 +399,22 @@ static bool isContractionBody(Block &block) {
   return linalg::detail::isContractionBody(block, &isPairTemplateImpl<Args...>);
 }
 
-/// Given a `linalgOp` and one of its `opOperand`, returns the positions of the
-/// iterators of type `iter` that index the `opOperand` as a permutation.
-/// This is useful to infer various subcomputations on a given `linalgOp`.
-/// This is performed by looking up each result in the matching indexing map and
-/// determining whether:
+/// Given an `indexingMap` and its corresponding `iterators`, returns
+/// the positions of the iterators of type `iter` that are indexed by
+/// the `indexingMap` as a permutation. This is useful to infer various
+/// subcomputations on a `LinalgOp`. This is performed by looking up
+/// each result in the `indexingMap` and determining whether:
 ///   - It is a single AffineDimExpr.
 ///   - It is the only result involving this AffineDimExpr.
-static DenseSet<int64_t>
-findPermutationsIndexingOperand(LinalgOp linalgOp, OpOperand *opOperand,
+static llvm::SmallDenseSet<int64_t>
+findPermutationsIndexingOperand(AffineMap indexingMap,
+                                ArrayRef<utils::IteratorType> iterators,
                                 utils::IteratorType iter) {
-  DenseSet<int64_t> res;
-  assert(linalgOp == opOperand->getOwner() && "expected linalgOp owner");
-  AffineMap indexingMap = linalgOp.getMatchingIndexingMap(opOperand);
+  assert(iterators.size() == indexingMap.getNumDims());
+  llvm::SmallDenseSet<int64_t> res;
   for (AffineExpr e : indexingMap.getResults()) {
-    if (auto d = e.dyn_cast<AffineDimExpr>()) {
-      if (linalgOp.getIteratorTypesArray()[d.getPosition()] == iter &&
+    if (auto d = dyn_cast<AffineDimExpr>(e)) {
+      if (iterators[d.getPosition()] == iter &&
           llvm::count_if(indexingMap.getResults(), [d](AffineExpr e) {
             return e.isFunctionOfDim(d.getPosition());
           }) == 1)
@@ -184,6 +429,21 @@ auto par = utils::IteratorType::parallel;
 auto red = utils::IteratorType::reduction;
 } // namespace
 
+/// Infer the iterator types from the init affine map. This looks at which dims
+/// are present in the map results, and returns an iterator types array with
+/// parallel types for dims that are present, and reduction types for dims that
+/// are not present.
+static FailureOr<SmallVector<utils::IteratorType>>
+inferIteratorsFromOutMap(AffineMap map) {
+  if (!map.isProjectedPermutation())
+    return failure();
+  SmallVector<utils::IteratorType> iterators(map.getNumDims(), red);
+  for (auto expr : map.getResults())
+    if (auto dim = dyn_cast<AffineDimExpr>(expr))
+      iterators[dim.getPosition()] = par;
+  return iterators;
+}
+
 /// Find 2 parallel (m and n) and 1 reduction (k) dimension candidates that form
 /// a matmul subcomputation within `linalgOp`. These dimensions are such that:
 ///   1. The m dimension is involved in an outer-product along LHS
@@ -195,40 +455,35 @@ auto red = utils::IteratorType::reduction;
 ///   5. Optional batch dimensions that appear in all operands are captured.
 /// This allows e.g. detecting that some contraction is embedded within
 /// `linalgOp` with some orthogonal heuristic.
-FailureOr<ContractionDimensions>
-mlir::linalg::inferContractionDims(LinalgOp linalgOp) {
-  if (linalgOp.getNumDpsInits() != 1 || linalgOp.getNumDpsInputs() != 2)
-    return failure();
-
-  DenseSet<int64_t> a = findPermutationsIndexingOperand(
-      linalgOp, linalgOp.getDpsInputOperand(0), par);
-  DenseSet<int64_t> b = findPermutationsIndexingOperand(
-      linalgOp, linalgOp.getDpsInputOperand(1), par);
-  DenseSet<int64_t> c = findPermutationsIndexingOperand(
-      linalgOp, linalgOp.getDpsInitOperand(0), par);
+static FailureOr<ContractionDimensions>
+inferContractionDimsImpl(ArrayRef<AffineMap> indexingMaps,
+                         ArrayRef<utils::IteratorType> iterators) {
+  llvm::SmallDenseSet<int64_t> a =
+      findPermutationsIndexingOperand(indexingMaps[0], iterators, par);
+  llvm::SmallDenseSet<int64_t> b =
+      findPermutationsIndexingOperand(indexingMaps[1], iterators, par);
+  llvm::SmallDenseSet<int64_t> c =
+      findPermutationsIndexingOperand(indexingMaps[2], iterators, par);
 
   // A & C - B are the iterators involved in an outer-product along A (the LHS).
-  DenseSet<int64_t> ac = a;
+  llvm::SmallDenseSet<int64_t> ac = a;
   llvm::set_intersect(ac, c);
   llvm::set_subtract(ac, b);
   // B & C - A are the iterators involved in an outer-product along B (the RHS).
-  DenseSet<int64_t> bc = b;
+  llvm::SmallDenseSet<int64_t> bc = b;
   llvm::set_intersect(bc, c);
   llvm::set_subtract(bc, a);
   // A & B & C are the "batch" dimensions.
-  DenseSet<int64_t> batches = a;
+  llvm::SmallDenseSet<int64_t> batches = a;
   llvm::set_intersect(batches, b);
   llvm::set_intersect(batches, c);
 
   // A & B red are the reduction dimensions.
-  DenseSet<int64_t> ra = findPermutationsIndexingOperand(
-      linalgOp, linalgOp.getDpsInputOperand(0), red);
-  DenseSet<int64_t> rb = findPermutationsIndexingOperand(
-      linalgOp, linalgOp.getDpsInputOperand(1), red);
+  llvm::SmallDenseSet<int64_t> ra =
+      findPermutationsIndexingOperand(indexingMaps[0], iterators, red);
+  llvm::SmallDenseSet<int64_t> rb =
+      findPermutationsIndexingOperand(indexingMaps[1], iterators, red);
   llvm::set_intersect(ra, rb);
-
-  if (ac.empty() || bc.empty() || ra.empty())
-    return failure();
 
   // Return each set in sorted order.
   ContractionDimensions dimensions{
@@ -236,11 +491,29 @@ mlir::linalg::inferContractionDims(LinalgOp linalgOp) {
       SmallVector<unsigned, 2>(ac.begin(), ac.end()),
       SmallVector<unsigned, 2>(bc.begin(), bc.end()),
       SmallVector<unsigned, 2>(ra.begin(), ra.end())};
-  std::sort(dimensions.batch.begin(), dimensions.batch.end());
-  std::sort(dimensions.m.begin(), dimensions.m.end());
-  std::sort(dimensions.n.begin(), dimensions.n.end());
-  std::sort(dimensions.k.begin(), dimensions.k.end());
+  llvm::sort(dimensions.batch);
+  llvm::sort(dimensions.m);
+  llvm::sort(dimensions.n);
+  llvm::sort(dimensions.k);
   return dimensions;
+}
+
+FailureOr<ContractionDimensions>
+mlir::linalg::inferContractionDims(LinalgOp linalgOp) {
+  if (linalgOp.getNumDpsInits() != 1 || linalgOp.getNumDpsInputs() != 2)
+    return failure();
+  return inferContractionDimsImpl(linalgOp.getIndexingMapsArray(),
+                                  linalgOp.getIteratorTypesArray());
+}
+
+FailureOr<ContractionDimensions>
+mlir::linalg::inferContractionDims(ArrayRef<AffineMap> indexingMaps) {
+  if (indexingMaps.size() != 3)
+    return failure();
+  auto iterators = inferIteratorsFromOutMap(indexingMaps[2]);
+  if (failed(iterators))
+    return failure();
+  return inferContractionDimsImpl(indexingMaps, iterators.value());
 }
 
 namespace mlir::linalg::detail {
@@ -344,8 +617,7 @@ LogicalResult mlir::linalg::detail::verifyContractionInterface(Operation *op) {
 /// preference over `rhs`)
 template <typename T>
 static T getAffineExprOfType(AffineExpr lhs, AffineExpr rhs) {
-  return lhs.isa<T>() ? lhs.cast<T>()
-                      : (rhs.isa<T>() ? rhs.cast<T>() : nullptr);
+  return isa<T>(lhs) ? cast<T>(lhs) : (isa<T>(rhs) ? cast<T>(rhs) : nullptr);
 }
 
 namespace {
@@ -359,8 +631,38 @@ namespace {
 /// dimensions and verifies each dimension occurs only once.
 struct ConvAccessExprWalker
     : public AffineExprVisitor<ConvAccessExprWalker, LogicalResult> {
-  llvm::SmallDenseSet<unsigned> convolvedDims;
-  llvm::SmallDenseSet<unsigned> unConvolvedDims;
+  // Stores dimensions used in expressions of the above form.
+  llvm::SmallDenseSet<int64_t> convolvedDims;
+  // Stores the dual mapping between LHS and RHS of convolution exprs.
+  llvm::SmallDenseMap<int64_t, int64_t> convolvedDimMapping;
+  // Stores single use dimensions used by an AffineDimExpr.
+  llvm::SmallDenseSet<int64_t> unConvolvedDims;
+  // Stores a mapping from convolved dims to their coefficient.
+  llvm::SmallDenseMap<int64_t, AffineExpr> strideAndDilationMapping;
+
+  // Removes dims with multiple uses in the source input map from dimension
+  // sets tracked by this walker.
+  void clearMultiUseDims(AffineMap map) {
+    for (int dimPos = 0, e = map.getNumDims(); dimPos < e; ++dimPos) {
+      if (llvm::count_if(map.getResults(), [dimPos](AffineExpr e) {
+            return e.isFunctionOfDim(dimPos);
+          }) > 1) {
+        convolvedDims.erase(dimPos);
+        unConvolvedDims.erase(dimPos);
+        // If a duplicate dim is marked as convolved, the pair of the duplicate
+        // dim must be removed from the map as well.
+        auto it = convolvedDimMapping.find(dimPos);
+        if (it != convolvedDimMapping.end()) {
+          int64_t pairedDim = it->second;
+          convolvedDims.erase(pairedDim);
+          unConvolvedDims.erase(pairedDim);
+          strideAndDilationMapping.erase(pairedDim);
+          convolvedDimMapping.erase(dimPos);
+          convolvedDimMapping.erase(pairedDim);
+        }
+      }
+    }
+  }
 
   LogicalResult visitDimExpr(AffineDimExpr dimExpr) {
     unsigned position = dimExpr.getPosition();
@@ -379,19 +681,27 @@ struct ConvAccessExprWalker
     // In pre-order visit, top level op has to be an add op.
     if (binaryExpr.getKind() != AffineExprKind::Add)
       return failure();
-    return success(succeeded(isDimExprOrMulExpr(binaryExpr.getLHS())) &&
-                   succeeded(isDimExprOrMulExpr(binaryExpr.getRHS())));
+    auto lhsDimPos = getDimExprOrMulExprDimPos(binaryExpr.getLHS());
+    auto rhsDimPos = getDimExprOrMulExprDimPos(binaryExpr.getRHS());
+    if (failed(lhsDimPos) || failed(rhsDimPos))
+      return failure();
+    convolvedDimMapping[*lhsDimPos] = *rhsDimPos;
+    convolvedDimMapping[*rhsDimPos] = *lhsDimPos;
+    return success();
   }
 
-  LogicalResult isDimExprOrMulExpr(AffineExpr expr) {
-    if (auto dimExpr = expr.dyn_cast<AffineDimExpr>()) {
-      unsigned dim = dimExpr.getPosition();
+  FailureOr<int64_t> getDimExprOrMulExprDimPos(AffineExpr expr) {
+    if (auto dimExpr = dyn_cast<AffineDimExpr>(expr)) {
+      int64_t dim = dimExpr.getPosition();
       if (convolvedDims.count(dim) || unConvolvedDims.count(dim))
         return failure();
+      // Stride/dilation for this dim is implicitly 1.
+      strideAndDilationMapping[dim] =
+          getAffineConstantExpr(1, expr.getContext());
       convolvedDims.insert(dim);
-      return success();
+      return dim;
     }
-    if (auto symbolMulExpr = expr.dyn_cast<AffineBinaryOpExpr>()) {
+    if (auto symbolMulExpr = dyn_cast<AffineBinaryOpExpr>(expr)) {
       if (symbolMulExpr.getKind() != AffineExprKind::Mul)
         return failure();
       auto lhsExpr = symbolMulExpr.getLHS();
@@ -406,24 +716,214 @@ struct ConvAccessExprWalker
       auto dimExpr = getAffineExprOfType<AffineDimExpr>(lhsExpr, rhsExpr);
       if (!mulExpr || !dimExpr)
         return failure();
-      unsigned dim = dimExpr.getPosition();
+      int64_t dim = dimExpr.getPosition();
       if (convolvedDims.count(dim) || unConvolvedDims.count(dim))
         return failure();
+      strideAndDilationMapping[dim] = mulExpr;
       convolvedDims.insert(dim);
-      return success();
+      return dim;
     }
     return failure();
   }
 };
 } // namespace
 
-static llvm::SmallDenseSet<unsigned> getPreservedDims(AffineMap map) {
+static llvm::SmallDenseSet<int64_t> getPreservedDims(AffineMap map) {
   assert(map.isProjectedPermutation() &&
          "expected map to have projected permutations");
-  llvm::SmallDenseSet<unsigned> preservedDims;
+  llvm::SmallDenseSet<int64_t> preservedDims;
   for (auto expr : map.getResults())
-    preservedDims.insert(expr.cast<AffineDimExpr>().getPosition());
+    preservedDims.insert(cast<AffineDimExpr>(expr).getPosition());
   return preservedDims;
+}
+
+static SmallVector<int64_t, 2>
+getConstantsFromExprList(const SmallVector<AffineExpr, 2> &exprs) {
+  SmallVector<int64_t, 2> vals;
+  for (auto e : exprs) {
+    auto constantExpr = dyn_cast<AffineConstantExpr>(e);
+    assert(constantExpr && "Found non-constant stride/dilation");
+    vals.push_back(constantExpr.getValue());
+  }
+  return vals;
+}
+
+/// Classifies dimensions in the `indexingMaps` used by a convolution
+/// subcomputation, as captured by `inputExprWalker`. If
+/// `allowEmptyConvolvedDims` is not set this will fail if there is not
+/// at least one convolved dimension pair (output image + filter loop).
+///
+/// The returned dimensions are ordered as follows:
+/// - `outputImage` is sorted by dimension index.
+/// - `filterLoop` is ordered to match the pairing with `outputImage`, i.e.,
+///   `outputImage[i]` and `filterLoop[i]` are paired dimensions from the
+///   convolution access pattern (e.g., `oh + kh` pairs `oh` with `kh`).
+/// - `strides[i]` corresponds to `outputImage[i]`.
+/// - `dilations[i]` corresponds to `filterLoop[i]`.
+/// - Other dimension sets (batch, outputChannel, etc.) are sorted by index.
+///
+/// `nativeStrides` and `nativeDilations`, when non-null, are the op-carried
+/// `strides`/`dilations` attributes and take precedence over the values derived
+/// from the convolution access pattern. They are null for the maps-based
+/// overload.
+static FailureOr<ConvolutionDimensions> inferConvolutionDimsImpl(
+    ArrayRef<AffineMap> indexingMaps, ArrayRef<utils::IteratorType> iterators,
+    ConvAccessExprWalker &inputExprWalker, bool allowEmptyConvolvedDims,
+    DenseIntElementsAttr nativeStrides, DenseIntElementsAttr nativeDilations) {
+  AffineMap filterMap = indexingMaps[1];
+  AffineMap outputMap = indexingMaps.back();
+  llvm::SmallDenseSet<int64_t> filterDims =
+      findPermutationsIndexingOperand(filterMap, iterators, par);
+  llvm::SmallDenseSet<int64_t> outputDims =
+      findPermutationsIndexingOperand(outputMap, iterators, par);
+
+  // unConvolvedDims & outputDims - filterDims are the batch iterators.
+  llvm::SmallDenseSet<int64_t> batch = inputExprWalker.unConvolvedDims;
+  llvm::set_intersect(batch, outputDims);
+  llvm::set_subtract(batch, filterDims);
+
+  // convolvedDims & outputDims are the output image iterators.
+  llvm::SmallDenseSet<int64_t> oi = inputExprWalker.convolvedDims;
+  llvm::set_intersect(oi, outputDims);
+
+  // filterDims & outputDims - unConvolvedDims are the output channel iterators.
+  llvm::SmallDenseSet<int64_t> oc = filterDims;
+  llvm::set_intersect(oc, outputDims);
+  llvm::set_subtract(oc, inputExprWalker.unConvolvedDims);
+
+  // filterDims & outputDims & unConvolvedDims are the depth iterators.
+  llvm::SmallDenseSet<int64_t> depth = filterDims;
+  llvm::set_intersect(depth, outputDims);
+  llvm::set_intersect(depth, inputExprWalker.unConvolvedDims);
+
+  llvm::SmallDenseSet<int64_t> filterReducedDims =
+      findPermutationsIndexingOperand(filterMap, iterators, red);
+
+  // convolvedDims & filterReducedDims are the filter loop iterators.
+  llvm::SmallDenseSet<int64_t> fl = inputExprWalker.convolvedDims;
+  llvm::set_intersect(fl, filterReducedDims);
+
+  // unConvolvedDims & filterReducedDims are the input channel iterators.
+  llvm::SmallDenseSet<int64_t> ic = inputExprWalker.unConvolvedDims;
+  llvm::set_intersect(ic, filterReducedDims);
+
+  if (oi.empty() && !allowEmptyConvolvedDims)
+    return failure();
+
+  // Return each set in sorted order, with outputImage and filterLoop
+  // ordered so that outputImage[i] pairs with filterLoop[i].
+  ConvolutionDimensions dimensions{
+      SmallVector<unsigned, 2>(batch.begin(), batch.end()),
+      SmallVector<unsigned, 2>(oi.begin(), oi.end()),
+      SmallVector<unsigned, 2>(oc.begin(), oc.end()),
+      /*filterLoop=*/SmallVector<unsigned, 2>{},
+      SmallVector<unsigned, 2>(ic.begin(), ic.end()),
+      SmallVector<unsigned, 2>(depth.begin(), depth.end()),
+      /*strides=*/SmallVector<int64_t, 2>{},
+      /*dilations=*/SmallVector<int64_t, 2>{}};
+  llvm::sort(dimensions.batch);
+  llvm::sort(dimensions.outputImage);
+  llvm::sort(dimensions.outputChannel);
+  llvm::sort(dimensions.inputChannel);
+  llvm::sort(dimensions.depth);
+  // Order filterLoop to match the pairing with outputImage. Each outputImage
+  // dimension has a corresponding filterLoop dimension from the convolution
+  // access pattern (e.g., oh + kh). This ensures outputImage[i] pairs with
+  // filterLoop[i].
+  for (unsigned oiDim : dimensions.outputImage)
+    dimensions.filterLoop.push_back(inputExprWalker.convolvedDimMapping[oiDim]);
+
+  // Use the op carried strides/dilations attribute if present.
+  if (!nativeStrides) {
+    SmallVector<AffineExpr, 2> strideExprs;
+    for (unsigned oiDim : dimensions.outputImage)
+      strideExprs.push_back(inputExprWalker.strideAndDilationMapping[oiDim]);
+    dimensions.strides = getConstantsFromExprList(strideExprs);
+  } else {
+    dimensions.strides = llvm::to_vector<2>(nativeStrides.getValues<int64_t>());
+  }
+  if (!nativeDilations) {
+    SmallVector<AffineExpr, 2> dilationExprs;
+    for (unsigned flDim : dimensions.filterLoop)
+      dilationExprs.push_back(inputExprWalker.strideAndDilationMapping[flDim]);
+    dimensions.dilations = getConstantsFromExprList(dilationExprs);
+  } else {
+    dimensions.dilations =
+        llvm::to_vector<2>(nativeDilations.getValues<int64_t>());
+  }
+  return dimensions;
+}
+
+/// Find at least 1 parallel (output_image) and reduction (filter_loop)
+/// dimension candidates that form a convolution subcomputation within
+/// `linalgOp`. The LHS is assumed to be the convolution input while the
+/// RHS is assumed as the filter.
+/// These dimensions are such that:
+///   1. Optional batch dimensions that appear in the input and filter.
+///   2. The output_image dimension is involved in a cross-correlation along LHS
+///      (i.e. it is a permutation on RES and LHS and has an associated
+///      filter_loop in RHS).
+///   3. Optional output_channel dimension is involved in an outer-product along
+///      RHS (i.e. it is a permutation on RES and RHS and does not appear in
+///      LHS).
+///   4. Optional input_channel dimension appears as a permutation on LHS and
+///      RHS.
+///   5. The filter_loop dimension appears as a permutation on the RHS and
+///      represents the shape of the kernel cross-correlated along a
+///      corresponding output_image dim.
+///   6. The input_channel dimension appears as a permutation on LHS and RHS.
+///   7. All dimensions appear only once in any given indexing map.
+/// This allows e.g. detecting that some convolution is embedded within
+/// `linalgOp` with some orthogonal heuristic.
+///
+/// The `outputImage` and `filterLoop` arrays are ordered such that
+/// `outputImage[i]` pairs with `filterLoop[i]` based on the convolution access
+/// pattern in the input indexing map (e.g., `d0 + d2` pairs dimension 0 with
+/// dimension 2). Other dimension sets are returned in sorted order.
+///
+/// Returns a failure if `output_image` (and implicitly `filter_loop`) is empty.
+FailureOr<ConvolutionDimensions>
+mlir::linalg::inferConvolutionDims(LinalgOp linalgOp) {
+  if (linalgOp.getNumDpsInits() != 1 || linalgOp.getNumDpsInputs() != 2)
+    return failure();
+
+  auto indexingMaps = linalgOp.getIndexingMapsArray();
+
+  // Check the input indexing map has the right form.
+  ConvAccessExprWalker inputExprWalker;
+  for (AffineExpr expr : indexingMaps[0].getResults())
+    (void)inputExprWalker.visit(expr);
+  inputExprWalker.clearMultiUseDims(indexingMaps[0]);
+
+  return inferConvolutionDimsImpl(
+      indexingMaps, linalgOp.getIteratorTypesArray(), inputExprWalker,
+      /*allowEmptyConvolvedDims=*/false,
+      linalgOp->getAttrOfType<DenseIntElementsAttr>("strides"),
+      linalgOp->getAttrOfType<DenseIntElementsAttr>("dilations"));
+}
+
+FailureOr<ConvolutionDimensions>
+mlir::linalg::inferConvolutionDims(ArrayRef<AffineMap> indexingMaps) {
+  if (indexingMaps.size() != 3)
+    return failure();
+
+  // Infer iterator types from the output map.
+  FailureOr<SmallVector<utils::IteratorType>> iterators =
+      inferIteratorsFromOutMap(indexingMaps[2]);
+  if (failed(iterators))
+    return failure();
+
+  // Check the input indexing map has the right form.
+  ConvAccessExprWalker inputExprWalker;
+  for (AffineExpr expr : indexingMaps[0].getResults())
+    (void)inputExprWalker.visit(expr);
+  inputExprWalker.clearMultiUseDims(indexingMaps[0]);
+
+  return inferConvolutionDimsImpl(indexingMaps, iterators.value(),
+                                  inputExprWalker,
+                                  /*allowEmptyConvolvedDims=*/false,
+                                  /*nativeStrides=*/nullptr,
+                                  /*nativeDilations=*/nullptr);
 }
 
 namespace mlir::linalg::detail {
@@ -435,13 +935,15 @@ enum class MatchConvolutionResult {
   NotProjectedPermutations,
   NonConvolutionLoop,
   OutputDimsNotParallel,
-  NonOutputDimNotReduction
+  NonOutputDimNotReduction,
+  EmptyConvolvedDims
 };
 } // namespace mlir::linalg::detail
 
 mlir::linalg::detail::MatchConvolutionResult
 mlir::linalg::detail::isConvolutionInterfaceImpl(
-    Operation *op, ConvolutionDimensions *dimensions) {
+    Operation *op, ConvolutionDimensions *dimensions,
+    bool allowEmptyConvolvedDims) {
   auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
   if (!linalgOp)
     return MatchConvolutionResult::NotLinalgOp;
@@ -466,9 +968,9 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
 
   auto iteratorTypes = linalgOp.getIteratorTypesArray();
 
-  llvm::SmallDenseSet<unsigned> outputDims =
+  llvm::SmallDenseSet<int64_t> outputDims =
       getPreservedDims(indexingMaps.back());
-  llvm::SmallDenseSet<unsigned> filterDims = getPreservedDims(indexingMaps[1]);
+  llvm::SmallDenseSet<int64_t> filterDims = getPreservedDims(indexingMaps[1]);
   // Make sure all loops are characterized as one of:
   // - Batch loop : present in output, as non-convolved in input, not present in
   //   filter.
@@ -482,17 +984,15 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
   //   present in filter.
   // - Depth multiplier : unconvolved in input, present in output, present in
   //   filter.
-  llvm::SmallDenseSet<unsigned> allLoopDims;
+  llvm::SmallDenseSet<int64_t> allLoopDims;
   for (auto outputExpr : indexingMaps.back().getResults()) {
-    unsigned outputDim = outputExpr.cast<AffineDimExpr>().getPosition();
+    int64_t outputDim = cast<AffineDimExpr>(outputExpr).getPosition();
     if (inputExprWalker.unConvolvedDims.count(outputDim) &&
         !filterDims.count(outputDim)) {
       // Batch dimension.
       if (iteratorTypes[outputDim] != utils::IteratorType::parallel)
         return MatchConvolutionResult::OutputDimsNotParallel;
       allLoopDims.insert(outputDim);
-      if (dimensions)
-        dimensions->batch.push_back(outputDim);
       continue;
     }
     if (inputExprWalker.convolvedDims.count(outputDim) &&
@@ -501,8 +1001,6 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
       if (iteratorTypes[outputDim] != utils::IteratorType::parallel)
         return MatchConvolutionResult::OutputDimsNotParallel;
       allLoopDims.insert(outputDim);
-      if (dimensions)
-        dimensions->outputImage.push_back(outputDim);
       continue;
     }
     if (!inputExprWalker.convolvedDims.count(outputDim) &&
@@ -512,8 +1010,6 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
       if (iteratorTypes[outputDim] != utils::IteratorType::parallel)
         return MatchConvolutionResult::OutputDimsNotParallel;
       allLoopDims.insert(outputDim);
-      if (dimensions)
-        dimensions->outputChannel.push_back(outputDim);
       continue;
     }
     if (inputExprWalker.unConvolvedDims.count(outputDim) &&
@@ -522,21 +1018,16 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
       if (iteratorTypes[outputDim] != utils::IteratorType::parallel)
         return MatchConvolutionResult::OutputDimsNotParallel;
       allLoopDims.insert(outputDim);
-      if (dimensions)
-        dimensions->depth.push_back(outputDim);
       continue;
     }
     return MatchConvolutionResult::NonConvolutionLoop;
   }
   for (auto filterExpr : indexingMaps[1].getResults()) {
-    unsigned filterDim = filterExpr.cast<AffineDimExpr>().getPosition();
+    int64_t filterDim = cast<AffineDimExpr>(filterExpr).getPosition();
     if (outputDims.count(filterDim) &&
         !inputExprWalker.unConvolvedDims.count(filterDim) &&
         !inputExprWalker.convolvedDims.count(filterDim)) {
       // Output channel dimension. This is already seen, continue;
-      assert((!dimensions ||
-              llvm::is_contained(dimensions->outputChannel, filterDim)) &&
-             "expected output channel to have been found from output dims");
       continue;
     }
     if (inputExprWalker.convolvedDims.count(filterDim) &&
@@ -547,8 +1038,6 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
       if (allLoopDims.count(filterDim))
         return MatchConvolutionResult::NonConvolutionLoop;
       allLoopDims.insert(filterDim);
-      if (dimensions)
-        dimensions->filterLoop.push_back(filterDim);
       continue;
     }
     if (inputExprWalker.unConvolvedDims.count(filterDim) &&
@@ -559,16 +1048,11 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
       if (allLoopDims.count(filterDim))
         return MatchConvolutionResult::NonConvolutionLoop;
       allLoopDims.insert(filterDim);
-      if (dimensions)
-        dimensions->inputChannel.push_back(filterDim);
       continue;
     }
     if (inputExprWalker.unConvolvedDims.count(filterDim) &&
         outputDims.count(filterDim)) {
       // Depthwise loop. Already seen.
-      assert(
-          (!dimensions || llvm::is_contained(dimensions->depth, filterDim)) &&
-          "expected depthwise dimension to have been found from output dims");
       continue;
     }
     return MatchConvolutionResult::NonConvolutionLoop;
@@ -577,13 +1061,16 @@ mlir::linalg::detail::isConvolutionInterfaceImpl(
   if (allLoopDims.size() != linalgOp.getNumLoops())
     return MatchConvolutionResult::NonConvolutionLoop;
 
+  if (!allowEmptyConvolvedDims && inputExprWalker.convolvedDims.empty())
+    return MatchConvolutionResult::EmptyConvolvedDims;
+
   if (dimensions) {
-    assert(dimensions->batch.size() + dimensions->outputImage.size() +
-                   dimensions->outputChannel.size() +
-                   dimensions->filterLoop.size() +
-                   dimensions->inputChannel.size() + dimensions->depth.size() ==
-               linalgOp.getNumLoops() &&
-           "expected all loops to be classified");
+    FailureOr<ConvolutionDimensions> res = inferConvolutionDimsImpl(
+        indexingMaps, iteratorTypes, inputExprWalker, allowEmptyConvolvedDims,
+        linalgOp->getAttrOfType<DenseIntElementsAttr>("strides"),
+        linalgOp->getAttrOfType<DenseIntElementsAttr>("dilations"));
+    assert(succeeded(res) && "unexpected failure to infer convolution dims");
+    *dimensions = *res;
   }
 
   return MatchConvolutionResult::Success;
@@ -606,14 +1093,18 @@ mlir::linalg::detail::getMatchConvolutionMessage(MatchConvolutionResult res) {
     return "expected all iterators used to access outputs to be parallel";
   case MatchConvolutionResult::NonOutputDimNotReduction:
     return "expected all iterators not used to access outputs to be reduction";
+  case MatchConvolutionResult::EmptyConvolvedDims:
+    return "expected convolved dim to be non-empty";
   case MatchConvolutionResult::Success:
     return "";
   }
   llvm_unreachable("unhandled MatchConvolutionResult case");
 }
 
-bool mlir::linalg::isaConvolutionOpInterface(LinalgOp linalgOp) {
-  return linalg::detail::isConvolutionInterfaceImpl(linalgOp.getOperation()) ==
+bool mlir::linalg::isaConvolutionOpInterface(LinalgOp linalgOp,
+                                             bool allowEmptyConvolvedDims) {
+  return linalg::detail::isConvolutionInterfaceImpl(
+             linalgOp.getOperation(), nullptr, allowEmptyConvolvedDims) ==
          linalg::detail::MatchConvolutionResult::Success;
 }
 
@@ -628,12 +1119,15 @@ LogicalResult mlir::linalg::detail::verifyConvolutionInterface(Operation *op) {
 // FillOpInterface implementation
 //===----------------------------------------------------------------------===//
 
+namespace {
 enum class MatchFillResult {
   Success = 0,
   NotLinalgOp,
   WrongNumOperands,
-  NotScalarInput
+  NotScalarInput,
+  TypeMismatch
 };
+} // namespace
 
 static MatchFillResult isFillInterfaceImpl(Operation *op) {
   auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
@@ -646,17 +1140,33 @@ static MatchFillResult isFillInterfaceImpl(Operation *op) {
   if (!linalgOp.isScalar(value))
     return MatchFillResult::NotScalarInput;
 
+  // Check that the scalar input type matches the output element type.
+  OpOperand *output = linalgOp.getDpsInitOperand(0);
+  Type scalarType = value->get().getType();
+  Type outputElementType = getElementTypeOrSelf(output->get().getType());
+  if (scalarType != outputElementType)
+    return MatchFillResult::TypeMismatch;
+
   return MatchFillResult::Success;
 }
 
 LogicalResult mlir::linalg::detail::verifyFillInterface(Operation *op) {
-  auto res = isFillInterfaceImpl(op);
+  MatchFillResult res = isFillInterfaceImpl(op);
   if (res == MatchFillResult::NotLinalgOp)
     return op->emitError("expected a LinalgOp");
   if (res == MatchFillResult::WrongNumOperands)
     return op->emitError("expected op with 1 input and 1 output");
   if (res == MatchFillResult::NotScalarInput)
     return op->emitError("expected op with scalar input");
+  if (res == MatchFillResult::TypeMismatch) {
+    auto linalgOp = cast<linalg::LinalgOp>(op);
+    Type scalarType = linalgOp.getDpsInputOperand(0)->get().getType();
+    Type outputElementType =
+        getElementTypeOrSelf(linalgOp.getDpsInitOperand(0)->get().getType());
+    return op->emitOpError("expected fill value type (")
+           << scalarType << ") to match output element type ("
+           << outputElementType << ")";
+  }
 
   return success();
 }
@@ -690,25 +1200,12 @@ SmallVector<Range, 4> LinalgOp::createLoopRanges(OpBuilder &b, Location loc) {
   SmallVector<Range, 4> res(numDims);
   for (unsigned idx = 0; idx < numRes; ++idx) {
     auto result = map.getResult(idx);
-    if (auto d = result.dyn_cast<AffineDimExpr>()) {
+    if (auto d = dyn_cast<AffineDimExpr>(result)) {
       if (res[d.getPosition()].offset)
         continue;
       res[d.getPosition()] =
           Range{b.getIndexAttr(0), viewSizes[idx], b.getIndexAttr(1)};
     }
-  }
-  return res;
-}
-
-SmallVector<int64_t, 4> LinalgOp::computeStaticLoopSizes() {
-  AffineMap map = getLoopsToShapesMap();
-  unsigned numDims = map.getNumDims(), numRes = map.getNumResults();
-  SmallVector<int64_t, 4> allShapeSizes = createFlatListOfOperandStaticDims();
-  SmallVector<int64_t, 4> res(numDims, 0);
-  for (unsigned idx = 0; idx < numRes; ++idx) {
-    auto result = map.getResult(idx);
-    if (auto d = result.dyn_cast<AffineDimExpr>())
-      res[d.getPosition()] = allShapeSizes[idx];
   }
   return res;
 }
@@ -742,8 +1239,8 @@ getResultsPositionInLoopsToShapeMap(LinalgOp &op) {
   int64_t outputRankSum = 0;
   for (OpOperand *input : op.getDpsInputOperands())
     inputRankSum += op.getRank(input);
-  for (OpOperand *output : op.getDpsInitOperands())
-    outputRankSum += op.getRank(output);
+  for (OpOperand &output : op.getDpsInitsMutable())
+    outputRankSum += op.getRank(&output);
   return {inputRankSum, inputRankSum + outputRankSum};
 }
 
@@ -786,19 +1283,18 @@ LinalgOp::reifyResultShapes(OpBuilder &b,
           createFlatListOfOperandDims(b, loc));
   int64_t pos = 0;
   ArrayRef<AffineExpr> shapeExprs = resultShapesFromInputShapesMap.getResults();
-  for (OpOperand *opOperand : getDpsInitOperands()) {
+  for (OpOperand &opOperand : getDpsInitsMutable()) {
     SmallVector<OpFoldResult> shapes;
-    for (int64_t dim : llvm::seq<int64_t>(0, getRank(opOperand))) {
-      auto shapedType = llvm::cast<ShapedType>(opOperand->get().getType());
+    for (int64_t dim : llvm::seq<int64_t>(0, getRank(&opOperand))) {
+      auto shapedType = llvm::cast<ShapedType>(opOperand.get().getType());
       if (!shapedType.isDynamicDim(dim)) {
         // Static dim: Return IntegerAttr.
         shapes.push_back(b.getIndexAttr(shapedType.getDimSize(dim)));
       } else {
         // Dynamic dim: Return Value.
-        OpFoldResult ofr =
-            checkDimExpr.visit(shapeExprs[pos])
-                ? createOrFoldDimOp(b, loc, opOperand->get(), dim)
-                : allResultDimValues[pos];
+        OpFoldResult ofr = checkDimExpr.visit(shapeExprs[pos])
+                               ? createOrFoldDimOp(b, loc, opOperand.get(), dim)
+                               : allResultDimValues[pos];
         shapes.push_back(getValueOrCreateConstantIndexOp(b, loc, ofr));
       }
       pos++;
@@ -815,7 +1311,7 @@ int64_t LinalgOp::getIndexingMapIndex(OpOperand *opOperand) {
   auto dpsIface = cast<DestinationStyleOpInterface>(*this->getOperation());
   if (!dpsIface.isDpsInput(opOperand))
     return operandNumber;
-  auto [start, end] = dpsIface.getDpsInitsPositionRange();
+  unsigned start = dpsIface.getDpsInits().getBeginOperandIndex();
   assert(!dpsIface.isDpsInit(opOperand));
   // Account for potential inputs that are not DPS and may not appear in
   // `indexingMaps`.
@@ -826,6 +1322,10 @@ int64_t LinalgOp::getIndexingMapIndex(OpOperand *opOperand) {
 
 LogicalResult mlir::linalg::detail::verifyStructuredOpInterface(Operation *op) {
   LinalgOp linalgOp = cast<LinalgOp>(op);
+  // Mixed tensor/buffer operands are not allowed.
+  if (!linalgOp.hasPureTensorSemantics() &&
+      !linalgOp.hasPureBufferSemantics() && op->getNumOperands() > 0)
+    return op->emitOpError("expected to have pure tensor or buffer semantics");
 
   // Before checking indexing maps, we need to make sure the attributes
   // referenced by it are valid.
@@ -833,108 +1333,29 @@ LogicalResult mlir::linalg::detail::verifyStructuredOpInterface(Operation *op) {
     if (failed(linalgOp.verifyIndexingMapRequiredAttributes()))
       return failure();
 
-  // All input/output operands must be indexed.
-  if (static_cast<int64_t>(linalgOp.getIndexingMapsArray().size()) !=
-      linalgOp->getNumOperands())
-    return op->emitOpError("expected the number of indexing_map (")
-           << linalgOp.getIndexingMapsArray().size()
-           << ") to be equal to the number of input/output operands ("
-           << linalgOp->getNumOperands() << ")";
+  // Delayed calling of IndexingMapOpInterface::verifyImpl.
+  if (failed(cast<IndexingMapOpInterface>(op).verifyImpl()))
+    return failure();
 
+  // Set this flag if this op has user defined maps. This is required to guard
+  // the below error condition which assume default indexing maps.
   for (OpOperand &opOperand : linalgOp->getOpOperands()) {
     AffineMap indexingMap = linalgOp.getMatchingIndexingMap(&opOperand);
-
-    // Symbols disallowed.
-    if (indexingMap.getNumSymbols() != 0)
-      return op->emitOpError("unexpected symbols in indexing_map #")
-             << opOperand.getOperandNumber();
-
     // Domain must be consistent.
     unsigned numLoops = linalgOp.getNumLoops();
     if (indexingMap.getNumDims() != numLoops)
       return op->emitOpError("expected indexing_map #")
              << opOperand.getOperandNumber() << " to have " << numLoops
              << " dim(s) to match the number of loops";
-
-    int64_t rank = linalgOp.getRank(&opOperand);
-    if (indexingMap.getNumResults() != rank)
-      return op->emitOpError("expected operand rank (")
-             << rank << ") to match the result rank of indexing_map #"
-             << opOperand.getOperandNumber() << " ("
-             << indexingMap.getNumResults() << ")";
   }
-
   SmallVector<unsigned> redDims;
   linalgOp.getReductionDims(redDims);
 
   if (!linalgOp.getShapesToLoopsMap())
     return op->emitOpError("expected the shape-to-loops map to be non-null");
 
-  // Check if given shapes match to inferred shapes.
-  SmallVector<int64_t, 4> endLoopRangeValues = linalgOp.getStaticLoopRanges();
-  SmallVector<int64_t, 4> startLoopRangeValues(endLoopRangeValues.size(), 0);
-
-  // Verify only static cases since we can't get exact dimension sizes and loop
-  // ranges for dynamic cases in this stage.
-  if (llvm::none_of(endLoopRangeValues, ShapedType::isDynamic)) {
-    for (int64_t &range : endLoopRangeValues)
-      range -= 1;
-    for (OpOperand &opOperand : linalgOp->getOpOperands()) {
-      AffineMap indexingMap = linalgOp.getMatchingIndexingMap(&opOperand);
-      SmallVector<int64_t, 4> startIndices =
-          indexingMap.compose(startLoopRangeValues);
-      SmallVector<int64_t, 4> endIndices =
-          indexingMap.compose(endLoopRangeValues);
-      ArrayRef<int64_t> shape = linalgOp.getShape(&opOperand);
-      for (auto dim : llvm::seq<int64_t>(0, shape.size())) {
-        // Ignore dynamic dimension or the case that the dimension size is 0
-        if (ShapedType::isDynamic(shape[dim]) || shape[dim] == 0)
-          continue;
-
-        // The first index or last index should be the maximum or the minimum in
-        // the inferred index ranges since the range is increasing or
-        // decreasing. The size of dimensions of input/output operands and the
-        // maximum value + 1 in the inferred range should be the same. But, for
-        // now we check if the inferred ranges are in boundary of input/output
-        // operands' size or not in case that Affine Expressions are complicated
-        // such as d0 * 3
-        // + d1 since it is not easy to handle the issues.
-        // Found the case that this solution can't check, for example, (d0, d1)
-        // -> (d1 - d0)
-        int64_t inferredDimSize =
-            std::max(startIndices[dim], endIndices[dim]) + 1;
-        if (std::min(startIndices[dim], endIndices[dim]) < 0) {
-          std::string mapStr;
-          {
-            llvm::raw_string_ostream os(mapStr);
-            os << indexingMap;
-          }
-          return op->emitOpError(
-                     "unexpected result less than 0 at expression #")
-                 << dim << " in " << mapStr;
-        }
-        if (indexingMap.getResult(dim).dyn_cast<AffineDimExpr>()) {
-          if (inferredDimSize != shape[dim]) {
-            return op->emitOpError("inferred input/output operand #")
-                   << opOperand.getOperandNumber() << " has shape's dimension #"
-                   << dim << " to be " << inferredDimSize << ", but found "
-                   << shape[dim];
-          }
-        } else {
-          if (inferredDimSize > shape[dim]) {
-            return op->emitOpError("inferred input/output operand #")
-                   << opOperand.getOperandNumber() << " has shape's dimension #"
-                   << dim << " to be greater than or equal to "
-                   << inferredDimSize << ", but found " << shape[dim];
-          }
-        }
-      }
-    }
-  }
-
   // Check the region has exactly one block.
-  if (linalgOp->getNumRegions() != 1 ||
-      !llvm::hasSingleElement(linalgOp->getRegion(0)))
+  if (linalgOp->getNumRegions() != 1 || !linalgOp->getRegion(0).hasOneBlock())
     return op->emitOpError("expects to have 1 region with 1 block");
 
   // Simplifying assumption: bbargs match 1-1 with shape operands elemental
@@ -950,7 +1371,9 @@ LogicalResult mlir::linalg::detail::verifyStructuredOpInterface(Operation *op) {
                            "arguments as the number of input/output operands");
 
   for (OpOperand *opOperand : linalgOp.getOpOperandsMatchingBBargs()) {
-    Type elementType = getElementTypeOrSelf(opOperand->get());
+    Type elementType = opOperand->get().getType();
+    if (isa<MemRefType, RankedTensorType>(elementType))
+      elementType = getElementTypeOrSelf(opOperand->get().getType());
     Type argType = block.getArgument(opOperand->getOperandNumber()).getType();
     if (elementType != argType)
       return op->emitOpError("expected type of bb argument #")

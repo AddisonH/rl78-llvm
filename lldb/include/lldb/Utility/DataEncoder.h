@@ -9,8 +9,6 @@
 #ifndef LLDB_UTILITY_DATAENCODER_H
 #define LLDB_UTILITY_DATAENCODER_H
 
-#if defined(__cplusplus)
-
 #include "lldb/lldb-defines.h"
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
@@ -148,7 +146,7 @@ public:
   ///    will be determined by the address size specified in the constructor.
   void AppendAddress(lldb::addr_t addr);
 
-  /// Append a bytes to the end of the owned data.
+  /// Append bytes to the end of the owned data.
   ///
   /// Append the bytes contained in the string reference. This function will
   /// not append a NULL termination character for a C string. Use the
@@ -158,7 +156,7 @@ public:
   ///     A string reference that contains bytes to append.
   void AppendData(llvm::StringRef data);
 
-  /// Append a bytes to the end of the owned data.
+  /// Append bytes to the end of the owned data.
   ///
   /// Append the bytes contained in the array reference.
   ///
@@ -301,5 +299,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // #if defined (__cplusplus)
 #endif // LLDB_UTILITY_DATAENCODER_H

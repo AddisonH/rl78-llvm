@@ -184,13 +184,13 @@ ttat r0, r1
 // 'Lazy Load/Store Multiple'
 
 // UNDEF-BASELINE: error: instruction requires: armv8m.main
-// CHECK-MAINLINE: vlldm r5          @ encoding: [0x35,0xec,0x00,0x0a]
-// CHECK-MAINLINE_DSP: vlldm r5      @ encoding: [0x35,0xec,0x00,0x0a]
+// CHECK-MAINLINE: vlldm r5, {d0 - d15} @ encoding: [0x35,0xec,0x00,0x0a]
+// CHECK-MAINLINE_DSP: vlldm r5, {d0 - d15} @ encoding: [0x35,0xec,0x00,0x0a]
 vlldm r5
 
 // UNDEF-BASELINE: error: instruction requires: armv8m.main
-// CHECK-MAINLINE: vlstm r10         @ encoding: [0x2a,0xec,0x00,0x0a]
-// CHECK-MAINLINE_DSP: vlstm r10     @ encoding: [0x2a,0xec,0x00,0x0a]
+// CHECK-MAINLINE: vlstm r10, {d0 - d15} @ encoding: [0x2a,0xec,0x00,0x0a]
+// CHECK-MAINLINE_DSP: vlstm r10, {d0 - d15} @ encoding: [0x2a,0xec,0x00,0x0a]
 vlstm r10
 
 // New SYSm's
@@ -274,12 +274,12 @@ tt pc, r0
 // UNDEF:     tt r0, pc
 tt r0, pc
 
-// UNDEF-BASELINE: error: invalid instruction
+// UNDEF-BASELINE: error: operand must be a register in range [r0, r14]
 // UNDEF-MAINLINE: error: operand must be a register in range [r0, r14]
 // UNDEF:     vlldm pc
 vlldm pc
 
-// UNDEF-BASELINE: error: invalid instruction
+// UNDEF-BASELINE: error: operand must be a register in range [r0, r14]
 // UNDEF-MAINLINE: error: operand must be a register in range [r0, r14]
 // UNDEF:     vlstm pc
 vlstm pc

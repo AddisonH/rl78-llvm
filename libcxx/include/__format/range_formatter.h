@@ -20,6 +20,7 @@
 #include <__config>
 #include <__format/buffer.h>
 #include <__format/concepts.h>
+#include <__format/fmt_pair_like.h>
 #include <__format/format_context.h>
 #include <__format/format_error.h>
 #include <__format/formatter.h>
@@ -28,17 +29,18 @@
 #include <__iterator/back_insert_iterator.h>
 #include <__ranges/concepts.h>
 #include <__ranges/data.h>
+#include <__ranges/from_range.h>
 #include <__ranges/size.h>
 #include <__type_traits/remove_cvref.h>
 #include <string_view>
 
-_LIBCPP_BEGIN_NAMESPACE_STD
-
 #if _LIBCPP_STD_VER >= 23
+
+_LIBCPP_BEGIN_NAMESPACE_STD
 
 template <class _Tp, class _CharT = char>
   requires same_as<remove_cvref_t<_Tp>, _Tp> && formattable<_Tp, _CharT>
-struct _LIBCPP_TEMPLATE_VIS range_formatter {
+struct range_formatter {
   _LIBCPP_HIDE_FROM_ABI constexpr void set_separator(basic_string_view<_CharT> __separator) noexcept {
     __separator_ = __separator;
   }
@@ -184,13 +186,7 @@ struct _LIBCPP_TEMPLATE_VIS range_formatter {
       std::formatter<basic_string<_CharT>, _CharT> __formatter;
       if (__debug_format)
         __formatter.set_debug_format();
-      // P2106's from_range has not been implemented yet. Instead use a simple
-      // copy operation.
-      // TODO FMT use basic_string's "from_range" constructor.
-      // return std::formatter<basic_string<_CharT>, _CharT>{}.format(basic_string<_CharT>{from_range, __range}, __ctx);
-      basic_string<_CharT> __str;
-      ranges::copy(__range, back_insert_iterator{__str});
-      return __formatter.format(__str, __ctx);
+      return __formatter.format(basic_string<_CharT>{from_range, __range}, __ctx);
     }
   }
 
@@ -219,6 +215,8 @@ private:
     switch (*__begin) {
     case _CharT('m'):
       if constexpr (__fmt_pair_like<_Tp>) {
+        __underlying_.set_separator(_LIBCPP_STATICALLY_WIDEN(_CharT, ": "));
+        __underlying_.set_brackets({}, {});
         set_brackets(_LIBCPP_STATICALLY_WIDEN(_CharT, "{"), _LIBCPP_STATICALLY_WIDEN(_CharT, "}"));
         set_separator(_LIBCPP_STATICALLY_WIDEN(_CharT, ", "));
         ++__begin;
@@ -251,9 +249,8 @@ private:
   __parse_empty_range_underlying_spec(_ParseContext& __ctx, typename _ParseContext::iterator __begin) {
     __ctx.advance_to(__begin);
     [[maybe_unused]] typename _ParseContext::iterator __result = __underlying_.parse(__ctx);
-    _LIBCPP_ASSERT_UNCATEGORIZED(
-        __result == __begin,
-        "the underlying's parse function should not advance the input beyond the end of the input");
+    _LIBCPP_ASSERT_INTERNAL(__result == __begin,
+                            "the underlying's parse function should not advance the input beyond the end of the input");
     return __begin;
   }
 
@@ -263,8 +260,8 @@ private:
   basic_string_view<_CharT> __closing_bracket_ = _LIBCPP_STATICALLY_WIDEN(_CharT, "]");
 };
 
-#endif //_LIBCPP_STD_VER >= 23
-
 _LIBCPP_END_NAMESPACE_STD
+
+#endif // _LIBCPP_STD_VER >= 23
 
 #endif // _LIBCPP___FORMAT_RANGE_FORMATTER_H

@@ -9,6 +9,7 @@
 #include "MCTargetDesc/RL78MCExpr.h"
 #include "RL78.h"
 #include "llvm/MC/MCELFObjectWriter.h"
+#include "llvm/MC/MCSymbolELF.h"
 #include "llvm/MC/MCValue.h"
 
 using namespace llvm;
@@ -25,21 +26,20 @@ public:
   ~RL78ELFObjectWriter() override {}
 
 protected:
-  unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
-                        const MCFixup &Fixup, bool IsPCRel) const override;
+  unsigned getRelocType(const MCFixup &Fixup, const MCValue &Target,
+                        bool IsPCRel) const override;
 
-  bool needsRelocateWithSymbol(const MCSymbol &Sym,
+  bool needsRelocateWithSymbol(const MCValue &Val,
                                unsigned Type) const override;
 };
 } // end anonymous namespace
 
-unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
+unsigned RL78ELFObjectWriter::getRelocType(const MCFixup &Fixup,
                                            const MCValue &Target,
-                                           const MCFixup &Fixup,
                                            bool IsPCRel) const {
 
   // No CCRL relocation accepts two symbols.
-  if (Target.getSymB())
+  if (Target.getSubSym())
     RL78ReportError(false, "Invalid number of operands for relocation.");
 
   if (IsPCRel) {
@@ -140,7 +140,7 @@ unsigned RL78ELFObjectWriter::getRelocType(MCContext &Ctx,
   return ELF::R_RL78_NONE;
 }
 
-bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
+bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCValue &Val,
                                                   unsigned Type) const {
   if (ForceRelaxRelocs) {
     // TODO: this is very conservative; return true only for types used for
@@ -155,7 +155,7 @@ bool RL78ELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_RL78_OPlowW_SMIR:
     return true;
   case ELF::R_RL78_DIR16U: {
-    auto &ElfSym = static_cast<const MCSymbolELF &>(Sym);
+    auto &ElfSym = static_cast<const MCSymbolELF &>(*Val.getAddSym());
     return ElfSym.getType() == ELF::STT_FUNC &&
            ElfSym.getBinding() == ELF::STB_LOCAL;
   }

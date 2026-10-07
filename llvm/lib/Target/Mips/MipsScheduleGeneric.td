@@ -160,12 +160,12 @@ def GenericWriteMDUtoGPR : SchedWriteRes<[GenericIssueMDU]> {
 def GenericWriteDIV : SchedWriteRes<[GenericIssueDIV]> {
   // Estimated worst case
   let Latency = 33;
-  let ResourceCycles = [33];
+  let ReleaseAtCycles = [33];
 }
 def GenericWriteDIVU : SchedWriteRes<[GenericIssueDIV]> {
   // Estimated worst case
   let Latency = 31;
-  let ResourceCycles = [31];
+  let ReleaseAtCycles = [31];
 }
 
 // mul
@@ -285,7 +285,7 @@ def GenericWriteJumpAndLink : SchedWriteRes<[GenericIssueCTISTD]> {
 // jalr, jr.hb, jr, jalr.hb, jarlc, jialc
 def : InstRW<[GenericWriteJump], (instrs B, BAL, BAL_BR, BEQ, BNE, BGTZ, BGEZ,
                                   BLEZ, BLTZ, BLTZAL, J, JALX, JR, JR_HB, ERET,
-                                  ERet, ERETNC, DERET)>;
+                                  ERet, ERETNC, DERET, NAL)>;
 
 def : InstRW<[GenericWriteJump], (instrs BEQL, BNEL, BGEZL, BGTZL, BLEZL,
                                   BLTZL)>;
@@ -761,35 +761,35 @@ def GenericWriteFPUMoveGPRFPU : SchedWriteRes<[GenericIssueFPUMove]> {
 }
 def GenericWriteFPUDivS : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 17;
-  let ResourceCycles = [ 14 ];
+  let ReleaseAtCycles = [ 14 ];
 }
 def GenericWriteFPUDivD : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 32;
-  let ResourceCycles = [ 29 ];
+  let ReleaseAtCycles = [ 29 ];
 }
 def GenericWriteFPURcpS : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 13;
-  let ResourceCycles = [ 10 ];
+  let ReleaseAtCycles = [ 10 ];
 }
 def GenericWriteFPURcpD : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 25;
-  let ResourceCycles = [ 21 ];
+  let ReleaseAtCycles = [ 21 ];
 }
 def GenericWriteFPURsqrtS : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 17;
-  let ResourceCycles = [ 14 ];
+  let ReleaseAtCycles = [ 14 ];
 }
 def GenericWriteFPURsqrtD : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 32;
-  let ResourceCycles = [ 29 ];
+  let ReleaseAtCycles = [ 29 ];
 }
 def GenericWriteFPUSqrtS : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 17;
-  let ResourceCycles = [ 14 ];
+  let ReleaseAtCycles = [ 14 ];
 }
 def GenericWriteFPUSqrtD : SchedWriteRes<[GenericFPUDivSqrt]> {
   let Latency = 29;
-  let ResourceCycles = [ 29 ];
+  let ReleaseAtCycles = [ 29 ];
 }
 
 // Floating point compare and branch
@@ -1405,7 +1405,7 @@ let Latency = 5;
 }
 def GenericWriteFPUDivI : SchedWriteRes<[GenericFPQ]> {
   let Latency = 33;
-  let ResourceCycles = [ 33 ];
+  let ReleaseAtCycles = [ 33 ];
 }
 
 // FPUS is also used in moves from floating point and MSA registers to general
@@ -1448,6 +1448,7 @@ def : InstRW<[GenericWriteMSAShortInt], (instregex "^INSERT_[BHWD]$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^(SLD|SLDI)_[BHWD]$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^(BSET|BSETI)_[BHWD]$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^(BCLR|BCLRI)_[BHWD]$")>;
+def : InstRW<[GenericWriteMSAShortInt], (instregex "^FABS_(W|D)$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^(BNEG|BNEGI)_[BHWD]$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^(BSEL_V|BSELI_B)$")>;
 def : InstRW<[GenericWriteMSAShortInt], (instregex "^BMN*Z.*$")>;
@@ -1507,7 +1508,6 @@ def : InstRW<[GenericWriteFPUS], (instregex "^FCULE_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FCULT_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FCUNE_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FCUN_(W|D)$")>;
-def : InstRW<[GenericWriteFPUS], (instregex "^FABS_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FFINT_(U|S)_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FFQL_(W|D)$")>;
 def : InstRW<[GenericWriteFPUS], (instregex "^FFQR_(W|D)$")>;
@@ -1600,9 +1600,7 @@ def : InstRW<[GenericWriteFPUMoveGPRFPU], (instregex "^COPY_U_[BHW]$")>;
 def : InstRW<[GenericWriteFPUMoveGPRFPU], (instregex "^COPY_S_[BHWD]$")>;
 
 def : InstRW<[GenericWriteFPUStore], (instregex "^ST_[BHWD]$")>;
-def : InstRW<[GenericWriteFPUStore], (instrs ST_F16)>;
 def : InstRW<[GenericWriteFPULoad], (instregex "^LD_[BHWD]$")>;
-def : InstRW<[GenericWriteFPULoad], (instrs LD_F16)>;
 
 // Atomic instructions
 

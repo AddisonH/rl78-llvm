@@ -19,6 +19,7 @@
 #include "count_new.h"
 #include "operator_hijacker.h"
 #include "test_macros.h"
+#include "MoveOnly.h"
 
 struct A
 {
@@ -91,12 +92,17 @@ void test(const T &t0)
 
 int main(int, char**)
 {
+  {
+    auto val = std::make_shared<MoveOnly>(MoveOnly());
+    assert(val->get() == 1);
+  }
+
     int nc = globalMemCounter.outstanding_new;
     {
     int i = 67;
     char c = 'e';
     std::shared_ptr<A> p = std::make_shared<A>(i, c);
-    assert(globalMemCounter.checkOutstandingNewEq(nc+1));
+    assert(globalMemCounter.checkOutstandingNewLessThanOrEqual(nc+1));
     assert(A::count == 1);
     assert(p->get_int() == 67);
     assert(p->get_char() == 'e');
@@ -116,7 +122,7 @@ int main(int, char**)
     {
     char c = 'e';
     std::shared_ptr<A> p = std::make_shared<A>(67, c);
-    assert(globalMemCounter.checkOutstandingNewEq(nc+1));
+    assert(globalMemCounter.checkOutstandingNewLessThanOrEqual(nc+1));
     assert(A::count == 1);
     assert(p->get_int() == 67);
     assert(p->get_char() == 'e');

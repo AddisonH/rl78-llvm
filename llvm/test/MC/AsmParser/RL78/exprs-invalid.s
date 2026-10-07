@@ -1,6 +1,6 @@
 // RUN: not llvm-mc -triple rl78 %s 2> %t.err | FileCheck %s
 // RUN: FileCheck --check-prefix=CHECK-ERRORS %s < %t.err
-// CHECK: 	.text
+// CHECK-NOT: error
 // CHECK-ERRORS: :[[#@LINE+1]]:10: error: invalid octal number
 .long 80+08
 

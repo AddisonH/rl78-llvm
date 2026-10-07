@@ -8,15 +8,16 @@
 
 #include "PrintfMatcher.h"
 
+#include "hdr/stdint_proxy.h"
 #include "src/__support/FPUtil/FPBits.h"
+#include "src/__support/macros/config.h"
 #include "src/stdio/printf_core/core_structs.h"
+#include "src/stdio/printf_core/printf_config.h"
 
 #include "test/UnitTest/StringUtils.h"
 #include "test/UnitTest/Test.h"
 
-#include <stdint.h>
-
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE_DECL {
 namespace testing {
 
 using printf_core::FormatFlags;
@@ -38,6 +39,10 @@ namespace {
 #define CASE_LM(lm)                                                            \
   case (LengthModifier::lm):                                                   \
     tlog << #lm;                                                               \
+    break
+#define CASE_LM_BIT_WIDTH(lm, bw)                                              \
+  case (LengthModifier::lm):                                                   \
+    tlog << #lm << "\n\tbit width: :" << bw;                                   \
     break
 
 static void display(FormatSection form) {
@@ -67,6 +72,13 @@ static void display(FormatSection form) {
       CASE_LM(z);
       CASE_LM(t);
       CASE_LM(L);
+#if defined(LIBC_INTERNAL_PRINTF_CONVERT_FLOAT128)
+      CASE_LM(Q);
+#endif // LIBC_INTERNAL_PRINTF_CONVERT_FLOAT128
+#ifndef LIBC_COPT_PRINTF_DISABLE_BITINT
+      CASE_LM_BIT_WIDTH(w, form.bit_width);
+      CASE_LM_BIT_WIDTH(wf, form.bit_width);
+#endif // LIBC_COPT_PRINTF_DISABLE_BITINT
     }
     tlog << "\n";
     tlog << "\tconversion name: " << form.conv_name << "\n";
@@ -76,10 +88,7 @@ static void display(FormatSection form) {
                   reinterpret_cast<uintptr_t>(form.conv_val_ptr))
            << "\n";
     else if (form.conv_name != '%')
-      tlog << "\tvalue: "
-           << int_to_hex<fputil::FPBits<long double>::UIntType>(
-                  form.conv_val_raw)
-           << "\n";
+      tlog << "\tvalue: " << int_to_hex(form.conv_val_raw) << "\n";
   }
 }
 } // anonymous namespace
@@ -94,4 +103,4 @@ void FormatSectionMatcher::explainError() {
 }
 
 } // namespace testing
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE_DECL

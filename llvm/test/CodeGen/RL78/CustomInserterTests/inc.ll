@@ -18,7 +18,7 @@ define dso_local i8 @aa(ptr nocapture noundef %0) local_unnamed_addr #0 {
 }
 
 ; CHECK: _ac:
-; CHECK: 	mov es, #HIGHW(_xa)
+; CHECK: 	mov es, #HIGHW(_xa+3)
 ; CHECK: 	inc es:!LOWW(_xa+3)
 
 define dso_local i8 @ac() local_unnamed_addr #1 {

@@ -1,11 +1,15 @@
 // RUN: %check_clang_tidy -check-suffixes=,STRICT \
-// RUN:   -std=c++23 %s modernize-use-std-print %t -- \
-// RUN:   -config="{CheckOptions: [{key: StrictMode, value: true}]}" \
-// RUN:   -- -isystem %clang_tidy_headers -fexceptions
+// RUN:   -std=c++23-or-later %s modernize-use-std-print %t -- \
+// RUN:   -config="{CheckOptions: {modernize-use-std-print.StrictMode: true}}" \
+// RUN:   -- -fexceptions \
+// RUN:      -DPRI_CMDLINE_MACRO="\"s\"" \
+// RUN:      -D__PRI_CMDLINE_MACRO="\"s\""
 // RUN: %check_clang_tidy -check-suffixes=,NOTSTRICT \
-// RUN:   -std=c++23 %s modernize-use-std-print %t -- \
-// RUN:   -config="{CheckOptions: [{key: StrictMode, value: false}]}" \
-// RUN:   -- -isystem %clang_tidy_headers -fexceptions
+// RUN:   -std=c++23-or-later %s modernize-use-std-print %t -- \
+// RUN:   -config="{CheckOptions: {modernize-use-std-print.StrictMode: false}}" \
+// RUN:   -- -fexceptions \
+// RUN:      -DPRI_CMDLINE_MACRO="\"s\"" \
+// RUN:      -D__PRI_CMDLINE_MACRO="\"s\""
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -13,6 +17,12 @@
 #include <inttypes.h>
 #include <string.h>
 #include <string>
+
+template <typename T>
+struct iterator {
+  T *operator->();
+  T &operator*();
+};
 
 void printf_simple() {
   printf("Hello");
@@ -42,6 +52,12 @@ void printf_deceptive_newline() {
   printf("Hello\x0a");
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
   // CHECK-FIXES: std::println("Hello");
+}
+
+void printf_utf8_text() {
+  printf("你好世界\n");
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("你好世界");
 }
 
 void printf_crlf_newline() {
@@ -103,7 +119,7 @@ int printf_uses_return_value(int choice) {
 
   for (printf("for init statement %d\n", i);;)
     // CHECK-MESSAGES: [[@LINE-1]]:8: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
-    // CHECK-FIXES: std::println("for init statement {}", i);
+    // CHECK-FIXES: for (std::println("for init statement {}", i);;)
     ;;
 
   for (int j = printf("for init statement %d\n", i);;)
@@ -114,7 +130,7 @@ int printf_uses_return_value(int choice) {
 
   for (;; printf("for expression %d\n", i))
     // CHECK-MESSAGES: [[@LINE-1]]:11: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
-    // CHECK-FIXES: std::println("for expression {}", i)
+    // CHECK-FIXES: for (;; std::println("for expression {}", i))
     ;;
 
   for (auto C : "foo")
@@ -218,7 +234,7 @@ int fprintf_uses_return_value(int choice) {
 
   for (fprintf(stderr, "for init statement %d\n", i);;)
     // CHECK-MESSAGES: [[@LINE-1]]:8: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
-    // CHECK-FIXES: std::println(stderr, "for init statement {}", i);
+    // CHECK-FIXES: for (std::println(stderr, "for init statement {}", i);;)
     ;;
 
   for (int j = fprintf(stderr, "for init statement %d\n", i);;)
@@ -229,7 +245,7 @@ int fprintf_uses_return_value(int choice) {
 
   for (;; fprintf(stderr, "for expression %d\n", i))
     // CHECK-MESSAGES: [[@LINE-1]]:11: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
-    // CHECK-FIXES: std::println(stderr, "for expression {}", i)
+    // CHECK-FIXES: for (;; std::println(stderr, "for expression {}", i))
     ;;
 
   for (auto C : "foo")
@@ -291,6 +307,12 @@ void fprintf_simple() {
   fprintf(stderr, "Hello");
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::print' instead of 'fprintf' [modernize-use-std-print]
   // CHECK-FIXES: std::print(stderr, "Hello");
+}
+
+void fprintf_utf8_text() {
+  fprintf(stderr, "你好世界\n");
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println(stderr, "你好世界");
 }
 
 void std_printf_simple() {
@@ -1121,10 +1143,31 @@ void printf_precision() {
   // CHECK-FIXES: std::println("Hello {:.5}", 'G');
 }
 
-void printf_field_width_and_precision() {
+void printf_field_width_and_precision(const std::string &s1, const std::string &s2, const std::string &s3)
+{
   printf("width only:%*d width and precision:%*.*f precision only:%.*f\n", 3, 42, 4, 2, 3.14159265358979323846, 5, 2.718);
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
   // CHECK-FIXES: std::println("width only:{:{}} width and precision:{:{}.{}f} precision only:{:.{}f}", 42, 3, 3.14159265358979323846, 4, 2, 2.718, 5);
+
+  const unsigned int ui1 = 42, ui2 = 43, ui3 = 44;
+  printf("casts width only:%*d width and precision:%*.*d precision only:%.*d\n", 3, ui1, 4, 2, ui2, 5, ui3);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES-NOTSTRICT: std::println("casts width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", ui1, 3, ui2, 4, 2, ui3, 5);
+  // CHECK-FIXES-STRICT: std::println("casts width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", static_cast<int>(ui1), 3, static_cast<int>(ui2), 4, 2, static_cast<int>(ui3), 5);
+
+  printf("c_str removal width only:%*s width and precision:%*.*s precision only:%.*s\n", 3, s1.c_str(), 4, 2, s2.c_str(), 5, s3.c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("c_str removal width only:{:>{}} width and precision:{:>{}.{}} precision only:{:.{}}", s1, 3, s2, 4, 2, s3, 5);
+
+  const std::string *ps1 = &s1, *ps2 = &s2, *ps3 = &s3;
+  printf("c_str() removal pointer width only:%-*s width and precision:%-*.*s precision only:%-.*s\n", 3, ps1->c_str(), 4, 2, ps2->c_str(), 5, ps3->c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("c_str() removal pointer width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", *ps1, 3, *ps2, 4, 2, *ps3, 5);
+
+  iterator<std::string> is1, is2, is3;
+  printf("c_str() removal iterator width only:%-*s width and precision:%-*.*s precision only:%-.*s\n", 3, is1->c_str(), 4, 2, is2->c_str(), 5, is3->c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("c_str() removal iterator width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", *is1, 3, *is2, 4, 2, *is3, 5);
 
   printf("width and precision positional:%1$*2$.*3$f after\n", 3.14159265358979323846, 4, 2);
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
@@ -1134,9 +1177,13 @@ void printf_field_width_and_precision() {
   printf("width only:%3$*1$d width and precision:%4$*1$.*2$f precision only:%5$.*2$f\n", width, precision, 42, 3.1415926, 2.718);
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
   // CHECK-FIXES: std::println("width only:{2:{0}} width and precision:{3:{0}.{1}f} precision only:{4:.{1}f}", width, precision, 42, 3.1415926, 2.718);
+
+  printf("c_str removal width only:%3$*1$s width and precision:%4$*1$.*2$s precision only:%5$.*2$s\n", width, precision, s1.c_str(), s2.c_str(), s3.c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("c_str removal width only:{2:>{0}} width and precision:{3:>{0}.{1}} precision only:{4:.{1}}", width, precision, s1, s2, s3);
 }
 
-void fprintf_field_width_and_precision() {
+void fprintf_field_width_and_precision(const std::string &s1, const std::string &s2, const std::string &s3) {
   fprintf(stderr, "width only:%*d width and precision:%*.*f precision only:%.*f\n", 3, 42, 4, 2, 3.14159265358979323846, 5, 2.718);
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
   // CHECK-FIXES: std::println(stderr, "width only:{:{}} width and precision:{:{}.{}f} precision only:{:.{}f}", 42, 3, 3.14159265358979323846, 4, 2, 2.718, 5);
@@ -1145,10 +1192,28 @@ void fprintf_field_width_and_precision() {
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
   // CHECK-FIXES: std::println(stderr, "width and precision positional:{0:{1}.{2}f} after", 3.14159265358979323846, 4, 2);
 
+  fprintf(stderr, "c_str removal width only:%*s width and precision:%*.*s precision only:%.*s\n", 3, s1.c_str(), 4, 2, s2.c_str(), 5, s3.c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println(stderr, "c_str removal width only:{:>{}} width and precision:{:>{}.{}} precision only:{:.{}}", s1, 3, s2, 4, 2, s3, 5);
+
+  const std::string *ps1 = &s1, *ps2 = &s2, *ps3 = &s3;
+  fprintf(stderr, "c_str() removal pointer width only:%-*s width and precision:%-*.*s precision only:%-.*s\n", 3, ps1->c_str(), 4, 2, ps2->c_str(), 5, ps3->c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println(stderr, "c_str() removal pointer width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", *ps1, 3, *ps2, 4, 2, *ps3, 5);
+
+  iterator<std::string> is1, is2, is3;
+  fprintf(stderr, "c_str() removal iterator width only:%-*s width and precision:%-*.*s precision only:%-.*s\n", 3, is1->c_str(), 4, 2, is2->c_str(), 5, is3->c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println(stderr, "c_str() removal iterator width only:{:{}} width and precision:{:{}.{}} precision only:{:.{}}", *is1, 3, *is2, 4, 2, *is3, 5);
+
   const int width = 10, precision = 3;
   fprintf(stderr, "width only:%3$*1$d width and precision:%4$*1$.*2$f precision only:%5$.*2$f\n", width, precision, 42, 3.1415926, 2.718);
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
   // CHECK-FIXES: std::println(stderr, "width only:{2:{0}} width and precision:{3:{0}.{1}f} precision only:{4:.{1}f}", width, precision, 42, 3.1415926, 2.718);
+
+  fprintf(stderr, "c_str removal width only:%3$*1$s width and precision:%4$*1$.*2$s precision only:%5$.*2$s\n", width, precision, s1.c_str(), s2.c_str(), s3.c_str());
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'fprintf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println(stderr, "c_str removal width only:{2:>{0}} width and precision:{3:>{0}.{1}} precision only:{4:.{1}}", width, precision, s1, s2, s3);
 }
 
 void printf_alternative_form() {
@@ -1497,12 +1562,6 @@ void fprintf_string_pointer_cstr(const std::string *s1) {
   // CHECK-FIXES: std::print(stderr, "fprintf string pointer c_str {}", *s1);
 }
 
-template <typename T>
-struct iterator {
-  T *operator->();
-  T &operator*();
-};
-
 void printf_iterator_cstr(iterator<std::string> i1, iterator<std::string> i2)
 {
   printf("printf iterator c_str %s %s\n", i1->c_str(), i2->data());
@@ -1527,4 +1586,69 @@ void p(S s1, S *s2)
   printf("Not std::string %s %s", s1.data(), s2->data());
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
   // CHECK-FIXES: std::print("Not std::string {} {}", s1.data(), s2->data());
+}
+
+// These need PRI and __PRI prefixes so that the check gets as far as looking
+// for where the macro comes from.
+#define PRI_FMT_MACRO "s"
+#define __PRI_FMT_MACRO "s"
+
+void macro_expansion(const char *s)
+{
+  const uint64_t u64 = 42;
+  const uint32_t u32 = 32;
+
+  printf("Replaceable macro at end %" PRIu64, u64);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::print("Replaceable macro at end {}", u64);
+
+  printf("Replaceable macros in middle %" PRIu64 " %" PRIu32 "\n", u64, u32);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::println("Replaceable macros in middle {} {}", u64, u32);
+
+  printf("Unreplaceable macro at end %" PRI_FMT_MACRO, s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'PRI_FMT_MACRO' [modernize-use-std-print]
+
+  printf(PRI_FMT_MACRO " Unreplaceable macro at beginning %s", s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'PRI_FMT_MACRO' [modernize-use-std-print]
+
+  printf("Unreplacemable macro %" __PRI_FMT_MACRO " in the middle", s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro '__PRI_FMT_MACRO' [modernize-use-std-print]
+
+  printf("First macro is replaceable %" PRIu64 " but second one is not %" PRI_FMT_MACRO, u64, s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'PRI_FMT_MACRO' [modernize-use-std-print]
+
+  // Needs a PRI prefix so that we get as far as looking for where the macro comes from
+  printf(" macro from command line %" PRI_CMDLINE_MACRO, s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'PRI_CMDLINE_MACRO' [modernize-use-std-print]
+
+  // Needs a __PRI prefix so that we get as far as looking for where the macro comes from
+  printf(" macro from command line %" __PRI_CMDLINE_MACRO, s);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro '__PRI_CMDLINE_MACRO' [modernize-use-std-print]
+
+  // We ought to be able to fix this since the macro surrounds the whole call
+  // and therefore can't change the format string independently. This is
+  // required to be able to fix calls inside Catch2 macros for example.
+#define SURROUND_ALL(x) x
+  SURROUND_ALL(printf("Macro surrounding entire invocation %" PRIu64, u64));
+  // CHECK-MESSAGES: [[@LINE-1]]:16: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: SURROUND_ALL(std::print("Macro surrounding entire invocation {}", u64));
+
+  // But having that surrounding macro shouldn't stop us ignoring an
+  // unreplaceable macro elsewhere.
+  SURROUND_ALL(printf("Macro surrounding entire invocation with unreplaceable macro %" PRI_FMT_MACRO, s));
+  // CHECK-MESSAGES: [[@LINE-1]]:16: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'PRI_FMT_MACRO' [modernize-use-std-print]
+
+  // At the moment at least the check will replace occurrences where the
+  // function name is the result of expanding a macro.
+#define SURROUND_FUNCTION_NAME(x) x
+  SURROUND_FUNCTION_NAME(printf)("Hello %d", 4442);
+  // CHECK-MESSAGES: [[@LINE-1]]:26: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::print("Hello {}", 4442);
+
+  // We can't safely fix occurrences where the macro may affect the format
+  // string differently in different builds.
+#define SURROUND_FORMAT(x) "!" x
+  printf(SURROUND_FORMAT("Hello %d"), 4443);
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: unable to use 'std::print' instead of 'printf' because format string contains unreplaceable macro 'SURROUND_FORMAT' [modernize-use-std-print]
 }

@@ -10,19 +10,15 @@
 ; CHECK: 	bnz $.LBB0_2
 ; CHECK: ; %bb.1:
 ; CHECK: 	movw ax, [sp+0]
-; CHECK: 	movw de, ax
 ; CHECK: 	br $.LBB0_4
 
 ; CHECK: .LBB0_2:
 ; CHECK: 	movw ax, [sp+0]
-; CHECK: 	movw de, ax
 
 ; CHECK: .LBB0_3:
-; CHECK: 	movw ax, de
-; CHECK: 	shlw ax, 1
-; CHECK: 	movw de, ax
-; CHECK: 	dec c
-; CHECK: 	bnz $.LBB0_3
+; CHECK-NEXT: 	shlw ax, 1
+; CHECK-NEXT: 	dec c
+; CHECK-NEXT: 	bnz $.LBB0_3
 
 define dso_local void @ab(ptr nocapture noundef %0, ptr nocapture noundef readonly %1) local_unnamed_addr #0 {
   %3 = load i16, ptr %0, align 1

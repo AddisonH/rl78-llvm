@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/IR/LLVMContext.h"
@@ -25,7 +26,6 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/LLVMDriver.h"
 #include "llvm/Support/LineIterator.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -66,10 +66,12 @@ static void printRanLibHelp(StringRef ToolName) {
          << "USAGE: " + ToolName + " archive...\n\n"
          << "OPTIONS:\n"
          << "  -h --help             - Display available options\n"
-         << "  -v --version          - Display the version of this program\n"
+         << "  -V --version          - Display the version of this program\n"
          << "  -D                    - Use zero for timestamps and uids/gids "
             "(default)\n"
-         << "  -U                    - Use actual timestamps and uids/gids\n";
+         << "  -U                    - Use actual timestamps and uids/gids\n"
+         << "  -X{32|64|32_64|any}   - Specify which archive symbol tables "
+            "should be generated if they do not already exist (AIX OS only)\n";
 }
 
 static void printArHelp(StringRef ToolName) {
@@ -81,6 +83,8 @@ static void printArHelp(StringRef ToolName) {
     =darwin             -   darwin
     =bsd                -   bsd
     =bigarchive         -   big archive (AIX OS)
+    =zos                -   zos archive (z/OS OS)
+    =coff               -   coff
   --plugin=<string>     - ignored for compatibility
   -h --help             - display this help and exit
   --output              - the directory to extract archive members to
@@ -128,7 +132,7 @@ MODIFIERS:
          << "USAGE: " + ToolName +
                 " [options] [-]<operation>[modifiers] [relpos] "
                 "[count] <archive> [files]\n"
-         << "       " + ToolName + " -M [<mri-script]\n\n";
+         << "       " + ToolName + " -M [< mri-script]\n\n";
 
   outs() << ArOptions;
 }
@@ -192,7 +196,16 @@ static SmallVector<const char *, 256> PositionalArgs;
 static bool MRI;
 
 namespace {
-enum Format { Default, GNU, BSD, DARWIN, BIGARCHIVE, Unknown };
+enum Format {
+  Default,
+  GNU,
+  COFF,
+  BSD,
+  DARWIN,
+  BIGARCHIVE,
+  ZOSARCHIVE,
+  Unknown
+};
 }
 
 static Format FormatType = Default;
@@ -225,7 +238,8 @@ static bool DisplayMemberOffsets = false; ///< 'O' modifier
 static bool CompareFullPath = false;      ///< 'P' modifier
 static bool OnlyUpdate = false;           ///< 'u' modifier
 static bool Verbose = false;              ///< 'v' modifier
-static bool Symtab = true;                ///< 's' modifier
+static SymtabWritingMode Symtab =
+    SymtabWritingMode::NormalSymtab;      ///< 's' modifier
 static bool Deterministic = true;         ///< 'D' and 'U' modifiers
 static bool Thin = false;                 ///< 'T' modifier
 static bool AddLibrary = false;           ///< 'L' modifier
@@ -371,11 +385,11 @@ static ArchiveOperation parseCommandLine() {
       CompareFullPath = true;
       break;
     case 's':
-      Symtab = true;
+      Symtab = SymtabWritingMode::NormalSymtab;
       MaybeJustCreateSymTab = true;
       break;
     case 'S':
-      Symtab = false;
+      Symtab = SymtabWritingMode::NoSymtab;
       break;
     case 'u':
       OnlyUpdate = true;
@@ -668,7 +682,7 @@ Expected<std::unique_ptr<Binary>> getAsBinary(const Archive::Child &C,
 }
 
 template <class A> static bool isValidInBitMode(const A &Member) {
-  if (object::Archive::getDefaultKindForHost() != object::Archive::K_AIXBIG)
+  if (object::Archive::getDefaultKind() != object::Archive::K_AIXBIG)
     return true;
   LLVMContext Context;
   Expected<std::unique_ptr<Binary>> BinOrErr = getAsBinary(Member, &Context);
@@ -709,8 +723,11 @@ static void performReadOperation(ArchiveOperation Operation,
         });
         if (I == Members.end())
           continue;
-        if (CountParam && ++MemberCount[Name] != CountParam)
-          continue;
+        if (CountParam) {
+          std::string CountKey = normalizePath(*I);
+          if (++MemberCount[CountKey] != CountParam)
+            continue;
+        }
         Members.erase(I);
       }
 
@@ -850,14 +867,19 @@ static InsertAction computeInsertAction(ArchiveOperation Operation,
   if (Operation == QuickAppend || Members.empty())
     return IA_AddOldMember;
 
-  auto MI = find_if(Members, [Name](StringRef Path) {
+  std::string CountKey;
+  auto MI = find_if(Members, [Name, &CountKey](StringRef Path) {
+    SmallString<128> MatchPath(Path);
     if (Thin && !sys::path::is_absolute(Path)) {
       Expected<std::string> PathOrErr =
           computeArchiveRelativePath(ArchiveName, Path);
-      return comparePaths(Name, PathOrErr ? *PathOrErr : Path);
-    } else {
-      return comparePaths(Name, Path);
+      if (PathOrErr)
+        MatchPath = *PathOrErr;
     }
+    if (!comparePaths(Name, MatchPath))
+      return false;
+    CountKey = normalizePath(MatchPath);
+    return true;
   });
 
   if (MI == Members.end())
@@ -866,7 +888,7 @@ static InsertAction computeInsertAction(ArchiveOperation Operation,
   Pos = MI;
 
   if (Operation == Delete) {
-    if (CountParam && ++MemberCount[Name] != CountParam)
+    if (CountParam && ++MemberCount[CountKey] != CountParam)
       return IA_AddOldMember;
     return IA_Delete;
   }
@@ -1023,24 +1045,34 @@ static void performWriteOperation(ArchiveOperation Operation,
       Kind = object::Archive::K_GNU;
     else if (OldArchive) {
       Kind = OldArchive->kind();
-      if (Kind == object::Archive::K_BSD) {
-        auto InferredKind = object::Archive::K_BSD;
+      std::optional<object::Archive::Kind> AltKind;
+      if (Kind == object::Archive::K_BSD)
+        AltKind = object::Archive::K_DARWIN;
+      else if (Kind == object::Archive::K_GNU && !OldArchive->hasSymbolTable())
+        // If there is no symbol table, we can't tell GNU from COFF format
+        // from the old archive type.
+        AltKind = object::Archive::K_COFF;
+      if (AltKind) {
+        auto InferredKind = Kind;
         if (NewMembersP && !NewMembersP->empty())
           InferredKind = NewMembersP->front().detectKindFromObject();
         else if (!NewMembers.empty())
           InferredKind = NewMembers.front().detectKindFromObject();
-        if (InferredKind == object::Archive::K_DARWIN)
-          Kind = object::Archive::K_DARWIN;
+        if (InferredKind == AltKind)
+          Kind = *AltKind;
       }
     } else if (NewMembersP)
       Kind = !NewMembersP->empty() ? NewMembersP->front().detectKindFromObject()
-                                   : object::Archive::getDefaultKindForHost();
+                                   : object::Archive::getDefaultKind();
     else
       Kind = !NewMembers.empty() ? NewMembers.front().detectKindFromObject()
-                                 : object::Archive::getDefaultKindForHost();
+                                 : object::Archive::getDefaultKind();
     break;
   case GNU:
     Kind = object::Archive::K_GNU;
+    break;
+  case COFF:
+    Kind = object::Archive::K_COFF;
     break;
   case BSD:
     if (Thin)
@@ -1056,6 +1088,11 @@ static void performWriteOperation(ArchiveOperation Operation,
     if (Thin)
       fail("only the gnu format has a thin mode");
     Kind = object::Archive::K_AIXBIG;
+    break;
+  case ZOSARCHIVE:
+    if (Thin)
+      fail("only the gnu format has a thin mode");
+    Kind = object::Archive::K_ZOS;
     break;
   case Unknown:
     llvm_unreachable("");
@@ -1074,9 +1111,31 @@ static void createSymbolTable(object::Archive *OldArchive) {
   // In summary, we only need to update the symbol table if we have none.
   // This is actually very common because of broken build systems that think
   // they have to run ranlib.
-  if (OldArchive->hasSymbolTable())
-    return;
+  if (OldArchive->hasSymbolTable()) {
+    if (OldArchive->kind() != object::Archive::K_AIXBIG)
+      return;
 
+    // For archives in the Big Archive format, the bit mode option specifies
+    // which symbol table to generate. The presence of a symbol table that does
+    // not match the specified bit mode does not prevent creation of the symbol
+    // table that has been requested.
+    if (OldArchive->kind() == object::Archive::K_AIXBIG) {
+      BigArchive *BigArc = dyn_cast<BigArchive>(OldArchive);
+      if (BigArc->has32BitGlobalSymtab() &&
+          Symtab == SymtabWritingMode::BigArchive32)
+        return;
+
+      if (BigArc->has64BitGlobalSymtab() &&
+          Symtab == SymtabWritingMode::BigArchive64)
+        return;
+
+      if (BigArc->has32BitGlobalSymtab() && BigArc->has64BitGlobalSymtab() &&
+          Symtab == SymtabWritingMode::NormalSymtab)
+        return;
+
+      Symtab = SymtabWritingMode::NormalSymtab;
+    }
+  }
   if (OldArchive->isThin())
     Thin = true;
   performWriteOperation(CreateSymTab, OldArchive, nullptr, nullptr);
@@ -1262,8 +1321,7 @@ static const char *matchFlagWithArg(StringRef Expected,
                                     ArrayRef<const char *> Args) {
   StringRef Arg = *ArgIt;
 
-  if (Arg.startswith("--"))
-    Arg = Arg.substr(2);
+  Arg.consume_front("--");
 
   size_t len = Expected.size();
   if (Arg == Expected) {
@@ -1272,7 +1330,7 @@ static const char *matchFlagWithArg(StringRef Expected,
 
     return *ArgIt;
   }
-  if (Arg.startswith(Expected) && Arg.size() > len && Arg[len] == '=')
+  if (Arg.starts_with(Expected) && Arg.size() > len && Arg[len] == '=')
     return Arg.data() + len + 1;
 
   return nullptr;
@@ -1308,7 +1366,7 @@ static int ar_main(int argc, char **argv) {
 
   // Get BitMode from enviorment variable "OBJECT_MODE" for AIX OS, if
   // specified.
-  if (object::Archive::getDefaultKindForHost() == object::Archive::K_AIXBIG) {
+  if (object::Archive::getDefaultKind() == object::Archive::K_AIXBIG) {
     BitMode = getBitMode(getenv("OBJECT_MODE"));
     if (BitMode == BitModeTy::Unknown)
       BitMode = BitModeTy::Bit32;
@@ -1353,6 +1411,8 @@ static int ar_main(int argc, char **argv) {
                        .Case("darwin", DARWIN)
                        .Case("bsd", BSD)
                        .Case("bigarchive", BIGARCHIVE)
+                       .Case("coff", COFF)
+                       .Case("zos", ZOSARCHIVE)
                        .Default(Unknown);
       if (FormatType == Unknown)
         fail(std::string("Invalid format ") + Match);
@@ -1369,8 +1429,7 @@ static int ar_main(int argc, char **argv) {
       continue;
 
     if (strncmp(*ArgIt, "-X", 2) == 0) {
-      if (object::Archive::getDefaultKindForHost() ==
-          object::Archive::K_AIXBIG) {
+      if (object::Archive::getDefaultKind() == object::Archive::K_AIXBIG) {
         Match = *(*ArgIt + 2) != '\0' ? *ArgIt + 2 : *(++ArgIt);
         BitMode = getBitMode(Match);
         if (BitMode == BitModeTy::Unknown)
@@ -1389,6 +1448,8 @@ static int ar_main(int argc, char **argv) {
 
 static int ranlib_main(int argc, char **argv) {
   std::vector<StringRef> Archives;
+  bool HasAIXXOption = false;
+
   for (int i = 1; i < argc; ++i) {
     StringRef arg(argv[i]);
     if (handleGenericOption(arg)) {
@@ -1403,9 +1464,30 @@ static int ranlib_main(int argc, char **argv) {
         } else if (arg.front() == 'h') {
           printHelpMessage();
           return 0;
-        } else if (arg.front() == 'v') {
+        } else if (arg.front() == 'V') {
           cl::PrintVersionMessage();
           return 0;
+        } else if (arg.front() == 'X') {
+          if (object::Archive::getDefaultKind() == object::Archive::K_AIXBIG) {
+            HasAIXXOption = true;
+            arg.consume_front("X");
+            const char *Xarg = arg.data();
+            if (Xarg[0] == '\0') {
+              if (argv[i + 1][0] != '-')
+                BitMode = getBitMode(argv[++i]);
+              else
+                BitMode = BitModeTy::Unknown;
+            } else
+              BitMode = getBitMode(arg.data());
+
+            if (BitMode == BitModeTy::Unknown)
+              fail("the specified object mode is not valid. Specify -X32, "
+                   "-X64, -X32_64, or -Xany");
+          } else {
+            fail(Twine("-") + Twine(arg) +
+                 " option not supported on non AIX OS");
+          }
+          break;
         } else {
           // TODO: GNU ranlib also supports a -t flag
           fail("Invalid option: '-" + arg + "'");
@@ -1414,6 +1496,31 @@ static int ranlib_main(int argc, char **argv) {
       }
     } else {
       Archives.push_back(arg);
+    }
+  }
+
+  if (object::Archive::getDefaultKind() == object::Archive::K_AIXBIG) {
+    // If not specify -X option, get BitMode from enviorment variable
+    // "OBJECT_MODE" for AIX OS if specify.
+    if (!HasAIXXOption) {
+      if (char *EnvObjectMode = getenv("OBJECT_MODE")) {
+        BitMode = getBitMode(EnvObjectMode);
+        if (BitMode == BitModeTy::Unknown)
+          fail("the OBJECT_MODE environment variable has an invalid value. "
+               "OBJECT_MODE must be 32, 64, 32_64, or any");
+      }
+    }
+
+    switch (BitMode) {
+    case BitModeTy::Bit32:
+      Symtab = SymtabWritingMode::BigArchive32;
+      break;
+    case BitModeTy::Bit64:
+      Symtab = SymtabWritingMode::BigArchive64;
+      break;
+    default:
+      Symtab = SymtabWritingMode::NormalSymtab;
+      break;
     }
   }
 
@@ -1427,7 +1534,6 @@ static int ranlib_main(int argc, char **argv) {
 }
 
 int llvm_ar_main(int argc, char **argv, const llvm::ToolContext &) {
-  InitLLVM X(argc, argv);
   ToolName = argv[0];
 
   llvm::InitializeAllTargetInfos();

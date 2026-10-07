@@ -14,51 +14,27 @@ from __future__ import print_function
 import sys, os, re
 from datetime import date
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-# sys.path.insert(0, os.path.abspath('.'))
+from llvm_sphinx import *  # see llvm-project/utils/docs/README.md
+
+globals().update(common_conf(tags, markdown=Markdown.EXCEPT_MAN))
 
 # -- General configuration -----------------------------------------------------
 
-# If your documentation needs a minimal Sphinx version, state it here.
-# needs_sphinx = '1.0'
-
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ["sphinx.ext.intersphinx", "sphinx.ext.todo"]
+extensions += ["sphinx.ext.intersphinx", "sphinx.ext.todo", "llvm_sphinx.ext.checks"]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
-
-# The suffix of source filenames.
-source_suffix = {
-    ".rst": "restructuredtext",
+myst_enable_extensions += ["deflist"]
+myst_url_schemes = {
+    "http": None,
+    "https": None,
+    "mailto": None,
+    "ftp": None,
+    "doxygen": {"url": "/doxygen/{{path}}"},
 }
 
-try:
-    import recommonmark
-except ImportError:
-    # manpages do not use any .md sources
-    if not tags.has("builder-man"):
-        raise
-else:
-    import sphinx
+import sphinx
 
-    if sphinx.version_info >= (3, 0):
-        # This requires 0.5 or later.
-        extensions.append("recommonmark")
-    else:
-        source_parsers = {".md": "recommonmark.parser.CommonMarkParser"}
-    source_suffix[".md"] = "markdown"
-
-# The encoding of source files.
-# source_encoding = 'utf-8-sig'
-
-# The master toctree document.
-master_doc = "index"
-
-# General information about the project.
 project = "LLVM"
 copyright = "2003-%d, LLVM Project" % date.today().year
 
@@ -221,7 +197,6 @@ latex_documents = [
 # If false, no module index is generated.
 # latex_domain_indices = True
 
-
 # -- Options for manual page output --------------------------------------------
 
 # One entry per manual page. List of tuples
@@ -269,7 +244,8 @@ def process_rst(name):
 
         if len(header) != len(title):
             print(
-                "error: invalid header in %r (does not match title)" % file_subpath,
+                "error: invalid header length in %r (does not match length of title)"
+                % file_subpath,
                 file=sys.stderr,
             )
         if " - " not in title:
@@ -287,7 +263,7 @@ def process_rst(name):
 
 for name in os.listdir(command_guide_path):
     # Process Markdown files
-    if name.endswith(".md"):
+    if name.endswith(".md") and name != "index.md":
         process_md(name)
     # Process ReST files apart from the index page.
     elif name.endswith(".rst") and name != "index.rst":

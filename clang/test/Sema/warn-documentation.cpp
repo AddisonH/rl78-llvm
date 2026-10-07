@@ -1,5 +1,6 @@
 // RUN: %clang_cc1 -std=c++11 -fsyntax-only -Wdocumentation -Wdocumentation-pedantic -verify %s
 // RUN: %clang_cc1 -std=c++14 -fsyntax-only -Wdocumentation -Wdocumentation-pedantic -verify %s
+// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wdocumentation -Wdocumentation-pedantic -verify %s
 
 // This file contains lots of corner cases, so ensure that XML we generate is not invalid.
 // RUN: c-index-test -test-load-source all -comments-xml-schema=%S/../../bindings/xml/comment-xml-schema.rng %s | FileCheck %s -check-prefix=WRONG
@@ -216,7 +217,6 @@ int test_retval_fine();
 /// \param a Blah blah.
 int test_param1_backslash;
 
-// rdar://13066276
 // Check that the diagnostic uses the same command marker as the comment.
 // expected-warning@+1 {{'@param' command used in a comment that is not attached to a function declaration}}
 /// @param a Blah blah.
@@ -400,7 +400,6 @@ typedef int (*test_not_function_like_typedef1)(int aaa);
 /// \param aaa Meow.
 typedef test_not_function_like_typedef1 test_not_function_like_typedef2;
 
-// rdar://13066276
 // Check that the diagnostic uses the same command marker as the comment.
 // expected-warning@+1 {{'@param' command used in a comment that is not attached to a function declaration}}
 /// @param aaa Meow.
@@ -725,7 +724,6 @@ private:
 #endif
 };
 
-// rdar://12397511
 // expected-note@+2 {{previous command '\headerfile' here}}
 // expected-warning@+2 {{duplicated command '\headerfile'}}
 /// \headerfile ""
@@ -769,7 +767,6 @@ T test_returns_right_decl_5(T aaa);
 /// \returns Aaa
 int test_returns_wrong_decl_1_backslash;
 
-// rdar://13066276
 // Check that the diagnostic uses the same command marker as the comment.
 // expected-warning@+1 {{'@returns' command used in a comment that is not attached to a function or method declaration}}
 /// @returns Aaa
@@ -825,7 +822,6 @@ enum test_returns_wrong_decl_8 {
 /// \returns Aaa
 namespace test_returns_wrong_decl_10 { };
 
-// rdar://13094352
 // expected-warning@+1 {{'@function' command should be used in a comment attached to a function declaration}}
 /*!	@function test_function
 */
@@ -1274,7 +1270,6 @@ int test_nocrash13(int x, int y);
  **/
 int test_nocrash14();
 
-// rdar://12379114
 // expected-warning@+2 {{'@union' command should not be used in a comment attached to a non-union declaration}}
 /*!
    @union U This is new 
@@ -1302,7 +1297,6 @@ class C1;
 */
 class S3;
 
-// rdar://14124702
 //----------------------------------------------------------------------
 /// @class Predicate Predicate.h "lldb/Host/Predicate.h"
 /// @brief A C++ wrapper class for providing threaded access to a value
@@ -1531,3 +1525,32 @@ F &f = FF; ///< \return none
 // expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
 
 } // namespace PR42844
+
+#if __cplusplus >= 201402L
+namespace GH144775 {
+/// @brief primary template
+/// @tparam T type
+template <class T, class = void> constexpr auto var = T{};
+
+/// @brief variable template partial specialization
+/// @tparam T type
+template <typename T> constexpr auto var<T> = T{};
+} // namespace GH144775
+#endif
+
+namespace GH64087
+{
+/// @brief Primary template
+/// @tparam T type
+template <typename T>
+void foo(){}
+
+#if __cplusplus >= 202002L
+/// @tparam T Derived class.
+/// @tparam TBase Base class.
+template <typename T, typename TBase>
+concept bar = true;
+#endif
+
+template void foo<bool>();
+} // namespace GH64087

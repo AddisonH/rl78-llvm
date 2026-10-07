@@ -18,7 +18,8 @@ was implemented to workaround/support the initialization of iostreams
 (implemented as a namespace scope static in the header - only to be provided
 when that specific header is included in the program).
 
-BOTH: module asm "narf"
+BOTH: module asm
+BOTH-NEXT: "narf"
 
 FOO: $_Z2f1PKcz = comdat any
 FOO: $_ZN13implicit_dtorD1Ev = comdat any
@@ -26,7 +27,7 @@ USE: $_Z4instIiEvv = comdat any
 USE: $_Z10always_inlv = comdat any
 FOO: $_ZN13implicit_dtorD2Ev = comdat any
 FOO: define weak_odr void @_Z2f1PKcz(ptr noundef %fmt, ...) #{{[0-9]+}} comdat
-FOO:   call void @llvm.va_start(ptr %{{[a-zA-Z0-9]*}})
+FOO:   call void @llvm.va_start.p0(ptr %{{[a-zA-Z0-9]*}})
 
 Test that implicit special members are emitted into the FOO module if they're
 ODR used there, otherwise emit them linkonce_odr as usual in the use.

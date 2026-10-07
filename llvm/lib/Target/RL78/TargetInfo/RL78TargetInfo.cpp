@@ -9,6 +9,8 @@
 #include "TargetInfo/RL78TargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 
+#include "llvm/Support/Compiler.h"
+
 using namespace llvm;
 
 Target &llvm::getTheRL78Target() {
@@ -16,7 +18,7 @@ Target &llvm::getTheRL78Target() {
   return TheRL78Target;
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetInfo() {
+extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetInfo() {
   RegisterTarget<Triple::RL78, /*HasJIT=*/false> X(getTheRL78Target(), "rl78",
                                                    "RL78", "RL78");
 }

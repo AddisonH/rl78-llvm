@@ -1,5 +1,6 @@
-; RUN: llc -march=amdgcn -mcpu=gfx90a -verify-machineinstrs < %s | FileCheck -check-prefixes=GFX90A,SDAG %s
-; RUN: llc -global-isel -march=amdgcn -mcpu=gfx90a -verify-machineinstrs < %s | FileCheck -check-prefixes=GFX90A,GISEL %s
+; RUN: llc -mtriple=amdgpu9.0a < %s | FileCheck -check-prefixes=GFX90A,SDAG %s
+; RUN: llc -mtriple=amdgpu9.0a -early-live-intervals < %s | FileCheck -check-prefixes=GFX90A,SDAG %s
+; RUN: llc -global-isel -mtriple=amdgpu9.0a < %s | FileCheck -check-prefixes=GFX90A,GISEL %s
 
 ; GFX90A-LABEL: {{^}}sample_1d:
 ; GFX90A-NOT: s_wqm_b64

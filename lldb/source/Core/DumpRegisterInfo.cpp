@@ -8,7 +8,7 @@
 
 #include "lldb/Core/DumpRegisterInfo.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Target/RegisterFlags.h"
+#include "lldb/Utility/RegisterFlags.h"
 #include "lldb/Utility/Stream.h"
 
 using namespace lldb;
@@ -111,6 +111,11 @@ void lldb_private::DoDumpRegisterInfo(
   };
   DumpList(strm, "    In sets: ", in_sets, emit_set);
 
-  if (flags_type)
+  if (flags_type) {
     strm.Printf("\n\n%s", flags_type->AsTable(terminal_width).c_str());
+
+    std::string enumerators = flags_type->DumpEnums(terminal_width);
+    if (enumerators.size())
+      strm << "\n\n" << enumerators;
+  }
 }

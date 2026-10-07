@@ -108,7 +108,7 @@ llvm::RL78GenSet1Clr1IntrinPass::run(Function &F, FunctionAnalysisManager &AM) {
             continue;
 
           // Add a call to the corresponding intrinsic as a sequence replacement.
-          auto Func = Intrinsic::getDeclaration(F.getParent(),
+          auto Func = Intrinsic::getOrInsertDeclaration(F.getParent(),
                                                 IsClr ? Intrinsic::rl78_clr1
                                                       : Intrinsic::rl78_set1,
                                                 Addr->getType());

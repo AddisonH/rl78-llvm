@@ -24,6 +24,8 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 
+#include "llvm/Support/Compiler.h"
+
 using namespace llvm;
 
 #define GET_INSTRINFO_MC_DESC
@@ -189,7 +191,7 @@ public:
 static MCAsmInfo *createRL78MCAsmInfo(const MCRegisterInfo &MRI,
                                       const Triple &TT,
                                       const MCTargetOptions &Options) {
-  MCAsmInfo *MAI = new RL78ELFMCAsmInfo(TT);
+  MCAsmInfo *MAI = new RL78ELFMCAsmInfo(TT, Options);
   unsigned Reg = MRI.getDwarfRegNum(RL78::SPreg, false);
   MCCFIInstruction Inst = MCCFIInstruction::cfiDefCfa(nullptr, Reg, 4);
   MAI->addInitialFrameState(Inst);
@@ -229,16 +231,14 @@ createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
 MCStreamer *createELFStreamer(const Triple &T, MCContext &Ctx,
                               std::unique_ptr<MCAsmBackend> &&TAB,
                               std::unique_ptr<MCObjectWriter> &&OW,
-                              std::unique_ptr<MCCodeEmitter> &&Emitter,
-                              bool RelaxAll) {
+                              std::unique_ptr<MCCodeEmitter> &&Emitter) {
   return new RL78ELFStreamer(Ctx, std::move(TAB), std::move(OW),
                              std::move(Emitter));
 }
 
 static MCTargetStreamer *createTargetAsmStreamer(MCStreamer &S,
                                                  formatted_raw_ostream &OS,
-                                                 MCInstPrinter *InstPrint,
-                                                 bool isVerboseAsm) {
+                                                 MCInstPrinter *InstPrint) {
   return new RL78TargetAsmStreamer(S, OS);
 }
 
@@ -253,7 +253,7 @@ static MCInstrAnalysis *createRL78MCInstrAnalysis(const MCInstrInfo *Info) {
   return new RL78MCInstrAnalysis(Info);
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetMC() {
+extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78TargetMC() {
   // Register the MC asm info.
   RegisterMCAsmInfoFn X(getTheRL78Target(), createRL78MCAsmInfo);
 

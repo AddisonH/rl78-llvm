@@ -7,14 +7,14 @@
 //
 // Now add Movable.framework to JustBuilt.
 // RUN: mkdir %t/JustBuilt
-// RUN: cp -r %t/StableFrameworks/Movable.framework %t/JustBuilt/Movable.framework
+// RUN: cp -R %t/StableFrameworks/Movable.framework %t/JustBuilt/Movable.framework
 //
 // Load Movable.pcm at first for JustBuilt location and then in the same TU try to load transitively for StableFrameworks location.
 // RUN: %clang_cc1 -fsyntax-only -F %t/JustBuilt -F %t/StableFrameworks %t/trigger-error.m \
 // RUN:            -fmodules -fimplicit-module-maps -fmodules-cache-path=%t/modules.cache
 
 // Test the case when a dependent module is found in a different location, so
-// module cache has outdated information. <rdar://97216258>
+// module cache has outdated information.
 
 //--- StableFrameworks/Movable.framework/Headers/Movable.h
 // empty

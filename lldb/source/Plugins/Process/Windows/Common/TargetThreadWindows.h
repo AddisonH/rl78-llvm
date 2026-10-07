@@ -9,7 +9,6 @@
 #ifndef liblldb_Plugins_Process_Windows_TargetThreadWindows_H_
 #define liblldb_Plugins_Process_Windows_TargetThreadWindows_H_
 
-//#include "ForwardDecl.h"
 #include "lldb/Host/HostThread.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/lldb-forward.h"
@@ -18,7 +17,6 @@
 
 namespace lldb_private {
 class ProcessWindows;
-class HostThread;
 class StackFrame;
 
 class TargetThreadWindows : public lldb_private::Thread {
@@ -34,6 +32,7 @@ public:
   lldb::RegisterContextSP
   CreateRegisterContextForFrame(StackFrame *frame) override;
   bool CalculateStopInfo() override;
+  const char *GetName() override;
 
   Status DoResume();
 
@@ -42,6 +41,7 @@ public:
 private:
   lldb::RegisterContextSP m_thread_reg_ctx_sp;
   HostThread m_host_thread;
+  std::string m_name;
 };
 } // namespace lldb_private
 
