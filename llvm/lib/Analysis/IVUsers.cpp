@@ -153,8 +153,13 @@ bool IVUsers::AddUsersIfInteresting(Instruction *I) {
   // LSR is not APInt clean, do not touch integers bigger than 64-bits.
   // Also avoid creating IVs of non-native types. For example, we don't want a
   // 64-bit IV in 32-bit code just because the loop has one 64-bit cast.
+  // RL78 (16-bit): 32-bit loop counters are common in C (uint32_t, long),
+  // and their truncated uses index 16-bit address arithmetic. Track them, so
+  // LSR can strength-reduce those uses.
   uint64_t Width = SE->getTypeSizeInBits(I->getType());
-  if (Width > 64 || !DL.isLegalInteger(Width))
+  if (Width > 64 ||
+      (!DL.isLegalInteger(Width) &&
+       !(Width == 32 && I->getModule()->getTargetTriple().isRL78())))
     return false;
 
   // Don't attempt to promote ephemeral values to indvars. They will be removed

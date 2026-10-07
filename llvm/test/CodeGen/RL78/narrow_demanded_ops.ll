@@ -9,9 +9,12 @@
 ; opt on this function -- hence the dedicated pass. Note TruncInstCombine does
 ; handle PHIs, so that is not the reason.
 ;
-; RUN: llc -O2 -mtriple=rl78 -rl78-narrow-demanded-ops=false < %s \
+; LSR strength-reduces this multiply away since it tracks i32 IVs on RL78;
+; it is disabled to test the narrowing on its own.
+;
+; RUN: llc -O2 -mtriple=rl78 -disable-lsr -rl78-narrow-demanded-ops=false < %s \
 ; RUN:   | FileCheck %s --check-prefix=NONARROW
-; RUN: llc -O2 -mtriple=rl78 -rl78-narrow-demanded-ops=true < %s \
+; RUN: llc -O2 -mtriple=rl78 -disable-lsr -rl78-narrow-demanded-ops=true < %s \
 ; RUN:   | FileCheck %s --check-prefix=NARROW
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
