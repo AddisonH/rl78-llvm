@@ -1298,6 +1298,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::BRCOND);
   setTargetDAGCombine(ISD::INLINEASM);
   setTargetDAGCombine(ISD::TRAP);
+  setTargetDAGCombine(ISD::SELECT);
   // To eliminate casts between far_code and far_data
   //setTargetDAGCombine(ISD::ADDRSPACECAST);
 
@@ -3234,9 +3235,29 @@ SDValue RL78TargetLowering::PerformSHLCombine(SDNode *N,
   return SDValue();
 }
 
+// select (load a), (load b) with a condition that is not a setcc. LLVM 23
+// tests a loaded bool as `trunc nuw i8 to i1` (17: `icmp ne i8 0`), so such a
+// select no longer becomes a SELECT_CC before legalization; SELECT is Expand
+// on RL78, so DAGCombiner's load-of-select fold (SimplifySelectOps) never ran
+// and both loads were speculated. Do the SELECT -> SELECT_CC expansion early.
+static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
+  SDValue Cond = N->getOperand(0);
+  SDValue TVal = N->getOperand(1);
+  SDValue FVal = N->getOperand(2);
+  EVT VT = N->getValueType(0);
+  if ((VT != MVT::i8 && VT != MVT::i16) || Cond.getOpcode() == ISD::SETCC ||
+      TVal.getOpcode() != ISD::LOAD || FVal.getOpcode() != ISD::LOAD)
+    return SDValue();
+  SDLoc dl(N);
+  return DAG.getSelectCC(dl, Cond, DAG.getConstant(0, dl, Cond.getValueType()),
+                         TVal, FVal, ISD::SETNE);
+}
+
 SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
                                               DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
+  case ISD::SELECT:
+    return PerformSELECTCombine(N, DCI.DAG);
   case ISD::BR_CC:
     return PerformBRCCCombine(N, DCI);
   case ISD::BRCOND:
