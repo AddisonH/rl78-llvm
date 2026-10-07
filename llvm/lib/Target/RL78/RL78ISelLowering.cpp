@@ -1833,12 +1833,17 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
   SDValue TargetCC = DAG.getConstant(cc, dl, MVT::i8);
   unsigned cmpSign = IntCondCCodeSign(CC);
   SDValue CCSign = DAG.getConstant(cmpSign, dl, MVT::i8);
-  
+  // A select between far addresses (-mfar-data) must stay a SELECTCC: only
+  // that form becomes LOAD_SELECTCC when a load uses it; a load from a
+  // SELECTCCBTBF of HI16 halves loses the segment (a near load).
+  bool FarAddr =
+      TVal.getOpcode() == RL78ISD::HI16 || FVal.getOpcode() == RL78ISD::HI16;
+
   // If " == 0" or " != 0".
   if (((CC == ISD::SETEQ) || (CC == ISD::SETNE)) && isa<ConstantSDNode>(RHS) &&
       (cast<ConstantSDNode>(RHS)->getZExtValue() == 0)) {
     // If AND with power of 2.
-    if ((LHS.getOpcode() == ISD::AND) &&
+    if (!FarAddr && (LHS.getOpcode() == ISD::AND) &&
         isa<ConstantSDNode>(LHS.getOperand(1)) &&
         isPowerOf2_64(LHS.getConstantOperandVal(1))) {
       // Checking that a bit and equals to 0 tranlates to BF Not BT so
@@ -1869,7 +1874,7 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
   }
 
   // If signed comparison with 0 we can use BT/BF.
-  if (cmpSign && isa<ConstantSDNode>(RHS) &&
+  if (!FarAddr && cmpSign && isa<ConstantSDNode>(RHS) &&
       LHS.getValueType().bitsGE(MVT::i8) &&
       ((cast<ConstantSDNode>(RHS)->getZExtValue() == 0 && CC == ISD::SETLT) ||
        (cast<ConstantSDNode>(RHS)->getSExtValue() == -1 && CC == ISD::SETGT))) {
