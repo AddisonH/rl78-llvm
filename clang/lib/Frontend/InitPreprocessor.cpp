@@ -1129,7 +1129,10 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
          "Target defined a max bit width larger than LLVM can support!");
   assert(BitIntMaxWidth >= TI.getLongLongWidth() &&
          "Target defined a max bit width smaller than the C standard allows!");
-  Builder.defineMacro("__BITINT_MAXWIDTH__", Twine(BitIntMaxWidth));
+  // RL78 has no _BitInt; like GCC, do not advertise a maximum width there
+  // (libc++ keys its _BitInt overloads on this macro).
+  if (TI.hasBitIntType() || !TI.getTriple().isRL78())
+    Builder.defineMacro("__BITINT_MAXWIDTH__", Twine(BitIntMaxWidth));
 
   DefineTypeSize("__SCHAR_MAX__", TargetInfo::SignedChar, TI, Builder);
   DefineTypeSize("__SHRT_MAX__", TargetInfo::SignedShort, TI, Builder);
