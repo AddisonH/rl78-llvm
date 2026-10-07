@@ -1,0 +1,26 @@
+# RUN: llc -mtriple=rl78 -run-pass=postrapseudos %s -o - | FileCheck %s
+# MACR is memory mapped, so copies to and from it become a store or load at its
+# address. They carry implicit MACR operands, otherwise post-RA scheduling may
+# move the load above the MACH that produced MACR and copy propagation deletes
+# the MACR write that the load reads (CoreMark matrix_test at -O3).
+
+# CHECK-LABEL: name: macr_copies
+# CHECK: STORE16_abs16_rp 65522, $rp0, implicit-def $macrh
+# CHECK: STORE16_abs16_rp 65520, $rp0, implicit-def $macrl
+# CHECK: MACH_CG
+# CHECK: $rp0 = LOAD16_rp_abs16 65520, implicit killed $macrl
+# CHECK: $rp0 = LOAD16_rp_abs16 65522, implicit killed $macrh
+---
+name: macr_copies
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2, $rp4
+    $macrh = COPY $rp0
+    $macrl = COPY $rp0
+    $macrl, $macrh = MACH_CG killed $macrl, killed $macrh, $rp2, $rp4, implicit-def dead $ccreg
+    $rp0 = COPY killed $macrl
+    STORE16_abs16_rp 0, killed $rp0
+    $rp0 = COPY killed $macrh
+    RET implicit $spreg, implicit $rp0
+...

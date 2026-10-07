@@ -733,16 +733,21 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } 
   else if (SrcReg == RL78::MACRH || SrcReg == RL78::MACRL) {
     unsigned SrcAddr = SrcReg == RL78::MACRH ? MACRHigh : MACRLow;
+    // MACR is memory mapped: the copy is a load from its address. The
+    // implicit use keeps it ordered after the MACH that defines MACR (post-RA
+    // scheduling) and keeps the MACR write before it alive (copy propagation).
     if (DestReg == RL78::RP0)
         BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_abs16), RL78::RP0)
-            .addImm(SrcAddr);
+            .addImm(SrcAddr)
+            .addReg(SrcReg, RegState::Implicit | getKillRegState(KillSrc));
     else {
       BuildMI(MBB, I, DL, get(RL78::XCHW_AX_rp), RL78::RP0)
           .addReg(DestReg, RegState::Define)
           .addReg(RL78::RP0, RegState::Kill)
           .addReg(DestReg, RegState::Kill);
       BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_abs16), RL78::RP0)
-            .addImm(SrcAddr);
+            .addImm(SrcAddr)
+            .addReg(SrcReg, RegState::Implicit | getKillRegState(KillSrc));
       BuildMI(MBB, I, DL, get(RL78::XCHW_AX_rp), RL78::RP0)
           .addReg(DestReg, RegState::Define)
           .addReg(RL78::RP0, RegState::Kill)
@@ -751,10 +756,13 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } 
   else if (DestReg == RL78::MACRH || DestReg == RL78::MACRL) {
       unsigned DestAddr = DestReg == RL78::MACRH ? MACRHigh : MACRLow;
+    // A store to MACR's address; the implicit def orders it before the MACH
+    // that reads MACR (see the load above).
     if (SrcReg == RL78::RP0)
         BuildMI(MBB, I, DL, get(RL78::STORE16_abs16_rp))
             .addImm(DestAddr)
-            .addReg(RL78::RP0, getKillRegState(KillSrc));
+            .addReg(RL78::RP0, getKillRegState(KillSrc))
+            .addReg(DestReg, RegState::ImplicitDefine);
     else {
       BuildMI(MBB, I, DL, get(RL78::XCHW_AX_rp), RL78::RP0)
           .addReg(SrcReg, RegState::Define)
@@ -762,7 +770,8 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
           .addReg(SrcReg, RegState::Kill);
       BuildMI(MBB, I, DL, get(RL78::STORE16_abs16_rp))
             .addImm(DestAddr)
-            .addReg(RL78::RP0);
+            .addReg(RL78::RP0)
+            .addReg(DestReg, RegState::ImplicitDefine);
       BuildMI(MBB, I, DL, get(RL78::XCHW_AX_rp), RL78::RP0)
           .addReg(SrcReg, RegState::Define)
           .addReg(RL78::RP0, RegState::Kill)
