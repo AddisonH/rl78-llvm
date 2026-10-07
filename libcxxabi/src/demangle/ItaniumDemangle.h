@@ -5795,7 +5795,12 @@ struct FloatData<float>
 template <>
 struct FloatData<double>
 {
+#if __DBL_MANT_DIG__ == 24
+    // double is IEEE single precision (e.g. RL78 without -m64bit-doubles).
+    static const size_t mangled_size = 8;
+#else
     static const size_t mangled_size = 16;
+#endif
     static const size_t max_demangled_size = 32;
     static constexpr const char* spec = "%a";
 };
@@ -5811,6 +5816,9 @@ struct FloatData<long double>
   static const size_t mangled_size = 16;
 #elif __LDBL_MANT_DIG__ == 64
   static const size_t mangled_size = 20;
+#elif __LDBL_MANT_DIG__ == 24
+  // long double is IEEE single precision (e.g. RL78 without -m64bit-doubles).
+  static const size_t mangled_size = 8;
 #else
 #error Unknown size for __LDBL_MANT_DIG__
 #endif

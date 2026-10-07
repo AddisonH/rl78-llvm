@@ -122,7 +122,7 @@ template <class _Tp>
 struct __fractional_constant_result {
   size_t __offset{size_t(-1)};
   _Tp __mantissa{0};
-  int __exponent{0};
+  int32_t __exponent{0}; // int32_t: int is 16 bits on RL78
   bool __truncated{false};
   bool __is_valid{false};
 };
@@ -189,7 +189,7 @@ __fractional_constant_result<_Tp> __parse_fractional_hex_constant(const char* __
 
 struct __exponent_result {
   size_t __offset{size_t(-1)};
-  int __value{0};
+  int32_t __value{0}; // int32_t: int is 16 bits on RL78
   bool __present{false};
 };
 

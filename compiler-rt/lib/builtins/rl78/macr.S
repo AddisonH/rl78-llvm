@@ -1,2 +1,0 @@
-MACRH = 0xffff2
-MACRL = 0xffff0

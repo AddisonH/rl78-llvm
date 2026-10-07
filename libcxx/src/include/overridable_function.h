@@ -59,7 +59,9 @@
 // want to be defining special sections inside user's executables which use our headers.
 //
 
-#if defined(_LIBCPP_OBJECT_FORMAT_MACHO) || (defined(_LIBCPP_OBJECT_FORMAT_ELF) && !defined(__NVPTX__))
+// RL78 is excluded because its backend has no "X"/"i" inline asm constraints.
+#if defined(_LIBCPP_OBJECT_FORMAT_MACHO) ||                                                                            \
+    (defined(_LIBCPP_OBJECT_FORMAT_ELF) && !defined(__NVPTX__) && !defined(__RL78__))
 
 #  define _LIBCPP_CAN_DETECT_OVERRIDDEN_FUNCTION 1
 

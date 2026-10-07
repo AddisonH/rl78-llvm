@@ -12,9 +12,7 @@
   #include "def.S"
 
   .file   "COM_macui.S"
-#ifdef __RL78_S3__
-#include "macr.S"
-#else
+#ifndef __RL78_S3__
 #ifndef __MDA_ENABLED__
   .extern __COM_mului
 #endif

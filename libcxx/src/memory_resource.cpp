@@ -87,6 +87,18 @@ memory_resource* null_memory_resource() noexcept { return &res_init.resources.nu
 // default_memory_resource()
 
 static memory_resource* __default_memory_resource(bool set = false, memory_resource* new_res = nullptr) noexcept {
+#if defined(__RL78__) && !_LIBCPP_HAS_THREADS
+  // RL78 has no __atomic_* runtime; without threads a plain variable will do
+  // (as in LLVM 17's no-atomic-header configuration).
+  static constinit memory_resource* __res = &res_init.resources.new_delete_res;
+  if (set) {
+    new_res                  = new_res ? new_res : new_delete_resource();
+    memory_resource* old_res = __res;
+    __res                    = new_res;
+    return old_res;
+  }
+  return __res;
+#else
   static constinit atomic<memory_resource*> __res{&res_init.resources.new_delete_res};
   if (set) {
     new_res = new_res ? new_res : new_delete_resource();
@@ -95,6 +107,7 @@ static memory_resource* __default_memory_resource(bool set = false, memory_resou
   } else {
     return std::atomic_load_explicit(&__res, memory_order_acquire);
   }
+#endif
 }
 
 memory_resource* get_default_resource() noexcept { return __default_memory_resource(); }
