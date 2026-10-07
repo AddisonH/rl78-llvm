@@ -91,39 +91,39 @@ extern "C++" {
 #define __FAR __far
 #endif
 
-inline _LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_HIDE_FROM_ABI
 char __FAR* __libcpp_strchr(const char __FAR* __s, int __c) {return (char __FAR*)_COM_strchr_f(__s, __c);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
 const char __FAR* strchr(const char __FAR* __s, int __c) {return __libcpp_strchr(__s, __c);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
       char __FAR* strchr(      char __FAR* __s, int __c) {return __libcpp_strchr(__s, __c);}
 
-inline _LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_HIDE_FROM_ABI
 char __FAR* __libcpp_strpbrk(const char __FAR* __s1, const char __FAR* __s2) {return (char __FAR*)_COM_strpbrk_ff(__s1, __s2);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
 const char __FAR* strpbrk(const char __FAR* __s1, const char __FAR* __s2) {return __libcpp_strpbrk(__s1, __s2);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
       char __FAR* strpbrk(      char __FAR* __s1, const char __FAR* __s2) {return __libcpp_strpbrk(__s1, __s2);}
 
-inline _LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_HIDE_FROM_ABI
 char __FAR* __libcpp_strrchr(const char __FAR* __s, int __c) {return (char __FAR*)_COM_strrchr_f(__s, __c);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
 const char __FAR* strrchr(const char __FAR* __s, int __c) {return __libcpp_strrchr(__s, __c);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
       char __FAR* strrchr(      char __FAR* __s, int __c) {return __libcpp_strrchr(__s, __c);}
 
-inline _LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_HIDE_FROM_ABI
 void __FAR* __libcpp_memchr(const void __FAR* __s, int __c, size_t __n) {return (void __FAR*)_COM_memchr_f(__s, __c, __n);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
 const void __FAR* memchr(const void __FAR* __s, int __c, size_t __n) {return __libcpp_memchr(__s, __c, __n);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
       void __FAR* memchr(      void __FAR* __s, int __c, size_t __n) {return __libcpp_memchr(__s, __c, __n);}
 
-inline _LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_HIDE_FROM_ABI
 char __FAR* __libcpp_strstr(const char __FAR* __s1, const char __FAR* __s2) {return (char __FAR*)_COM_strstr_ff(__s1, __s2);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
 const char __FAR* strstr(const char __FAR* __s1, const char __FAR* __s2) {return __libcpp_strstr(__s1, __s2);}
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_PREFERRED_OVERLOAD
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_PREFERRED_OVERLOAD
       char __FAR* strstr(      char __FAR* __s1, const char __FAR* __s2) {return __libcpp_strstr(__s1, __s2);}
 
 #else
