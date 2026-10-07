@@ -49,6 +49,15 @@ unsigned RL78FrameLowering::calculateCSRegisterMask(MachineFunction &MF) const {
   if (!MF.getRegInfo().reg_empty(RL78::ES) || MF.getFrameInfo().hasCalls())
     mask |= 1 << regNo;
 
+  // MACR (S3): the interrupted code may hold a MACH accumulator in it, and a
+  // callee may use MACH. It is saved through AX, so AX is saved too.
+  regNo++;
+  if (MF.getSubtarget<RL78Subtarget>().isRL78S3CoreType() &&
+      (!MF.getRegInfo().reg_empty(RL78::MACRL) ||
+       !MF.getRegInfo().reg_empty(RL78::MACRH) ||
+       MF.getFrameInfo().hasCalls()))
+    mask |= 1 << regNo | 1;
+
   MF.getInfo<RL78MachineFunctionInfo>()->setCSRegisterMask(mask);
   return mask;
 }
@@ -155,6 +164,17 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       if (mask & (1 << 5)) {
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
             .addReg(RL78::ES)
+            .setMIFlags(MachineInstr::FrameSetup);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameSetup);
+        NumBytesForCSRegs += 2;
+      }
+    }
+    if (mask & (1 << 6)) {
+      for (unsigned Addr : {0xFFF0u, 0xFFF2u}) {
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_abs16), RL78::RP0)
+            .addImm(Addr)
             .setMIFlags(MachineInstr::FrameSetup);
         BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
             .addReg(RL78::RP0)
@@ -456,6 +476,9 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
         NumBytesForCSRegs += 2;
     }
 
+    if (mask & (1 << 6))
+      NumBytesForCSRegs += 4;
+
     if (!Bank) {
       for (unsigned reg = 4; reg > 0; --reg)
         if ((1 << (reg - 1)) & mask)
@@ -616,6 +639,17 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
 
   if (MF.getFunction().hasFnAttribute("brk_interrupt") ||
       MF.getFunction().hasFnAttribute("interrupt")) {
+    if (mask & (1 << 6)) {
+      for (unsigned Addr : {0xFFF2u, 0xFFF0u}) {
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::STORE16_abs16_rp))
+            .addImm(Addr)
+            .addReg(RL78::RP0)
+            .setMIFlags(MachineInstr::FrameDestroy);
+        NumBytes -= 2;
+      }
+    }
     if (mask & (1 << 5) && mask & (1 << 4)) {
       BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
           .setMIFlags(MachineInstr::FrameDestroy);
