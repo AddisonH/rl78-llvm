@@ -1318,6 +1318,10 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
 
   setMinFunctionAlignment(Align(1));
 
+  // No lock-free atomics: AtomicExpand turns every atomic operation into an
+  // __atomic_* libcall (clang 17 emitted those calls itself).
+  setMaxAtomicSizeInBitsSupported(0);
+
   computeRegisterProperties(Subtarget->getRegisterInfo());
 
   // Runtime helpers use the CC-RL names (_COM_*); see RL78SystemLibrary in

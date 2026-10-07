@@ -2083,14 +2083,18 @@ bool AtomicExpandImpl::expandAtomicOpToLibcall(
 
   // TODO: the "order" argument type is "int", not int32. So
   // getInt32Ty may be wrong if the arch uses e.g. 16-bit ints.
+  // RL78: int is 16 bits, and the 32-bit argument would shift the registers
+  // of the following arguments.
+  Type *OrderingTy = M->getTargetTriple().isRL78() ? Type::getInt16Ty(Ctx)
+                                                   : Type::getInt32Ty(Ctx);
   assert(Ordering != AtomicOrdering::NotAtomic && "expect atomic MO");
   Constant *OrderingVal =
-      ConstantInt::get(Type::getInt32Ty(Ctx), (int)toCABI(Ordering));
+      ConstantInt::get(OrderingTy, (int)toCABI(Ordering));
   Constant *Ordering2Val = nullptr;
   if (CASExpected) {
     assert(Ordering2 != AtomicOrdering::NotAtomic && "expect atomic MO");
     Ordering2Val =
-        ConstantInt::get(Type::getInt32Ty(Ctx), (int)toCABI(Ordering2));
+        ConstantInt::get(OrderingTy, (int)toCABI(Ordering2));
   }
   bool HasResult = I->getType() != Type::getVoidTy(Ctx);
 

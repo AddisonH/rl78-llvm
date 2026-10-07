@@ -19,6 +19,7 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
@@ -200,6 +201,7 @@ void RL78PassConfig::addIRPasses() {
   // asm("nop"/"halt"/"stop"/"brk"/"ei"/"di") -> RL78 intrinsics (LLVM 17 did
   // this in CodeGenPrepare via TargetLowering::ExpandInlineAsm).
   addPass(createRL78ExpandInlineAsmPass());
+  addPass(createAtomicExpandLegacyPass());
   addPass(createNaryReassociatePass());
   addPass(createSinkingPass());
   if (getOptLevel() != CodeGenOptLevel::None)
