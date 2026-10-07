@@ -234,6 +234,8 @@ void RL78PassConfig::addFastRegAlloc() {
 }
 
 void RL78PassConfig::addPreRegAlloc() {
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRL78MACRLoopPromotePass());
   addPass(createRL78AdjustMemRefsPass());
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());

@@ -49,6 +49,7 @@ FunctionPass *createRL78ESOptPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 FunctionPass *createRL78NarrowDemandedOpsPass();
 FunctionPass *createRL78ExpandInlineAsmPass();
+FunctionPass *createRL78MACRLoopPromotePass();
 
 void initializeRL78DAGToDAGISelLegacyPass(PassRegistry &);
 void initializeRL78NarrowDemandedOpsPass(PassRegistry &);
