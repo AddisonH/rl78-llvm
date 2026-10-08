@@ -216,6 +216,15 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
 
     CmdArgs.push_back("-mllvm");
     CmdArgs.push_back("-unroll-runtime-epilog");
+
+    // Flatten i*N+j nests into one loop (CoreMark matrix kernels, as CC-RL
+    // does); the overflow check is an i32 multiply, so allow versioning
+    // although i32 is not a legal integer on RL78.
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-enable-loop-flatten");
+
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-loop-flatten-version-illegal-tripcount");
   }
 
   if (OptLevel != 's' && OptLevel != 'z')
