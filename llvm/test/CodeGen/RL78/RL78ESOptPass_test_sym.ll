@@ -26,15 +26,18 @@ entry:
 }
 
 ; Tests elimination of redundant MOV_es_A without a preceding copy in R1.
+; The far pointer is reloaded after a byte store through it, which may alias
+; the pointer itself; the loads are marked invariant so that both stores use
+; the same ES value (without that, both MOV_es_A are required).
 ; CHECK-LABEL: _test_copy
 ; CHECK: mov es, a
 ; CHECK-NOT: mov es, a
 @p = dso_local local_unnamed_addr global ptr addrspace(2) null, align 2
 
 define dso_local void @test_copy(i8 noundef %c) local_unnamed_addr {
-  %1 = load ptr addrspace(2), ptr @p, align 2
+  %1 = load ptr addrspace(2), ptr @p, align 2, !invariant.load !0
   store i8 %c, ptr addrspace(2) %1, align 1
-  %2 = load ptr addrspace(2), ptr @p, align 2
+  %2 = load ptr addrspace(2), ptr @p, align 2, !invariant.load !0
   %arrayidx1 = getelementptr inbounds i8, ptr addrspace(2) %2, i16 2
   store i8 %c, ptr addrspace(2) %arrayidx1, align 1
   ret void
@@ -48,9 +51,9 @@ define dso_local void @test_copy(i8 noundef %c) local_unnamed_addr {
 
 define dso_local void @test_copy_2() local_unnamed_addr {
   %call = tail call i8 @getc() 
-  %1 = load ptr addrspace(2), ptr @p2, align 2
+  %1 = load ptr addrspace(2), ptr @p2, align 2, !invariant.load !0
   store i8 %call, ptr addrspace(2) %1, align 1
-  %2 = load ptr addrspace(2), ptr @p2, align 2
+  %2 = load ptr addrspace(2), ptr @p2, align 2, !invariant.load !0
   %arrayidx1 = getelementptr inbounds i8, ptr addrspace(2) %2, i16 2
   store i8 %call, ptr addrspace(2) %arrayidx1, align 1
   ret void
@@ -59,3 +62,5 @@ define dso_local void @test_copy_2() local_unnamed_addr {
 declare dso_local i8 @getc(...) local_unnamed_addr #1
 
 attributes #1 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="RL78_S3" "target-features"="+mirror-source-0,+relax" }
+
+!0 = !{}
