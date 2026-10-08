@@ -14,8 +14,13 @@
 #include "RL78MachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
+
+static cl::opt<bool> FrameOrderByDensity(
+    "rl78-frame-order-density", cl::Hidden, cl::init(true),
+    cl::desc("Place frame objects by uses per byte rather than by uses"));
 
 RL78FrameLowering::RL78FrameLowering(const RL78Subtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsUp, Align(2), 0) {}
@@ -749,6 +754,7 @@ struct RL78FrameSortingObject {
   bool IsValid = false;       // true if we care about this Object.
   unsigned ObjectIndex = 0;   // Index of Object into MFI list.
   unsigned ObjectNumUses = 0; // Object static number of uses.
+  unsigned ObjectSize = 0;    // Object size in bytes.
 };
 
 struct RL78FrameSortingComparator {
@@ -762,14 +768,25 @@ struct RL78FrameSortingComparator {
     if (!B.IsValid)
       return true;
 
+    // Uses per byte, highest first (closest to SP): a large array is
+    // addressed by computing its base once, so its offset hardly matters,
+    // while a spill slot beyond [SP+255] costs a sequence through BC at
+    // every access. Compare A.uses / A.size > B.uses / B.size without a
+    // division; equal densities keep the more used object first.
+    if (FrameOrderByDensity) {
+      uint64_t DA = uint64_t(A.ObjectNumUses) * std::max(B.ObjectSize, 1u);
+      uint64_t DB = uint64_t(B.ObjectNumUses) * std::max(A.ObjectSize, 1u);
+      if (DA != DB)
+        return DA > DB;
+    }
     return A.ObjectNumUses > B.ObjectNumUses;
   }
 };
 } // namespace
 
 // Order frame objects:
-// We want to place the more freequently used objects first (lower address)
-// becuase we use [SP+offset] when offset < 256 and offset[BC] when offset >=
+// We want to place the more densely used objects first (lower address)
+// because we use [SP+offset] when offset < 256 and offset[BC] when offset >=
 // 256. This will improve both code size and speed.
 void RL78FrameLowering::orderFrameObjects(
     const MachineFunction &MF, SmallVectorImpl<int> &objectsToAllocate) const {
@@ -792,6 +809,7 @@ void RL78FrameLowering::orderFrameObjects(
   for (auto &Obj : objectsToAllocate) {
     SortingObjects[Obj].IsValid = true;
     SortingObjects[Obj].ObjectIndex = Obj;
+    SortingObjects[Obj].ObjectSize = MFI.getObjectSize(Obj);
     ObjectsSize += MFI.getObjectSize(Obj);
   }
 
