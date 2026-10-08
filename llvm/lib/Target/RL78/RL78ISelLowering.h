@@ -124,6 +124,9 @@ public:
                              const MachineFunction &MF) const override;
 
   bool isSelectSupported(SelectSupportKind Kind) const override;
+  bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
+                             unsigned AS,
+                             Instruction *I = nullptr) const override;
   bool shouldFormBranchFromSelects(ArrayRef<SelectInst *> Selects) const override;
 
   /// getSetCCResultType - Return the ISD::SETCC ValueType

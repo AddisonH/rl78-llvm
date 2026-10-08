@@ -1463,6 +1463,29 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
   return nullptr;
 }
 
+static cl::opt<bool> RL78NarrowAddrModes(
+    "rl78-narrow-addr-modes", cl::Hidden, cl::init(true),
+    cl::desc("Report only RL78's real addressing modes to LSR/CGP"));
+
+// A memory operand takes one register plus an unsigned 8-bit displacement
+// ([DE+byte], [HL+byte], [SP+byte]), or a 16-bit address with no register
+// (!addr16) or with BC (word[BC]). There is no reg+reg form with a 16-bit
+// index. The default (reg+reg, any offset) let LSR pick a post-incremented
+// pointer with negative offsets, each of which then needs an ADDW to form.
+bool RL78TargetLowering::isLegalAddressingMode(const DataLayout &DL,
+                                               const AddrMode &AM, Type *Ty,
+                                               unsigned AS,
+                                               Instruction *I) const {
+  if (!RL78NarrowAddrModes)
+    return TargetLowering::isLegalAddressingMode(DL, AM, Ty, AS, I);
+  bool HasReg = AM.HasBaseReg || AM.Scale == 1;
+  if (AM.Scale != 0 && (AM.Scale != 1 || AM.HasBaseReg))
+    return false;
+  if (!HasReg || AM.BaseGV)
+    return isInt<17>(AM.BaseOffs); // !addr16, word[BC]
+  return AM.BaseOffs >= 0 && AM.BaseOffs <= 255;
+}
+
 static cl::opt<bool> RL78SelectToBranch(
     "rl78-select-to-branch", cl::Hidden, cl::init(true),
     cl::desc("Have CodeGenPrepare turn groups of selects and i32 selects "
