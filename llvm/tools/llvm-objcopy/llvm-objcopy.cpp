@@ -122,6 +122,7 @@ static Error executeObjcopyOnRawBinary(ConfigManager &ConfigMgr,
   case FileFormat::IHex:
   case FileFormat::Unspecified:
   case FileFormat::SREC:
+  case FileFormat::SymbolSREC:
     Expected<const ELFConfig &> ELFConfig = ConfigMgr.getELFConfig();
     if (!ELFConfig)
       return ELFConfig.takeError();
@@ -143,6 +144,8 @@ static StringRef toFileFormatName(FileFormat Fmt) {
     return "ihex";
   case FileFormat::SREC:
     return "srec";
+  case FileFormat::SymbolSREC:
+    return "symbolsrec";
   default:
     return "";
   }

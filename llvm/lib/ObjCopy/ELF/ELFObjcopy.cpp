@@ -179,7 +179,10 @@ static std::unique_ptr<Writer> createWriter(const CommonConfig &Config,
   case FileFormat::IHex:
     return std::make_unique<IHexWriter>(Obj, Out, Config.OutputFilename);
   case FileFormat::SREC:
-    return std::make_unique<SRECWriter>(Obj, Out, Config.OutputFilename);
+  case FileFormat::SymbolSREC:
+    return std::make_unique<SRECWriter>(
+        Obj, Out, Config.OutputFilename,
+        Config.OutputFormat == FileFormat::SymbolSREC);
   default:
     return createELFWriter(Config, Obj, Out, OutputElfType);
   }

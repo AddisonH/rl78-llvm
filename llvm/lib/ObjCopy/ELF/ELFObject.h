@@ -406,11 +406,16 @@ private:
 
 class SRECWriter : public ASCIIHexWriter {
 public:
-  SRECWriter(Object &Obj, raw_ostream &OS, StringRef OutputFile)
-      : ASCIIHexWriter(Obj, OS, OutputFile) {}
+  /// \p SymbolHeader selects GNU objcopy's "symbolsrec" format: the symbol
+  /// table as text ("$$ file", "  name $hex", "$$ ") before the S-records.
+  SRECWriter(Object &Obj, raw_ostream &OS, StringRef OutputFile,
+             bool SymbolHeader = false)
+      : ASCIIHexWriter(Obj, OS, OutputFile), SymbolHeader(SymbolHeader) {}
   Error write() override;
 
 private:
+  bool SymbolHeader;
+  std::string getSymbolHeader() const;
   size_t writeHeader(uint8_t *Buf);
   size_t writeTerminator(uint8_t *Buf, uint8_t Type);
   Expected<size_t>
@@ -831,6 +836,7 @@ public:
   void prepareForLayout();
   // An 'empty' symbol table still contains a null symbol.
   bool empty() const { return Symbols.size() == 1; }
+  ArrayRef<SymPtr> symbols() const { return Symbols; }
   bool indicesChanged() const { return IndicesChanged; }
   void setShndxTable(SectionIndexSection *ShndxTable) {
     SectionIndexTable = ShndxTable;

@@ -899,6 +899,7 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> ArgsArr,
                             .Case("binary", FileFormat::Binary)
                             .Case("ihex", FileFormat::IHex)
                             .Case("srec", FileFormat::SREC)
+                            .Case("symbolsrec", FileFormat::SymbolSREC)
                             .Default(FileFormat::Unspecified);
   if (Config.OutputFormat == FileFormat::Unspecified) {
     if (OutputFormat.empty()) {

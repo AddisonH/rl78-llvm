@@ -3024,6 +3024,22 @@ SRecord SRecord::getHeader(StringRef FileName) {
   return {SRecord::S0, 0, Data};
 }
 
+std::string SRECWriter::getSymbolHeader() const {
+  if (!SymbolHeader)
+    return {};
+  std::string S = ("$$ " + OutputFileName + "\r\n").str();
+  if (Obj.SymbolTable) {
+    for (const std::unique_ptr<Symbol> &Sym : Obj.SymbolTable->symbols()) {
+      if (Sym->Name.empty() || Sym->Type == ELF::STT_SECTION)
+        continue;
+      uint64_t Value = Sym->Value & 0xFFFFFFFF;
+      unsigned Digits = isUInt<16>(Value) ? 4 : isUInt<24>(Value) ? 6 : 8;
+      S += "  " + Sym->Name + " $" + utohexstr(Value, false, Digits) + "\r\n";
+    }
+  }
+  return S + "$$ \r\n";
+}
+
 size_t SRECWriter::writeHeader(uint8_t *Buf) {
   SRecLineData Record = SRecord::getHeader(OutputFileName).toString();
   memcpy(Buf, Record.data(), Record.size());
@@ -3051,12 +3067,17 @@ SRECWriter::getTotalSize(WritableMemoryBuffer &EmptyBuffer) const {
   SRecord Header = SRecord::getHeader(OutputFileName);
   uint8_t TerminatorType = 10 - SizeCalc.getType();
   SRecord Terminator = {TerminatorType, static_cast<uint32_t>(Obj.Entry), {}};
-  return Header.getSize() + SizeCalc.getBufferOffset() + Terminator.getSize();
+  return getSymbolHeader().size() + Header.getSize() +
+         SizeCalc.getBufferOffset() + Terminator.getSize();
 }
 
 Error SRECWriter::write() {
+  std::string Symbols = getSymbolHeader();
+  memcpy(Buf->getBufferStart(), Symbols.data(), Symbols.size());
   uint32_t HeaderSize =
-      writeHeader(reinterpret_cast<uint8_t *>(Buf->getBufferStart()));
+      Symbols.size() +
+      writeHeader(reinterpret_cast<uint8_t *>(Buf->getBufferStart()) +
+                  Symbols.size());
   SRECSectionWriter Writer(*Buf, HeaderSize);
   for (const SectionBase *S : Sections) {
     if (Error E = S->accept(Writer))

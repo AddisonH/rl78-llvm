@@ -1,0 +1,54 @@
+## -O symbolsrec (GNU objcopy's format): the symbol table as text, then the
+## same S-records as -O srec. Section symbols and symbols without a name are skipped; values use
+## 4, 6 or 8 hex digits.
+# RUN: yaml2obj %s -o %t
+# RUN: llvm-objcopy -O symbolsrec %t - | \
+# RUN:   FileCheck --match-full-lines --strict-whitespace %s
+# RUN: llvm-objcopy -O srec %t %t.srec
+# RUN: llvm-objcopy -O symbolsrec %t %t.symbolsrec
+# RUN: tail -n 3 %t.symbolsrec | diff - %t.srec
+
+     # CHECK:$$ -
+# CHECK-NEXT:  file.c $0000
+# CHECK-NEXT:  _main $0100
+# CHECK-NEXT:  _data $0F7F00
+# CHECK-NEXT:  _high $12345678
+# CHECK-NEXT:$$ 
+# CHECK-NEXT:S00400002DCE
+# CHECK-NEXT:S1070100F6D7030027
+# CHECK-NEXT:S9030100FB
+# CHECK-EMPTY:
+
+--- !ELF
+FileHeader:
+  Class:           ELFCLASS32
+  Data:            ELFDATA2LSB
+  Type:            ET_EXEC
+  Machine:         EM_RL78
+  Entry:           0x100
+Sections:
+  - Name:            .text
+    Type:            SHT_PROGBITS
+    Flags:           [ SHF_ALLOC, SHF_EXECINSTR ]
+    Address:         0x100
+    Content:         "F6D70300"
+Symbols:
+  - Name:            file.c
+    Type:            STT_FILE
+    Index:           SHN_ABS
+  - Name:            .text
+    Type:            STT_SECTION
+    Section:         .text
+  - Name:            _main
+    Type:            STT_FUNC
+    Section:         .text
+    Value:           0x100
+    Binding:         STB_GLOBAL
+  - Name:            _data
+    Index:           SHN_ABS
+    Value:           0xF7F00
+    Binding:         STB_GLOBAL
+  - Name:            _high
+    Index:           SHN_ABS
+    Value:           0x12345678
+    Binding:         STB_GLOBAL

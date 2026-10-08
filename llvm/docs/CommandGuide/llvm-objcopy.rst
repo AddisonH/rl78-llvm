@@ -626,8 +626,10 @@ The following formats are supported by :program:`llvm-objcopy` for the
 :option:`--output-target` only:
 
 - `srec`
+- `symbolsrec` (`srec` preceded by the symbol table as text, as written by GNU
+  objcopy)
 
-Additionally, all targets except `binary`, `ihex`, and `srec` can have
+Additionally, all targets except `binary`, `ihex`, `srec` and `symbolsrec` can have
 `-freebsd` as a suffix.
 
 BINARY INPUT AND OUTPUT
