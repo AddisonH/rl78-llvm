@@ -121,6 +121,13 @@ bool RL78NarrowDemandedOps::runOnFunction(Function &F) {
     Value *R = B.CreateTrunc(BO->getOperand(1), I16);
     // No nuw/nsw: what cannot overflow in 32 bits may overflow in 16.
     Value *Narrow = B.CreateBinOp(BO->getOpcode(), L, R);
+    // Disjoint bits stay disjoint in the low half. Keep the flag: SCEV only
+    // sees `or disjoint` as an add, so (k | 1) * N of an unrolled loop would
+    // otherwise stop being an add recurrence and LSR could not reduce it.
+    if (auto *Or = dyn_cast<PossiblyDisjointInst>(BO))
+      if (Or->isDisjoint())
+        if (auto *NarrowOr = dyn_cast<PossiblyDisjointInst>(Narrow))
+          NarrowOr->setIsDisjoint(true);
     Value *Wide = B.CreateZExt(Narrow, BO->getType());
     LLVM_DEBUG(dbgs() << "RL78 narrowing: " << *BO << " -> " << *Narrow << '\n');
     BO->replaceAllUsesWith(Wide);

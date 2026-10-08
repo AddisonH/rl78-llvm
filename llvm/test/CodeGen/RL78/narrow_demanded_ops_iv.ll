@@ -26,3 +26,31 @@ loop:
 exit:
   ret i16 %s.next
 }
+
+; An unrolled loop indexes with (k | 1) * n. Narrowing keeps `disjoint` on the
+; or: SCEV only treats a disjoint or as an add, and without it (k | 1) * n is
+; not an add recurrence, so LSR cannot strength-reduce the multiply.
+
+; CHECK-LABEL: @unrolled_stride(
+; CHECK: or disjoint i16
+define i32 @unrolled_stride(ptr %b, i32 %n) {
+entry:
+  br label %loop
+
+loop:
+  %k = phi i32 [ 0, %entry ], [ %k.next, %loop ]
+  %s = phi i32 [ 0, %entry ], [ %s.next, %loop ]
+  %k1 = or disjoint i32 %k, 1
+  %m = mul i32 %k1, %n
+  %idx = trunc i32 %m to i16
+  %p = getelementptr inbounds i16, ptr %b, i16 %idx
+  %v = load i16, ptr %p, align 2
+  %w = sext i16 %v to i32
+  %s.next = add i32 %s, %w
+  %k.next = add nuw i32 %k, 2
+  %done = icmp uge i32 %k.next, %n
+  br i1 %done, label %exit, label %loop
+
+exit:
+  ret i32 %s.next
+}
