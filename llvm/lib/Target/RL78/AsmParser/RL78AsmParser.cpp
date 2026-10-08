@@ -128,7 +128,7 @@ class RL78AsmParser : public MCTargetAsmParser {
   ParseStatus parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
                                                       StringRef Mnemonic);
   bool tokenHasNoDotOrHasSemicolon();
-  int64_t parseBeforeDot(const std::string &before_dot);
+  const MCExpr *parseAddressBeforeDot(StringRef BeforeDot, SMLoc Loc);
   ParseStatus parseOperand(OperandVector &Operands, StringRef Name);
 
   bool tryParseBCCorSCC(OperandVector &Operands, StringRef Name, SMLoc NameLoc);
@@ -2757,17 +2757,26 @@ bool RL78AsmParser::tokenHasNoDotOrHasSemicolon() {
          getLexer().getTok().getString().find(";") != std::string::npos;
 }
 
-int64_t RL78AsmParser::parseBeforeDot(const std::string &before_dot) {
-  int64_t value = 0;
-  std::stringstream ss;
-  if (before_dot.find("F") != std::string::npos ||
-      before_dot.find("f") != std::string::npos) {
-    ss << std::hex << before_dot;
-  } else {
-    ss << before_dot;
+/// The address part of an "!addr16.bit" operand that the lexer returned as
+/// one token: a number in any radix the lexer accepts (0x.., 0b.., 0..,
+/// decimal), an absolute alias (.equ/.set), or a symbol. Returns null after
+/// reporting an error.
+const MCExpr *RL78AsmParser::parseAddressBeforeDot(StringRef BeforeDot,
+                                                   SMLoc Loc) {
+  uint64_t Value;
+  if (!BeforeDot.getAsInteger(0, Value))
+    return MCConstantExpr::create(Value, getContext());
+  if (BeforeDot.empty() || isDigit(BeforeDot[0])) {
+    Error(Loc, "invalid address '" + BeforeDot + "'");
+    return nullptr;
   }
-  ss >> value;
-  return value;
+  MCSymbol *Sym = getContext().lookupSymbol(BeforeDot);
+  int64_t Alias;
+  if (Sym && Sym->isVariable() &&
+      Sym->getVariableValue()->evaluateAsAbsolute(Alias))
+    return MCConstantExpr::create(Alias, getContext());
+  return MCSymbolRefExpr::create(getContext().getOrCreateSymbol(BeforeDot),
+                                 getContext());
 }
 
 ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
@@ -2843,20 +2852,9 @@ ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
                   .find_first_not_of("0123456789") == std::string::npos &&
           ((Mnemonic.compare("set1") == 0 || Mnemonic.compare("clr1") == 0) &&
            !getLexer().peekTok().is(AsmToken::LParen))) {
-        std::string before_dot = checkDot.substr(0, dot).str();
-
-        int64_t value = getSymbolAliasValue(before_dot);
-
-        if (value == 0) {
-          value = parseBeforeDot(before_dot);
-        }
-
-        if (value != 0)
-          EVal = MCConstantExpr::create(value, getContext());
-        else {
-          MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-          EVal = MCSymbolRefExpr::create(Sym, getParser().getContext());
-        }
+        EVal = parseAddressBeforeDot(checkDot.substr(0, dot), S);
+        if (!EVal)
+          return ParseStatus::Failure;
 
         Operands.push_back(RL78Operand::CreateAbs16(EVal, S, E));
 
@@ -2884,9 +2882,14 @@ ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
                   Mnemonic.compare("set1") == 0 || Mnemonic.compare("clr1") == 0 ||
                   Mnemonic.compare("bt") == 0 || Mnemonic.compare("bf") == 0 ||
                   Mnemonic.compare("btclr") == 0) {
+                // The bit number follows the address as its own ".n"
+                // token; anything else (e.g. "a03ah.3" after "0" when the
+                // lexer split "0a03ah.3") is not a bit operand.
                 StringRef checkDot = getLexer().getTok().getString();
                 size_t dot = checkDot.find(".");
-                if (dot != std::string::npos) {
+                if (dot == 0 && checkDot.size() > 1 &&
+                    checkDot.drop_front().find_first_not_of("0123456789") ==
+                        StringRef::npos) {
                   std::string Imm =
                       checkDot.substr(dot + 1, checkDot.size()).str();
                   const MCExpr *EVal;
@@ -2903,15 +2906,21 @@ ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
               if (AddressValue.isAbsolute()) {
                 AddressExpr = MCConstantExpr::create(AddressValue.getConstant(),
                                                      getContext());
-              } else if (!AddressValue.getSubSym()) {
-                AddressExpr = MCSymbolRefExpr::create(AddressValue.getAddSym(), getContext());
               } else {
-                AddressExpr = MCBinaryExpr::createSub(
-                    MCSymbolRefExpr::create(AddressValue.getAddSym(),
-                                            getContext()),
-                    MCSymbolRefExpr::create(AddressValue.getSubSym(),
-                                            getContext()),
-                    getContext());
+                AddressExpr = MCSymbolRefExpr::create(AddressValue.getAddSym(),
+                                                      getContext());
+                if (AddressValue.getSubSym())
+                  AddressExpr = MCBinaryExpr::createSub(
+                      AddressExpr,
+                      MCSymbolRefExpr::create(AddressValue.getSubSym(),
+                                              getContext()),
+                      getContext());
+                if (AddressValue.getConstant())
+                  AddressExpr = MCBinaryExpr::createAdd(
+                      AddressExpr,
+                      MCConstantExpr::create(AddressValue.getConstant(),
+                                             getContext()),
+                      getContext());
               }
               Operands.push_back(RL78Operand::CreateAbs16(AddressExpr, S, E));
               Operands.push_back(RL78Operand::CreateImm07(
@@ -2926,20 +2935,9 @@ ParseStatus RL78AsmParser::parseOperand(OperandVector &Operands,
 
           SMLoc S = Parser.getTok().getLoc();
           SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
-          std::string before_dot = checkDot.substr(0, dot).str();
-
-          int64_t value = getSymbolAliasValue(before_dot);
-
-          if (value == 0) {
-            value = parseBeforeDot(before_dot);
-          }
-
-          if (value != 0) {
-            EVal = MCConstantExpr::create(value, getContext());
-          } else {
-            MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-            EVal = MCSymbolRefExpr::create(Sym, getParser().getContext());
-          }
+          EVal = parseAddressBeforeDot(checkDot.substr(0, dot), S);
+          if (!EVal)
+            return ParseStatus::Failure;
 
           Operands.push_back(RL78Operand::CreateAbs16(EVal, S, E));
 
@@ -3175,26 +3173,10 @@ RL78AsmParser::parseEsRegRegAddrAndDotOperand(OperandVector &Operands,
               std::string::npos &&
           (Mnemonic.compare("set1") == 0 || Mnemonic.compare("clr1") == 0)) {
 
-        std::string before_dot = name.substr(0, dot).str();
-        int64_t value = getSymbolAliasValue(before_dot);
-
-        if (value == 0) {
-          std::stringstream ss;
-          if (before_dot.find("F") != std::string::npos ||
-              before_dot.find("f") != std::string::npos) {
-            ss << std::hex << before_dot;
-          } else {
-            ss << before_dot;
-          }
-          ss >> value;
-        }
-
-        if (value != 0)
-          Res = MCConstantExpr::create(value, getContext());
-        else {
-          MCSymbol *Sym = getContext().getOrCreateSymbol(before_dot);
-          Res = MCSymbolRefExpr::create(Sym, getParser().getContext());
-        }
+        Res = parseAddressBeforeDot(name.substr(0, dot),
+                                    Parser.getTok().getLoc());
+        if (!Res)
+          return ParseStatus::Failure;
 
         Operands.push_back(
             RL78Operand::CreateEsAddr16(RegES, RegESKind, Res, S, E));
