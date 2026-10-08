@@ -38,6 +38,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78DAGToDAGISelLegacyPass(*PR);
   initializeRL78ExpandInlineAsmPass(*PR);
   initializeRL78NarrowDemandedOpsPass(*PR);
+  initializeRL78NarrowLoopCountersPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {
@@ -207,8 +208,10 @@ void RL78PassConfig::addIRPasses() {
   addPass(createAtomicExpandLegacyPass());
   addPass(createNaryReassociatePass());
   addPass(createSinkingPass());
-  if (getOptLevel() != CodeGenOptLevel::None)
+  if (getOptLevel() != CodeGenOptLevel::None) {
+    addPass(createRL78NarrowLoopCountersPass());
     addPass(createRL78NarrowDemandedOpsPass());
+  }
   TargetPassConfig::addIRPasses();
 }
 
