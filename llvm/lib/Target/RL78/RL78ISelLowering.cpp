@@ -1299,6 +1299,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::INLINEASM);
   setTargetDAGCombine(ISD::TRAP);
   setTargetDAGCombine(ISD::SELECT);
+  setTargetDAGCombine({ISD::SETCC, ISD::SELECT_CC});
   // To eliminate casts between far_code and far_data
   //setTargetDAGCombine(ISD::ADDRSPACECAST);
 
@@ -1499,23 +1500,17 @@ EVT RL78TargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
 void RL78TargetLowering::computeKnownBitsForTargetNode(
     const SDValue Op, KnownBits &Known, const APInt &DemandedElts,
     const SelectionDAG &DAG, unsigned Depth) const {
-  KnownBits Known2;
   Known.resetAll();
-
-  // switch (Op.getOpcode()) {
-  // default:
-  //  break;
-  //  // case SPISD::SELECT_ICC:
-  //  // case SPISD::SELECT_XCC:
-  //  // case SPISD::SELECT_FCC:
-  //  //  DAG.computeKnownBits(Op.getOperand(1), Known, Depth+1);
-  //  //  DAG.computeKnownBits(Op.getOperand(0), Known2, Depth+1);
-
-  //  //  // Only known if known in both the LHS and RHS.
-  //  //  Known.One &= Known2.One;
-  //  //  Known.Zero &= Known2.Zero;
-  //  break;
-  //}
+  switch (Op.getOpcode()) {
+  case RL78ISD::SELECTCC:
+  case RL78ISD::SELECTCCBTBF:
+    // Only what both values have in common is known.
+    Known = DAG.computeKnownBits(Op.getOperand(0), Depth + 1);
+    if (!Known.isUnknown())
+      Known = Known.intersectWith(
+          DAG.computeKnownBits(Op.getOperand(1), Depth + 1));
+    break;
+  }
 }
 
 // Convert to a target node and set target flags.
@@ -3282,9 +3277,77 @@ static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
                          TVal, FVal, ISD::SETNE);
 }
 
+// An ordered i32 setcc or select_cc producing an i8/i16 value. Type
+// legalization would compare the high halves twice (signed or unsigned and for
+// equality) and the low halves once, then pick a result with a select, which
+// becomes three compares and two branches. As PerformBRCONDCombine does, compare
+// the high halves, then (on equality) the low halves into the same flags:
+//   CMPW hi; [XOR1 CY fixup]; SKNZ; CMPW lo; select on the flags
+static cl::opt<bool> RL78CombineI32Compare(
+    "rl78-combine-i32-compare", cl::Hidden, cl::init(true),
+    cl::desc("Lower ordered i32 setcc/select_cc as one CMP/LOWCMP chain"));
+static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
+  if (!RL78CombineI32Compare)
+    return SDValue();
+  bool IsSetCC = N->getOpcode() == ISD::SETCC;
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  ISD::CondCode CC =
+      cast<CondCodeSDNode>(N->getOperand(IsSetCC ? 2 : 4))->get();
+  EVT VT = N->getValueType(0);
+  if (LHS.getValueType() != MVT::i32 || CC == ISD::SETEQ || CC == ISD::SETNE)
+    return SDValue();
+  // Sign tests read one bit (see LowerBR_CC / LowerSELECT_CC).
+  if (auto *C = dyn_cast<ConstantSDNode>(RHS))
+    if ((C->isZero() && (CC == ISD::SETLT || CC == ISD::SETGE)) ||
+        (C->isAllOnes() && (CC == ISD::SETGT || CC == ISD::SETLE)))
+      return SDValue();
+
+  SDLoc dl(N);
+  SDValue TVal, FVal;
+  EVT SelVT;
+  if (IsSetCC) {
+    // A setcc that feeds a branch or a select is combined by its user.
+    for (SDNode *U : N->users())
+      if (U->getOpcode() == ISD::BRCOND || U->getOpcode() == ISD::SELECT ||
+          U->getOpcode() == ISD::VSELECT)
+        return SDValue();
+    if (!VT.isScalarInteger() || VT.bitsGT(MVT::i16))
+      return SDValue();
+    SelVT = MVT::i16;
+    TVal = DAG.getConstant(1, dl, SelVT);
+    FVal = DAG.getConstant(0, dl, SelVT);
+  } else {
+    TVal = N->getOperand(2);
+    FVal = N->getOperand(3);
+    if ((VT != MVT::i8 && VT != MVT::i16) ||
+        TVal.getOpcode() == RL78ISD::HI16 || FVal.getOpcode() == RL78ISD::HI16)
+      return SDValue();
+    SelVT = VT;
+  }
+
+  SDValue Lo = DAG.getConstant(0, dl, MVT::i16);
+  SDValue Hi = DAG.getConstant(1, dl, MVT::i16);
+  auto Half = [&](SDValue V, SDValue Idx) {
+    return DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, V, Idx);
+  };
+  SDValue Cmp =
+      DAG.getNode(RL78ISD::CMP, dl, MVT::Glue, Half(LHS, Hi), Half(RHS, Hi),
+                  DAG.getConstant(IntCondCCodeSign(CC), dl, MVT::i8));
+  SDValue LowCmp = DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, Half(LHS, Lo),
+                               Half(RHS, Lo), Cmp);
+  SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
+  SDValue Sel =
+      DAG.getNode(RL78ISD::SELECTCC, dl, SelVT, TVal, FVal, TargetCC, LowCmp);
+  return IsSetCC ? DAG.getZExtOrTrunc(Sel, dl, VT) : Sel;
+}
+
 SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
                                               DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
+  case ISD::SETCC:
+  case ISD::SELECT_CC:
+    return PerformI32CompareCombine(N, DCI.DAG);
   case ISD::SELECT:
     return PerformSELECTCombine(N, DCI.DAG);
   case ISD::BR_CC:
