@@ -45,6 +45,10 @@ public:
 
   bool hasDivRemOp(Type *DataType, bool IsSigned) const override;
 
+  void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
+                               TTI::UnrollingPreferences &UP,
+                               OptimizationRemarkEmitter *ORE) const override;
+
   bool isProfitableToSinkOperands(Instruction *I,
                                   SmallVectorImpl<Use *> &Ops) const override {
 

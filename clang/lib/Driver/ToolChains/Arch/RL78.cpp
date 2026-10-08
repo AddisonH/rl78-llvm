@@ -208,9 +208,8 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
     CmdArgs.push_back("-mllvm");
     CmdArgs.push_back("-enable-dfa-jump-thread");
 
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-allow-unroll-and-jam");
-
+    // RL78's TTI allows unroll-and-jam (except around MACH reductions);
+    // -allow-unroll-and-jam would override that choice.
     CmdArgs.push_back("-mllvm");
     CmdArgs.push_back("-enable-unroll-and-jam");
 
