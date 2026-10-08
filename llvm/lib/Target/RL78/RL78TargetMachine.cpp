@@ -242,6 +242,7 @@ void RL78PassConfig::addPreRegAlloc() {
   addPass(createRL78AdjustMemRefsPass());
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
+    addPass(createRL78SinkToAccumulatorPass());
     addPass(&ProcessImplicitDefsID);
 
     // LiveVariables currently requires pure SSA form.
