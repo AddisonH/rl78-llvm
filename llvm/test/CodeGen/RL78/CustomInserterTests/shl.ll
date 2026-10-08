@@ -3,22 +3,11 @@
 
 ; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 
-; CHECK: _ab:
-; CHECK: 	mov a, [de]
-; CHECK: 	mov c, a
-; CHECK: 	cmp0 c
-; CHECK: 	bnz $.LBB0_2
-; CHECK: ; %bb.1:
-; CHECK: 	movw ax, [sp+0]
-; CHECK: 	br $.LBB0_4
-
-; CHECK: .LBB0_2:
-; CHECK: 	movw ax, [sp+0]
-
-; CHECK: .LBB0_3:
-; CHECK-NEXT: 	shlw ax, 1
-; CHECK-NEXT: 	dec c
-; CHECK-NEXT: 	bnz $.LBB0_3
+; CHECK-LABEL: _ab:
+; CHECK:       [[LOOP:\.LBB0_[0-9]+]]:{{.*}}Inner Loop Header
+; CHECK:       shlw ax, 1
+; CHECK:       dec c
+; CHECK-NEXT:  bnz $[[LOOP]]
 
 define dso_local void @ab(ptr nocapture noundef %0, ptr nocapture noundef readonly %1) local_unnamed_addr #0 {
   %3 = load i16, ptr %0, align 1

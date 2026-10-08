@@ -20,12 +20,33 @@
 #include "RL78.h"
 #include "RL78Subtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SparseSet.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #include <queue>
 
 using namespace llvm;
+
+// Pinning every address to HL/DE/BC by a straight-line interval scan (below)
+// ignores loops: a pointer carried around a loop in DE was copied to HL before
+// each access (push de / pop hl), CoreMark's list walks most of all. The
+// generic load/store forms are the word[BC] encodings and are specialized to
+// [DE+byte]/[HL+byte] after allocation, so any of BC, DE, HL works as long as
+// the offset fits a byte: constrain the class and let the allocator choose.
+// Only for loaded pointers, though: left free, other bases (p + 4 and the
+// like) sometimes got DE/BC and the allocator spilled worse around them
+// (Embench huffbench +18%, also with the scan's choice as a hint), while the
+// pin cost little there.
+static cl::opt<bool> PinAddressRegs(
+    "rl78-pin-address-regs", cl::Hidden, cl::init(false),
+    cl::desc("Pin load/store address registers to HL/DE before allocation "
+             "instead of constraining them to BC/DE/HL"));
+static cl::opt<bool> OnlyLoadedPointers(
+    "rl78-unpin-loaded-pointers-only", cl::Hidden, cl::init(true),
+    cl::desc("Leave only loaded pointers (p = p->next) to the allocator"));
 
 namespace {
 class RL78AdjustMemRefsPass : public MachineFunctionPass {
@@ -64,6 +85,33 @@ static int getAddrOpPositions(const MachineInstr &MI) {
   default:
     return -1;
   }
+}
+
+// A pointer that is itself loaded (p = p->next), directly or through COPYs and
+// PHIs. Selected loads write $rp0 and are followed by `%v = COPY $rp0`.
+static bool isLoadedPointer(Register R, const MachineRegisterInfo &MRI,
+                            SmallPtrSetImpl<const MachineInstr *> &Seen,
+                            unsigned Depth = 0) {
+  const MachineInstr *Def = R.isVirtual() ? MRI.getUniqueVRegDef(R) : nullptr;
+  if (!Def || Depth > 6 || !Seen.insert(Def).second)
+    return false;
+  if (Def->isPHI()) {
+    for (unsigned I = 1; I < Def->getNumOperands(); I += 2)
+      if (isLoadedPointer(Def->getOperand(I).getReg(), MRI, Seen, Depth + 1))
+        return true;
+    return false;
+  }
+  if (!Def->isCopy())
+    return false;
+  Register Src = Def->getOperand(1).getReg();
+  if (Src.isVirtual())
+    return isLoadedPointer(Src, MRI, Seen, Depth + 1);
+  auto It = Def->getIterator();
+  if (It == Def->getParent()->begin())
+    return false;
+  const MachineInstr &Prev = *std::prev(It);
+  return Prev.mayLoad() && Prev.getNumOperands() &&
+         Prev.getOperand(0).isReg() && Prev.getOperand(0).getReg() == Src;
 }
 
 bool RL78AdjustMemRefsPass::runOnMachineFunction(MachineFunction &MF) {
@@ -173,6 +221,43 @@ bool RL78AdjustMemRefsPass::runOnMachineFunction(MachineFunction &MF) {
       rp4Usage++;
     rangeHeap.push({end, PhysReg});
     vRegsMap[VirtualReg] = PhysReg;
+  }
+
+  if (!PinAddressRegs) {
+    // Offsets over a byte, and symbols, need word[BC]: those still go to BC.
+    MachineRegisterInfo &MRI = MF.getRegInfo();
+    const TargetInstrInfo *TII =
+        MF.getSubtarget<RL78Subtarget>().getInstrInfo();
+    bool Changed = false;
+    for (MachineBasicBlock &MBB : MF)
+      for (MachineInstr &MI : MBB) {
+        int Pos = getAddrOpPositions(MI);
+        if (Pos == -1)
+          continue;
+        Register R = MI.getOperand(Pos).getReg();
+        if (!R.isVirtual())
+          continue;
+        SmallPtrSet<const MachineInstr *, 8> Seen;
+        if (needsBC.contains(R) ||
+            (OnlyLoadedPointers && !isLoadedPointer(R, MRI, Seen))) {
+          // Pinned as before: to BC for word[BC], else the scan's HL/DE.
+          Register Phys = needsBC.contains(R) ? Register(RL78::RP2)
+                                              : Register(vRegsMap[R]);
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::COPY), Phys)
+              .addReg(R);
+          MI.getOperand(Pos).ChangeToRegister(Phys, false);
+        } else {
+          Register NewR = R;
+          if (!MRI.constrainRegClass(R, &RL78::RL78BCDEHLRegClass)) {
+            NewR = MRI.createVirtualRegister(&RL78::RL78BCDEHLRegClass);
+            BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::COPY), NewR)
+                .addReg(R);
+            MI.getOperand(Pos).setReg(NewR);
+          }
+        }
+        Changed = true;
+      }
+    return Changed;
   }
 
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();

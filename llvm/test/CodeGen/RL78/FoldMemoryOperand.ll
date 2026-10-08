@@ -8,8 +8,8 @@ target triple = "rl78-unknown-unknown-elf"
 ; Checks MOV_r_imm is folded into a memory store
 ; CHECK-LABEL: test_MOV_r_imm
 ; CHECK-NOT: movw ax, #0
-; CHECK: mov [sp+2], #0
-; CHECK-NOT: movw [sp+2], ax
+; CHECK: mov [sp+[[SLOT:[0-9]+]]], #0
+; CHECK-NOT: movw [sp+[[SLOT]]], ax
 define dso_local void @test_MOV_r_imm(ptr nocapture noundef readonly %x, i16 noundef %y) local_unnamed_addr {
 entry:
   %smax = tail call i16 @llvm.smax.i16(i16 %y, i16 0)

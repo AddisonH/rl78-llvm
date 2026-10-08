@@ -12,7 +12,7 @@ declare i8 @step(i8)
 
 ; CHECK-LABEL: _walk:
 ; CHECK-NOT:   xchw ax,
-; CHECK:       movw ax, bc
+; CHECK:       movw ax, {{bc|de|hl}}
 define i16 @walk(ptr %p) {
 entry:
   br label %loop
