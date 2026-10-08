@@ -2671,6 +2671,19 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag], Uses = [CCreg] in {
          [(set i16:$rd, (adde i16:$rsrc, (load ADDRri8:$addr)))]>;
 }
 
+// The high half of an i32 add of a 16-bit constant is adde(hi, 0): only the
+// carry. ADDE_rp_imm turns that into BNC + INCW, but when hi is a load the
+// commuted memory form adde(0, (load ...)) wins on complexity and adds the
+// carry byte by byte through A (x[i]++ on a 32-bit counter in memory: 15
+// instructions instead of 7). Prefer the immediate form for 0 and -1.
+def immCarryOnly : PatLeaf<(imm), [{
+  uint64_t V = N->getZExtValue() & 0xFFFF;
+  return V == 0 || V == 0xFFFF;
+}]>;
+let AddedComplexity = 100 in
+def : Pat<(adde i16:$rsrc, (i16 immCarryOnly:$imm)),
+          (ADDE_rp_imm RL78RPRegs:$rsrc, imm:$imm)>;
+
 //===----------------------------------------------------------------------===//
 // SUBW instruction
 //===----------------------------------------------------------------------===//
