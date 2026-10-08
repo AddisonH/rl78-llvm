@@ -82,6 +82,8 @@ public:
 
   bool enablePostRAScheduler() const override { return true; }
 
+  bool enableMachineScheduler() const override;
+
   bool useAA() const override { return true; }
 
   bool Has64BitDoubles() const { return has64BitDoubles; }

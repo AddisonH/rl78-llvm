@@ -36,6 +36,23 @@ protected:
 public:
   explicit RL78InstrInfo(RL78Subtarget &ST);
 
+  bool findCommutedOpIndices(const MachineInstr &MI, unsigned &SrcOpIdx1,
+                             unsigned &SrcOpIdx2) const override;
+
+  /// With -rl78-virtual-acc, accumulator operands carry their real class
+  /// (RL78AXRP or RL78AReg) instead of the general one.
+  const TargetRegisterClass *getRegClass(const MCInstrDesc &MCID,
+                                         unsigned OpNum) const override;
+
+  /// The class operand OpNum of Opcode is pinned to (RL78AXRP, RL78AReg), or
+  /// null if it is not an accumulator operand.
+  static const TargetRegisterClass *getAccumulatorClass(unsigned Opcode,
+                                                        unsigned OpNum);
+
+  /// Whether operand OpNum of Opcode may hold the accumulator: it is pinned
+  /// to it, or takes any register.
+  static bool acceptsAccumulator(unsigned Opcode, unsigned OpNum);
+
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).

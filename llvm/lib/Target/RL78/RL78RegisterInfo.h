@@ -45,6 +45,15 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
   /// many registers, this could reduce regalloc compile time by a large
   /// factor.
   bool reverseLocalAssignment() const override { return true; }
+
+  const TargetRegisterClass *
+  getLargestLegalSuperClass(const TargetRegisterClass *RC,
+                            const MachineFunction &MF) const override;
+
+  bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
+                      unsigned SubReg, const TargetRegisterClass *DstRC,
+                      unsigned DstSubReg, const TargetRegisterClass *NewRC,
+                      LiveIntervals &LIS) const override;
 };
 
 } // end namespace llvm

@@ -15,6 +15,9 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
@@ -594,6 +597,66 @@ bool RL78InstrInfo::reverseBranchCondition(
 // The 8-bit MOV_A_r/MOV_r_A are deliberately not listed. Their register classes
 // span A and X, which are the two halves of AX, and propagating across that
 // miscompiles CoreMark (wrong crclist and crcstate).
+cl::opt<bool> llvm::RL78VirtualAcc(
+    "rl78-virtual-acc", cl::Hidden, cl::init(false),
+    cl::desc("Allocate AX/A operands as virtual registers"));
+
+static uint32_t accKey(unsigned Opcode, unsigned OpNum) {
+  return Opcode << 8 | OpNum;
+}
+
+const TargetRegisterClass *
+RL78InstrInfo::getAccumulatorClass(unsigned Opcode, unsigned OpNum) {
+  static const DenseMap<uint32_t, const TargetRegisterClass *> Map = [] {
+    DenseMap<uint32_t, const TargetRegisterClass *> M;
+#define ACC_OPERAND(OPC, IDX, CLS)                                             \
+  M[accKey(RL78::OPC, IDX)] = CLASS_##CLS;
+#define CLASS_AX &RL78::RL78AXRPRegClass
+#define CLASS_A &RL78::RL78ARegRegClass
+#include "RL78AccumulatorOperands.def"
+#undef CLASS_AX
+#undef CLASS_A
+    return M;
+  }();
+  return Map.lookup(accKey(Opcode, OpNum));
+}
+
+bool RL78InstrInfo::acceptsAccumulator(unsigned Opcode, unsigned OpNum) {
+  static const DenseSet<uint32_t> Any = [] {
+    DenseSet<uint32_t> S;
+#define ANY_OPERAND(OPC, IDX) S.insert(accKey(RL78::OPC, IDX));
+#include "RL78AccumulatorOperands.def"
+    return S;
+  }();
+  return getAccumulatorClass(Opcode, OpNum) ||
+         Any.contains(accKey(Opcode, OpNum));
+}
+
+const TargetRegisterClass *RL78InstrInfo::getRegClass(const MCInstrDesc &MCID,
+                                                      unsigned OpNum) const {
+  if (RL78VirtualAcc)
+    if (const TargetRegisterClass *RC =
+            getAccumulatorClass(MCID.getOpcode(), OpNum))
+      return RC;
+  return TargetInstrInfo::getRegClass(MCID, OpNum);
+}
+
+// Commuting `AX = ADDW AX, rp` would move the value pinned to AX (a virtual
+// register of the single-register class RL78AXRP) into the other operand.
+bool RL78InstrInfo::findCommutedOpIndices(const MachineInstr &MI,
+                                          unsigned &SrcOpIdx1,
+                                          unsigned &SrcOpIdx2) const {
+  if (!TargetInstrInfo::findCommutedOpIndices(MI, SrcOpIdx1, SrcOpIdx2))
+    return false;
+  const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+  for (unsigned Idx : {SrcOpIdx1, SrcOpIdx2}) {
+    Register R = MI.getOperand(Idx).getReg();
+    if (R.isVirtual() && MRI.getRegClass(R)->getNumRegs() == 1)
+      return false;
+  }
+  return true;
+}
+
 std::optional<DestSourcePair>
 RL78InstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
   switch (MI.getOpcode()) {

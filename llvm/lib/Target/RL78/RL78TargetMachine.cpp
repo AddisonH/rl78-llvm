@@ -21,6 +21,8 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/ScheduleDAGMutation.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
@@ -186,12 +188,74 @@ public:
   bool addPreISel() override;
   void addIRPasses() override;
   bool addInstSelector() override;
+  void addMachineSSAOptimization() override;
+  bool addRegAssignAndRewriteOptimized() override;
   void addPreEmitPass() override;
   void addFastRegAlloc() override;
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
 };
 } // end anonymous namespace
+
+static cl::opt<bool> RL78AccMisched(
+    "rl78-acc-misched", cl::Hidden, cl::init(false),
+    cl::desc("Schedule before register allocation (with -rl78-virtual-acc)"));
+
+bool RL78Subtarget::enableMachineScheduler() const { return RL78AccMisched; }
+
+namespace {
+// An accumulator operand in a virtual register (RL78AXRP, RL78AReg) has to be
+// in AX (A) where it is used, which the scheduler does not know: moving it
+// into the live range of a value still in physical AX, say a return value
+// not yet copied out, leaves the allocator no way out. Keep the instructions
+// that read or write AX, A or X physically in order with every instruction
+// that uses an accumulator class; the rest move freely.
+class RL78AccumulatorOrder : public ScheduleDAGMutation {
+public:
+  void apply(ScheduleDAGInstrs *DAG) override {
+    const TargetRegisterInfo *TRI = DAG->TRI;
+    const MachineRegisterInfo &MRI = DAG->MRI;
+    SUnit *LastPhys = nullptr;
+    SmallVector<SUnit *, 8> SinceLastPhys;
+    for (SUnit &SU : DAG->SUnits) {
+      bool Phys = false, Virt = false;
+      for (const MachineOperand &MO : SU.getInstr()->operands()) {
+        if (MO.isRegMask() && MO.clobbersPhysReg(RL78::RP0))
+          Phys = true;
+        if (!MO.isReg() || !MO.getReg())
+          continue;
+        Register R = MO.getReg();
+        if (R.isPhysical()) {
+          Phys |= TRI->regsOverlap(R, RL78::RP0);
+        } else {
+          const TargetRegisterClass *RC = MRI.getRegClass(R);
+          Virt |= RC == &RL78::RL78AXRPRegClass ||
+                  RC == &RL78::RL78ARegRegClass;
+        }
+      }
+      if (Phys) {
+        for (SUnit *Prev : SinceLastPhys)
+          DAG->addEdge(&SU, SDep(Prev, SDep::Artificial));
+        if (LastPhys)
+          DAG->addEdge(&SU, SDep(LastPhys, SDep::Artificial));
+        SinceLastPhys.clear();
+        LastPhys = &SU;
+      } else if (Virt) {
+        if (LastPhys)
+          DAG->addEdge(&SU, SDep(LastPhys, SDep::Artificial));
+        SinceLastPhys.push_back(&SU);
+      }
+    }
+  }
+};
+} // end anonymous namespace
+
+ScheduleDAGInstrs *
+RL78TargetMachine::createMachineScheduler(MachineSchedContext *C) const {
+  ScheduleDAGMILive *DAG = createSchedLive(C);
+  DAG->addMutation(std::make_unique<RL78AccumulatorOrder>());
+  return DAG;
+}
 
 TargetPassConfig *RL78TargetMachine::createPassConfig(PassManagerBase &PM) {
   return new RL78PassConfig(*this, PM);
@@ -239,6 +303,16 @@ void RL78PassConfig::addFastRegAlloc() {
   TargetPassConfig::addOptimizedRegAlloc();
 }
 
+void RL78PassConfig::addMachineSSAOptimization() {
+  addPass(createRL78VirtualizeAccumulatorPass(/*WidenOnly=*/true));
+  TargetPassConfig::addMachineSSAOptimization();
+}
+
+bool RL78PassConfig::addRegAssignAndRewriteOptimized() {
+  addPass(createRL78SeparateAccumulatorOperandsPass());
+  return TargetPassConfig::addRegAssignAndRewriteOptimized();
+}
+
 void RL78PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(createRL78MACRLoopPromotePass());
@@ -246,6 +320,7 @@ void RL78PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
     addPass(createRL78SinkToAccumulatorPass());
+    addPass(createRL78VirtualizeAccumulatorPass());
     addPass(&ProcessImplicitDefsID);
 
     // LiveVariables currently requires pure SSA form.

@@ -23,6 +23,55 @@ using namespace llvm;
 // 2. we emit a DW_CFA_offset: r37 at cfa-4 in the CIE.
 RL78RegisterInfo::RL78RegisterInfo() : RL78GenRegisterInfo(RL78::PCreg) {}
 
+// A value split away from the instruction that needs it in AX (A) may live in
+// any register pair (register).
+const TargetRegisterClass *
+RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
+                                            const MachineFunction &MF) const {
+  if (RL78VirtualAcc) {
+    if (RC == &RL78::RL78AXRPRegClass)
+      return &RL78::RL78RPRegsRegClass;
+    if (RC == &RL78::RL78ARegRegClass)
+      return &RL78::RL78RegRegClass;
+  }
+  return RC;
+}
+
+static cl::opt<bool> RL78AccCoalesce(
+    "rl78-acc-coalesce", cl::Hidden, cl::init(false),
+    cl::desc("Let the coalescer narrow values to AX or A"));
+
+// Do not narrow a value that may live in any register to the one register an
+// accumulator operand (RL78AXRP, RL78AReg) allows: every other operand of
+// that value would have to be in AX too, and two of them at once cannot be.
+// Leave the copy for the allocator's hints to remove.
+bool RL78RegisterInfo::shouldCoalesce(
+    MachineInstr *MI, const TargetRegisterClass *SrcRC, unsigned SubReg,
+    const TargetRegisterClass *DstRC, unsigned DstSubReg,
+    const TargetRegisterClass *NewRC, LiveIntervals &LIS) const {
+  if (NewRC->getNumRegs() != 1)
+    return true;
+  // With -rl78-acc-coalesce, a whole value copied into AX/A may be kept
+  // there; the allocator splits it out again where it cannot stay. Through a
+  // subregister the join would pin the whole pair to AX (`%p.sub_hi = CLRB`
+  // makes %p RL78AXRP).
+  if (SrcRC->getNumRegs() == 1 && DstRC->getNumRegs() == 1)
+    return true;
+  if (!RL78AccCoalesce || SubReg || DstSubReg)
+    return false;
+  // Nor when either value is read or written in part elsewhere: splitting
+  // the pinned value around such accesses does not always succeed.
+  const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
+  for (const MachineOperand &Op : MI->operands()) {
+    if (!Op.isReg() || !Op.getReg().isVirtual())
+      continue;
+    for (const MachineOperand &MO : MRI.reg_nodbg_operands(Op.getReg()))
+      if (MO.getSubReg())
+        return false;
+  }
+  return true;
+}
+
 const MCPhysReg *
 RL78RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   return CSR_SaveList;

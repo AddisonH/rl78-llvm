@@ -52,6 +52,9 @@ public:
 
   bool useIPRA() const override { return true; }
 
+  ScheduleDAGInstrs *
+  createMachineScheduler(MachineSchedContext *C) const override;
+
   bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override {
     // when -mfar-data the default AS is far, so the only outlier is the near AS
     if (DL.getPointerSizeInBits(0) == 32)
