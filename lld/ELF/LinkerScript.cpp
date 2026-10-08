@@ -1240,6 +1240,14 @@ LinkerScript::findMemoryRegion(OutputSection *sec, MemoryRegion *hint) {
       return {m, nullptr};
   }
 
+  // RL78: the first section of an OVERLAY is kept even when it is empty,
+  // because the other sections of the overlay take their address from it.
+  // An empty one occupies no memory, so it needs no region (lld 17 discarded
+  // it; GNU ld accepts it).
+  if (ctx.arg.emachine == EM_RL78 && sec->firstInOverlay &&
+      !getFirstInputSection(sec))
+    return {nullptr, nullptr};
+
   // Otherwise, no suitable region was found.
   ErrAlways(ctx) << "no memory region specified for section '" << sec->name
                  << "'";
