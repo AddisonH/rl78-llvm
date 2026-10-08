@@ -1,7 +1,5 @@
 ; RUN: opt -S -mtriple=rl78 -passes='require<profile-summary>,function(codegenprepare)' < %s | FileCheck %s
 
-target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
-
 ; RL78 has no conditional move. CodeGenPrepare turns a group of selects on one
 ; condition, or an i32 select, into one branch; it leaves single i8/i16 and
 ; i1 selects to instruction selection.

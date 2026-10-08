@@ -53,7 +53,9 @@ static std::string computeDataLayout(const Triple &T, StringRef FS) {
   std::string DL;
   llvm::raw_string_ostream SS(DL);
 
-  // NOTE: keep in sync with def from clang/lib/Basic/Targets/RL78.cpp
+  // NOTE: keep in sync with clang/lib/Basic/Targets/RL78.cpp and, for the
+  // default (no far features), Triple::computeDataLayout in
+  // llvm/lib/TargetParser/TargetDataLayout.cpp.
   SS << "e"               // little endian
         "-m:o";           // Mach-O mangling: Private symbols get L prefix.
                           // Other symbols get a _ prefix.
