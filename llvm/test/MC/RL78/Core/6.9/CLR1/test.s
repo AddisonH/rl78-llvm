@@ -105,28 +105,28 @@ clr1 A.7
 
 
 
-# CHECK-INST: clr1 !0x1111.0                         ; encoding: [0x71,0x08,A,A]
+# CHECK-INST: clr1 !0xf1111.0                         ; encoding: [0x71,0x08,0x11,0x11]
 clr1 !0x1111.0
 
-# CHECK-INST: clr1 !0x1111.1                         ; encoding: [0x71,0x18,A,A]
+# CHECK-INST: clr1 !0xf1111.1                         ; encoding: [0x71,0x18,0x11,0x11]
 clr1 !0x1111.1
 
-# CHECK-INST: clr1 !0x1111.2                         ; encoding: [0x71,0x28,A,A]
+# CHECK-INST: clr1 !0xf1111.2                         ; encoding: [0x71,0x28,0x11,0x11]
 clr1 !0x1111.2
 
-# CHECK-INST: clr1 !0x1111.3                         ; encoding: [0x71,0x38,A,A]
+# CHECK-INST: clr1 !0xf1111.3                         ; encoding: [0x71,0x38,0x11,0x11]
 clr1 !0x1111.3
 
-# CHECK-INST: clr1 !0x1111.4                         ; encoding: [0x71,0x48,A,A]
+# CHECK-INST: clr1 !0xf1111.4                         ; encoding: [0x71,0x48,0x11,0x11]
 clr1 !0x1111.4
 
-# CHECK-INST: clr1 !0x1111.5                         ; encoding: [0x71,0x58,A,A]
+# CHECK-INST: clr1 !0xf1111.5                         ; encoding: [0x71,0x58,0x11,0x11]
 clr1 !0x1111.5
 
-# CHECK-INST: clr1 !0x1111.6                         ; encoding: [0x71,0x68,A,A]
+# CHECK-INST: clr1 !0xf1111.6                         ; encoding: [0x71,0x68,0x11,0x11]
 clr1 !0x1111.6
 
-# CHECK-INST: clr1 !0x1111.7                         ; encoding: [0x71,0x78,A,A]
+# CHECK-INST: clr1 !0xf1111.7                         ; encoding: [0x71,0x78,0x11,0x11]
 clr1 !0x1111.7
 
 
@@ -182,28 +182,28 @@ clr1 [HL].7
 
 
 
-# CHECK-INST: clr1 es:!0x1111.0                         ; encoding: [0x11,0x71,0x08,A,A]
+# CHECK-INST: clr1 es:!0x1111.0                         ; encoding: [0x11,0x71,0x08,0x11,0x11]
 clr1 ES:!0x1111.0
 
-# CHECK-INST: clr1 es:!0x1111.1                         ; encoding: [0x11,0x71,0x18,A,A]
+# CHECK-INST: clr1 es:!0x1111.1                         ; encoding: [0x11,0x71,0x18,0x11,0x11]
 clr1 ES:!0x1111.1
 
-# CHECK-INST: clr1 es:!0x1111.2                         ; encoding: [0x11,0x71,0x28,A,A]
+# CHECK-INST: clr1 es:!0x1111.2                         ; encoding: [0x11,0x71,0x28,0x11,0x11]
 clr1 ES:!0x1111.2
 
-# CHECK-INST: clr1 es:!0x1111.3                         ; encoding: [0x11,0x71,0x38,A,A]
+# CHECK-INST: clr1 es:!0x1111.3                         ; encoding: [0x11,0x71,0x38,0x11,0x11]
 clr1 ES:!0x1111.3
  
-# CHECK-INST: clr1 es:!0x1111.4                         ; encoding: [0x11,0x71,0x48,A,A]
+# CHECK-INST: clr1 es:!0x1111.4                         ; encoding: [0x11,0x71,0x48,0x11,0x11]
 clr1 ES:!0x1111.4
 
-# CHECK-INST: clr1 es:!0x1111.5                         ; encoding: [0x11,0x71,0x58,A,A]
+# CHECK-INST: clr1 es:!0x1111.5                         ; encoding: [0x11,0x71,0x58,0x11,0x11]
 clr1 ES:!0x1111.5
 
-# CHECK-INST: clr1 es:!0x1111.6                         ; encoding: [0x11,0x71,0x68,A,A]
+# CHECK-INST: clr1 es:!0x1111.6                         ; encoding: [0x11,0x71,0x68,0x11,0x11]
 clr1 ES:!0x1111.6
 
-# CHECK-INST: clr1 es:!0x1111.7                         ; encoding: [0x11,0x71,0x78,A,A]
+# CHECK-INST: clr1 es:!0x1111.7                         ; encoding: [0x11,0x71,0x78,0x11,0x11]
 clr1 ES:!0x1111.7
 
 
