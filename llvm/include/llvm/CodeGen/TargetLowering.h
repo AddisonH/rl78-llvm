@@ -499,6 +499,14 @@ public:
     return true;
   }
 
+  /// For a target whose selects of the given kind are not supported: return
+  /// true if CodeGenPrepare should turn \p Selects, consecutive selects on one
+  /// condition, into a branch. Returning false leaves them to the target's
+  /// select lowering.
+  virtual bool shouldFormBranchFromSelects(ArrayRef<SelectInst *> Selects) const {
+    return true;
+  }
+
   /// Return true if the @llvm.get.active.lane.mask intrinsic should be expanded
   /// using generic code in SelectionDAGBuilder.
   virtual bool shouldExpandGetActiveLaneMask(EVT VT, EVT OpVT) const {

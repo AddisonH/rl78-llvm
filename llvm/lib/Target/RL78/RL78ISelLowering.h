@@ -123,6 +123,9 @@ public:
   Register getRegisterByName(const char *RegName, LLT VT,
                              const MachineFunction &MF) const override;
 
+  bool isSelectSupported(SelectSupportKind Kind) const override;
+  bool shouldFormBranchFromSelects(ArrayRef<SelectInst *> Selects) const override;
+
   /// getSetCCResultType - Return the ISD::SETCC ValueType
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;

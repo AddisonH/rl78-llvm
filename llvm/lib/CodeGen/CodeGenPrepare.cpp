@@ -7765,6 +7765,9 @@ bool CodeGenPrepare::optimizeSelectInst(SelectInst *SI) {
       (!isFormingBranchFromSelectProfitable(TTI, TLI, SI) ||
        llvm::shouldOptimizeForSize(SI->getParent(), PSI, BFI)))
     return false;
+  if (!TLI->isSelectSupported(SelectKind) &&
+      !TLI->shouldFormBranchFromSelects(ASI))
+    return false;
 
   // Transform a sequence like this:
   //    start:

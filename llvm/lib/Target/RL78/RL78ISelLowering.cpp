@@ -1461,6 +1461,30 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
   return nullptr;
 }
 
+static cl::opt<bool> RL78SelectToBranch(
+    "rl78-select-to-branch", cl::Hidden, cl::init(true),
+    cl::desc("Have CodeGenPrepare turn groups of selects and i32 selects "
+             "into branches"));
+
+// RL78 has no conditional move: every select becomes a branch diamond after
+// instruction selection, one per select (two for an i32 select, one per half).
+// Let CodeGenPrepare branch once instead where that saves diamonds.
+bool RL78TargetLowering::isSelectSupported(SelectSupportKind Kind) const {
+  return Kind != ScalarValSelect || !RL78SelectToBranch;
+}
+
+bool RL78TargetLowering::shouldFormBranchFromSelects(
+    ArrayRef<SelectInst *> Selects) const {
+  Type *Ty = Selects.front()->getType();
+  // i1 selects are mostly short-circuit && / || values, which become logic
+  // or feed a branch that SelectionDAGBuilder splits anyway; select-of-constant
+  // and similar i8/i16 singletons often lower without a branch. Branching for
+  // those cost up to 21% on Embench statemate.
+  if (Ty->isIntegerTy(1))
+    return false;
+  return Selects.size() > 1 || Ty->getScalarSizeInBits() > 16;
+}
+
 EVT RL78TargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
                                            EVT VT) const {
   if (!VT.isVector())
