@@ -99,5 +99,28 @@ class RL78Inst<int size, dag outs, dag ins, string asmstr,
   // Encoded by the TableGen'erated encoder (the older definitions above are
   // still encoded by hand in RL78MCCodeEmitter).
   let TSFlags{0} = 1;
+  // Operands of a single-register class are not encoded: the disassembler
+  // supplies the register (Decode<Class>RegisterClass without a value).
+  bits<0> a;
+  bits<0> ad;
+  bits<0> as;
+  bits<0> ax;
+  bits<0> axd;
+  bits<0> axs;
+  bits<0> x;
+  bits<0> hl;
+  bits<0> es;
+  bits<0> cs;
+  bits<0> psw;
+  bits<0> sp;
+  bits<0> sd;
+  bits<0> ss;
+  bits<0> base;
+}
+
+// An instruction whose $rd and $rs are fixed registers (A, AX, ...).
+class RL78FixedRdRs {
+  bits<0> rd;
+  bits<0> rs;
 }
 

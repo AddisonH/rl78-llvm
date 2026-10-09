@@ -42,150 +42,45 @@ class RL78MCInstrAnalysis : public MCInstrAnalysis {
 public:
   RL78MCInstrAnalysis(const MCInstrInfo *Info) : MCInstrAnalysis(Info) {}
 
+  // A branch or call to $addr20, $!addr20 (PC-relative), !addr16 or
+  // !!addr20.
   bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
                       uint64_t &Target) const override {
-    unsigned Opcode = Inst.getOpcode();
-    switch (Opcode) {
-    case RL78::BTCLR_saddr:
-    case RL78::BTCLR_memr:
-    case RL78::BTCLR_sfri_addr:
-    case RL78::BTCLR_PSWi_addr:
-    case RL78::BTCLR_esmemr:
-    case RL78::B_cc:
-    case RL78::BR_rel8_cg:
-    case RL78::BR_rel16_cg:
-    case RL78::BTBF_A:
-    case RL78::BTBF_saddr:
-    case RL78::BTBF_memr:
-    case RL78::BTBF_sfri_addr:
-    case RL78::BTBF_PSWi_addr:
-    case RL78::BTBF_esmemr:
-    case RL78::BR_addr16:
-    case RL78::BR_addr20:
-    case RL78::CALL_addr16rel:
-    case RL78::CALL_addr16:
-    case RL78::CALL_addr20:
-      Target = Inst.getOperand(0).getImm();
-      break;
-    case RL78::BTCLR_A:
-      Target = Inst.getOperand(1).getImm();
-      break;
-    default:
-      return false;
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    for (unsigned I = 0, E = Desc.getNumOperands(); I < E; ++I) {
+      const MCOperand &MO = Inst.getOperand(I);
+      if (!MO.isImm())
+        continue;
+      switch (Desc.operands()[I].OperandType) {
+      case MCOI::OPERAND_PCREL: {
+        // $!addr20 (BR, CALL) is 16 bits, $addr20 8 bits.
+        bool Rel16 = Inst.getOpcode() == RL78::BR_rel16 ||
+                     Inst.getOpcode() == RL78::CALL_rel16;
+        int64_t Disp = Rel16 ? int16_t(MO.getImm()) : int8_t(MO.getImm());
+        Target = (Addr + Size + Disp) & 0xFFFFF;
+        return true;
+      }
+      case RL78Op::OPERAND_CODE_ADDR:
+        Target = MO.getImm();
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
-  static int64_t getsaddrRange(int64_t Imm) {
-    if ((Imm & 0xFF) < 0x20)
-      return (Imm & 0xFF) + 0xFFF00;
-    else
-      return (Imm & 0xFF) + 0xFFE00;
-  }
-
+  // A data address the instruction reads or writes: saddr, sfr, !addr16,
+  // or the base of word[B], word[C], word[BC]. (The address of an ES: form
+  // depends on ES; those operands have other types.)
   std::optional<uint64_t>
   evaluateMemoryOperandAddress(const MCInst &Inst, const MCSubtargetInfo *STI,
                                uint64_t Addr, uint64_t Size) const override {
-    unsigned Opcode = Inst.getOpcode();
-    switch (Opcode) {
-    case RL78::CMP0_abs16_cg:
-    case RL78::CLRB_abs16_cg:
-    case RL78::DECW_abs16_cg:
-    case RL78::INCW_abs16_cg:
-    case RL78::DEC_abs16_cg:
-    case RL78::INC_abs16_cg:
-      return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;
-    case RL78::SUBW_rp_saddr:
-    case RL78::ADDW_rp_saddr:
-    case RL78::XOR_r_saddr:
-    case RL78::OR_r_saddr:
-    case RL78::AND_r_saddr:
-    case RL78::SUBC_r_saddr:
-    case RL78::SUB_r_saddr:
-    case RL78::ADDC_r_saddrabs:
-    case RL78::ADD_r_saddr:
-    case RL78::XCH_A_saddrabs:
-      return getsaddrRange(Inst.getOperand(2).getImm());
-    case RL78::MOVW_saddrp_imm:
-    case RL78::CLR1_saddr:
-    case RL78::SET1_saddr:
-    case RL78::XOR1_cy_saddrx:
-    case RL78::AND1_cy_saddrx:
-    case RL78::OR1_cy_saddrx:
-    case RL78::MOV1_saddr_cy:
-    case RL78::MOV1_cy_saddr:
-    case RL78::STORE8_saddr_A:
-    case RL78::CMP_saddr_imm:
-    case RL78::XOR_saddr_imm:
-    case RL78::OR_saddr_imm:
-    case RL78::AND_saddr_imm:
-    case RL78::SUBC_saddr_imm:
-    case RL78::SUB_saddr_imm:
-    case RL78::ADDC_saddrabs_imm:
-    case RL78::ADD_saddr_imm:
-    case RL78::STORE8_saddr_imm:
-    case RL78::DECW_saddr:
-    case RL78::INCW_saddr:
-    case RL78::DEC_saddr_cg:
-    case RL78::INC_saddr_cg:
-    case RL78::CMP0_saddr_cg:
-    case RL78::STORE16_saddrp_rp:
-    case RL78::CLRB_saddr_cg:
-    case RL78::ONEB_saddr_cg:
-      return getsaddrRange(Inst.getOperand(0).getImm());
-    case RL78::CMPW_rp_saddr:
-    case RL78::CMP_r_saddr:
-    case RL78::MOV_es_saddr:
-    case RL78::LOAD8_rlo_saddr:
-    case RL78::LOAD16_rp_saddrp:
-      return getsaddrRange(Inst.getOperand(1).getImm());
-    case RL78::LOAD8_r_abs16:
-    case RL78::CMP_r_abs16:
-      return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
-    case RL78::ADDC_r_abs16:
-    case RL78::ADD_r_abs16:
-    case RL78::XCH_A_abs16_cg:
-    case RL78::XOR_r_abs16:
-    case RL78::OR_r_abs16:
-    case RL78::AND_r_abs16:
-    case RL78::SUBC_r_abs16:
-    case RL78::SUBW_rp_abs16:
-    case RL78::ADDW_rp_abs16:
-    case RL78::SUB_r_abs16:
-      return (Inst.getOperand(2).getImm() & 0xFFFF) + 0xF0000;
-    case RL78::CMP_abs16_imm:
-    case RL78::STORE8_abs16_imm:
-    case RL78::ONEB_abs16_cg:
-    case RL78::STORE16_abs16_rp:
-    case RL78::STORE8_abs16_r:
-      return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;
-    case RL78::LOAD16_rp_rpi:
-    case RL78::LOAD8_r_ri:
-    case RL78::LOAD16_rp_memBorCi:
-      if (Inst.getOperand(1).getReg() == RL78::RP2 ||
-          Inst.getOperand(1).getReg() == RL78::R2 ||
-          Inst.getOperand(1).getReg() == RL78::R3)
-        return (Inst.getOperand(2).getImm() & 0xFFFF) + 0xF0000;
-      else
-        return std::nullopt;
-    case RL78::STORE8_ri_r:
-    case RL78::STORE16_rpi_rp:
-    case RL78::STORE16_memBorCi_rp:
-      if (Inst.getOperand(0).getReg() == RL78::RP2 ||
-          Inst.getOperand(0).getReg() == RL78::R2 ||
-          Inst.getOperand(0).getReg() == RL78::R3)
-        return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
-      else
-        return std::nullopt;
-    case RL78::CMPW_rp_abs16:
-    case RL78::STORE8_ri_imm:
-    case RL78::LOAD16_rp_abs16:
-      return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
-    default:
-      return std::nullopt;
-    }
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    for (unsigned I = 0, E = Desc.getNumOperands(); I < E; ++I)
+      if (Desc.operands()[I].OperandType == RL78Op::OPERAND_DATA_ADDR &&
+          Inst.getOperand(I).isImm())
+        return (Inst.getOperand(I).getImm() & 0xFFFF) | 0xF0000;
+    return std::nullopt;
   }
-
 };
 
 static MCAsmInfo *createRL78MCAsmInfo(const MCRegisterInfo &MRI,

@@ -118,6 +118,7 @@ def RL78AXBCRP : RegisterClass<"RL78", [i16], 16, (add RP0, RP2)>;
 def RL78BCDEHL : RegisterClass<"RL78", [i16], 16, (add RP6, RP4, RP2)>;
 def RL78HL : RegisterClass<"RL78", [i16], 16, (add RP6)>;
 def RL78BCRP : RegisterClass<"RL78", [i16], 16, (add RP2)>;
+def RL78DERP : RegisterClass<"RL78", [i16], 16, (add RP4)>;
 def RL78DEHL : RegisterClass<"RL78", [i16], 16, (add RP6, RP4)>;
 
 def SPreg : RL78Register<"SP", 32>, DwarfRegNum<[32]>;

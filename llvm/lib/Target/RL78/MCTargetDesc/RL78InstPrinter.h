@@ -54,6 +54,12 @@ public:
                     raw_ostream &O);
   void printSfrpOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                         raw_ostream &O);
+  void printBranchTarget(const MCInst *MI, uint64_t Address, int opNum,
+                         raw_ostream &O, bool Rel16);
+  void printBranchTarget8(const MCInst *MI, uint64_t Address, int opNum,
+                          const MCSubtargetInfo &STI, raw_ostream &O);
+  void printBranchTarget16(const MCInst *MI, uint64_t Address, int opNum,
+                           const MCSubtargetInfo &STI, raw_ostream &O);
   void printCode16Operand(const MCInst *MI, int opNum,
                           const MCSubtargetInfo &STI, raw_ostream &O);
   void printBitCondOperand(const MCInst *MI, int opNum,

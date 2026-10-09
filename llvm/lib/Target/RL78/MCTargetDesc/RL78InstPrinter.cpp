@@ -112,6 +112,38 @@ void RL78InstPrinter::printESMemRegReg(const MCInst *MI, int opNum,
   printMemRegReg(MI, opNum + 1, STI, O);
 }
 
+// $addr20, $!addr20: a displacement from the end of the instruction. Shown
+// as the target address when the instruction's address is known.
+void RL78InstPrinter::printBranchTarget(const MCInst *MI, uint64_t Address,
+                                        int opNum, raw_ostream &O,
+                                        bool Rel16) {
+  O << (Rel16 ? "$!" : "$");
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (!MO.isImm()) {
+    MAI.printExpr(O, *MO.getExpr());
+    return;
+  }
+  int64_t Disp = Rel16 ? int16_t(MO.getImm()) : int8_t(MO.getImm());
+  if (PrintBranchImmAsAddress) {
+    uint64_t Size = MII.get(MI->getOpcode()).getSize();
+    O << formatHex((Address + Size + Disp) & 0xFFFFF);
+  } else {
+    O << formatHex(Disp);
+  }
+}
+
+void RL78InstPrinter::printBranchTarget8(const MCInst *MI, uint64_t Address,
+                                         int opNum, const MCSubtargetInfo &STI,
+                                         raw_ostream &O) {
+  printBranchTarget(MI, Address, opNum, O, /*Rel16=*/false);
+}
+
+void RL78InstPrinter::printBranchTarget16(const MCInst *MI, uint64_t Address,
+                                          int opNum, const MCSubtargetInfo &STI,
+                                          raw_ostream &O) {
+  printBranchTarget(MI, Address, opNum, O, /*Rel16=*/true);
+}
+
 // !addr16 of a branch or call: a code address in 00000H-0FFFFH.
 void RL78InstPrinter::printCode16Operand(const MCInst *MI, int opNum,
                                          const MCSubtargetInfo &STI,

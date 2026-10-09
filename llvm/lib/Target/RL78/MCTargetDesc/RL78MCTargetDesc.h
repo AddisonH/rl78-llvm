@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_RL78_MCTARGETDESC_RL78MCTARGETDESC_H
 #define LLVM_LIB_TARGET_RL78_MCTARGETDESC_RL78MCTARGETDESC_H
 
+#include "llvm/MC/MCInstrDesc.h"
 #include <memory>
 
 namespace llvm {
@@ -45,6 +46,16 @@ enum {
 enum TOF { NONE, MO_OUTLINE_SP, MO_NO_OUTLINE_SP, TOF_LAST };
 
 } // end namespace SPII
+
+/// Operand types of the hardware instructions (RL78InstrISA.td).
+namespace RL78Op {
+enum OperandType : unsigned {
+  /// A code address: !addr16 or !!addr20 of a branch or call.
+  OPERAND_CODE_ADDR = MCOI::OPERAND_FIRST_TARGET,
+  /// A data address: saddr, sfr, !addr16, the base of word[B/C/BC].
+  OPERAND_DATA_ADDR,
+};
+} // end namespace RL78Op
 
 MCCodeEmitter *createRL78MCCodeEmitter(const MCInstrInfo &MCII,
                                        MCContext &Ctx);
