@@ -477,6 +477,19 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
 // A stack slot can only be loaded into AX, so loading one into another pair
 // while AX is live costs an xchw pair. Move the load back to where AX is dead
 // and a single MOVW AX + MOVW rp, AX will do instead.
+// "movw [sp+0], rp" right after a push (possibly with a CALL_STACK_SETUP in
+// between), which ReplaceStoreWithPush folds into the push.
+static bool isStoreFoldableIntoPush(MachineBasicBlock &MBB,
+                                    MachineBasicBlock::iterator It) {
+  if (It->getOpcode() != RL78::STORE16_stack_slot_rp ||
+      It->getOperand(1).getImm() != 0 || It == MBB.begin())
+    return false;
+  auto Prev = std::prev(It);
+  if (Prev->getOpcode() == RL78::CALL_STACK_SETUP && Prev != MBB.begin())
+    Prev = std::prev(Prev);
+  return Prev->getOpcode() == RL78::PUSH_rp;
+}
+
 static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
                                     const TargetRegisterInfo *TRI) {
   // Bounds both the pass and how far the destination's live range stretches.
@@ -552,10 +565,18 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         if (Prev.isCall() || Prev.isTerminator() || Prev.isInlineAsm() ||
             Prev.hasUnmodeledSideEffects())
           break;
+        // Keep the prologue together: an instruction moved above frame setup
+        // would also come before prologue_end in the line table.
+        if (Prev.getFlag(MachineInstr::FrameSetup))
+          break;
         // Stop at whatever produced the value being copied.
         if (Prev.modifiesRegister(RL78::RP0, TRI))
           break;
         if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
+          break;
+        // ReplaceStoreWithPush folds this store into the push before it;
+        // splitting the pair would keep the store.
+        if (isStoreFoldableIntoPush(MBB, It))
           break;
         if (Prev.mayStore())
           SawStore = true;
@@ -564,6 +585,12 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
 
       // Only worth it if it frees AX for a store that would otherwise exchange.
       if (Target != MBB.end() && SawStore) {
+        // AX is still read by the instructions the copy moves above.
+        for (auto I = Target; &*I != &MI; ++I)
+          if (I->readsRegister(RL78::RP0, TRI)) {
+            MI.clearRegisterKills(RL78::RP0, TRI);
+            break;
+          }
         MBB.splice(Target, &MBB, MachineBasicBlock::iterator(MI));
         Changed = ChangedAny = true;
         break;
