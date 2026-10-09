@@ -329,6 +329,10 @@ void RL78PassConfig::addPreRegAlloc() {
     addPass(&ProcessImplicitDefsID);
     addPass(&UnreachableMachineBlockElimID);
     addPass(&DeadMachineInstructionElimID);
+  } else {
+    // addMachineSSAOptimization does not run at -O0; the classes ISel gives
+    // copies of accumulator results still need widening.
+    addPass(createRL78VirtualizeAccumulatorPass(/*WidenOnly=*/true));
   }
   addPass(createRL78ESOptPass());
 }

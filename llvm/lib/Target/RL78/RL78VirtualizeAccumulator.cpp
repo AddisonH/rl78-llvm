@@ -249,14 +249,17 @@ bool RL78VirtualizeAccumulator::runOnMachineFunction(MachineFunction &MF) {
         }
       }
   }
-  if (!RL78VirtualAcc || skipFunction(MF.getFunction()))
+  if (!RL78VirtualAcc)
     return false;
   MRI = &MF.getRegInfo();
   TRI = MF.getSubtarget().getRegisterInfo();
   if (!MRI->isSSA())
     return false;
   bool Changed = false;
-  if (!WidenOnly)
+  // Moving spans is an optimization; the widening below is not (the
+  // allocator cannot keep a narrowed value in AX across a pinned use of AX),
+  // so it also runs on optnone functions.
+  if (!WidenOnly && !skipFunction(MF.getFunction()))
     for (MachineBasicBlock &MBB : MF)
       Changed |= runOnBlock(MBB);
 
