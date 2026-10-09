@@ -5330,11 +5330,18 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                                       llvm::ConstantInt::get(Int32Ty, Offset)));
   }
   case Builtin::BI__builtin_return_address: {
-    Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
-                                                   getContext().UnsignedIntTy);
+    // The intrinsic takes an i32 depth; unsigned int is narrower on 16-bit
+    // targets.
+    Value *Depth = Builder.CreateZExtOrTrunc(
+        ConstantEmitter(*this).emitAbstract(E->getArg(0),
+                                            getContext().UnsignedIntTy),
+        Int32Ty);
     Function *F =
         CGM.getIntrinsic(Intrinsic::returnaddress, {CGM.ProgramPtrTy});
-    return RValue::get(Builder.CreateCall(F, Depth));
+    // The result is a void *, which need not be in (or the size of) the
+    // program address space (RL78 -mfar-code: 32-bit code, 16-bit data).
+    return RValue::get(Builder.CreatePointerBitCastOrAddrSpaceCast(
+        Builder.CreateCall(F, Depth), ConvertType(E->getType())));
   }
   case Builtin::BI_ReturnAddress: {
     Function *F =
@@ -5342,10 +5349,15 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     return RValue::get(Builder.CreateCall(F, Builder.getInt32(0)));
   }
   case Builtin::BI__builtin_frame_address: {
-    Value *Depth = ConstantEmitter(*this).emitAbstract(E->getArg(0),
-                                                   getContext().UnsignedIntTy);
+    Value *Depth = Builder.CreateZExtOrTrunc(
+        ConstantEmitter(*this).emitAbstract(E->getArg(0),
+                                            getContext().UnsignedIntTy),
+        Int32Ty);
     Function *F = CGM.getIntrinsic(Intrinsic::frameaddress, AllocaInt8PtrTy);
-    return RValue::get(Builder.CreateCall(F, Depth));
+    // As for __builtin_return_address: void * may be in another address
+    // space (RL78 -mfar-data: far void *, near stack).
+    return RValue::get(Builder.CreatePointerBitCastOrAddrSpaceCast(
+        Builder.CreateCall(F, Depth), ConvertType(E->getType())));
   }
   case Builtin::BI__builtin_stack_address: {
     return RValue::get(Builder.CreateCall(
