@@ -967,8 +967,12 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           if (It2 == MBB.end())
             break;
           MachineInstr &MI2 = *It2;
-          if ((MI1.getOpcode() == RL78::XOR1_cy_r) &&
-              MI1.getOperand(0).isKill() &&
+          // ADDW AX, AX overwrites all of AX, so neither half may be needed
+          // after the XOR1 (which reads only A).
+          auto LB2 = LiveBeforeMI.find(&MI2);
+          bool AXDeadAfter = LB2 != LiveBeforeMI.end() && !LB2->second.first &&
+                             !LB2->second.second;
+          if ((MI1.getOpcode() == RL78::XOR1_cy_r) && AXDeadAfter &&
               (MI2.getOpcode() == RL78::BRCC) &&
               ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_H) ||
                 (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH))) {

@@ -4339,11 +4339,10 @@ RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
   case RL78::CMPW_rp_imm:
     // xor1_cy_A.
     // if imm negative, NOT1_cy.
+    // XOR1 CY, A.7 reads the high byte of the compared AX value.
     BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
             TII->get(RL78::XOR1_cy_r))
-        // RP0 instead of R1 to track register liveness.
-        // We revert it to R1 in RL78InsertExchangeInstructions
-        .addReg(RL78::RP0)
+        .addReg(RL78::R1)
         .addImm(7);
     if (MI.getOperand(1).getImm() & 0x8000)
       BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
