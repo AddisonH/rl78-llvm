@@ -17747,8 +17747,6 @@ bool Sema::DiagnoseAssignmentResult(AssignConvertType ConvTy,
     } else if (getLangOpts().CPlusPlus) {
       DiagKind = diag::err_typecheck_convert_incompatible_pointer;
       isInvalid = true;
-    } else if (Context.getTargetInfo().getTriple().isRL78()) {
-      DiagKind = diag::warn_rl78_typecheck_convert_incompatible_pointer;
     } else {
       DiagKind = diag::ext_typecheck_convert_incompatible_pointer;
     }
