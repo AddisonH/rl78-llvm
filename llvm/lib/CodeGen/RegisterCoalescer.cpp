@@ -448,7 +448,7 @@ static bool isSplitEdge(const MachineBasicBlock *MBB) {
     return false;
 
   for (const auto &MI : *MBB) {
-    if (!MI.isCopyLike() && !MI.isUnconditionalBranch())
+    if (!MI.isCopyLike() && !MI.isUnconditionalBranch() && !MI.isDebugInstr())
       return false;
   }
   return true;
