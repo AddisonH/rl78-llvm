@@ -437,9 +437,11 @@ struct InstructionMapper {
 
         case InstrType::Invisible:
           // Normally this is set by mapTo(Blah)Unsigned, but we just want to
-          // skip this instruction. So, unset the flag here.
+          // skip this instruction. So, unset the flag here. Debug instructions
+          // leave it alone: they must not change the mapping.
           ++NumInvisible;
-          AddedIllegalLastTime = false;
+          if (!It->isDebugInstr())
+            AddedIllegalLastTime = false;
           break;
         }
       }
@@ -1365,7 +1367,9 @@ void MachineOutliner::populateMapper(InstructionMapper &Mapper, Module &M) {
       // contain something worth outlining.
       // FIXME: This should be based off of the maximum size in B of an outlined
       // call versus the size in B of the MBB.
-      if (MBB.size() < MinMBBSize) {
+      if (llvm::count_if(MBB, [](const MachineInstr &MI) {
+            return !MI.isDebugInstr();
+          }) < MinMBBSize) {
         LLVM_DEBUG(dbgs() << "    SKIP: MBB size less than minimum size of "
                           << MinMBBSize << "\n");
         continue;
