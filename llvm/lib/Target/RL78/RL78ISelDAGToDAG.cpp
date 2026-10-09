@@ -187,6 +187,17 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
         break;
       }
 
+      // The _imm forms select between target constants, which are not values
+      // by themselves: materialize the chosen one.
+      if (isa<ConstantSDNode>(SelectionResult)) {
+        EVT VT = N->getValueType(0);
+        SelectionResult = SDValue(
+            CurDAG->getMachineNode(VT == MVT::i8 ? RL78::MOV_r_imm
+                                                 : RL78::MOVW_rp_imm,
+                                   SDLoc(N), VT, SelectionResult),
+            0);
+      }
+
       CurDAG->ReplaceAllUsesWith(N, &SelectionResult);
       MadeChange = true;
     } else if (N->getMachineOpcode() == RL78::BRCC &&

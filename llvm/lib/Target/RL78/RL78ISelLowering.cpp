@@ -1122,6 +1122,9 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
 
   // __far support.
   setOperationAction(ISD::BUILD_PAIR, MVT::i32, Custom);
+  // 32-bit (far) results of these are built from 16-bit parts.
+  setOperationAction(ISD::RETURNADDR, MVT::i32, Custom);
+  setOperationAction(ISD::FRAMEADDR, MVT::i32, Custom);
   setOperationAction(ISD::ADDRSPACECAST, MVT::i16, Custom);
   setOperationAction(ISD::ADDRSPACECAST, MVT::i32, Custom);
   setOperationAction(ISD::FrameIndex, MVT::i32, Custom);
@@ -3504,6 +3507,57 @@ SDValue RL78TargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   return DAG.getMergeValues(Ops, SDLoc());
 }
 
+// CALL leaves the return address at the incoming SP: PC[7:0], PC[15:8],
+// PC[19:16] and one byte it does not write. getFrameIndexReference resolves a
+// fixed object at offset -2 to that slot (SP + frame size). There is no frame
+// pointer chain, so only depth 0 is known; deeper frames give 0.
+static int getReturnAddressSlot(MachineFunction &MF) {
+  // Two bytes, like the incoming-argument objects: a larger object at -2
+  // would reach into the local area and allocate frame space.
+  return MF.getFrameInfo().CreateFixedObject(2, -2, /*IsImmutable=*/true);
+}
+
+SDValue RL78TargetLowering::LowerRETURNADDR(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MF.getFrameInfo().setReturnAddressIsTaken(true);
+  EVT VT = Op.getValueType();
+  SDLoc DL(Op);
+  if (Op.getConstantOperandVal(0) != 0)
+    return DAG.getConstant(0, DL, VT);
+  int FI = getReturnAddressSlot(MF);
+  SDValue Slot = DAG.getFrameIndex(FI, MVT::i16);
+  MachinePointerInfo PI = MachinePointerInfo::getFixedStack(MF, FI);
+  SDValue Lo = DAG.getLoad(MVT::i16, DL, DAG.getEntryNode(), Slot, PI);
+  if (VT == MVT::i16)
+    return Lo;
+  // A far code address: PC[19:16] is the third byte.
+  SDValue Hi = DAG.getExtLoad(
+      ISD::ZEXTLOAD, DL, MVT::i16, DAG.getEntryNode(),
+      DAG.getMemBasePlusOffset(Slot, TypeSize::getFixed(2), DL),
+      PI.getWithOffset(2), MVT::i8);
+  Hi = DAG.getNode(ISD::AND, DL, MVT::i16, Hi,
+                   DAG.getConstant(0xF, DL, MVT::i16));
+  return DAG.getNode(ISD::BUILD_PAIR, DL, MVT::i32, Lo, Hi);
+}
+
+SDValue RL78TargetLowering::LowerFRAMEADDR(SDValue Op,
+                                           SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MF.getFrameInfo().setFrameAddressIsTaken(true);
+  EVT VT = Op.getValueType();
+  SDLoc DL(Op);
+  if (Op.getConstantOperandVal(0) != 0)
+    return DAG.getConstant(0, DL, VT);
+  // The frame starts at the return address slot.
+  SDValue FA = DAG.getFrameIndex(getReturnAddressSlot(MF), MVT::i16);
+  if (VT == MVT::i16)
+    return FA;
+  // A far pointer to the stack (in F0000H-FFFFFH).
+  return DAG.getNode(ISD::BUILD_PAIR, DL, MVT::i32, FA,
+                     DAG.getConstant(0xF, DL, MVT::i16));
+}
+
 SDValue RL78TargetLowering::LowerOperation(SDValue Op,
                                            SelectionDAG &DAG) const {
   // RL78Core coreType = Subtarget->GetCoreType();
@@ -3517,6 +3571,10 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
       llvm_unreachable("Unexpected address space cast");
     }
     return Op.getOperand(0);
+  case ISD::RETURNADDR:
+    return LowerRETURNADDR(Op, DAG);
+  case ISD::FRAMEADDR:
+    return LowerFRAMEADDR(Op, DAG);
   case ISD::SETCC:
     return LowerSETCC(Op, DAG);
   case ISD::LOAD:
@@ -6468,6 +6526,12 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     return;
   case ISD::EXTRACT_ELEMENT:
     return;
+  case ISD::RETURNADDR:
+    Results.push_back(LowerRETURNADDR(SDValue(N, 0), DAG));
+    return;
+  case ISD::FRAMEADDR:
+    Results.push_back(LowerFRAMEADDR(SDValue(N, 0), DAG));
+    return;
   case ISD::TargetGlobalAddress: {
     GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(N);
     const GlobalValue *GV = G->getGlobal();
@@ -6773,6 +6837,11 @@ void RL78TargetLowering::LowerOperationWrapper(
   default:
     LLVM_DEBUG(N->dump());
     llvm_unreachable("Do not know how to custom type legalize this operation!");
+    return;
+  case ISD::RETURNADDR:
+  case ISD::FRAMEADDR:
+    // Only the i32 depth operand is illegal here; the default expansion
+    // narrows it.
     return;
   case ISD::BRIND: {
     SDValue Chain = N->getOperand(0);
