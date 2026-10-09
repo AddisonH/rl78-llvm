@@ -18,6 +18,7 @@
 #include "TargetInfo/RL78TargetInfo.h"
 #include "RL78.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/MC/MCInstBuilder.h"
@@ -55,6 +56,7 @@ public:
   void emitStartOfAsmFile(Module &) override;
   void emitFunctionBodyStart() override;
   void emitFunctionBodyEnd() override;
+  void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
   void emitInstruction(const MachineInstr *MI) override;
   void emitGlobalVariable(const GlobalVariable *GV) override;
 
@@ -68,6 +70,15 @@ public:
                        const char *ExtraCode, raw_ostream &O) override;
 
 private:
+  // The CFA is described with relative .cfi_adjust_cfa_offset directives as
+  // SP-changing instructions are printed, so after a block that leaves the
+  // frame (an epilogue followed by another exit block) the offset must be
+  // reset to the next block's own entry offset.
+  DenseMap<const MachineBasicBlock *, int> CFAEntryOffset;
+  int CFAOffset = 0;
+  static int getCFAAdjustment(const MachineInstr &MI);
+  void computeCFAEntryOffsets();
+
   void emitInterruptVectorSymbol(uint64_t Specs);
   const MCExpr *lowerConstantGV(const GlobalValue *GV, int DstAS = -1,
                                 const MCExpr *BaseExpr = nullptr) const;
@@ -102,31 +113,66 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     EmitToStreamer(*OutStreamer, TmpInst);
   }
 
-if (MF->getMMI().hasDebugInfo()) {
-    switch (MI->getOpcode()) {
-    default:
-      break;
-    case RL78::PUSH_rp:
-      OutStreamer->emitCFIAdjustCfaOffset(2);
-      break;
-    case RL78::POP_rp:
-      OutStreamer->emitCFIAdjustCfaOffset(-2);
-      break;
-    case RL78::SUBW_sp_imm:
-    case RL78::SUBW_rp_imm:
-      if (MI->getFlag(MachineInstr::FrameSetup) && MI->getNumOperands() >= 3 &&
-          MI->getOperand(2).isImm()) {
-        OutStreamer->emitCFIAdjustCfaOffset(MI->getOperand(2).getImm());
-      }
-      break;
-    case RL78::ADDW_sp_imm:
-    case RL78::ADDW_rp_imm:
-      if (MI->getFlag(MachineInstr::FrameDestroy) &&
-          MI->getNumOperands() >= 3 && MI->getOperand(2).isImm()) {
-        OutStreamer->emitCFIAdjustCfaOffset(-(int)MI->getOperand(2).getImm());
-      }
-      break;
+  if (MF->getMMI().hasDebugInfo()) {
+    if (int Adj = getCFAAdjustment(*MI)) {
+      OutStreamer->emitCFIAdjustCfaOffset(Adj);
+      CFAOffset += Adj;
     }
+  }
+}
+
+/// Change of the CFA offset (bytes allocated on the stack) by \p MI, as
+/// described in the frame information.
+int RL78AsmPrinter::getCFAAdjustment(const MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  default:
+    return 0;
+  case RL78::PUSH_rp:
+    return 2;
+  case RL78::POP_rp:
+    return -2;
+  case RL78::SUBW_sp_imm:
+  case RL78::SUBW_rp_imm:
+    if (MI.getFlag(MachineInstr::FrameSetup) && MI.getNumOperands() >= 3 &&
+        MI.getOperand(2).isImm())
+      return MI.getOperand(2).getImm();
+    return 0;
+  case RL78::ADDW_sp_imm:
+  case RL78::ADDW_rp_imm:
+    if (MI.getFlag(MachineInstr::FrameDestroy) && MI.getNumOperands() >= 3 &&
+        MI.getOperand(2).isImm())
+      return -(int)MI.getOperand(2).getImm();
+    return 0;
+  }
+}
+
+/// Offset on entry to every reachable block, following the CFG from the
+/// entry block (where it is 0).
+void RL78AsmPrinter::computeCFAEntryOffsets() {
+  CFAEntryOffset.clear();
+  CFAOffset = 0;
+  SmallVector<const MachineBasicBlock *, 16> Worklist;
+  CFAEntryOffset[&MF->front()] = 0;
+  Worklist.push_back(&MF->front());
+  while (!Worklist.empty()) {
+    const MachineBasicBlock *MBB = Worklist.pop_back_val();
+    int Offset = CFAEntryOffset[MBB];
+    for (const MachineInstr &MI : *MBB)
+      Offset += getCFAAdjustment(MI);
+    for (const MachineBasicBlock *Succ : MBB->successors())
+      if (CFAEntryOffset.try_emplace(Succ, Offset).second)
+        Worklist.push_back(Succ);
+  }
+}
+
+void RL78AsmPrinter::emitBasicBlockStart(const MachineBasicBlock &MBB) {
+  AsmPrinter::emitBasicBlockStart(MBB);
+  if (!MF->getMMI().hasDebugInfo())
+    return;
+  auto It = CFAEntryOffset.find(&MBB);
+  if (It != CFAEntryOffset.end() && It->second != CFAOffset) {
+    OutStreamer->emitCFIAdjustCfaOffset(It->second - CFAOffset);
+    CFAOffset = It->second;
   }
 }
 
@@ -177,6 +223,8 @@ void RL78AsmPrinter::emitInterruptVectorSymbol(uint64_t Specs) {
 }
 
 void RL78AsmPrinter::emitFunctionBodyStart() {
+  if (MF->getMMI().hasDebugInfo())
+    computeCFAEntryOffsets();
   if (!MF->getFunction().hasFnAttribute("interrupt") &&
       !MF->getFunction().hasFnAttribute("brk_interrupt"))
     return;
