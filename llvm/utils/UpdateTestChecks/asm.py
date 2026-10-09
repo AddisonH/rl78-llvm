@@ -110,6 +110,14 @@ ASM_FUNCTION_AVR_RE = re.compile(
     flags=(re.M | re.S),
 )
 
+ASM_FUNCTION_RL78_RE = re.compile(
+    r'^_?(?P<func>[^:]+):[ \t]*;+[ \t]*@"?(?P=func)"?\n'
+    r"(?:[ \t]*\.cfi_startproc\n)?"
+    r"(?P<body>.*?)\n"
+    r"\.Lfunc_end[0-9]+:\n",
+    flags=(re.M | re.S),
+)
+
 ASM_FUNCTION_PPC_RE = re.compile(
     r"#[ \-\t]*Begin function (?P<func>[^.:]+)\n"
     r".*?"
@@ -433,6 +441,17 @@ def scrub_asm_avr(asm, args):
     return asm
 
 
+def scrub_asm_rl78(asm, args):
+    # Scrub runs of whitespace out of the assembly, but leave the leading
+    # whitespace in place.
+    asm = common.SCRUB_WHITESPACE_RE.sub(r" ", asm)
+    # Expand the tabs used for indentation.
+    asm = string.expandtabs(asm, 2)
+    # Strip trailing whitespace.
+    asm = common.SCRUB_TRAILING_WHITESPACE_RE.sub(r"", asm)
+    return asm
+
+
 def scrub_asm_riscv(asm, args):
     # Scrub runs of whitespace out of the assembly, but leave the leading
     # whitespace in place.
@@ -602,6 +621,7 @@ def get_run_handler(triple):
         "ppc64": (scrub_asm_powerpc, ASM_FUNCTION_PPC_RE),
         "powerpc": (scrub_asm_powerpc, ASM_FUNCTION_PPC_RE),
         "riscv32": (scrub_asm_riscv, ASM_FUNCTION_RISCV_RE),
+        "rl78": (scrub_asm_rl78, ASM_FUNCTION_RL78_RE),
         "riscv32-apple-none-macho": (scrub_asm_riscv, ASM_FUNCTION_RISCV_MACHO_RE),
         "riscv64": (scrub_asm_riscv, ASM_FUNCTION_RISCV_RE),
         "lanai": (scrub_asm_lanai, ASM_FUNCTION_LANAI_RE),
