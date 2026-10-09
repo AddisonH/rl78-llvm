@@ -40,6 +40,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFVerifier.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Decompressor.h"
+#include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/RelocationResolver.h"
@@ -2279,6 +2280,12 @@ public:
       SupportsRelocation Supports;
       RelocationResolver Resolver;
       std::tie(Supports, Resolver) = getRelocationResolver(Obj);
+      // RL78 (CC-RL operator relocations) computes label differences on a
+      // stack: R_RL78_SYM pushes S + A, R_RL78_OPsub/OPadd combine the top
+      // two values, and R_RL78_ABS* stores the result. The stack is evaluated
+      // here; the ABS relocation's entry carries the result.
+      bool IsRL78 = Obj.getArch() == Triple::RL78;
+      SmallVector<uint64_t, 4> RL78Stack;
       for (const RelocationRef &Reloc : Section.relocations()) {
         // FIXME: it's not clear how to correctly handle scattered
         // relocations.
@@ -2292,6 +2299,41 @@ public:
           continue;
         }
 
+        uint64_t SymbolValue = SymInfoOrErr->Address;
+        uint64_t SectionIndex = SymInfoOrErr->SectionIndex;
+        if (IsRL78) {
+          uint64_t Type = Reloc.getType();
+          if (Type == ELF::R_RL78_SYM) {
+            int64_t Addend = 0;
+            if (Expected<int64_t> A = ELFRelocationRef(Reloc).getAddend())
+              Addend = *A;
+            else
+              consumeError(A.takeError());
+            RL78Stack.push_back(SymbolValue + Addend);
+            continue;
+          }
+          if (Type == ELF::R_RL78_OPsub || Type == ELF::R_RL78_OPadd) {
+            if (RL78Stack.size() < 2) {
+              HandleWarning(createError("RL78 relocation stack underflow"));
+              RL78Stack.clear();
+              continue;
+            }
+            uint64_t X = RL78Stack.pop_back_val();
+            uint64_t Y = RL78Stack.pop_back_val();
+            RL78Stack.push_back(Type == ELF::R_RL78_OPsub ? Y - X : Y + X);
+            continue;
+          }
+          if (Type == ELF::R_RL78_ABS32U || Type == ELF::R_RL78_ABS16U ||
+              Type == ELF::R_RL78_ABS8U) {
+            if (RL78Stack.empty()) {
+              HandleWarning(createError("RL78 relocation stack underflow"));
+              continue;
+            }
+            SymbolValue = RL78Stack.pop_back_val();
+            SectionIndex = object::SectionedAddress::UndefSection;
+          }
+        }
+
         // Check if Resolver can handle this relocation type early so as not to
         // handle invalid cases in DWARFDataExtractor.
         //
@@ -2299,9 +2341,9 @@ public:
         if (Supports && Supports(Reloc.getType())) {
           auto I = Map->try_emplace(
               Reloc.getOffset(),
-              RelocAddrEntry{
-                  SymInfoOrErr->SectionIndex, Reloc, SymInfoOrErr->Address,
-                  std::optional<object::RelocationRef>(), 0, Resolver});
+              RelocAddrEntry{SectionIndex, Reloc, SymbolValue,
+                             std::optional<object::RelocationRef>(), 0,
+                             Resolver});
           // If we didn't successfully insert that's because we already had a
           // relocation for that offset. Store it as a second relocation in the
           // same RelocAddrEntry instead.

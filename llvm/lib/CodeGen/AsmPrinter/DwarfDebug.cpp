@@ -3469,10 +3469,16 @@ emitRangeList(DwarfDebug &DD, AsmPrinter *Asm, MCSymbol *Sym, const Ranges &R,
 
   const MCSymbol *CUBase = CU.getBaseAddress();
   bool BaseIsSet = false;
+  // Offsets within a section that linker relaxation can change need
+  // relocations; without ULEB128 ones (or with split DWARF), DWARF 5 lists
+  // use start/end address indices instead of offsets and lengths.
+  auto AvoidULEBDiffs = [&](const MCSection &S) {
+    return UseDwarf5 && S.isLinkerRelaxable() &&
+           (DD.useSplitDwarf() || !Asm->MAI.canRelocateULEB128Differences());
+  };
   for (const auto &P : SectionRanges) {
     auto *Base = CUBase;
-    if (DD.shouldResetBaseAddress(*P.first) ||
-        (DD.useSplitDwarf() && UseDwarf5 && P.first->isLinkerRelaxable())) {
+    if (DD.shouldResetBaseAddress(*P.first) || AvoidULEBDiffs(*P.first)) {
       BaseIsSet = false;
       Base = nullptr;
     } else if (!Base && ShouldUseBaseAddress) {
@@ -3527,7 +3533,8 @@ emitRangeList(DwarfDebug &DD, AsmPrinter *Asm, MCSymbol *Sym, const Ranges &R,
         // need), absoluteSymbolDiff also requires that the offset remain
         // unchanged at assembly time, imposing a much stricter condition.
         // Consequently, this would lead to less optimal debug info emission.
-        if (DD.useSplitDwarf() && llvm::isRangeRelaxable(Begin, End)) {
+        if ((DD.useSplitDwarf() || AvoidULEBDiffs(Begin->getSection())) &&
+            llvm::isRangeRelaxable(Begin, End)) {
           Asm->OutStreamer->AddComment(StringifyEnum(StartxEndx));
           Asm->emitInt8(StartxEndx);
           Asm->OutStreamer->AddComment("  start index");

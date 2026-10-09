@@ -49,6 +49,11 @@ public:
   bool writeNopData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override;
 
+  // With linker relaxation, code offsets are only known at link time: line
+  // and CFA advances become fixed-size fields filled by relocations.
+  bool relaxDwarfLineAddr(MCFragment &F) const override;
+  bool relaxDwarfCFA(MCFragment &F) const override;
+
   bool forceRelaxRelocs() const {
     return ForceRelocs || STI.hasFeature(RL78::FeatureRelax);
   }

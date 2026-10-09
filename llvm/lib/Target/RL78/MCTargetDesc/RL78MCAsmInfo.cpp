@@ -35,6 +35,9 @@ RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple,
   CalleeSaveStackSlotSize = 2; // A saved register is always 2 byte.
 
   HasRL78Expressions = true;
+  // Linker relaxation: label differences use the CC-RL operator relocations,
+  // which have no ULEB128 form.
+  CanRelocateULEB128Differences = false;
 
   // Keep LLVM 17's `.set sym, value` form (upstream now defaults to `sym = value`).
   UsesSetToEquateSymbol = true;

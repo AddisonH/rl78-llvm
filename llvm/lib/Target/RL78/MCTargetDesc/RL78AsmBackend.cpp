@@ -7,8 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/RL78AsmBackend.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/MC/MCValue.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/EndianStream.h"
@@ -255,6 +262,84 @@ namespace llvm {
     return true;
   }
 
+  // The address advance between two rows: a label difference that linker
+  // relaxation may change. Emitted as DW_LNS_fixed_advance_pc (2 bytes) or
+  // DW_LNE_set_address with a data fixup, which applyFixup turns into
+  // relocations (SYM, SYM, OPsub, ABS16U/ABS32U).
+  bool RL78AsmBackend::relaxDwarfLineAddr(MCFragment &F) const {
+    int64_t LineDelta = F.getDwarfLineDelta();
+    const MCExpr &AddrDelta = F.getDwarfAddrDelta();
+    int64_t Value;
+    if (AddrDelta.evaluateAsAbsolute(Value, *Asm))
+      return false; // Not affected by relaxation: the default encoding.
+    [[maybe_unused]] bool IsAbsolute =
+        AddrDelta.evaluateKnownAbsolute(Value, *Asm);
+    assert(IsAbsolute && "line address delta is not a label difference");
+
+    SmallVector<char> Data;
+    raw_svector_ostream OS(Data);
+    // INT64_MAX marks a DW_LNE_end_sequence.
+    if (LineDelta != INT64_MAX) {
+      OS << uint8_t(dwarf::DW_LNS_advance_line);
+      encodeSLEB128(LineDelta, OS);
+    }
+    // DW_LNS_fixed_advance_pc takes an unsigned half; relaxation only
+    // shrinks code, so the current value bounds the final one.
+    unsigned PCBytes;
+    if (Value > 0xFFFF) {
+      PCBytes = 4;
+      OS << uint8_t(dwarf::DW_LNS_extended_op) << uint8_t(PCBytes + 1)
+         << uint8_t(dwarf::DW_LNE_set_address);
+    } else {
+      PCBytes = 2;
+      OS << uint8_t(dwarf::DW_LNS_fixed_advance_pc);
+    }
+    OS.write_zeros(PCBytes);
+    unsigned Offset = OS.tell() - PCBytes;
+    if (LineDelta == INT64_MAX)
+      OS << uint8_t(dwarf::DW_LNS_extended_op) << uint8_t(1)
+         << uint8_t(dwarf::DW_LNE_end_sequence);
+    else
+      OS << uint8_t(dwarf::DW_LNS_copy);
+
+    const MCExpr *Fix = &AddrDelta;
+    if (PCBytes == 4) {
+      // DW_LNE_set_address takes the address itself: the end label.
+      Fix = cast<MCBinaryExpr>(AddrDelta).getLHS();
+    }
+    F.setVarContents(Data);
+    F.setVarFixups({MCFixup::create(Offset, Fix,
+                                    MCFixup::getDataKindForSize(PCBytes))});
+    return true;
+  }
+
+  // A CFA advance that relaxation may change: DW_CFA_advance_loc1/2/4 with a
+  // data fixup (see relaxDwarfLineAddr).
+  bool RL78AsmBackend::relaxDwarfCFA(MCFragment &F) const {
+    const MCExpr &AddrDelta = F.getDwarfAddrDelta();
+    int64_t Value;
+    if (AddrDelta.evaluateAsAbsolute(Value, *Asm))
+      return false;
+    [[maybe_unused]] bool IsAbsolute =
+        AddrDelta.evaluateKnownAbsolute(Value, *Asm);
+    assert(IsAbsolute && "CFA advance is not a label difference");
+    assert(getContext().getAsmInfo().getMinInstAlignment() == 1 &&
+           "expected 1-byte alignment");
+
+    SmallVector<char, 8> Data;
+    raw_svector_ostream OS(Data);
+    // Relaxation only shrinks code, so the current value bounds the size.
+    unsigned Size = isUInt<8>(Value) ? 1 : isUInt<16>(Value) ? 2 : 4;
+    OS << uint8_t(Size == 1   ? dwarf::DW_CFA_advance_loc1
+                  : Size == 2 ? dwarf::DW_CFA_advance_loc2
+                              : dwarf::DW_CFA_advance_loc4);
+    OS.write_zeros(Size);
+    F.setVarContents(Data);
+    F.setVarFixups(
+        {MCFixup::create(1, &AddrDelta, MCFixup::getDataKindForSize(Size))});
+    return true;
+  }
+
 } // end namespace llvm
 
 namespace {
@@ -270,6 +355,12 @@ public:
                   bool IsResolved) override {
     if (IsResolved && shouldForceRelocation(Fixup))
       IsResolved = false;
+    if (!IsResolved && Target.getSubSym()) {
+      // A label difference in a section with linker relaxation (DWARF
+      // lengths and advances): computed by the linker on its stack.
+      addDifferenceRelocs(F, Fixup, Target);
+      return;
+    }
     maybeAddReloc(F, Fixup, Target, Value, IsResolved);
     if (mc::isRelocation(Fixup.getKind()))
       return;
@@ -286,6 +377,46 @@ public:
     for (unsigned i = 0, e = (getFixupKindInfo(Fixup.getKind()).TargetSize / 8);
          i != e; ++i)
       Data[i] |= uint8_t((Value >> (i * 8)) & 0xff);
+  }
+
+  // A - B + C: SYM(A + C), SYM(B), OPsub, ABS8U/ABS16U/ABS32U.
+  void addDifferenceRelocs(const MCFragment &F, const MCFixup &Fixup,
+                           const MCValue &Target) {
+    unsigned Store;
+    switch (Fixup.getKind()) {
+    case FK_Data_1:
+      Store = RL78::fixup_RL78_ABS8U;
+      break;
+    case FK_Data_2:
+      Store = RL78::fixup_RL78_ABS16U;
+      break;
+    case FK_Data_4:
+      Store = RL78::fixup_RL78_ABS32U;
+      break;
+    default:
+      getContext().reportError(Fixup.getLoc(),
+                               "unsupported size for a label difference");
+      return;
+    }
+    uint64_t Unused;
+    auto Reloc = [&](unsigned Kind, const MCValue &V) {
+      MCFixup R = MCFixup::create(Fixup.getOffset(), nullptr, Kind);
+      Asm->getWriter().recordRelocation(F, R, V, Unused);
+    };
+    // A temporary label in a section without relaxation (e.g. the FDE's own
+    // location for a pc-relative .eh_frame field) has no symbol table entry:
+    // refer to it as the section start plus its (fixed) offset.
+    auto Ref = [&](const MCSymbol *S, int64_t C) {
+      if (S->isTemporary() && S->isInSection() &&
+          !S->getSection().isLinkerRelaxable())
+        return MCValue::get(S->getSection().getBeginSymbol(), nullptr,
+                            Asm->getSymbolOffset(*S) + C);
+      return MCValue::get(S, nullptr, C);
+    };
+    Reloc(RL78::fixup_RL78_SYM, Ref(Target.getAddSym(), Target.getConstant()));
+    Reloc(RL78::fixup_RL78_SYM, Ref(Target.getSubSym(), 0));
+    Reloc(RL78::fixup_RL78_OPsub, MCValue::get(nullptr));
+    Reloc(Store, MCValue::get(nullptr));
   }
 
   std::unique_ptr<MCObjectTargetWriter>

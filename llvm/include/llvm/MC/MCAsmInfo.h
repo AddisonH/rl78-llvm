@@ -433,6 +433,11 @@ protected:
   // STARTOF, SIZEOF, ...).
   bool HasRL78Expressions = false;
 
+  // False if label differences in linker-relaxable sections cannot be
+  // relocated as ULEB128 values (no SET/SUB_ULEB128-style relocations):
+  // DWARF 5 range and location lists then avoid them.
+  bool CanRelocateULEB128Differences = true;
+
   llvm::DenseMap<uint32_t, StringRef> AtSpecifierToName;
   llvm::StringMap<uint32_t> NameToAtSpecifier;
   void initializeAtSpecifiers(ArrayRef<AtSpecifier>);
@@ -743,6 +748,9 @@ public:
 
   bool shouldUseMotorolaIntegers() const { return UseMotorolaIntegers; }
   bool hasRL78Expressions() const { return HasRL78Expressions; }
+  bool canRelocateULEB128Differences() const {
+    return CanRelocateULEB128Differences;
+  }
 
   StringRef getSpecifierName(uint32_t S) const;
   std::optional<uint32_t> getSpecifierForName(StringRef Name) const;

@@ -521,6 +521,11 @@ static bool supportsRL78(uint64_t Type) {
   case ELF::R_RL78_DIR32U:
   case ELF::R_RL78_DIR16U:
   case ELF::R_RL78_DIR8S_PCREL:
+  // The operator relocations' result: the caller evaluates the stack
+  // (R_RL78_SYM, R_RL78_OP*) and passes the value as S.
+  case ELF::R_RL78_ABS32U:
+  case ELF::R_RL78_ABS16U:
+  case ELF::R_RL78_ABS8U:
     return true;
   default:
     return false;
@@ -537,6 +542,12 @@ static uint64_t resolveRL78(uint64_t Type, uint64_t Offset, uint64_t S,
     return (S + RA) & 0xFFFF;
   case ELF::R_RL78_DIR8S_PCREL:
     return (S + RA - Offset) & 0xFF;
+  case ELF::R_RL78_ABS32U:
+    return S & 0xFFFFFFFF;
+  case ELF::R_RL78_ABS16U:
+    return S & 0xFFFF;
+  case ELF::R_RL78_ABS8U:
+    return S & 0xFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }

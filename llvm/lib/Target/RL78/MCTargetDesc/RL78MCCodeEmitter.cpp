@@ -3353,12 +3353,13 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
     case RL78::fixup_RL78_DIR20U:
     case RL78::fixup_RL78_DIR16U:
     case RL78::fixup_RL78_DIR16S_PCREL: {
-      // Deliberately not MCFixup::setLinkerRelaxable(): that makes label
-      // differences in the section unfoldable, and RL78 has no relocations
-      // to express them (DWARF .uleb128 would fail to assemble). As in the
-      // 17-based toolchain, such differences are folded at assembly time.
-      Fixups.push_back(RL78::createFixup(
-          offset, MCConstantExpr::create(0, Ctx), RL78::fixup_RL78_RELAX));
+      // Marking the fixup linker-relaxable keeps label differences in the
+      // section symbolic: the backend emits them as relocations (DWARF
+      // lengths, line and CFA advances) so they follow relaxation.
+      MCFixup Relax = RL78::createFixup(offset, MCConstantExpr::create(0, Ctx),
+                                        RL78::fixup_RL78_RELAX);
+      Relax.setLinkerRelaxable();
+      Fixups.push_back(Relax);
       break;
     }
     default:
