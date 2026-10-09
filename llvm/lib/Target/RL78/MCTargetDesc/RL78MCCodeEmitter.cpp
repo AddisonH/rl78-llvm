@@ -115,6 +115,15 @@ public:
   RL78_OPERAND_ENCODER(getRpSaddrpOpcode)
   RL78_OPERAND_ENCODER(getRpAbsOpcode)
   RL78_OPERAND_ENCODER(getShlRegOpValue)
+  RL78_OPERAND_ENCODER(getRel8OpValue)
+  RL78_OPERAND_ENCODER(getRel16OpValue)
+  RL78_OPERAND_ENCODER(getCode16OpValue)
+  RL78_OPERAND_ENCODER(getCode20OpValue)
+  RL78_OPERAND_ENCODER(getCalltOpValue)
+  RL78_OPERAND_ENCODER(getBccOpValue)
+  RL78_OPERAND_ENCODER(getHccOpValue)
+  RL78_OPERAND_ENCODER(getBtBfOpValue)
+  RL78_OPERAND_ENCODER(getMachineOpValueImm)
   RL78_OPERAND_ENCODER(getShlwRegOpValue)
 #undef RL78_OPERAND_ENCODER
 };
@@ -2197,7 +2206,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits |= ((addressValue & 0xFF00) >> 8) | ((addressValue & 0xFF) << 8);
     break;
   }
-  case RL78::BR_AX: {
+  case RL78::BR_AX_cg: {
     // br AX
     RL78ReportError(MI.getOperand(0).getReg() == RL78::RP0,
                     "Instruction using illegal register.");
@@ -2792,7 +2801,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits |= (MI.getOperand(2).getImm() & 0xF) << 4;
     break;
   case RL78::CALL_cs_rp:
-  case RL78::CALL_rp:
+  case RL78::CALL_rp_cg:
     // CALL AX           61 CA
     // CALL BC           61 DA
     // CALL DE           61 EA
@@ -2952,14 +2961,14 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
       break;
     }
     break;
-  case RL78::BR_rel8: {
+  case RL78::BR_rel8_cg: {
     // BR $addr20    EF adr
     unsigned int addr = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR8S_PCREL);
     Bits |= addr & 0xFF;
     break;
   }
-  case RL78::BR_rel16: {
+  case RL78::BR_rel16_cg: {
     // BR $!addr20 EE adrl adrh
     unsigned int addressValue = getTargetOpValue(
         MI, 0, 1, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16S_PCREL);
@@ -3161,8 +3170,8 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     // SEL RB3           61 FF
     Bits += MI.getOperand(0).getImm() << 4;
     break;
-  case RL78::PUSH_rp:
-  case RL78::POP_rp:
+  case RL78::PUSH_rp_cg:
+  case RL78::POP_rp_cg:
     // PUSH AX           C1
     // PUSH BC           C3
     // PUSH DE           C5
@@ -3443,7 +3452,68 @@ RL78_FIXUP_ENCODER(getAddr16wOpValue, fixup_RL78_DIR16UW_RAM)
 // ES:!addr16: ES supplies bits 19-16, any 20-bit address will do.
 RL78_FIXUP_ENCODER(getFarAddr16OpValue, fixup_RL78_DIR20U_16)
 RL78_FIXUP_ENCODER(getFarAddr16wOpValue, fixup_RL78_DIR20UW_16)
+// Branch displacements ($addr20, $!addr20) and code addresses.
+RL78_FIXUP_ENCODER(getRel8OpValue, fixup_RL78_DIR8S_PCREL)
+RL78_FIXUP_ENCODER(getRel16OpValue, fixup_RL78_DIR16S_PCREL)
+RL78_FIXUP_ENCODER(getCode16OpValue, fixup_RL78_DIR16U)
+RL78_FIXUP_ENCODER(getCode20OpValue, fixup_RL78_DIR20U)
 #undef RL78_FIXUP_ENCODER
+
+// CALLT [addr5]: the index of the table entry, (addr5 - 80H) / 2. For a
+// symbol the linker writes the whole opcode byte (R_RL78_DIR_CALLT).
+unsigned RL78MCCodeEmitter::getCalltOpValue(const MCInst &MI, unsigned OpNo,
+                                            SmallVectorImpl<MCFixup> &Fixups,
+                                            const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  if (MO.isImm()) {
+    int64_t Addr = MO.getImm();
+    RL78ReportError(Addr >= 0x80 && Addr <= 0xBE && Addr % 2 == 0,
+                    "CALLT table entry must be an even address in 80H-BEH");
+    return (Addr - 0x80) / 2;
+  }
+  uint32_t Offset = getOperandBitOffset(MI, OpNo, STI) / 8;
+  Fixups.push_back(
+      RL78::createFixup(Offset, MO.getExpr(), RL78::fixup_RL78_DIR_CALLT));
+  return 0;
+}
+
+// BC, BZ, BNC, BNZ: DC, DD, DE, DF.
+unsigned RL78MCCodeEmitter::getBccOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  switch (MI.getOperand(OpNo).getImm()) {
+  case RL78CC::RL78CC_C:
+    return 0;
+  case RL78CC::RL78CC_Z:
+    return 1;
+  case RL78CC::RL78CC_NC:
+    return 2;
+  case RL78CC::RL78CC_NZ:
+    return 3;
+  }
+  llvm_unreachable("not a C/NC/Z/NZ condition");
+}
+
+// BH/BNH, SKH/SKNH.
+unsigned RL78MCCodeEmitter::getHccOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  return MI.getOperand(OpNo).getImm() == RL78CC::RL78CC_NH;
+}
+
+// BT (Z, bit set) 01, BF (NZ) 10.
+unsigned RL78MCCodeEmitter::getBtBfOpValue(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  return MI.getOperand(OpNo).getImm() == RL78CC::RL78CC_Z ? 1 : 2;
+}
+
+unsigned
+RL78MCCodeEmitter::getMachineOpValueImm(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  return MI.getOperand(OpNo).getImm();
+}
 
 // sfr, sfrp: a fixed address in FFF00H-FFFFFH; the low byte is encoded.
 unsigned RL78MCCodeEmitter::getSfrOpValue(const MCInst &MI, unsigned OpNo,

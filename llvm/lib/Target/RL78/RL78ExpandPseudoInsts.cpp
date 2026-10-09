@@ -69,7 +69,7 @@ static bool isSingleInstructionBB(MachineBasicBlock &MBB) {
       break;
     case RL78::UDIVREM16_r_r:
     case RL78::UDIVREM32_r_r:
-      // DIV + NOP.
+      // DIV + NOP_cg.
       blockSize += 2;
       break;
     default:
@@ -178,7 +178,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
             .add(MI.getOperand(1));
         break;
       case RL78::BR:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel8))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel8_cg))
             .add(MI.getOperand(0));
         break;
       }
@@ -221,7 +221,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
             .addImm(ReversedInCy);
 
         if (isInt<16>(jumpSize))
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16_cg))
               .add(MI.getOperand(0));
         else
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_addr20))
@@ -235,7 +235,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
         LLVM_FALLTHROUGH;
       case RL78::BR:
         if (isInt<16>(jumpSize))
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16_cg))
               .add(MI.getOperand(0));
         else
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_addr20))

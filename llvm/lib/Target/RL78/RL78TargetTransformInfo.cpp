@@ -43,7 +43,7 @@ bool RL78TTIImpl::hasDivRemOp(Type *DataType, bool IsSigned) const {
 }
 
 // Whether the loop has an i32 reduction of 16x16-bit products, which ISel
-// turns into MACH/MACHU accumulating in MACR.
+// turns into MACH_cg/MACHU_cg accumulating in MACR.
 static bool hasMACReduction(const Loop *L) {
   using namespace PatternMatch;
   for (const PHINode &Phi : L->getHeader()->phis()) {
@@ -68,9 +68,9 @@ void RL78TTIImpl::getUnrollingPreferences(
     OptimizationRemarkEmitter *ORE) const {
   BaseT::getUnrollingPreferences(L, SE, UP, ORE);
   // Unroll-and-jam runs only when the driver enables it (-O3). It pays on
-  // RL78 except around MACH: there is one MACR, and jamming an outer loop
+  // RL78 except around MACH_cg: there is one MACR, and jamming an outer loop
   // gives the inner reduction one accumulator per copy, each swapped through
-  // MACR around every MACH. Plain unrolling of the inner loop keeps the
+  // MACR around every MACH_cg. Plain unrolling of the inner loop keeps the
   // single accumulator in MACR.
   UP.UnrollAndJam = true;
   if (ST->isRL78S3CoreType() && L->getSubLoops().size() == 1 &&

@@ -1,9 +1,9 @@
 ; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; i32 multiplies whose operands are known (not just explicitly zero-extended)
-; to fit in 8 bits use MULU, and those of 16-bit operands MULHU; neither calls
+; to fit in 8 bits use MULU, and those of 16-bit operands MULHU_cg; neither calls
 ; __COM_lmul (CoreMark matrix_mul_matrix_bitextract). An i16 multiply of
-; 8-bit values stays MULHU: MULU's A/X operands cost more moves.
+; 8-bit values stays MULHU_cg: MULU's A/X operands cost more moves.
 
 ; CHECK-LABEL: _bitfields:
 ; CHECK:       mulu x

@@ -16,5 +16,5 @@ reti ax
 # CHECK-ERR: error: invalid operand for instruction
 retb ax
 
-# CHECK-ERR: error: Instruction using illegal operand
+# CHECK-ERR: error: invalid operand for instruction
 callt [0x128]

@@ -70,7 +70,7 @@ llvm::RL78GenSet1Clr1IntrinPass::run(Function &F, FunctionAnalysisManager &AM) {
   IRBuilder<> Builder(Ctx);
 
   for (auto &BB : F) {
-    for (auto I = BB.rbegin(), EI = BB.rend(); I != EI;) {
+    for (auto I = BB.rbegin(), EI_cg = BB.rend(); I != EI_cg;) {
       // Look for volatile stores as possible pattern endings.
       if (auto *Store = dyn_cast<StoreInst>(&*I++); Store && Store->isVolatile()) {
         Value *StoredVal = Store->getValueOperand();
@@ -95,13 +95,13 @@ llvm::RL78GenSet1Clr1IntrinPass::run(Function &F, FunctionAnalysisManager &AM) {
           // Check that all the instructions in the sequence can be deleted.
           auto Count = NumInsts - 1;
           auto J = I;
-          for (; J != EI && Count && J->hasOneUse(); ++J, --Count)
+          for (; J != EI_cg && Count && J->hasOneUse(); ++J, --Count)
             ;
           if (Count)
             continue;
 
           // Last check: the start of the sequence is a matching load.
-          Instruction *MaybeLoad = (J == EI) ? &BB.front() : J->getNextNode();
+          Instruction *MaybeLoad = (J == EI_cg) ? &BB.front() : J->getNextNode();
           auto *Load = dyn_cast<LoadInst>(MaybeLoad);
           if (!(Load && Load->isVolatile() && Load->getType()->isIntegerTy(8) &&
                 Load->getPointerOperand() == Addr))

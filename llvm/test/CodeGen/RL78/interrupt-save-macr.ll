@@ -1,7 +1,7 @@
 ; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
 ; RUN: llc -mtriple=rl78 -mcpu=RL78_S2 -O2 < %s | FileCheck %s --check-prefix=S2
-; An S3 interrupt handler that uses MACR (MACH) or calls a function, which may
-; use it, saves and restores MACR: the interrupted code may hold a MACH
+; An S3 interrupt handler that uses MACR (MACH_cg) or calls a function, which may
+; use it, saves and restores MACR: the interrupted code may hold a MACH_cg
 ; accumulator there. S2 has no MACR.
 
 @a = global [8 x i16] zeroinitializer, align 2

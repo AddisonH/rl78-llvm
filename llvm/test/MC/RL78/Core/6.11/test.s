@@ -1,7 +1,7 @@
 # RUN: llvm-mc %s -triple=rl78 -show-encoding \
 # RUN:     | FileCheck -check-prefix=CHECK-INST %s
 
-# CHECK-INST: push PSW                                ; encoding: [0x61,0xdd]
+# CHECK-INST: push psw                                ; encoding: [0x61,0xdd]
 push PSW
 
 # CHECK-INST: push ax                                 ; encoding: [0xc1]
@@ -17,7 +17,7 @@ push DE
 push HL
 
 
-# CHECK-INST: pop PSW                                 ; encoding: [0x61,0xcd]
+# CHECK-INST: pop psw                                 ; encoding: [0x61,0xcd]
 pop psw
 
 # CHECK-INST: pop ax                                  ; encoding: [0xc0]

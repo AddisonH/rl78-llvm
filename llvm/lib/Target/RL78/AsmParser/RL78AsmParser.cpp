@@ -941,6 +941,42 @@ public:
            (EsRegRegReg.Reg.RegNum == RL78::R2 ||
             EsRegRegReg.Reg.RegNum == RL78::R3);
   }
+  // Conditions, as tryParseBCCorSCC makes them: B and SK take C, NC, Z,
+  // NZ or (with a 61 prefix) H, NH; BT and BF are Z and NZ.
+  int64_t getCondValue() const {
+    return cast<MCConstantExpr>(CC.Val)->getValue();
+  }
+  // CALLT [addr5]: an even address in 80H-BEH.
+  bool isCallt() const {
+    if (Kind != k_Abs5)
+      return false;
+    auto *CE = dyn_cast<MCConstantExpr>(Abs5.Val);
+    if (!CE)
+      return true;
+    int64_t V = CE->getValue();
+    return V >= 0x80 && V <= 0xBE && V % 2 == 0;
+  }
+  bool isCondCZ() const {
+    return Kind == k_cc && getCondValue() <= RL78CC::RL78CC_NZ;
+  }
+  bool isCondH() const {
+    return Kind == k_cc && (getCondValue() == RL78CC::RL78CC_H ||
+                            getCondValue() == RL78CC::RL78CC_NH);
+  }
+  bool isCondTF() const {
+    return Kind == k_cc && (getCondValue() == RL78CC::RL78CC_Z ||
+                            getCondValue() == RL78CC::RL78CC_NZ);
+  }
+  void addCondCZOperands(MCInst &Inst, unsigned N) const {
+    Inst.addOperand(MCOperand::createImm(getCondValue()));
+  }
+  void addCondHOperands(MCInst &Inst, unsigned N) const {
+    Inst.addOperand(MCOperand::createImm(getCondValue()));
+  }
+  void addCondTFOperands(MCInst &Inst, unsigned N) const {
+    Inst.addOperand(MCOperand::createImm(getCondValue()));
+  }
+
   static bool isDEorHL(unsigned Reg) {
     return Reg == RL78::RP4 || Reg == RL78::RP6;
   }

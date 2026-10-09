@@ -255,7 +255,7 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
 
   // Maskable interrupt acknowledgment by vectored interrupt is disabled (with
   // the interrupt enable flag (IE) cleared (0)).
-  BuildMI(*BB, MI, DL, II->get(RL78::DI));
+  BuildMI(*BB, MI, DL, II->get(RL78::DI_cg));
 
   // 0 is transferred to the MDUC address.
   BuildMI(*BB, MI, DL, II->get(RL78::CLRB_abs16_cg)).addImm(MDUC);
@@ -276,7 +276,7 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
       .addReg(RL78::RP0, RegState::Kill);
 
   // Only the time is consumed without processing.
-  BuildMI(*BB, MI, DL, II->get(RL78::NOP));
+  BuildMI(*BB, MI, DL, II->get(RL78::NOP_cg));
 
   // MDBL address contents is transferred to the AX register.
   BuildMI(*BB, MI, DL, II->get(RL78::LOAD16_rp_sfrp), RL78::RP0).addImm(MDBL);
@@ -522,7 +522,7 @@ static bool isCondBranchOpcode(int Opc) {
       || (Opc == RL78::BTBF_sfr) || (Opc == RL78::BTBF_saddr);
 }
 
-static bool isIndirectBranchOpcode(int Opc) { return Opc == RL78::BR_AX; }
+static bool isIndirectBranchOpcode(int Opc) { return Opc == RL78::BR_AX_cg; }
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
                             SmallVectorImpl<MachineOperand> &Cond) {
@@ -794,7 +794,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       // pop AX -> 1 byte and clocks 1.
       if (MBB.getParent()->getFunction().hasOptSize() &&
           (DestReg != RL78::R0)) {
-        BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
+        BuildMI(MBB, I, DL, get(RL78::PUSH_rp_cg))
             .addReg(RL78::RP0, RegState::Kill);
         // mov A, r
         BuildMI(MBB, I, DL, get(RL78::MOV_A_r_cg), RL78::R1)
@@ -803,7 +803,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         BuildMI(MBB, I, DL, get(RL78::MOV_r_A_cg), DestReg)
             .addReg(RL78::R1, RegState::Kill);
         //
-        BuildMI(MBB, I, DL, get(RL78::POP_rp), RL78::RP0);
+        BuildMI(MBB, I, DL, get(RL78::POP_rp_cg), RL78::RP0);
       } else {
         BuildMI(MBB, I, DL, get(RL78::XCH_A_r_cg), RL78::R1)
             .addReg(DestReg, RegState::Define)
@@ -837,9 +837,9 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // movw BC/DE/HL, BC/DE/HL using push/pop 2 bytes and 2 cycles.
     // Also used for ES when it is modeled as a 16-bit RP register.
     else {
-      BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
+      BuildMI(MBB, I, DL, get(RL78::PUSH_rp_cg))
           .addReg(SrcReg, getKillRegState(KillSrc));
-      BuildMI(MBB, I, DL, get(RL78::POP_rp), DestReg);
+      BuildMI(MBB, I, DL, get(RL78::POP_rp_cg), DestReg);
     }
   }
   // 16 to 8 bit copy:
@@ -890,7 +890,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   else if (SrcReg == RL78::MACRH || SrcReg == RL78::MACRL) {
     unsigned SrcAddr = SrcReg == RL78::MACRH ? MACRHigh : MACRLow;
     // MACR is memory mapped: the copy is a load from its address. The
-    // implicit use keeps it ordered after the MACH that defines MACR (post-RA
+    // implicit use keeps it ordered after the MACH_cg that defines MACR (post-RA
     // scheduling) and keeps the MACR write before it alive (copy propagation).
     if (DestReg == RL78::RP0)
         BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_abs16), RL78::RP0)
@@ -912,7 +912,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } 
   else if (DestReg == RL78::MACRH || DestReg == RL78::MACRL) {
       unsigned DestAddr = DestReg == RL78::MACRH ? MACRHigh : MACRLow;
-    // A store to MACR's address; the implicit def orders it before the MACH
+    // A store to MACR's address; the implicit def orders it before the MACH_cg
     // that reads MACR (see the load above).
     if (SrcReg == RL78::RP0)
         BuildMI(MBB, I, DL, get(RL78::STORE16_abs16_rp))
@@ -946,7 +946,7 @@ unsigned RL78InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     return 512;
 
   switch (MI.getOpcode()) {
-    // Worst case scenario for BRCC is SK_cc + BR_rel16 =
+    // Worst case scenario for BRCC is SK_cc + BR_rel16_cg =
     // 2 + 3 = 5. And for BT/BF is MOV1 + 5 = 8.
   case RL78::BRCC:
     return 5;
@@ -1156,10 +1156,10 @@ RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
 
   switch (MI.getOpcode()) {
   // __nop/asm("nop") is used for timing delays; an outlined call/ret would
-  // change the cycle count. (EI/DI/HALT/... stay outlinable: a call/ret or
+  // change the cycle count. (EI_cg/DI_cg/HALT_cg/... stay outlinable: a call/ret or
   // branch does not change the interrupt state, and interrupt epilogues such
   // as "ei; reti" are deliberately outlined for size.)
-  case RL78::NOP:
+  case RL78::NOP_cg:
     return outliner::InstrType::Illegal;
   case RL78::MOVW_sp_rp:
   case RL78::MOVW_rp_sp:
@@ -1167,8 +1167,8 @@ RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   case RL78::MOVW_sp_imm:
   case RL78::ADDW_sp_imm:
   case RL78::SUBW_sp_imm:
-  case RL78::POP_rp:
-  case RL78::PUSH_rp:
+  case RL78::POP_rp_cg:
+  case RL78::PUSH_rp_cg:
     return outliner::InstrType::Illegal;
   default:
     break;
@@ -1268,7 +1268,7 @@ void RL78InstrInfo::buildOutlinedFrame(
 
   // We're a normal call, so our sequence doesn't have a return instruction.
   // Add it in.
-  MachineInstr *retq = BuildMI(MF, DebugLoc(), get(RL78::RET));
+  MachineInstr *retq = BuildMI(MF, DebugLoc(), get(RL78::RET_cg));
   MBB.insert(MBB.end(), retq);
 }
 
@@ -1437,13 +1437,13 @@ public:
   ///     some other instruction can be issued, do so, otherwise issue a noop.
   HazardType getHazardType(SUnit *m, int Stalls = 0) override {
     switch (m->getInstr()->getOpcode()) {
-    case RL78::BR_AX: {
+    case RL78::BR_AX_cg: {
       BitVector AX(2, true);
       if (SelI || RegMask.anyCommon(AX) || RegMask.test(CS))
         return Hazard;
       return NoHazard;
     }
-    case RL78::CALL_rp:
+    case RL78::CALL_rp_cg:
     case RL78::CALL_cs_rp: {
       BitVector Bank0(8, true);
       if (SelI || RegMask.anyCommon(Bank0) || RegMask.test(CS) ||
@@ -1452,10 +1452,10 @@ public:
       return NoHazard;
     }
     case RL78::PUSH_cc:
-    case RL78::PUSH_rp:
+    case RL78::PUSH_rp_cg:
     case RL78::POP_cc:
-    case RL78::POP_rp:
-    case RL78::BRK:
+    case RL78::POP_rp_cg:
+    case RL78::BRK_cg:
     case RL78::LOAD8_r_stack_slot:
     case RL78::LOAD16_rp_stack_slot:
     case RL78::STORE8_stack_slot_r:

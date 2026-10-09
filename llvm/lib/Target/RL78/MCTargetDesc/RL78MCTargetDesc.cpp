@@ -52,8 +52,8 @@ public:
     case RL78::BTCLR_PSWi_addr:
     case RL78::BTCLR_esmemr:
     case RL78::B_cc:
-    case RL78::BR_rel8:
-    case RL78::BR_rel16:
+    case RL78::BR_rel8_cg:
+    case RL78::BR_rel16_cg:
     case RL78::BTBF_A:
     case RL78::BTBF_saddr:
     case RL78::BTBF_memr:

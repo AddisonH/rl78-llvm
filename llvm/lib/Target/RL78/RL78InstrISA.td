@@ -1338,3 +1338,437 @@ def XCHW_AX_rp : RL78Inst<1, (outs RL78AXRP:$axd, RL78BCDEHL:$rpd),
   let Inst{7-0} = {0, 0, 1, 1, 0, rps{2-1}, 1};
   let Constraints = "$axs = $axd, $rps = $rpd";
 }
+
+//===----------------------------------------------------------------------===//
+// Bit manipulation (manual 6.9): MOV1, AND1, OR1, XOR1, SET1, CLR1, NOT1
+//===----------------------------------------------------------------------===//
+
+// 71 {Hi, bit, Sel, L}: Hi Sel select the location (saddr 0 0, sfr 0 1,
+// A 1 1, [HL] 1 0), L the operation: MOV1 x.bit, CY 1; SET1 2; CLR1 3;
+// MOV1 CY, x.bit 4; AND1 5; OR1 6; XOR1 7. PSW.bit is sfr.bit with sfr FAH.
+multiclass RL78BitOp<string Mn, bits<3> L, string Pre, string Post,
+                     dag Outs, dag InsPre, dag InsPost, dag OutsA, bit RMW> {
+  defvar Ld = !or(RMW, !ne(Pre, ""));
+  defvar St = !or(RMW, !eq(Pre, ""));
+  // saddr.bit             71 {0 bit 0 L} saddr
+  def _saddr_b : RL78Inst<3, Outs, !con(InsPre, (ins saddr8:$addr, bitimm:$bn), InsPost),
+                          Mn # " " # Pre # "$addr$bn" # Post> {
+    bits<8> addr;
+    bits<3> bn;
+    let Inst{7-0} = 0x71;
+    let Inst{15-8} = {0, bn, 0, L};
+    let Inst{23-16} = addr;
+    let mayLoad = Ld;
+    let mayStore = St;
+  }
+  // sfr.bit               71 {0 bit 1 L} sfr
+  def _sfr_b : RL78Inst<3, Outs, !con(InsPre, (ins sfr8:$addr, bitimm:$bn), InsPost),
+                        Mn # " " # Pre # "$addr$bn" # Post> {
+    bits<8> addr;
+    bits<3> bn;
+    let Inst{7-0} = 0x71;
+    let Inst{15-8} = {0, bn, 1, L};
+    let Inst{23-16} = addr;
+    let mayLoad = Ld;
+    let mayStore = St;
+    let hasSideEffects = 1;
+  }
+  // A.bit                 71 {1 bit 1 L}
+  def _A_b : RL78Inst<2, OutsA, !con(InsPre, (ins RL78AReg:$a, bitimm:$bn), InsPost),
+                      Mn # " " # Pre # "$a$bn" # Post> {
+    bits<3> bn;
+    let Inst{7-0} = 0x71;
+    let Inst{15-8} = {1, bn, 1, L};
+    let Constraints = !if(!empty(OutsA), "", "$a = $ad");
+  }
+  // [HL].bit              71 {1 bit 0 L}
+  def _mHL_b : RL78Inst<2, Outs, !con(InsPre, (ins (memHL $hl):$addr, bitimm:$bn), InsPost),
+                        Mn # " " # Pre # "$addr$bn" # Post> {
+    bits<3> bn;
+    let Inst{7-0} = 0x71;
+    let Inst{15-8} = {1, bn, 0, L};
+    let mayLoad = Ld;
+    let mayStore = St;
+  }
+  // ES:[HL].bit           11 71 {1 bit 0 L}
+  def _emHL_b : RL78Inst<3, Outs,
+                         !con(InsPre, (ins (esmemHL $es, $hl):$addr, bitimm:$bn), InsPost),
+                         Mn # " " # Pre # "$addr$bn" # Post> {
+    bits<3> bn;
+    let Inst{15-0} = 0x7111;
+    let Inst{23-16} = {1, bn, 0, L};
+    let mayLoad = Ld;
+    let mayStore = St;
+  }
+}
+
+// MOV1, AND1, OR1, XOR1 CY, x.bit
+let Defs = [CCreg] in {
+defm MOV1_CY : RL78BitOp<"mov1", 4, "cy, ", "", (outs), (ins), (ins), (outs), 0>;
+let Uses = [CCreg] in {
+defm AND1_CY : RL78BitOp<"and1", 5, "cy, ", "", (outs), (ins), (ins), (outs), 0>;
+defm OR1_CY : RL78BitOp<"or1", 6, "cy, ", "", (outs), (ins), (ins), (outs), 0>;
+defm XOR1_CY : RL78BitOp<"xor1", 7, "cy, ", "", (outs), (ins), (ins), (outs), 0>;
+}
+}
+// MOV1 x.bit, CY
+let Uses = [CCreg] in
+defm MOV1 : RL78BitOp<"mov1", 1, "", ", cy", (outs), (ins), (ins),
+                      (outs RL78AReg:$ad), 0>;
+// SET1, CLR1 x.bit
+defm SET1 : RL78BitOp<"set1", 2, "", "", (outs), (ins), (ins),
+                      (outs RL78AReg:$ad), 1>;
+defm CLR1 : RL78BitOp<"clr1", 3, "", "", (outs), (ins), (ins),
+                      (outs RL78AReg:$ad), 1>;
+
+// SET1/CLR1 !addr16.bit  71 {0 bit 0/1 000} adrl adrh (and behind ES:)
+multiclass RL78BitAbs<string Mn, bit Sel> {
+  let mayLoad = 1, mayStore = 1 in {
+  def _abs16_b : RL78Inst<4, (outs), (ins addr16:$addr, bitimm:$bn), Mn # " $addr$bn"> {
+    bits<16> addr;
+    bits<3> bn;
+    let Inst{7-0} = 0x71;
+    let Inst{15-8} = {0, bn, Sel, 0, 0, 0};
+    let Inst{31-16} = addr;
+  }
+  def _eabs16_b : RL78Inst<5, (outs), (ins (esaddr16 $es, $adr):$addr, bitimm:$bn),
+                           Mn # " $addr$bn"> {
+    bits<16> adr;
+    bits<3> bn;
+    let Inst{15-0} = 0x7111;
+    let Inst{23-16} = {0, bn, Sel, 0, 0, 0};
+    let Inst{39-24} = adr;
+  }
+  }
+}
+defm SET1 : RL78BitAbs<"set1", 0>;
+defm CLR1 : RL78BitAbs<"clr1", 1>;
+
+// SET1 CY 71 80, CLR1 CY 71 88, NOT1 CY 71 C0
+let Defs = [CCreg] in {
+def SET1_CY : RL78Inst<2, (outs), (ins), "set1 cy"> { let Inst{15-0} = 0x8071; }
+def CLR1_CY : RL78Inst<2, (outs), (ins), "clr1 cy"> { let Inst{15-0} = 0x8871; }
+let Uses = [CCreg] in
+def NOT1_CY : RL78Inst<2, (outs), (ins), "not1 cy"> { let Inst{15-0} = 0xC071; }
+}
+
+//===----------------------------------------------------------------------===//
+// Branch targets and conditions
+//===----------------------------------------------------------------------===//
+
+// $addr20 (8-bit displacement), $!addr20 (16-bit displacement), !addr16 and
+// !!addr20 (absolute code addresses).
+def brtarget8 : Operand<OtherVT> {
+  let PrintMethod = "printRel8Operand";
+  let ParserMatchClass = RL78brtargetRel8AsmOperand;
+  let EncoderMethod = "getRel8OpValue";
+}
+def brtarget16 : Operand<OtherVT> {
+  let PrintMethod = "printRel16Operand";
+  let ParserMatchClass = RL78brtargetRel16AsmOperand;
+  let EncoderMethod = "getRel16OpValue";
+}
+def code16 : Operand<iPTR> {
+  let PrintMethod = "printCode16Operand";
+  let ParserMatchClass = RL78MEMDirectAddr16AsmOperand;
+  let EncoderMethod = "getCode16OpValue";
+}
+def code20 : Operand<iPTR> {
+  let PrintMethod = "printABS20Operand";
+  let ParserMatchClass = RL78MEMDirectAddr20AsmOperand;
+  let EncoderMethod = "getCode20OpValue";
+}
+// CALLT [addr5]: a table entry, 00080H-000BEH (even).
+def CalltAsmOperand : AsmOperandClass {
+  let Name = "Callt";
+  let RenderMethod = "addABS5Operands";
+}
+def callt5 : Operand<iPTR> {
+  let PrintMethod = "printABS5Operand";
+  let ParserMatchClass = CalltAsmOperand;
+  let EncoderMethod = "getCalltOpValue";
+}
+
+// Conditions (RL78CC::CondCodes) that a form encodes.
+class CondAsmOperand<string N> : AsmOperandClass { let Name = N; }
+class CondOperand<string Print, string Asm, string Enc> : Operand<i8> {
+  let PrintMethod = Print;
+  let ParserMatchClass = CondAsmOperand<Asm>;
+  let EncoderMethod = Enc;
+}
+// BC, BNC, BZ, BNZ; SKC, SKNC, SKZ, SKNZ
+def condCZ : CondOperand<"printCCOperand", "CondCZ", "getBccOpValue">;
+def condSkCZ : CondOperand<"printCCOperand", "CondCZ", "getMachineOpValueImm">;
+// BH, BNH; SKH, SKNH
+def condH : CondOperand<"printCCOperand", "CondH", "getHccOpValue">;
+// BT, BF: true (Z), false (NZ)
+def condTF : CondOperand<"printBitCondOperand", "CondTF", "getBtBfOpValue">;
+
+//===----------------------------------------------------------------------===//
+// Branches (manual 6.12, 6.13, 6.14)
+//===----------------------------------------------------------------------===//
+
+let isBranch = 1, isTerminator = 1 in {
+let isBarrier = 1 in {
+// BR $addr20             EF adr
+def BR_rel8 : RL78Inst<2, (outs), (ins brtarget8:$dst), "br $dst"> {
+  bits<8> dst;
+  let Inst{7-0} = 0xEF;
+  let Inst{15-8} = dst;
+}
+// BR $!addr20            EE adrl adrh
+def BR_rel16 : RL78Inst<3, (outs), (ins brtarget16:$dst), "br $dst"> {
+  bits<16> dst;
+  let Inst{7-0} = 0xEE;
+  let Inst{23-8} = dst;
+}
+// BR !addr16             ED adrl adrh
+def BR_abs16 : RL78Inst<3, (outs), (ins code16:$dst), "br $dst"> {
+  bits<16> dst;
+  let Inst{7-0} = 0xED;
+  let Inst{23-8} = dst;
+}
+// BR !!addr20            EC adrl adrh adrs
+def BR_abs20 : RL78Inst<4, (outs), (ins code20:$dst), "br !!$dst"> {
+  bits<24> dst;
+  let Inst{7-0} = 0xEC;
+  let Inst{31-8} = dst;
+}
+// BR AX                  61 CB
+let isIndirectBranch = 1 in
+def BR_AX : RL78Inst<2, (outs), (ins RL78AXRP:$ax), "br $ax"> {
+  let Inst{15-0} = 0xCB61;
+}
+}
+
+let Uses = [CCreg] in {
+// BC/BZ/BNC/BNZ $addr20  DC/DD/DE/DF adr
+def Bcc_rel8 : RL78Inst<2, (outs), (ins brtarget8:$dst, condCZ:$cc), "b$cc $dst"> {
+  bits<8> dst;
+  bits<2> cc;
+  let Inst{7-0} = {1, 1, 0, 1, 1, 1, cc};
+  let Inst{15-8} = dst;
+}
+// BH/BNH $addr20         61 C3/D3 adr
+def BHcc_rel8 : RL78Inst<3, (outs), (ins brtarget8:$dst, condH:$cc), "b$cc $dst"> {
+  bits<8> dst;
+  bits<1> cc;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, 1, 0, cc, 0, 0, 1, 1};
+  let Inst{23-16} = dst;
+}
+}
+
+// BT/BF x.bit, $addr20    31 {Hi bit TF Lo} [addr] adr; Hi Lo select the
+// location (saddr 0 0, sfr 1 0, A 0 1, [HL] 1 1). TF is 01 for BT, 10 for BF,
+// 00 for BTCLR (which also clears the bit).
+multiclass RL78BitBranch<string Mn, dag Cond, string CondAsm, bit Clr> {
+  def _saddr_b : RL78Inst<4, (outs), !con((ins saddr8:$addr, bitimm:$bn, brtarget8:$dst), Cond),
+                          Mn # CondAsm # " $addr$bn, $dst"> {
+    bits<8> addr;
+    bits<3> bn;
+    bits<8> dst;
+    bits<2> cc;
+    let Inst{7-0} = 0x31;
+    let Inst{15-8} = {0, bn, 0, !if(Clr, 0, cc{1}), !if(Clr, 0, cc{0}), 0};
+    let Inst{23-16} = addr;
+    let Inst{31-24} = dst;
+    let mayLoad = 1;
+    let mayStore = Clr;
+  }
+  def _sfr_b : RL78Inst<4, (outs), !con((ins sfr8:$addr, bitimm:$bn, brtarget8:$dst), Cond),
+                        Mn # CondAsm # " $addr$bn, $dst"> {
+    bits<8> addr;
+    bits<3> bn;
+    bits<8> dst;
+    bits<2> cc;
+    let Inst{7-0} = 0x31;
+    let Inst{15-8} = {1, bn, 0, !if(Clr, 0, cc{1}), !if(Clr, 0, cc{0}), 0};
+    let Inst{23-16} = addr;
+    let Inst{31-24} = dst;
+    let mayLoad = 1;
+    let mayStore = Clr;
+    let hasSideEffects = 1;
+  }
+  def _A_b : RL78Inst<3, !if(Clr, (outs RL78AReg:$ad), (outs)),
+                      !con((ins RL78AReg:$a, bitimm:$bn, brtarget8:$dst), Cond),
+                      Mn # CondAsm # " $a$bn, $dst"> {
+    bits<3> bn;
+    bits<8> dst;
+    bits<2> cc;
+    let Inst{7-0} = 0x31;
+    let Inst{15-8} = {0, bn, 0, !if(Clr, 0, cc{1}), !if(Clr, 0, cc{0}), 1};
+    let Inst{23-16} = dst;
+    let Constraints = !if(Clr, "$a = $ad", "");
+  }
+  def _mHL_b : RL78Inst<3, (outs), !con((ins (memHL $hl):$addr, bitimm:$bn, brtarget8:$dst), Cond),
+                        Mn # CondAsm # " $addr$bn, $dst"> {
+    bits<3> bn;
+    bits<8> dst;
+    bits<2> cc;
+    let Inst{7-0} = 0x31;
+    let Inst{15-8} = {1, bn, 0, !if(Clr, 0, cc{1}), !if(Clr, 0, cc{0}), 1};
+    let Inst{23-16} = dst;
+    let mayLoad = 1;
+    let mayStore = Clr;
+  }
+  def _emHL_b : RL78Inst<4, (outs),
+                         !con((ins (esmemHL $es, $hl):$addr, bitimm:$bn, brtarget8:$dst), Cond),
+                         Mn # CondAsm # " $addr$bn, $dst"> {
+    bits<3> bn;
+    bits<8> dst;
+    bits<2> cc;
+    let Inst{15-0} = 0x3111;
+    let Inst{23-16} = {1, bn, 0, !if(Clr, 0, cc{1}), !if(Clr, 0, cc{0}), 1};
+    let Inst{31-24} = dst;
+    let mayLoad = 1;
+    let mayStore = Clr;
+  }
+}
+defm BTF : RL78BitBranch<"b", (ins condTF:$cc), "$cc", 0>;
+defm BTCLR : RL78BitBranch<"btclr", (ins), "", 1>;
+} // isBranch, isTerminator
+
+// SKC/SKNC/SKZ/SKNZ      61 C8/D8/E8/F8
+// SKH/SKNH               61 E3/F3
+// Skip the next instruction when the condition holds.
+let Uses = [CCreg], hasSideEffects = 1 in {
+def SKcc : RL78Inst<2, (outs), (ins condSkCZ:$cc), "sk$cc"> {
+  bits<2> cc;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, 1, cc, 1, 0, 0, 0};
+}
+def SKHcc : RL78Inst<2, (outs), (ins condH:$cc), "sk$cc"> {
+  bits<1> cc;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, 1, 1, cc, 0, 0, 1, 1};
+}
+}
+
+//===----------------------------------------------------------------------===//
+// Calls, returns, stack (manual 6.10, 6.11)
+//===----------------------------------------------------------------------===//
+
+let isCall = 1, Uses = [SPreg], Defs = [SPreg] in {
+// CALL AX/BC/DE/HL       61 CA/DA/EA/FA
+def CALL_rp : RL78Inst<2, (outs), (ins RL78RPRegs:$rp, variable_ops), "call $rp"> {
+  bits<3> rp;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, 1, rp{2-1}, 1, 0, 1, 0};
+}
+// CALL $!addr20          FE adrl adrh
+def CALL_rel16 : RL78Inst<3, (outs), (ins brtarget16:$dst, variable_ops), "call $dst"> {
+  bits<16> dst;
+  let Inst{7-0} = 0xFE;
+  let Inst{23-8} = dst;
+}
+// CALL !addr16           FD adrl adrh
+def CALL_abs16 : RL78Inst<3, (outs), (ins code16:$dst, variable_ops), "call $dst"> {
+  bits<16> dst;
+  let Inst{7-0} = 0xFD;
+  let Inst{23-8} = dst;
+}
+// CALL !!addr20          FC adrl adrh adrs
+def CALL_abs20 : RL78Inst<4, (outs), (ins code20:$dst, variable_ops), "call !!$dst"> {
+  bits<24> dst;
+  let Inst{7-0} = 0xFC;
+  let Inst{31-8} = dst;
+}
+// CALLT [addr5]          61 {1 i2-i0 0 1 i4-i3}, i = (addr5 - 80H) / 2
+def CALLT : RL78Inst<2, (outs), (ins callt5:$entry, variable_ops), "callt $entry"> {
+  bits<5> entry;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, entry{2-0}, 0, 1, entry{4-3}};
+}
+// BRK                    61 CC
+let hasSideEffects = 1 in
+def BRK : RL78Inst<2, (outs), (ins), "brk"> { let Inst{15-0} = 0xCC61; }
+}
+
+let isReturn = 1, isTerminator = 1, isBarrier = 1, Uses = [SPreg],
+    Defs = [SPreg] in {
+// RET                    D7
+def RET : RL78Inst<1, (outs), (ins), "ret"> { let Inst{7-0} = 0xD7; }
+let hasSideEffects = 1 in {
+// RETI                   61 FC
+def RETI : RL78Inst<2, (outs), (ins), "reti"> { let Inst{15-0} = 0xFC61; }
+// RETB                   61 EC
+def RETB : RL78Inst<2, (outs), (ins), "retb"> { let Inst{15-0} = 0xEC61; }
+}
+}
+
+let Uses = [SPreg], Defs = [SPreg] in {
+// PUSH AX/BC/DE/HL       C1/C3/C5/C7
+let mayStore = 1 in
+def PUSH_rp : RL78Inst<1, (outs), (ins RL78RPRegs:$rp), "push $rp"> {
+  bits<3> rp;
+  let Inst{7-0} = {1, 1, 0, 0, 0, rp{2-1}, 1};
+}
+// POP AX/BC/DE/HL        C0/C2/C4/C6
+let mayLoad = 1 in
+def POP_rp : RL78Inst<1, (outs RL78RPRegs:$rp), (ins), "pop $rp"> {
+  bits<3> rp;
+  let Inst{7-0} = {1, 1, 0, 0, 0, rp{2-1}, 0};
+}
+// PUSH PSW               61 DD
+// POP PSW                61 CD
+let mayStore = 1 in
+def PUSH_PSW : RL78Inst<2, (outs), (ins RL78RegPSW:$psw), "push $psw"> {
+  let Inst{15-0} = 0xDD61;
+}
+let mayLoad = 1, hasSideEffects = 1 in
+def POP_PSW : RL78Inst<2, (outs RL78RegPSW:$psw), (ins), "pop $psw"> {
+  let Inst{15-0} = 0xCD61;
+}
+}
+
+//===----------------------------------------------------------------------===//
+// CPU control (manual 6.15)
+//===----------------------------------------------------------------------===//
+
+def NOP : RL78Inst<1, (outs), (ins), "nop"> { let Inst{7-0} = 0x00; }
+let hasSideEffects = 1 in {
+// SEL RBn                61 CF/DF/EF/FF
+def SEL_RBn : RL78Inst<2, (outs), (ins SELRBx:$rb), "sel $rb"> {
+  bits<2> rb;
+  let Inst{7-0} = 0x61;
+  let Inst{15-8} = {1, 1, rb, 1, 1, 1, 1};
+}
+// HALT 61 ED, STOP 61 FD
+def HALT : RL78Inst<2, (outs), (ins), "halt"> { let Inst{15-0} = 0xED61; }
+def STOP : RL78Inst<2, (outs), (ins), "stop"> { let Inst{15-0} = 0xFD61; }
+// EI is SET1 PSW.7 (71 7A FA), DI is CLR1 PSW.7 (71 7B FA).
+def EI : RL78Inst<3, (outs), (ins), "ei"> { let Inst{23-0} = 0xFA7A71; }
+def DI : RL78Inst<3, (outs), (ins), "di"> { let Inst{23-0} = 0xFA7B71; }
+}
+
+//===----------------------------------------------------------------------===//
+// Multiply, divide, multiply-accumulate (manual 6.5)
+//===----------------------------------------------------------------------===//
+
+// MULU X                 D6        AX = A * X
+def MULU_X : RL78Inst<1, (outs RL78AXRP:$ax), (ins RL78AReg:$a, RL78XReg:$x), "mulu $x"> {
+  let Inst{7-0} = 0xD6;
+}
+// The S3 core's multiply/divide unit; operands and results in fixed
+// registers. CE FB Op.
+class RL78MulDiv<string Mn, bits<8> Op> : RL78Inst<3, (outs), (ins), Mn> {
+  let Inst{15-0} = 0xFBCE;
+  let Inst{23-16} = Op;
+}
+// MULHU 01, MULH 02: BCAX = AX * BC
+let Uses = [RP0, RP2], Defs = [RP0, RP2, CCreg] in {
+def MULHU : RL78MulDiv<"mulhu", 0x01>;
+def MULH : RL78MulDiv<"mulh", 0x02>;
+}
+// DIVHU 03: AX = AX / DE, DE = AX % DE
+let Uses = [RP0, RP4], Defs = [RP0, RP4, CCreg] in
+def DIVHU : RL78MulDiv<"divhu", 0x03>;
+// DIVWU 0B: BCAX = BCAX / HLDE, HLDE = BCAX % HLDE
+let Uses = [RP0, RP2, RP4, RP6], Defs = [RP0, RP2, RP4, RP6, CCreg] in
+def DIVWU : RL78MulDiv<"divwu", 0x0B>;
+// MACHU 05, MACH 06: MACR += AX * BC
+let Uses = [RP0, RP2, MACRL, MACRH], Defs = [MACRL, MACRH, CCreg] in {
+def MACHU : RL78MulDiv<"machu", 0x05>;
+def MACH : RL78MulDiv<"mach", 0x06>;
+}

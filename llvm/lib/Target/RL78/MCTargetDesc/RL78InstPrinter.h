@@ -52,6 +52,10 @@ public:
                         const MCSubtargetInfo &STI, raw_ostream &O);
   void printMemWord(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &O);
+  void printCode16Operand(const MCInst *MI, int opNum,
+                          const MCSubtargetInfo &STI, raw_ostream &O);
+  void printBitCondOperand(const MCInst *MI, int opNum,
+                           const MCSubtargetInfo &STI, raw_ostream &O);
   void printESMemWord(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &O);
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,

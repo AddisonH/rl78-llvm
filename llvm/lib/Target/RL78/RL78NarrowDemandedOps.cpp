@@ -8,7 +8,7 @@
 //
 // Redo an i32 operation in i16 when DemandedBits shows nothing above bit 15 is
 // used. i32 costs two registers here and mul i32 costs a call to __COM_lmul,
-// so this turns CoreMark's index arithmetic into a single MULHU.
+// so this turns CoreMark's index arithmetic into a single MULHU_cg.
 // InstCombine and AggressiveInstCombine both decline the case, so it needs a
 // pass of its own.
 //

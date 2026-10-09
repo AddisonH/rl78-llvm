@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
-; The accumulator of a MACH loop stays in MACR: written once before the loop,
+; The accumulator of a MACH_cg loop stays in MACR: written once before the loop,
 ; read once after it, no MACR traffic inside the loop.
 
 ; CHECK-LABEL: _dot:
@@ -38,7 +38,7 @@ exit:
 }
 
 ; A call may clobber MACR: the accumulator is copied in and out around every
-; MACH.
+; MACH_cg.
 ; CHECK-LABEL: _dot_call:
 ; CHECK: .LBB1_[[L:[0-9]+]]:
 ; CHECK: movw !0xffff0, ax

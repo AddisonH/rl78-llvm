@@ -131,9 +131,9 @@ int RL78AsmPrinter::getCFAAdjustment(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     return 0;
-  case RL78::PUSH_rp:
+  case RL78::PUSH_rp_cg:
     return 2;
-  case RL78::POP_rp:
+  case RL78::POP_rp_cg:
     return -2;
   case RL78::SUBW_sp_imm:
   case RL78::SUBW_rp_imm:
@@ -234,7 +234,7 @@ void RL78AsmPrinter::emitFunctionBodyStart() {
     return;
 
   if (MF->getFunction().hasFnAttribute("brk_interrupt")) {
-    // Vector address for the BRK interrupt.
+    // Vector address for the BRK_cg interrupt.
     emitInterruptVectorSymbol(0x7e);
     return;
   }
@@ -267,7 +267,7 @@ void RL78AsmPrinter::emitFunctionBodyEnd() {
   if (MF->getFunction().hasFnAttribute("inline_asm")) {
     // Since we marked with naked the inline_asm function, we need to add a
     // return to it's end.
-    getTargetStreamer().getStreamer().emitInstruction(MCInstBuilder(RL78::RET),
+    getTargetStreamer().getStreamer().emitInstruction(MCInstBuilder(RL78::RET_cg),
                                                       getSubtargetInfo());
   }
 }

@@ -18,7 +18,7 @@
 //
 // The physical register operands serialize every such unit, so the machine
 // scheduler cannot reorder them and the SelectionDAG order stands. When it
-// computes an AX operand early (MACH computes `B` before `A`, which goes
+// computes an AX operand early (MACH_cg computes `B` before `A`, which goes
 // through AX into BC), %v needs a second register across the other unit, and
 // with four register pairs that is often a spill.
 //

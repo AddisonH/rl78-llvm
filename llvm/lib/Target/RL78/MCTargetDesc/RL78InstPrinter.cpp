@@ -112,6 +112,25 @@ void RL78InstPrinter::printESMemRegReg(const MCInst *MI, int opNum,
   printMemRegReg(MI, opNum + 1, STI, O);
 }
 
+// !addr16 of a branch or call: a code address in 00000H-0FFFFH.
+void RL78InstPrinter::printCode16Operand(const MCInst *MI, int opNum,
+                                         const MCSubtargetInfo &STI,
+                                         raw_ostream &O) {
+  O << "!";
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (MO.isImm())
+    O << format_hex(MO.getImm(), 0);
+  else
+    MAI.printExpr(O, *MO.getExpr());
+}
+
+// BT (Z) and BF (NZ).
+void RL78InstPrinter::printBitCondOperand(const MCInst *MI, int opNum,
+                                          const MCSubtargetInfo &STI,
+                                          raw_ostream &O) {
+  O << (MI->getOperand(opNum).getImm() == RL78CC::RL78CC_Z ? "t" : "f");
+}
+
 // word[B], word[C], word[BC]
 void RL78InstPrinter::printMemWord(const MCInst *MI, int opNum,
                                    const MCSubtargetInfo &STI, raw_ostream &O) {

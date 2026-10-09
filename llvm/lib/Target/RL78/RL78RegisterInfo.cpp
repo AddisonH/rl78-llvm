@@ -84,13 +84,13 @@ bool RL78RegisterInfo::shouldCoalesce(
     // A copy of the joined value (or the value it is a copy of) is the same
     // value and will be joined as well: no competition for the accumulator.
     auto SameValue = [&](Register R) {
-      for (const MachineInstr &DI : MRI.def_instructions(R))
-        if (DI.isCopy() && (DI.getOperand(1).getReg() == Dst ||
-                            DI.getOperand(1).getReg() == Src))
+      for (const MachineInstr &DI_cg : MRI.def_instructions(R))
+        if (DI_cg.isCopy() && (DI_cg.getOperand(1).getReg() == Dst ||
+                            DI_cg.getOperand(1).getReg() == Src))
           return true;
       for (Register J : {Dst, Src})
-        for (const MachineInstr &DI : MRI.def_instructions(J))
-          if (DI.isCopy() && DI.getOperand(1).getReg() == R)
+        for (const MachineInstr &DI_cg : MRI.def_instructions(J))
+          if (DI_cg.isCopy() && DI_cg.getOperand(1).getReg() == R)
             return true;
       return false;
     };
@@ -190,7 +190,7 @@ void buildWordBCAccess(MachineBasicBlock &MBB, MachineFunction &MF,
   }
 
   if (saveBC) {
-    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP2, RegState::Kill);
     if (FrameReg == RL78::SPreg) {
       offset = offset + 2;
@@ -214,7 +214,7 @@ void buildWordBCAccess(MachineBasicBlock &MBB, MachineFunction &MF,
   }
 
   if (saveBC) {
-    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP2);
+    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP2);
   }
 }
 
@@ -244,7 +244,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // LOAD/STORE AX/A from/to Offset+2[BC].
     // MOVW BC, AX.
     // POP AX.
-    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP0, RegState::Kill);
     if (!isLoad) {
       BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::RP0)
@@ -254,7 +254,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
                       Offset, 2, false);
     BuildMI(MBB, II, DL, TII->get(RL78::COPY), mainRegister)
         .addReg(RL78::RP0, RegState::Kill);
-    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP0);
+    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP0);
   } else if (mainRegister == RL78::RP4 ||
              (mainRegister == RL78::RP6 && FrameReg != RL78::RP6)) {
     // if mainRegister == DE/HL and we don't try to store HL to [HL+offset].
@@ -284,7 +284,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // COPY X, A.
     // COPY A, E.
     // POP DE.
-    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP4, RegState::Kill);
     BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::R4)
         .addReg(RL78::R1, RegState::Kill);
@@ -294,7 +294,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
         .addReg(RL78::R1, RegState::Kill);
     BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::R1)
         .addReg(RL78::R4, RegState::Kill);
-    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP4);
+    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP4);
   } else {
     // PUSH AX.
     // if store COPY AX/A, mainRegister.
@@ -304,7 +304,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // POP BC.
     // if load COPY mainRegister, AX/A.
     // POP AX.
-    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP0, RegState::Kill);
     if (!isLoad) {
       BuildMI(MBB, II, DL, TII->get(RL78::COPY), is8bit ? RL78::R1 : RL78::RP0)
@@ -316,7 +316,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
       BuildMI(MBB, II, DL, TII->get(RL78::COPY), mainRegister)
           .addReg(is8bit ? RL78::R1 : RL78::RP0, RegState::Kill);
     }
-    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP0);
+    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP0);
   }
 
   MI.eraseFromParent();
@@ -332,7 +332,7 @@ static void loadUnalignedSP(MachineBasicBlock &MBB,
         .addReg(actualFrameReg)
         .addImm(offset);
   else if (isUInt<16>(offset + 2)) {
-    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP2, RegState::Kill);
     unsigned additionalAdj = 0;
     if (actualFrameReg == RL78::SPreg) {
@@ -349,7 +349,7 @@ static void loadUnalignedSP(MachineBasicBlock &MBB,
     BuildMI(MBB, II, DL, TII->get(RL78::LOAD16_rp_rpi), RL78::RP0)
         .addReg(RL78::RP2, RegState::Kill)
         .addImm(offset + additionalAdj);
-    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP2);
+    BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP2);
   } else
     llvm_unreachable("Invalid stack offset!");
 }
@@ -392,12 +392,12 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     int offsetAdj = 0;
     if (FrameReg == RL78::RP4) {
       // It means we first need to retrieve the old SP.
-      BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+      BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
           .addReg(RL78::RP6, RegState::Kill);
       offsetAdj += 2;
 
       if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot) {
-        BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+        BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
             .addReg(RL78::RP0, RegState::Kill);
         offsetAdj += 2;
       }
@@ -414,10 +414,10 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
           .addReg(RL78::RP0, RegState::Kill);
 
       if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot)
-        BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP0);
+        BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP0);
 
       FrameReg = RL78::RP6;
-      BuildMI(MBB, std::next(II), DL, TII->get(RL78::POP_rp), RL78::RP6);
+      BuildMI(MBB, std::next(II), DL, TII->get(RL78::POP_rp_cg), RL78::RP6);
     }
 
     if (isUInt<8>(Offset + offsetAdj)) {
@@ -448,7 +448,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       // MI.getParent()->dump();
       return false;
     } else if (isUInt<16>(Offset - 2)) {
-      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp))
+      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp_cg))
           .addReg(RL78::RP2, RegState::Kill);
 
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP2)
@@ -460,7 +460,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
           .addReg(RL78::RP2)
           .addImm(Offset)
           .add(MI.getOperand(2));
-      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::POP_rp), RL78::RP2);
+      BuildMI(*MI.getParent(), II, DL, TII->get(RL78::POP_rp_cg), RL78::RP2);
 
       // MI.getParent()->dump();
       MI.eraseFromParent();

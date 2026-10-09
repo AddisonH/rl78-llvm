@@ -3,7 +3,7 @@
 ; This is CoreMark's matrix_add_const index computation. The i32 multiply feeds
 ; an i32 add whose only use is a trunc to i16, so DemandedBits reports 0xffff
 ; for the multiply. Without narrowing it becomes an out-of-line call to
-; __COM_lmul; with it, a single MULHU.
+; __COM_lmul; with it, a single MULHU_cg.
 ;
 ; InstCombine and AggressiveInstCombine both decline this case -- verified with
 ; opt on this function -- hence the dedicated pass. Note TruncInstCombine does

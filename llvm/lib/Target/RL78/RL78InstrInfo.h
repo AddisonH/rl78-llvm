@@ -185,7 +185,7 @@ public:
   bool hasLowDefLatency(const TargetSchedModel &SchedModel,
                         const MachineInstr &DefMI,
                         unsigned DefIdx) const override {
-    // Only DIVHU and DIVWU have high def latency.
+    // Only DIVHU_cg and DIVWU_cg have high def latency.
     if ((DefMI.getOpcode() == RL78::UDIVREM16_r_r) ||
         (DefMI.getOpcode() == RL78::UDIVREM32_r_r))
       return false;

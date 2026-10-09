@@ -1,4 +1,4 @@
-; This test verifies the lowering of the DIVUL intrinsic to the DIVWU instruction for S3 cores.
+; This test verifies the lowering of the DIVUL intrinsic to the DIVWU_cg instruction for S3 cores.
 
 ; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 

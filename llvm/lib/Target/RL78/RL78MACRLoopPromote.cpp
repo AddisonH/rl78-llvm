@@ -1,4 +1,4 @@
-//===-- RL78MACRLoopPromote.cpp - Keep MACH accumulators in MACR ---------===//
+//===-- RL78MACRLoopPromote.cpp - Keep MACH_cg accumulators in MACR ---------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// A multiply-accumulate loop (sum += a[i] * b[i]) selects MACH/MACHU, whose
+// A multiply-accumulate loop (sum += a[i] * b[i]) selects MACH_cg/MACHU_cg, whose
 // accumulator is the MACRL/MACRH register pair. The loop-carried sum is an
 // ordinary 16-bit virtual register pair, so every iteration copies it into
-// MACR before the MACH and back out after it; MACR is memory mapped
+// MACR before the MACH_cg and back out after it; MACR is memory mapped
 // (0xffff0/2), so each of those copies is a load or store through AX.
 //
 // When MACR is otherwise unused in the loop, give the loop-carried values the
-// MACRL/MACRH register classes instead: the copies around the MACH become
+// MACRL/MACRH register classes instead: the copies around the MACH_cg become
 // coalescable, MACR is written once in the preheader and read once in the
 // exit block. The classes have one register each, so the conditions below
 // make sure no other MACR value is ever live at the same time.
@@ -37,7 +37,7 @@ using namespace llvm;
 
 static cl::opt<bool> EnableMACRLoopPromote(
     "rl78-macr-loop-promote", cl::Hidden, cl::init(true),
-    cl::desc("Keep MACH accumulators in MACR across loops"));
+    cl::desc("Keep MACH_cg accumulators in MACR across loops"));
 
 namespace {
 class RL78MACRLoopPromote : public MachineFunctionPass {
@@ -46,7 +46,7 @@ public:
   RL78MACRLoopPromote() : MachineFunctionPass(ID) {}
 
   StringRef getPassName() const override {
-    return "RL78 keep MACH accumulators in MACR across loops";
+    return "RL78 keep MACH_cg accumulators in MACR across loops";
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {

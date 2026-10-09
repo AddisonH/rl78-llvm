@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass lower __delay_cycles pseudo instruction into NOP like instructions
+// This pass lower __delay_cycles pseudo instruction into NOP_cg like instructions
 // to consume specified cycles.
 // Note this pass must be placed as late as possible in pre-emit passes in order
 // to avoid the inserted instructions to consume cycles are optimized away.
@@ -53,14 +53,14 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_1_4(
   unsigned DelayCycles = MI.getOperand(0).getImm();
   switch (DelayCycles) {
   case 1: {
-    // One NOP instruction.
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
+    // One NOP_cg instruction.
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
     break;
   }
   case 2: {
-    // Two NOP instructions.
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
+    // Two NOP_cg instructions.
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
     break;
   }
   case 3: {
@@ -68,14 +68,14 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_1_4(
     //    br #.NextMBB  ; 3 cycles
     //  .NextMBB:
     MachineBasicBlock *NextMBB = MBB.splitAt(MI);
-    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8)).addMBB(NextMBB);
+    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8_cg)).addMBB(NextMBB);
     break;
   }
   case 4: {
-    // Unconditional branch to next instruction + One NOP instruction.
+    // Unconditional branch to next instruction + One NOP_cg instruction.
     MachineBasicBlock *NextMBB = MBB.splitAt(MI);
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
-    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8)).addMBB(NextMBB);
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8_cg)).addMBB(NextMBB);
     break;
   }
   default: {

@@ -1224,7 +1224,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::ExternalSymbol, MVT::i32, Custom);
   setOperationAction(ISD::JumpTable, PtrVT, Custom);
 
-  // MULU for 8-bit operands on every core, MULHU forms on S3.
+  // MULU for 8-bit operands on every core, MULHU_cg forms on S3.
   setTargetDAGCombine(ISD::MUL);
   // Custom lower mul (except i8).
   setOperationAction(ISD::MUL, MVT::i16, Custom);
@@ -1313,7 +1313,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::XOR);
   setTargetDAGCombine(ISD::SHL);
 
-  // To match MACH/MACHU on S3 or other optimizations.
+  // To match MACH_cg/MACHU_cg on S3 or other optimizations.
   setTargetDAGCombine(ISD::ADD);
 
   setTargetDAGCombine(ISD::SUB);
@@ -2204,7 +2204,7 @@ SDValue RL78TargetLowering::LowerMul(SDValue Op, SelectionDAG &DAG) const {
     return Op;
 
   if (isS3Core) {
-    // if S3 core we can use MULHU (or MULH), MUL16_r_r.
+    // if S3 core we can use MULHU_cg (or MULH_cg), MUL16_r_r.
     return Op;
   } else {
     if (!DAG.getMachineFunction().getFunction().hasOptSize())
@@ -2858,8 +2858,8 @@ SDValue RL78TargetLowering::PerformMULCombine(SDNode *N,
 
   // An i32 mul of operands known to fit in 8 bits (e.g. masked bit fields):
   // the product fits in 16, and MULU (A * X -> AX, every core) computes it
-  // instead of MULHU or __COM_lmul. Not for i16: MULU's fixed A/X operands
-  // cost more moves than MULHU's AX/BC (Embench picojpeg +1.1%).
+  // instead of MULHU_cg or __COM_lmul. Not for i16: MULU's fixed A/X operands
+  // cost more moves than MULHU_cg's AX/BC (Embench picojpeg +1.1%).
   KnownBits K0 = DAG.computeKnownBits(N->getOperand(0));
   KnownBits K1 = DAG.computeKnownBits(N->getOperand(1));
   if (VT == MVT::i32 && K0.countMaxActiveBits() <= 8 &&
@@ -2886,7 +2886,7 @@ SDValue RL78TargetLowering::PerformMULCombine(SDNode *N,
       if (RHS && LHS)
         op = ISD::UMUL_LOHI;
     }
-    // Operands known to fit in 16 bits without an explicit zext (MULHU).
+    // Operands known to fit in 16 bits without an explicit zext (MULHU_cg).
     if (op == ISD::DELETED_NODE && K0.countMaxActiveBits() <= 16 &&
         K1.countMaxActiveBits() <= 16) {
       RHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, N->getOperand(0));
@@ -2983,7 +2983,7 @@ SDValue RL78TargetLowering::PerformMULADDCombine(SDNode *N,
   SDLoc dl(N);
   unsigned op = ISD::DELETED_NODE;
   SDValue MulA, MulB, AddX;
-  // Try to combine into MACH/MACHU
+  // Try to combine into MACH_cg/MACHU_cg
   // Assume that the multiplication was already combined to (u/s)mul_lohi.
   if (Subtarget->isRL78S3CoreType() && N->getOpcode() == ISD::ADD &&
       N->getValueType(0) == MVT::i32) {
@@ -6139,7 +6139,7 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
   case RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr:
     return LowerLOAD_SELECTCC(MI, BB);
-  case RL78::BR_AX: {
+  case RL78::BR_AX_cg: {
     return Lower16bitAXSrc(MI, BB);
   }
   }

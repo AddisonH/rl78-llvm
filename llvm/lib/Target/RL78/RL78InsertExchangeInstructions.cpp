@@ -194,13 +194,13 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(Reg, RegState::Kill);
       } else {
-        BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
+        BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp_cg))
             .addReg(RL78::RP0, RegState::Kill);
         BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp_cg), RL78::RP0)
             .addReg(Reg, RegState::Kill);
         // OBS. the order of the next 2 instruction is not wrong, they will be
         // inserted in the right order
-        BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp),
+        BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp_cg),
                 RL78::RP0);
         // Only if the operand is def we need to copy it back from AX.
         if (MI.getOperand(opIndex).isDef())
@@ -225,7 +225,7 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
             // An edge case: when the offset of LOAD16_rp_stack_slot/STORE16_stack_slot_rp is 254, simply
             // bumping the offset by 2 would make it overflow, so we need to do the addressing using BC
             auto II = MachineBasicBlock::iterator(MI);
-            BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
+            BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
                 .addReg(RL78::RP2, RegState::Kill);
             BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_sp), RL78::RP2)
                 .addReg(RL78::SPreg);
@@ -238,7 +238,7 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
                   .addReg(RL78::RP2)
                   .addImm(opImm + 4)
                   .addReg(RL78::RP0);
-            BuildMI(MBB, II, DL, TII->get(RL78::POP_rp), RL78::RP2);
+            BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP2);
             MI.eraseFromParent();
             // As in this case we erase the original instruction, return here
             return;
@@ -262,19 +262,19 @@ static void insertHLExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
   assert(MI.getOperand(opIndex).isReg());
   if (MI.getOperand(opIndex).getReg() != RL78::RP6) {
     unsigned badReg = MI.getOperand(opIndex).getReg();
-    BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP6, RegState::Kill);
-    BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(badReg, RegState::Kill);
-    BuildMI(MBB, MI, DL, TII->get(RL78::POP_rp), RL78::RP6);
+    BuildMI(MBB, MI, DL, TII->get(RL78::POP_rp_cg), RL78::RP6);
     MI.getOperand(opIndex).ChangeToRegister(RL78::RP6, false);
     // despite the order here, in the generated code it will be push hl, pop de,
     // pop hl
-    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp))
+    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp_cg))
         .addReg(RL78::RP6, RegState::Define);
-    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp),
+    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp_cg),
             badReg);
-    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::PUSH_rp))
+    BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP6, RegState::Kill);
   }
 }
@@ -393,7 +393,7 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
       MI.getOperand(1).getImm() == 0) {
     // The instructions might come one after the other, or there might be a
     // CALL_STACK_SETUP between them.
-    if (PrevIt->getOpcode() == RL78::PUSH_rp) {
+    if (PrevIt->getOpcode() == RL78::PUSH_rp_cg) {
       PrevIt->getOperand(0).setReg(Reg);
       MI.eraseFromParent();
       return true;
@@ -401,7 +401,7 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
       auto PushInstr = prevNonDebug(MBB, PrevIt);
       if (PushInstr == MBB.end())
         return false;
-      if (PushInstr->getOpcode() == RL78::PUSH_rp) {
+      if (PushInstr->getOpcode() == RL78::PUSH_rp_cg) {
         PushInstr->getOperand(0).setReg(Reg);
         MI.eraseFromParent();
         return true;
@@ -448,8 +448,8 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
       return false;
   if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
       SubwIt->getOperand(2).getImm() == 4) {
-      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
-      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp_cg)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp_cg)).addReg(Reg);
 
       PrevIt->eraseFromParent();
       MI.eraseFromParent();
@@ -467,8 +467,8 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
 
       if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
           SubwIt->getOperand(2).getImm() == 4) {
-      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
-      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp_cg)).addReg(Reg);
+      BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp_cg)).addReg(Reg);
 
       PrevIt->eraseFromParent();
       MI.eraseFromParent();
@@ -493,7 +493,7 @@ static bool isStoreFoldableIntoPush(MachineBasicBlock &MBB,
   auto Prev = prevNonDebug(MBB, It);
   if (Prev != MBB.end() && Prev->getOpcode() == RL78::CALL_STACK_SETUP)
     Prev = prevNonDebug(MBB, Prev);
-  return Prev != MBB.end() && Prev->getOpcode() == RL78::PUSH_rp;
+  return Prev != MBB.end() && Prev->getOpcode() == RL78::PUSH_rp_cg;
 }
 
 static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
@@ -957,9 +957,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
             BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_rp_AX_cg), dst)
                 .add(MI.getOperand(1));
           } else {
-            BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
+            BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp_cg))
                 .add(MI.getOperand(1));
-            BuildMI(MBB, MI, DL, TII->get(RL78::POP_rp), dst);
+            BuildMI(MBB, MI, DL, TII->get(RL78::POP_rp_cg), dst);
           }
         }
         MI.removeFromParent();
@@ -1219,8 +1219,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           MI1.eraseFromParent();
           MI2.eraseFromParent();
 
-        } else if ((MI1.getOpcode() == RL78::POP_rp) &&
-                   (MI2.getOpcode() == RL78::PUSH_rp) &&
+        } else if ((MI1.getOpcode() == RL78::POP_rp_cg) &&
+                   (MI2.getOpcode() == RL78::PUSH_rp_cg) &&
                    (MI1.getOperand(0).getReg() == MI2.getOperand(0).getReg()) &&
                    (MI1.getOperand(0).isKill() && MI2.getOperand(0).isKill())) {
           // update iterator

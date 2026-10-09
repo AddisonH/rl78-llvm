@@ -155,18 +155,18 @@ struct InstructionInfo {
 
 // static std::multimap<char, InstructionInfo> instructions =
 static std::multimap<unsigned int, InstructionInfo> instructionsS3 = {
-    // DIVHU
-    {0xCEU, {RL78::DIVHU, {0xFBU, 0x3U}, {}}},
-    // DIVWU
-    {0xCEU, {RL78::DIVWU, {0xFBU, 0x0BU}, {}}},
-    // MACH
-    {0xCEU, {RL78::MACH, {0xFBU, 0x6U}, {}}},
-    // MACHU
-    {0xCEU, {RL78::MACHU, {0xFBU, 0x5U}, {}}},
-    // MULH
-    {0xCEU, {RL78::MULH, {0xFBU, 0x2U}, {}}},
-    // MULHU
-    {0xCEU, {RL78::MULHU, {0xFBU, 0x1U}, {}}}};
+    // DIVHU_cg
+    {0xCEU, {RL78::DIVHU_cg, {0xFBU, 0x3U}, {}}},
+    // DIVWU_cg
+    {0xCEU, {RL78::DIVWU_cg, {0xFBU, 0x0BU}, {}}},
+    // MACH_cg
+    {0xCEU, {RL78::MACH_cg, {0xFBU, 0x6U}, {}}},
+    // MACHU_cg
+    {0xCEU, {RL78::MACHU_cg, {0xFBU, 0x5U}, {}}},
+    // MULH_cg
+    {0xCEU, {RL78::MULH_cg, {0xFBU, 0x2U}, {}}},
+    // MULHU_cg
+    {0xCEU, {RL78::MULHU_cg, {0xFBU, 0x1U}, {}}}};
 // static std::multimap<char, InstructionInfo> instructions =
 static std::multimap<unsigned int, InstructionInfo> instructions = {
     // clang-format off
@@ -565,15 +565,15 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // BR !addr16
     {0xEDU, {RL78::BR_addr16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // BR AX*/ 
-    {0x61U, {RL78::BR_AX, {0xCBU}, {RL78::RP0}}},
+    {0x61U, {RL78::BR_AX_cg, {0xCBU}, {RL78::RP0}}},
     // BR $!addr20
-    {0xEEU, {RL78::BR_rel16, {SBP::adrl, SBP::adrh}, {OPT::SI_addr20}}},
+    {0xEEU, {RL78::BR_rel16_cg, {SBP::adrl, SBP::adrh}, {OPT::SI_addr20}}},
     // BR $addr20*/ 
-    {0xEFU, {RL78::BR_rel8, {SBP::adr}, {OPT::S_addr20}}},
+    {0xEFU, {RL78::BR_rel8_cg, {SBP::adr}, {OPT::S_addr20}}},
     // BR !!addr20
     {0xECU, {RL78::BR_addr20, {SBP::adrl, SBP::adrh, SBP::adrs}, {OPT::II_addr20}}},
-    // BRK nan*/ 
-    {0x61U, {RL78::BRK, {0xCCU}, {}}},
+    // BRK_cg nan*/ 
+    {0x61U, {RL78::BRK_cg, {0xCCU}, {}}},
     // BT [HL].0,$addr20
     {0x31U, {RL78::BTBF_memr, {0x83U, SBP::adr}, {OPT::S_addr20, OPT::RL78CC_Z, OPT::memHL, OPT::imm0}}},
     // BT [HL].1,$addr20
@@ -775,13 +775,13 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // CALL !!addr20
     {0xFCU, {RL78::CALL_addr20, {SBP::adrl, SBP::adrh, SBP::adrs}, {OPT::II_addr20}}},
     // CALL AX*/ 
-    {0x61U, {RL78::CALL_rp, {0xCAU}, {RL78::RP0}}},
+    {0x61U, {RL78::CALL_rp_cg, {0xCAU}, {RL78::RP0}}},
     // CALL BC*/ 
-    {0x61U, {RL78::CALL_rp, {0xDAU}, {RL78::RP2}}},
+    {0x61U, {RL78::CALL_rp_cg, {0xDAU}, {RL78::RP2}}},
     // CALL DE*/ 
-    {0x61U, {RL78::CALL_rp, {0xEAU}, {RL78::RP4}}},
+    {0x61U, {RL78::CALL_rp_cg, {0xEAU}, {RL78::RP4}}},
     // CALL HL*/ 
-    {0x61U, {RL78::CALL_rp, {0xFAU}, {RL78::RP6}}},
+    {0x61U, {RL78::CALL_rp_cg, {0xFAU}, {RL78::RP6}}},
     // CALLT [0080h]
     {0x61U, {RL78::CALLT_addr5, {SBP::adr}, {OPT::mem_addr5}}},
     // CLR1 !addr16.0
@@ -897,7 +897,7 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // CLR1 PSW.6
     {0x71U, {RL78::CLR1_PSW, {0x6BU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm6}}},
     // CLR1 PSW.7
-    //{0x71U, {RL78::CLR1_PSW, {0x7BU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm7}}}, - we print DI instead
+    //{0x71U, {RL78::CLR1_PSW, {0x7BU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm7}}}, - we print DI_cg instead
     // CLR1 sfr.0
     {0x71U, {RL78::CLR1_sfr, {0x0BU, SBP::sfr}, {OPT::sfr,OPT::imm0}}},
     // CLR1 sfr.1
@@ -1072,12 +1072,12 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     {0x11U, {RL78::DECW_esaddr16, {0xB2U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // DECW ES:[HL+byte]
     {0x11U, {RL78::DECW_esmemHLi, {0x61U, 0x89U, SBP::adr}, {OPT::ES_memHL_byte}}},
-    // DI nan
-    {0x71U, {RL78::DI, {0x7BU, 0xFAU}, {}}},
-    // EI nan
-    {0x71U, {RL78::EI, {0x7AU, 0xFAU}, {}}},
-    // HALT nan*/ 
-    {0x61U, {RL78::HALT, {0xEDU}, {}}},
+    // DI_cg nan
+    {0x71U, {RL78::DI_cg, {0x7BU, 0xFAU}, {}}},
+    // EI_cg nan
+    {0x71U, {RL78::EI_cg, {0x7AU, 0xFAU}, {}}},
+    // HALT_cg nan*/ 
+    {0x61U, {RL78::HALT_cg, {0xEDU}, {}}},
     // INC !addr16
     {0xA0U, {RL78::INC_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // INC [HL+byte]
@@ -1654,8 +1654,8 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     {0xCBU, {RL78::STORE16_sfrp_imm, {SBP::sfr, SBP::datal, SBP::datah}, {OPT::sfrp,OPT::word}}},
     // MULU X*/ 
     {0xD6U, {RL78::MULU_r, {}, {RL78::R0}}},
-    // NOP nan*/ 
-    {0x0U, {RL78::NOP, {}, {}}},
+    // NOP_cg nan*/ 
+    {0x0U, {RL78::NOP_cg, {}, {}}},
     // NOT1 CY*/ 
     {0x71U, {RL78::NOT1_cy, {0xC0U}, {}}},
     // ONEB !addr16
@@ -1831,29 +1831,29 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // POP PSW
     {0x61U, {RL78::POP_cc, {0xCDU}, {}}},
     // POP AX
-    {0xC0U, {RL78::POP_rp, {}, {RL78::RP0}}},
+    {0xC0U, {RL78::POP_rp_cg, {}, {RL78::RP0}}},
     // POP BC
-    {0xC2U, {RL78::POP_rp, {}, {RL78::RP2}}},
+    {0xC2U, {RL78::POP_rp_cg, {}, {RL78::RP2}}},
     // POP DE
-    {0xC4U, {RL78::POP_rp, {}, {RL78::RP4}}},
+    {0xC4U, {RL78::POP_rp_cg, {}, {RL78::RP4}}},
     // POP HL
-    {0xC6U, {RL78::POP_rp, {}, {RL78::RP6}}},
+    {0xC6U, {RL78::POP_rp_cg, {}, {RL78::RP6}}},
     // PUSH PSW
     {0x61U, {RL78::PUSH_cc, {0xDDU}, {}}},
     // PUSH AX
-    {0xC1U, {RL78::PUSH_rp, {}, {RL78::RP0}}},
+    {0xC1U, {RL78::PUSH_rp_cg, {}, {RL78::RP0}}},
     // PUSH BC
-    {0xC3U, {RL78::PUSH_rp, {}, {RL78::RP2}}},
+    {0xC3U, {RL78::PUSH_rp_cg, {}, {RL78::RP2}}},
     // PUSH DE
-    {0xC5U, {RL78::PUSH_rp, {}, {RL78::RP4}}},
+    {0xC5U, {RL78::PUSH_rp_cg, {}, {RL78::RP4}}},
     // PUSH HL
-    {0xC7U, {RL78::PUSH_rp, {}, {RL78::RP6}}},
-    // RET nan
-    {0xD7U, {RL78::RET, {}, {}}},
-    // RETB nan
-    {0x61U, {RL78::RETB, {0xECU}, {}}},
-    // RETI nan
-    {0x61U, {RL78::RETI, {0xFCU}, {}}},
+    {0xC7U, {RL78::PUSH_rp_cg, {}, {RL78::RP6}}},
+    // RET_cg nan
+    {0xD7U, {RL78::RET_cg, {}, {}}},
+    // RETB_cg nan
+    {0x61U, {RL78::RETB_cg, {0xECU}, {}}},
+    // RETI_cg nan
+    {0x61U, {RL78::RETI_cg, {0xFCU}, {}}},
     // ROL A,1
     {0x61U, {RL78::ROL_r_1, {0xEBU}, {RL78::R1, OPT::imm1}}},
     // ROLC A,1
@@ -2031,7 +2031,7 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // SET1 PSW.6
     {0x71U, {RL78::SET1_PSW, {0x6AU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm6}}},
     // SET1 PSW.7
-    //{0x71U, {RL78::SET1_PSW, {0x7AU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm7}}}, - we print EI instead
+    //{0x71U, {RL78::SET1_PSW, {0x7AU, 0xFAU}, {RL78::PSW, RL78::PSW, OPT::imm7}}}, - we print EI_cg instead
     // SET1 sfr.0
     {0x71U, {RL78::SET1_sfr, {0x0AU, SBP::sfr}, {OPT::sfr,OPT::imm0}}},
     // SET1 sfr.1
@@ -2206,8 +2206,8 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     {0x61U, {RL78::SK_cc_nodst, {0xF8U}, {OPT::RL78CC_NZ}}},
     // SKZ nan
     {0x61U, {RL78::SK_cc_nodst, {0xE8U}, {OPT::RL78CC_Z}}},
-    // STOP nan
-    {0x61U, {RL78::STOP, {0xFDU}, {}}},
+    // STOP_cg nan
+    {0x61U, {RL78::STOP_cg, {0xFDU}, {}}},
     // SUB A,!addr16
     {0x2FU, {RL78::SUB_r_abs16, {SBP::adrl, SBP::adrh}, {RL78::R1, RL78::R1, OPT::I_addr16}}},
     // SUB saddr,#byte

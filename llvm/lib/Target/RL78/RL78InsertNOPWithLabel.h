@@ -1,4 +1,4 @@
-//===-- RL78InsertNOPWithLabel.h - Insert NOP with label for RL78 ---------===//
+//===-- RL78InsertNOPWithLabel.h - Insert NOP_cg with label for RL78 ---------===//
 
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

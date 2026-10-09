@@ -1,6 +1,6 @@
-; RL78SinkToAccumulator: MACH reads AX and BC. Its BC operand is loaded through
+; RL78SinkToAccumulator: MACH_cg reads AX and BC. Its BC operand is loaded through
 ; AX, so loading the AX operand first parks it in a stack slot. Sunk to the
-; MACH, the AX operand is loaded straight into AX after BC is set up.
+; MACH_cg, the AX operand is loaded straight into AX after BC is set up.
 ; RUN: llc -O2 < %s | FileCheck %s
 ; RUN: llc -O2 -rl78-sink-to-acc=false < %s | FileCheck %s --check-prefix=NOSINK
 
