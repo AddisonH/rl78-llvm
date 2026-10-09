@@ -586,9 +586,12 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     // Remove DirectFixup from param list.
     if (CurrentStatus.VariantKind == VK_RL78_FUNCTION) {
       DirectFixup = Fixup;
-      const MCSymbolRefExpr *SymExpr = cast<MCSymbolRefExpr>(SubExpr);
+      // The function's symbol, possibly with an offset (e.g. "f+64" after a
+      // comparison with a function address was folded).
+      if (!SubStatus.SymWithPossibleOffset)
+        return CurrentStatus;
       DefaultStatus.Success = true;
-      DefaultStatus.SymWithPossibleOffset = SymExpr;
+      DefaultStatus.SymWithPossibleOffset = SubStatus.SymWithPossibleOffset;
       return DefaultStatus;
     }
     if ((CurrentStatus.VariantKind == VK_RL78_MIRLW ||
