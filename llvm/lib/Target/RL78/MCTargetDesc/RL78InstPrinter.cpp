@@ -57,6 +57,61 @@ void RL78InstPrinter::printOperand(const MCInst *MI, int opNum,
   }
 }
 
+// [rp]
+void RL78InstPrinter::printMemReg(const MCInst *MI, int opNum,
+                                  const MCSubtargetInfo &STI, raw_ostream &O) {
+  O << "[";
+  printRegName(O, MI->getOperand(opNum).getReg());
+  O << "]";
+}
+
+// [rp+byte]
+void RL78InstPrinter::printMemRegDisp(const MCInst *MI, int opNum,
+                                      const MCSubtargetInfo &STI,
+                                      raw_ostream &O) {
+  O << "[";
+  printRegName(O, MI->getOperand(opNum).getReg());
+  O << "+";
+  const MCOperand &Disp = MI->getOperand(opNum + 1);
+  if (Disp.isImm())
+    O << Disp.getImm();
+  else
+    MAI.printExpr(O, *Disp.getExpr());
+  O << "]";
+}
+
+// [HL+B], [HL+C]
+void RL78InstPrinter::printMemRegReg(const MCInst *MI, int opNum,
+                                     const MCSubtargetInfo &STI,
+                                     raw_ostream &O) {
+  O << "[";
+  printRegName(O, MI->getOperand(opNum).getReg());
+  O << "+";
+  printRegName(O, MI->getOperand(opNum + 1).getReg());
+  O << "]";
+}
+
+void RL78InstPrinter::printESMemReg(const MCInst *MI, int opNum,
+                                    const MCSubtargetInfo &STI,
+                                    raw_ostream &O) {
+  O << "es:";
+  printMemReg(MI, opNum + 1, STI, O);
+}
+
+void RL78InstPrinter::printESMemRegDisp(const MCInst *MI, int opNum,
+                                        const MCSubtargetInfo &STI,
+                                        raw_ostream &O) {
+  O << "es:";
+  printMemRegDisp(MI, opNum + 1, STI, O);
+}
+
+void RL78InstPrinter::printESMemRegReg(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O) {
+  O << "es:";
+  printMemRegReg(MI, opNum + 1, STI, O);
+}
+
 void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O, const char *Modifier) {

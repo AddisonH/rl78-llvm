@@ -12,6 +12,9 @@
 
 class RL78Register<string n, bits<6> num, list<string> altNames = []> : Register<n, altNames> {
   field bits<6> Num = num;
+  // The value the opcode tables add for this register: X..H = 0..7,
+  // AX, BC, DE, HL = 0, 2, 4, 6.
+  let HWEncoding{5-0} = num;
   let Namespace = "RL78";
 }
 
@@ -112,6 +115,8 @@ def RL78AXBCRP : RegisterClass<"RL78", [i16], 16, (add RP0, RP2)>;
 //this is for ADDRri and ADDrr
 def RL78BCDEHL : RegisterClass<"RL78", [i16], 16, (add RP6, RP4, RP2)>;
 def RL78HL : RegisterClass<"RL78", [i16], 16, (add RP6)>;
+def RL78BCRP : RegisterClass<"RL78", [i16], 16, (add RP2)>;
+def RL78DEHL : RegisterClass<"RL78", [i16], 16, (add RP6, RP4)>;
 
 def SPreg : RL78Register<"SP", 32>, DwarfRegNum<[32]>;
 def CCreg : RL78Register<"CC", 34>;

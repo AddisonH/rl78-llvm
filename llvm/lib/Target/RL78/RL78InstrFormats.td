@@ -77,3 +77,27 @@ class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
   let isCodeGenOnly = 1;
   let isPseudo = 1;
 }
+
+// A hardware instruction: one form of the RL78 Software Manual's operation
+// list (R01US0015), with the exact register class for each register operand.
+// Byte I of the encoding is Inst{8*I+7-8*I}, so the first byte is in the low
+// bits and little-endian data fields (adrl adrh) are contiguous.
+class RL78Inst<int size, dag outs, dag ins, string asmstr,
+               list<dag> pattern = []> : Instruction {
+  let Namespace = "RL78";
+  let OutOperandList = outs;
+  let InOperandList = ins;
+  let AsmString = asmstr;
+  let Pattern = pattern;
+  let Size = size;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+  let DecoderNamespace = "RL78";
+  field bits<40> Inst;
+  field bits<40> SoftFail = 0;
+  // Encoded by the TableGen'erated encoder (the older definitions above are
+  // still encoded by hand in RL78MCCodeEmitter).
+  let TSFlags{0} = 1;
+}
+

@@ -37,6 +37,19 @@ public:
   static const char *getRegisterName(MCRegister Reg,
                                      unsigned AltIdx = RL78::NoRegAltName);
 
+  // Memory operands of the hardware instructions (RL78InstrISA.td).
+  void printMemReg(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                   raw_ostream &O);
+  void printMemRegDisp(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                       raw_ostream &O);
+  void printMemRegReg(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                      raw_ostream &O);
+  void printESMemReg(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                     raw_ostream &O);
+  void printESMemRegDisp(const MCInst *MI, int opNum,
+                         const MCSubtargetInfo &STI, raw_ostream &O);
+  void printESMemRegReg(const MCInst *MI, int opNum,
+                        const MCSubtargetInfo &STI, raw_ostream &O);
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);
   void printMemOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,

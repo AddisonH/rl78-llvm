@@ -81,6 +81,30 @@ public:
   unsigned getBranchOnRegTargetOpValue(const MCInst &MI, unsigned OpNo,
                                        SmallVectorImpl<MCFixup> &Fixups,
                                        const MCSubtargetInfo &STI) const;
+
+  // TableGen'erated: the bit position of operand OpNum's field in Inst.
+  uint32_t getOperandBitOffset(const MCInst &MI, unsigned OpNum,
+                               const MCSubtargetInfo &STI) const;
+
+  // Operands of the hardware instructions (RL78InstrISA.td). Field is the
+  // operand the encoding field belongs to (the first sub-operand of a
+  // memory operand), Val the one holding the value or expression.
+  unsigned getFieldValue(const MCInst &MI, unsigned Field, unsigned Val,
+                         SmallVectorImpl<MCFixup> &Fixups,
+                         const MCSubtargetInfo &STI, unsigned Kind) const;
+#define RL78_OPERAND_ENCODER(NAME)                                             \
+  unsigned NAME(const MCInst &MI, unsigned OpNo,                               \
+                SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI)   \
+      const;
+  RL78_OPERAND_ENCODER(getImm8OpValue)
+  RL78_OPERAND_ENCODER(getSaddrOpValue)
+  RL78_OPERAND_ENCODER(getAddr16OpValue)
+  RL78_OPERAND_ENCODER(getESAddr16OpValue)
+  RL78_OPERAND_ENCODER(getMemDisp8OpValue)
+  RL78_OPERAND_ENCODER(getESMemDisp8OpValue)
+  RL78_OPERAND_ENCODER(getMemIndexOpValue)
+  RL78_OPERAND_ENCODER(getESMemIndexOpValue)
+#undef RL78_OPERAND_ENCODER
 };
 
 } // end anonymous namespace
@@ -162,6 +186,14 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
                                           const MCSubtargetInfo &STI) const {
   unsigned long long Bits = getBinaryCodeForInstr(MI, Fixups, STI);
   unsigned Size = MCII.get(MI.getOpcode()).getSize();
+  // A hardware instruction (RL78InstrISA.td): Bits holds the bytes in
+  // order, the first one in the low bits.
+  if (MCII.get(MI.getOpcode()).TSFlags & 1) {
+    for (unsigned I = 0; I < Size; ++I)
+      CB.push_back(char(Bits >> (8 * I)));
+    ++MCNumEmitted;
+    return;
+  }
   switch (MI.getOpcode()) {
   case RL78::MOV_A_PSW:
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
@@ -3370,9 +3402,87 @@ unsigned RL78MCCodeEmitter::getTargetOpValue(const MCInst &MI, unsigned OpNo,
   return 0;
 }
 
+unsigned RL78MCCodeEmitter::getFieldValue(const MCInst &MI, unsigned Field,
+                                          unsigned Val,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI,
+                                          unsigned Kind) const {
+  // Inst keeps byte I in bits 8*I..8*I+7, so a field's byte offset is its
+  // bit offset over 8.
+  uint32_t Offset = getOperandBitOffset(MI, Field, STI) / 8;
+  return getTargetOpValue(MI, Val, Offset, Fixups, STI, MCFixupKind(Kind));
+}
+
+unsigned RL78MCCodeEmitter::getImm8OpValue(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  return getFieldValue(MI, OpNo, OpNo, Fixups, STI, RL78::fixup_RL78_DIR8U);
+}
+
+unsigned RL78MCCodeEmitter::getSaddrOpValue(const MCInst &MI, unsigned OpNo,
+                                            SmallVectorImpl<MCFixup> &Fixups,
+                                            const MCSubtargetInfo &STI) const {
+  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
+                       RL78::fixup_RL78_DIR8U_SAD);
+}
+
+unsigned RL78MCCodeEmitter::getAddr16OpValue(const MCInst &MI, unsigned OpNo,
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             const MCSubtargetInfo &STI) const {
+  // A data address: the linker checks it is in the F0000H-FFFFFH window.
+  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
+                       RL78::fixup_RL78_DIR16U_RAM);
+}
+
+unsigned
+RL78MCCodeEmitter::getESAddr16OpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  // ES supplies bits 19-16: any 20-bit address, its low 16 bits encoded.
+  return getFieldValue(MI, OpNo, OpNo + 1, Fixups, STI,
+                       RL78::fixup_RL78_DIR20U_16);
+}
+
+unsigned
+RL78MCCodeEmitter::getMemDisp8OpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  return getFieldValue(MI, OpNo, OpNo + 1, Fixups, STI,
+                       RL78::fixup_RL78_DIR8U);
+}
+
+unsigned
+RL78MCCodeEmitter::getESMemDisp8OpValue(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  return getFieldValue(MI, OpNo, OpNo + 2, Fixups, STI,
+                       RL78::fixup_RL78_DIR8U);
+}
+
+// [HL+B] and [HL+C] differ in bit 1 of the opcode.
+static unsigned getIndexValue(MCRegister Reg) {
+  assert((Reg == RL78::R3 || Reg == RL78::R2) && "index register is B or C");
+  return Reg == RL78::R2 ? 2 : 0;
+}
+
+unsigned
+RL78MCCodeEmitter::getMemIndexOpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  return getIndexValue(MI.getOperand(OpNo + 1).getReg());
+}
+
+unsigned
+RL78MCCodeEmitter::getESMemIndexOpValue(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  return getIndexValue(MI.getOperand(OpNo + 2).getReg());
+}
+
 MCCodeEmitter *llvm::createRL78MCCodeEmitter(const MCInstrInfo &MCII,
                                              MCContext &Ctx) {
   return new RL78MCCodeEmitter(MCII, Ctx);
 }
 
+#define GET_OPERAND_BIT_OFFSET
 #include "RL78GenMCCodeEmitter.inc"

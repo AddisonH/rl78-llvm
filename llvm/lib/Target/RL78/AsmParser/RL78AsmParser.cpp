@@ -907,6 +907,85 @@ public:
     Inst.addOperand(MCOperand::createReg(getEsHlRegAddrHlReg()));
   }
 
+  // Memory operands of the hardware instructions (RL78InstrISA.td).
+  static bool isZero(const MCExpr *E) {
+    auto *CE = dyn_cast<MCConstantExpr>(E);
+    return CE && CE->getValue() == 0;
+  }
+  // [HL]; also [HL+0], which the parser does not tell from it.
+  bool isMemHL() const {
+    return (Kind == k_HLAddr && HLAddr.HlReg.RegNum == RL78::RP6) ||
+           (Kind == k_RegOffsetAddr && RegOffsetAddr.RPReg.RegNum == RL78::RP6 &&
+            isZero(RegOffsetAddr.Val));
+  }
+  bool isMemHLi() const {
+    return (Kind == k_HLAddr && HLAddr.HlReg.RegNum == RL78::RP6) ||
+           (Kind == k_RegOffsetAddr && RegOffsetAddr.RPReg.RegNum == RL78::RP6);
+  }
+  bool isMemHLr() const {
+    return Kind == k_RegRegAddr && RegRegAddr.RPReg.RegNum == RL78::RP6 &&
+           (RegRegAddr.Reg.RegNum == RL78::R2 ||
+            RegRegAddr.Reg.RegNum == RL78::R3);
+  }
+  bool isESMemHL() const {
+    return (Kind == k_EsHlRegAddr && EsHlRegAddr.RL78HL.RegNum == RL78::RP6) ||
+           (Kind == k_EsRegRegAddr && EsRegRegAddr.RPReg.RegNum == RL78::RP6 &&
+            isZero(EsRegRegAddr.Val));
+  }
+  bool isESMemHLi() const {
+    return (Kind == k_EsHlRegAddr && EsHlRegAddr.RL78HL.RegNum == RL78::RP6) ||
+           (Kind == k_EsRegRegAddr && EsRegRegAddr.RPReg.RegNum == RL78::RP6);
+  }
+  bool isESMemHLr() const {
+    return Kind == k_EsRegRegReg && EsRegRegReg.RPReg.RegNum == RL78::RP6 &&
+           (EsRegRegReg.Reg.RegNum == RL78::R2 ||
+            EsRegRegReg.Reg.RegNum == RL78::R3);
+  }
+  const MCExpr *getMemDisp() const {
+    if (Kind == k_RegOffsetAddr)
+      return RegOffsetAddr.Val;
+    if (Kind == k_EsRegRegAddr)
+      return EsRegRegAddr.Val;
+    return nullptr;
+  }
+  void addMemHLOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+  }
+  void addMemHLiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+    if (const MCExpr *Disp = getMemDisp())
+      addExpr(Inst, Disp);
+    else
+      Inst.addOperand(MCOperand::createImm(0));
+  }
+  void addMemHLrOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+    Inst.addOperand(MCOperand::createReg(RegRegAddr.Reg.RegNum));
+  }
+  void addESMemHLOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::ES));
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+  }
+  void addESMemHLiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::ES));
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+    if (const MCExpr *Disp = getMemDisp())
+      addExpr(Inst, Disp);
+    else
+      Inst.addOperand(MCOperand::createImm(0));
+  }
+  void addESMemHLrOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::ES));
+    Inst.addOperand(MCOperand::createReg(RL78::RP6));
+    Inst.addOperand(MCOperand::createReg(EsRegRegReg.Reg.RegNum));
+  }
+
   void addHLAddressOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     Inst.addOperand(MCOperand::createReg(getReg()));
