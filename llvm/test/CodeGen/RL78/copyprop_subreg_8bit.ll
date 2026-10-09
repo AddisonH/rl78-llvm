@@ -1,5 +1,5 @@
 ; MachineCopyPropagation runs with UseCopyInstr, so RL78InstrInfo::isCopyInstrImpl
-; decides what it treats as a copy. The 8-bit MOV_A_r/MOV_r_A must stay out of
+; decides what it treats as a copy. The 8-bit MOV_A_r_cg/MOV_r_A_cg must stay out of
 ; that list: their register classes span A and X, which are the two halves of AX,
 ; and the pass then reasons across the pair/half boundary and deletes moves that
 ; are not redundant.
@@ -33,7 +33,7 @@ define i16 @loop_carried_half_copy() {
 4:
   ; Keeps the branch on %2 alive. LLVM 23 otherwise deletes the whole
   ; loop-carried byte (its only effect is the dead phi in %5), and the test no
-  ; longer reaches the copy it guards. Verified to fail with MOV_A_r/MOV_r_A
+  ; longer reaches the copy it guards. Verified to fail with MOV_A_r_cg/MOV_r_A_cg
   ; added back to isCopyInstrImpl.
   call void asm sideeffect "", ""()
   br label %5

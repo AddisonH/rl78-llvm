@@ -112,6 +112,26 @@ void RL78InstPrinter::printESMemRegReg(const MCInst *MI, int opNum,
   printMemRegReg(MI, opNum + 1, STI, O);
 }
 
+// word[B], word[C], word[BC]
+void RL78InstPrinter::printMemWord(const MCInst *MI, int opNum,
+                                   const MCSubtargetInfo &STI, raw_ostream &O) {
+  const MCOperand &Base = MI->getOperand(opNum + 1);
+  if (Base.isImm())
+    O << Base.getImm();
+  else
+    MAI.printExpr(O, *Base.getExpr());
+  O << "[";
+  printRegName(O, MI->getOperand(opNum).getReg());
+  O << "]";
+}
+
+void RL78InstPrinter::printESMemWord(const MCInst *MI, int opNum,
+                                     const MCSubtargetInfo &STI,
+                                     raw_ostream &O) {
+  O << "es:";
+  printMemWord(MI, opNum + 1, STI, O);
+}
+
 void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O, const char *Modifier) {

@@ -264,13 +264,13 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // LOAD/STORE AX/A from/to Offset+2[BC].
     // POP BC.
     // XCHW AX, DE/HL.
-    BuildMI(MBB, II, DL, TII->get(RL78::XCHW_AX_rp), RL78::RP0)
+    BuildMI(MBB, II, DL, TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
         .addReg(mainRegister, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(mainRegister, RegState::Kill);
     buildWordBCAccess(MBB, MF, TFI, II, DL, TII, isLoad, is8bit, FrameReg,
                       Offset);
-    BuildMI(MBB, II, DL, TII->get(RL78::XCHW_AX_rp), RL78::RP0)
+    BuildMI(MBB, II, DL, TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
         .addReg(mainRegister, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(mainRegister, RegState::Kill);
@@ -341,10 +341,10 @@ static void loadUnalignedSP(MachineBasicBlock &MBB,
       additionalAdj = 2;
       // If we are using SP, account for the bc push.
     } else
-      BuildMI(MBB, II, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
+      BuildMI(MBB, II, DL, TII->get(RL78::MOVW_AX_rp_cg), RL78::RP0)
           .addReg(actualFrameReg);
 
-    BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP2)
+    BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_AX_cg), RL78::RP2)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(MBB, II, DL, TII->get(RL78::LOAD16_rp_rpi), RL78::RP0)
         .addReg(RL78::RP2, RegState::Kill)
@@ -410,7 +410,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       loadUnalignedSP(MBB, II, DL, TII, actualFrameReg,
                       stackSize - 2 + offsetAdj);
 
-      BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP6)
+      BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_AX_cg), RL78::RP6)
           .addReg(RL78::RP0, RegState::Kill);
 
       if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot)

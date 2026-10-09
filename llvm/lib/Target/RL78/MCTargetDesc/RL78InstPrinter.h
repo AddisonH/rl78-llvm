@@ -50,6 +50,10 @@ public:
                          const MCSubtargetInfo &STI, raw_ostream &O);
   void printESMemRegReg(const MCInst *MI, int opNum,
                         const MCSubtargetInfo &STI, raw_ostream &O);
+  void printMemWord(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                    raw_ostream &O);
+  void printESMemWord(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                      raw_ostream &O);
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);
   void printMemOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,

@@ -123,7 +123,7 @@ mov !0x2100, A
 # CHECK-INST: mov psw, #6                             ; encoding: [0xce,0xfa,0x06]
 mov PSW, #0x06
 
-# CHECK-INST: mov PSW, a                              ; encoding: [0x9e,0xfa]
+# CHECK-INST: mov psw, a                              ; encoding: [0x9e,0xfa]
 mov PSW, A
 
 

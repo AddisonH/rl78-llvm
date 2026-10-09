@@ -353,6 +353,7 @@ def shift16imm  : Operand<i8> {
 let isReMaterializable = 1 in {
 //Instruction       Opcode
 //MOV r, #byte      5X data (X..H -> 0..7)
+let isCodeGenOnly = 1 in
 def MOV_r_imm : InstRL78_16bit<0x5000,
         (outs RL78Reg:$rd), (ins i8imm:$imm8),
         "mov $rd, $imm8",
@@ -360,6 +361,7 @@ def MOV_r_imm : InstRL78_16bit<0x5000,
 }
 
 //MOV saddr, #byte  CD saddr data
+let isCodeGenOnly = 1 in
 def STORE8_saddr_imm : InstRL78_24bit<0xCD0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "mov $addr, $imm8",
@@ -368,6 +370,7 @@ def STORE8_saddr_imm : InstRL78_24bit<0xCD0000,
 let mayLoad = 0, mayStore = 0 in {
 
 //MOV ES, #byte      41 data
+let isCodeGenOnly = 1 in
 def MOV_es_imm : InstRL78_16bit<0x4100,
         (outs RL78RegES:$rd), (ins i8imm:$imm8),
         "mov $rd, $imm8",
@@ -375,6 +378,7 @@ def MOV_es_imm : InstRL78_16bit<0x4100,
 
 //Instruction       Opcode
 //MOV A, ES			8E FD
+let isCodeGenOnly = 1 in
 def MOV_A_es : InstRL78_16bit<0x8EFD,
         (outs RL78AReg:$rd), (ins RL78RegES:$rsrc),
         "mov $rd, $rsrc",
@@ -382,6 +386,7 @@ def MOV_A_es : InstRL78_16bit<0x8EFD,
 
 //Instruction       Opcode
 //MOV ES, A			9E FD
+let isCodeGenOnly = 1 in
 def MOV_es_A : InstRL78_16bit<0x9EFD,
         (outs RL78RegES:$rd), (ins RL78AReg:$rsrc),
         "mov $rd, $rsrc",
@@ -389,6 +394,7 @@ def MOV_es_A : InstRL78_16bit<0x9EFD,
 
 //Instruction       Opcode
 //MOV A, CS			8E FC
+let isCodeGenOnly = 1 in
 def MOV_A_cs : InstRL78_16bit<0x8EFC,
         (outs RL78AReg:$rd), (ins RL78RegCS:$rsrc),
         "mov $rd, $rsrc",
@@ -396,12 +402,14 @@ def MOV_A_cs : InstRL78_16bit<0x8EFC,
 
 //Instruction       Opcode
 //MOV CS, A			9E FC
+let isCodeGenOnly = 1 in
 def MOV_cs_A : InstRL78_16bit<0x9EFC,
         (outs RL78RegCS:$rd), (ins RL78AReg:$rsrc),
         "mov $rd, $rsrc",
         []>;
 
 //MOV CS, #byte      CE FC data
+let isCodeGenOnly = 1 in
 def MOV_cs_imm : InstRL78_24bit<0xcefc00,
         (outs RL78RegCS:$rd), (ins i8imm:$imm8),
         "mov $rd, $imm8",
@@ -415,7 +423,8 @@ def MOV_cs_imm : InstRL78_24bit<0xcefc00,
 //MOV A, D          65
 //MOV A, L          66
 //MOV A, H          67
-def MOV_A_r : InstRL78_8bit<0x60,
+let isCodeGenOnly = 1 in
+def MOV_A_r_cg : InstRL78_8bit<0x60,
         (outs RL78AReg:$rd), (ins RL78XBCEDHLReg:$rsrc),
         "mov $rd, $rsrc",
         []>;
@@ -428,7 +437,8 @@ def MOV_A_r : InstRL78_8bit<0x60,
 //MOV D, A          75
 //MOV L, A          76
 //MOV H, A          77
-def MOV_r_A : InstRL78_8bit<0x70,
+let isCodeGenOnly = 1 in
+def MOV_r_A_cg : InstRL78_8bit<0x70,
         (outs RL78XBCEDHLReg:$rd), (ins RL78AReg:$rsrc),
         "mov $rd, $rsrc",
         []>;
@@ -440,6 +450,7 @@ def MOV_r_A : InstRL78_8bit<0x70,
 //MOV X, saddr      D8 saddr
 //MOV B, saddr      E8 saddr
 //MOV C, saddr      F8 saddr
+let isCodeGenOnly = 1 in
 def LOAD8_rlo_saddr : InstRL78_16bit<0x8D00,
         (outs RL78Reg:$rd), (ins ABS8:$addr),
         "mov $rd, $addr",
@@ -450,6 +461,7 @@ def LOAD8_rlo_saddr : InstRL78_16bit<0x8D00,
 //MOV B, !addr16    E9 adrl adrh
 //MOV C, !addr16    F9 adrl adrh
 //MOV X, !addr16    D9 adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD8_r_abs16 : InstRL78_24bit<0x8F0000,
         (outs RL78Reg:$rd), (ins ABS16:$addr),
         "mov $rd, $addr",
@@ -457,6 +469,7 @@ def LOAD8_r_abs16 : InstRL78_24bit<0x8F0000,
 
 //Instruction           Opcode
 //MOV !addr16, #byte    CF adrl adrh data
+let isCodeGenOnly = 1 in
 def STORE8_abs16_imm : InstRL78_32bit<0xCF000000,
         (outs), (ins ABS16:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -464,6 +477,7 @@ def STORE8_abs16_imm : InstRL78_32bit<0xCF000000,
 
 //Instruction			Opcode
 //MOV [SP+byte], #byte	C8 adr data
+let isCodeGenOnly = 1 in
 def STORE8_stack_slot_imm : InstRL78_24bit<0xC80000,
         (outs), (ins STACKSlot:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -471,6 +485,7 @@ def STORE8_stack_slot_imm : InstRL78_24bit<0xC80000,
 
 //MOV sfr, #byte ;CE sfr data
 let hasSideEffects = 1 in
+let isCodeGenOnly = 1 in
 def STORE8_sfr_imm : InstRL78_24bit<0xCE0000,
         (outs), (ins  Sfr:$sfr, i8imm:$imm8),
         "mov $sfr, $imm8",
@@ -481,6 +496,7 @@ let usesCustomInserter = 1 in {
 //Instruction       Opcode
 //MOV A, [HL+B]     61 C9
 //MOV A, [HL+C]     61 E9
+let isCodeGenOnly = 1 in
 def LOAD8_r_memrr : InstRL78_16bit<0x61C9,
         (outs RL78Reg:$rd), (ins RegRegAddr:$addr),
         "mov $rd, $addr",
@@ -489,12 +505,14 @@ def LOAD8_r_memrr : InstRL78_16bit<0x61C9,
 //Instruction       Opcode
 //MOV [HL+B], A     61 D9
 //MOV [HL+C], A     61 F9
+let isCodeGenOnly = 1 in
 def STORE8_memrr_r : InstRL78_16bit<0x61D9,
         (outs), (ins RegRegAddr:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
         [(store i8:$rsrc, ADDRrr:$addr)]>;
 
 //MOV saddr, A      9D saddr
+let isCodeGenOnly = 1 in
 def STORE8_saddr_A : InstRL78_16bit<0x9D00,
         (outs), (ins ABS8:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -502,6 +520,7 @@ def STORE8_saddr_A : InstRL78_16bit<0x9D00,
 
 //MOV word[B], #byte	19 adrl adrh data
 //MOV word[C], #byte	38 adrl adrh data
+let isCodeGenOnly = 1 in
 def STORE8_memBorCi_imm : InstRL78_32bit<0x19000000,
         (outs), (ins RegBorCOffsetAddr:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -515,6 +534,7 @@ def STORE8_ri_imm : InstRL78_32bit<0x39000000,
         [(store (i8 imm:$imm), ADDRri16orBC:$addr)]>;
 
 //MOV [DE+byte], #byte	CA adr data
+let isCodeGenOnly = 1 in
 def STORE8_memDEi_imm : InstRL78_24bit<0xCA0000,
         (outs), (ins RegOffsetAddr:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -532,6 +552,7 @@ def STORE8_memHLi_imm : InstRL78_24bit<0xCC0000,
 
 //Instruction       Opcode
 //MOV A, [SP+byte]  88 adr
+let isCodeGenOnly = 1 in
 def LOAD8_r_stack_slot : InstRL78_16bit<0x8800,
         (outs RL78Reg:$rd), (ins STACKSlot:$addr),
         "mov $rd, $addr",
@@ -539,6 +560,7 @@ def LOAD8_r_stack_slot : InstRL78_16bit<0x8800,
 
 //Instruction       Opcode
 //MOV !addr16, A    9F adrl adrh
+let isCodeGenOnly = 1 in
 def STORE8_abs16_r : InstRL78_24bit<0x9F0000,
         (outs), (ins ABS16:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -546,6 +568,7 @@ def STORE8_abs16_r : InstRL78_24bit<0x9F0000,
 
 //Instruction       Opcode
 //MOV [SP+byte], A  98 adr
+let isCodeGenOnly = 1 in
 def STORE8_stack_slot_r : InstRL78_16bit<0x9800,
         (outs), (ins STACKSlot:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -553,6 +576,7 @@ def STORE8_stack_slot_r : InstRL78_16bit<0x9800,
 
 //MOV A, word[B]    09 adrl adrh
 //MOV A, word[C]    29 adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD8_r_memBorCi : InstRL78_24bit<0x090000,
         (outs RL78Reg:$rd), (ins RegBorCOffsetAddr:$addr),
         "mov $rd, $addr",
@@ -566,6 +590,7 @@ def LOAD8_r_ri : InstRL78_24bit<0x490000,
         [(set i8:$rd, (load ADDRri16orBC:$addr))]>;
 
 //MOV A, [DE]       89
+let isCodeGenOnly = 1 in
 def LOAD8_r_memDE : InstRL78_8bit<0x89,
         (outs RL78Reg:$rd), (ins RegOffsetAddr:$addr),
         "mov $rd, $addr",
@@ -595,6 +620,7 @@ def LOAD8_r_memHLi : InstRL78_16bit<0x8C00,
 
 //MOV word[B], A    18 adrl adrh
 //MOV word[C], A    38 adrl adrh
+let isCodeGenOnly = 1 in
 def STORE8_memBorCi_r : InstRL78_24bit<0x380000,
         (outs), (ins RegBorCOffsetAddr:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -608,6 +634,7 @@ def STORE8_ri_r : InstRL78_24bit<0x480000,
         [(store i8:$rsrc, ADDRri16orBC:$addr)]>;
 
 //MOV [DE], A       99
+let isCodeGenOnly = 1 in
 def STORE8_memDE_r : InstRL78_8bit<0x99,
         (outs), (ins RegOffsetAddr:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -638,12 +665,14 @@ def STORE8_memHLi_r : InstRL78_16bit<0x9C00,
 let hasSideEffects = 1 in {
 
 //MOV A, sfr ;8E sfr
+let isCodeGenOnly = 1 in
 def LOAD8_r_sfr : InstRL78_16bit<0x8E00,
         (outs RL78Reg:$rd), (ins Sfr:$addr),
         "mov $rd, $addr",
         [(set i8:$rd, (load SFR:$addr))]>;
 
 //MOV sfr, A ;9E sfr
+let isCodeGenOnly = 1 in
 def STORE8_sfr_r : InstRL78_16bit<0x9E00,
         (outs), (ins Sfr:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -657,7 +686,8 @@ let hasSideEffects = 1 in {
 
 // mov A, PSW
 let Uses = [CCreg] in {
-def MOV_A_PSW : InstRL78_16bit<0x8EFA,
+let isCodeGenOnly = 1 in
+def MOV_A_PSW_cg : InstRL78_16bit<0x8EFA,
         (outs RL78Reg:$dest), (ins),
         "mov $dest, PSW",
          [(set i8:$dest, (int_rl78_getpsw))]>;
@@ -665,7 +695,8 @@ def MOV_A_PSW : InstRL78_16bit<0x8EFA,
 
 // mov PSW, A
 let Defs = [CCreg], Uses = [CCreg] in {
-def MOV_PSW_A : InstRL78_16bit<0x9EFA,
+let isCodeGenOnly = 1 in
+def MOV_PSW_A_cg : InstRL78_16bit<0x9EFA,
         (outs), (ins RL78Reg:$rsrc),
         "mov PSW, $rsrc",
          [(int_rl78_setpsw i8:$rsrc)]>;
@@ -673,6 +704,7 @@ def MOV_PSW_A : InstRL78_16bit<0x9EFA,
 
 //MOV PSW, #byte      CE FA data
 let Defs = [CCreg], Uses = [CCreg], mayLoad = 0, mayStore = 1 in {
+let isCodeGenOnly = 1 in
 def MOV_psw_imm : InstRL78_24bit<0xcefa00,
         (outs RL78RegPSW:$rd), (ins i8imm:$imm8),
         "mov $rd, $imm8",
@@ -706,6 +738,7 @@ def MOV_sfrReg_imm : InstRL78_24bit<0xCE0000,
 
 //MOV ES, saddr ;61 B8 saddr
 let mayLoad = 1, mayStore = 0 in
+let isCodeGenOnly = 1 in
 def MOV_es_saddr : InstRL78_24bit<0x61B800,
         (outs RL78RegES:$rd), (ins ABS8:$src),
         "mov $rd, $src",
@@ -713,6 +746,7 @@ def MOV_es_saddr : InstRL78_24bit<0x61B800,
 
 //MOV ES:!addr16, #byte ;11 CF adrl adrh data
 let mayLoad = 0, mayStore = 1, usesCustomInserter = 1 in
+let isCodeGenOnly = 1 in
 def MOV_esaddr16_imm : InstRL78_40bit<0x11cf000000,
         (outs), (ins EsAddr16:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -723,6 +757,7 @@ def MOV_esaddr16_imm : InstRL78_40bit<0x11cf000000,
 //MOV C, ES:!addr16 ;11 F9 adrl adrh
 //MOV X, ES:!addr16 ;11 D9 adrl adrh
 let mayLoad = 1, mayStore = 0, usesCustomInserter = 1 in
+let isCodeGenOnly = 1 in
 def MOV_r_esaddr16 : InstRL78_32bit<0x118f0000,
         (outs RL78Reg:$rd), (ins EsAddr16:$addr ),
         "mov $rd, $addr",
@@ -731,6 +766,7 @@ def MOV_r_esaddr16 : InstRL78_32bit<0x118f0000,
 let mayLoad = 0, mayStore = 1, usesCustomInserter = 1 in {
 
 //MOV ES:!addr16, A ;11 9F adrl adrh
+let isCodeGenOnly = 1 in
 def MOV_esaddr16_r: InstRL78_32bit<0x119f0000,
         (outs), (ins EsAddr16:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
@@ -738,6 +774,7 @@ def MOV_esaddr16_r: InstRL78_32bit<0x119f0000,
 
 //MOV ES:[HL+B], A ;11 61 D9
 //MOV ES:[HL+C], A ;11 61 F9
+let isCodeGenOnly = 1 in
 def STORE8_esmemRpr_a : InstRL78_24bit<0x1161D9,
        (outs), (ins EsRegRegReg:$addr, RL78Reg:$rsrc),
        "mov $addr, $rsrc",
@@ -745,12 +782,14 @@ def STORE8_esmemRpr_a : InstRL78_24bit<0x1161D9,
 
 //MOV ES:word[B], #byte  ;11 19 adrl adrh data
 //MOV ES:word[C], #byte  ;11 38 adrl adrh data
+let isCodeGenOnly = 1 in
 def STORE8_esmemBorCi_imm : InstRL78_40bit<0x1119000000,
         (outs), (ins EsRegBorCRegAddr:$addr, i8imm:$imm),
         "mov $addr, $imm",
         [(store (i8 imm:$imm), ESADDRr8i16:$addr)]>;
 
 //MOV ES:word[BC], #byte ;11 39 adrl adrh data
+let isCodeGenOnly = 1 in
 def STORE8_esmemBCi_imm : InstRL78_40bit<0x1139000000,
         (outs), (ins EsRegRegAddr:$addr, i8imm:$imm),
         "mov $addr, $imm",
@@ -758,6 +797,7 @@ def STORE8_esmemBCi_imm : InstRL78_40bit<0x1139000000,
 
 // MOV es:word[B], A     11 18 adrl adrh
 // MOV es:word[C], A     11 28 adrl adrh
+let isCodeGenOnly = 1 in
 def STORE8_esmemBorCi_r : InstRL78_32bit<0x11180000,
        (outs), (ins EsRegBorCRegAddr:$addr, RL78Reg:$rsrc),
        "mov $addr, $rsrc",
@@ -776,6 +816,7 @@ let mayLoad = 0, mayStore = 1 in {
 //Instruction           Opcode
 
 // MOV es:[DE], A         11 99
+let isCodeGenOnly = 1 in
 def STORE8_esmemDE_r : InstRL78_16bit<0x1199,
        (outs), (ins EsRegRegAddr:$addr, RL78Reg:$rsrc),
        "mov $addr, $rsrc",
@@ -819,6 +860,7 @@ let mayLoad = 1, mayStore = 0, usesCustomInserter = 1 in {
 //Instruction            Opcode
 //MOV A, es:word[B]   11 09 adrl adrh
 //MOV A, es:word[C]   11 29 adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD8_a_esmemBorCi : InstRL78_32bit<0x11090000,
         (outs RL78Reg:$rd), (ins EsRegBorCRegAddr:$addr),
         "mov $rd, $addr",
@@ -826,6 +868,7 @@ def LOAD8_a_esmemBorCi : InstRL78_32bit<0x11090000,
 
 //MOV A, ES:[HL+B] ;11 61 C9
 //MOV A, ES:[HL+C] ;11 61 E9
+let isCodeGenOnly = 1 in
 def LOAD8_a_esmemRpr : InstRL78_24bit<0x1161C9,
         (outs RL78Reg:$rd), (ins EsRegRegReg:$addr),
         "mov $rd, $addr",
@@ -842,6 +885,7 @@ let mayLoad = 1, mayStore = 0 in {
 
 //Instruction            Opcode
 //MOV A, es:[DE]       11 89
+let isCodeGenOnly = 1 in
 def LOAD8_a_esmemDE : InstRL78_16bit<0x1189,
         (outs RL78AReg:$rd), (ins EsRegRegAddr:$addr),
         "mov $rd, $addr",
@@ -876,7 +920,8 @@ let mayLoad = 0, mayStore = 0 in {
 let Constraints = "$rsrc = $rd, $rsrc2 = $rd2" in
 {
 //XCH A, r          61 8X (C..H -> A..F)
-def XCH_A_r  : InstRL78_16bit<0x618A,
+let isCodeGenOnly = 1 in
+def XCH_A_r_cg  : InstRL78_16bit<0x618A,
         (outs RL78AReg:$rd, RL78XBCEDHLReg:$rd2), (ins RL78AReg:$rsrc, RL78XBCEDHLReg:$rsrc2),
         "xch $rd, $rsrc2",
         []>;
@@ -884,7 +929,8 @@ def XCH_A_r  : InstRL78_16bit<0x618A,
 
 //Instruction       Opcode
 //XCH A, X          08
-def XCH_A_X  : InstRL78_8bit<0x08,
+let isCodeGenOnly = 1 in
+def XCH_A_X_cg  : InstRL78_8bit<0x08,
         (outs RL78AReg:$rd, RL78XReg:$rd2), (ins RL78AReg:$rsrc, RL78XReg:$rsrc2),
         "xch $rd, $rsrc2",
         []>;
@@ -894,6 +940,7 @@ def XCH_A_X  : InstRL78_8bit<0x08,
 let mayLoad = 1, mayStore = 1 in {
 
 //XCH A, saddr      61 A8 saddr
+let isCodeGenOnly = 1 in
 def XCH_A_saddrabs  : InstRL78_24bit<0x61A800,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, ABS8:$src2),
         "xch $rd, $src2",
@@ -902,7 +949,8 @@ def XCH_A_saddrabs  : InstRL78_24bit<0x61A800,
 let Constraints = "$rsrc = $rd, $sfr = $sfr2", hasSideEffects = 1 in
 {
 //XCH A, sfr      61 AB saddr
-def XCH_A_sfr  : InstRL78_24bit<0x61AB00,
+let isCodeGenOnly = 1 in
+def XCH_A_sfr_cg  : InstRL78_24bit<0x61AB00,
         (outs RL78AReg:$rd, Sfr:$sfr), (ins RL78AReg:$rsrc, Sfr:$sfr2),
         "xch $rd, $sfr2",
         []>;
@@ -919,7 +967,8 @@ let Constraints = "$rsrc = $rd" in {
 
 //Instruction       Opcode
 //XCH A, !addr16    61 AA adrl adrh
-def XCH_A_abs16  : InstRL78_32bit<0x61AA0000,
+let isCodeGenOnly = 1 in
+def XCH_A_abs16_cg  : InstRL78_32bit<0x61AA0000,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, ABS16:$addr),
         "xch $rd, $addr",
         []>;
@@ -928,7 +977,7 @@ def XCH_A_abs16  : InstRL78_32bit<0x61AA0000,
 
 //Instruction       Opcode
 //XCH A, !addr16    61 AA adrl adrh
-//def XCH_A_abs16  : InstRL78_32bit<0x61AA0000,
+//def XCH_A_abs16_cg  : InstRL78_32bit<0x61AA0000,
 //        (outs RL78AReg:$rd, ABS16:$addr1 ), (ins RL78AReg:$rsrc, ABS16:$addr2),
 //        "xch $rd, $addr1",
 //        []>;
@@ -939,6 +988,7 @@ def XCH_A_abs16  : InstRL78_32bit<0x61AA0000,
 //XCH A, [DE+byte]  61 AF adr
 //XCH A, [HL]       61 AC
 //XCH A, [HL+byte]  61 AD adr
+let isCodeGenOnly = 1 in
 def XCH_A_memri : InstRL78_24bit<0x61AF00,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RegOffsetAddr:$addr),
         "xch $rd, $addr",
@@ -947,18 +997,21 @@ def XCH_A_memri : InstRL78_24bit<0x61AF00,
 //Instruction       Opcode
 //XCH A, [HL+B]     61 B9
 //XCH A, [HL+C]     61 A9
+let isCodeGenOnly = 1 in
 def XCH_A_memrr : InstRL78_16bit<0x61B9,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RegRegAddr:$addr),
         "xch $rd, $addr",
         []>;
 
 //XCH A, ES:!addr16 ;11 61 AA adrl adrh
+let isCodeGenOnly = 1 in
 def XCH_A_esaddr16 : InstRL78_40bit<0x1161AA0000,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, EsAddr16:$addr),
         "xch $rd, $addr",
         []>;
 
 //XCH A, ES:[DE] ;11 61 AE
+let isCodeGenOnly = 1 in
 def XCH_A_esmemDE : InstRL78_24bit<0x1161AE,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, EsRegRegAddr:$addr),
         "xch $rd, $addr",
@@ -971,6 +1024,7 @@ def XCH_A_esmemHL : InstRL78_24bit<0x1161AC,
 
 //XCH A, ES:[HL+B] ;11 61 B9
 //XCH A, ES:[HL+C] ;11 61 A9
+let isCodeGenOnly = 1 in
 def XCH_A_esmemRpr : InstRL78_24bit<0x1161A9,
         (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, EsRegRegReg:$addr),
         "xch $rd, $addr",
@@ -990,7 +1044,7 @@ def XCH_A_esmemRpi : InstRL78_32bit<0x1161AD00,
 
 // Initially we started with this as a pseudo instruction which expanded to:
 // 2 x COPYs for to extract the sub_lo and sub_hi parts from the 16 bit reg
-// XCH_A_r
+// XCH_A_r_cg
 // 2 x INSERT_SUBREG of sub_lo and sub_hi back into an 16 reg
 // this didn't generate the optimal code not even in simple cases,
 // we had extra mov/xch instructions which we avoided by doing this:
@@ -1111,6 +1165,7 @@ let isReMaterializable = 1 in {
 //MOVW BC, #word        32 datal datah
 //MOVW DE, #word        34 datal datah
 //MOVW HL, #word        36 datal datah
+let isCodeGenOnly = 1 in
 def MOVW_rp_imm : InstRL78_24bit<0x300000,
         (outs RL78RPRegs:$rd), (ins i16imm:$imm16),
         "movw $rd, $imm16",
@@ -1118,6 +1173,7 @@ def MOVW_rp_imm : InstRL78_24bit<0x300000,
 }
 
 //MOVW saddrp, #word    C9 saddr datal datah
+let isCodeGenOnly = 1 in
 def MOVW_saddrp_imm : InstRL78_32bit<0xC9000000,
         (outs), (ins ABS8:$addr, i16imm:$imm16),
         "movw $addr, $imm16",
@@ -1125,6 +1181,7 @@ def MOVW_saddrp_imm : InstRL78_32bit<0xC9000000,
 
 //MOVW sfrp,#word ;CB sfr datal datah
 let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+let isCodeGenOnly = 1 in
 def STORE16_sfrp_imm : InstRL78_32bit<0xCB000000,
         (outs), (ins  Sfrp:$addr, i16imm:$imm16),
         "movw $addr, $imm16",
@@ -1134,6 +1191,7 @@ let mayLoad = 0, mayStore = 0 in {
 
 //Instruction       Opcode
 //MOVW SP, #word    CB F8 datal datah
+let isCodeGenOnly = 1 in
 def MOVW_sp_imm  : InstRL78_32bit<0xCBF80000,
         (outs RL78SPReg:$rd), (ins i16imm:$imm16),
         "movw $rd, $imm16",
@@ -1143,7 +1201,8 @@ def MOVW_sp_imm  : InstRL78_32bit<0xCBF80000,
 //MOVW AX, BC       13
 //MOVW AX, DE       15
 //MOVW AX, HL       17
-def MOVW_AX_rp : InstRL78_8bit<0x13,
+let isCodeGenOnly = 1 in
+def MOVW_AX_rp_cg : InstRL78_8bit<0x13,
         (outs RL78AXRP:$rd), (ins RL78BCDEHL:$rsrc),
         "movw $rd, $rsrc",
         []>;
@@ -1152,7 +1211,8 @@ def MOVW_AX_rp : InstRL78_8bit<0x13,
 //MOVW BC, AX       12
 //MOVW DE, AX       14
 //MOVW HL, AX       16
-def MOVW_rp_AX : InstRL78_8bit<0x12,
+let isCodeGenOnly = 1 in
+def MOVW_rp_AX_cg : InstRL78_8bit<0x12,
         (outs RL78BCDEHL:$rd), (ins RL78AXRP:$rsrc),
         "movw $rd, $rsrc",
         []>;
@@ -1167,6 +1227,7 @@ def MOVW_rp_sp  : InstRL78_24bit<0xDBF8FF,
         []>;
 
 //MOVW AX, SP       AE F8
+let isCodeGenOnly = 1 in
 def MOVW_AX_sp  : InstRL78_16bit<0xAEF8,
         (outs RL78RPRegs:$rd), (ins RL78SPReg:$rsrc),
         "movw $rd, $rsrc",
@@ -1174,6 +1235,7 @@ def MOVW_AX_sp  : InstRL78_16bit<0xAEF8,
 
 //Instruction       Opcode
 //MOVW SP, AX       BE F8
+let isCodeGenOnly = 1 in
 def MOVW_sp_rp  : InstRL78_16bit<0xBEF8,
         (outs RL78SPReg:$rd), (ins RL78RPRegs:$rsrc),
         "movw $rd, $rsrc",
@@ -1210,6 +1272,7 @@ def : Pat<(RL78Low8 tconstpool:$addr),
 //MOVW BC, !addr16      DB adrl adrh
 //MOVW DE, !addr16      EB adrl adrh
 //MOVW HL, !addr16      FB adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD16_rp_abs16 : InstRL78_24bit<0xAF0000,
         (outs RL78RPRegs:$rd), (ins ABS16:$addr),
         "movw $rd, $addr",
@@ -1220,6 +1283,7 @@ def LOAD16_rp_abs16 : InstRL78_24bit<0xAF0000,
 //MOVW BC, saddrp    DA saddr
 //MOVW DE, saddrp    EA saddr
 //MOVW HL, saddrp    FA saddr
+let isCodeGenOnly = 1 in
 def LOAD16_rp_saddrp : InstRL78_16bit<0xAD00,
         (outs RL78RPRegs:$rd), (ins ABS8:$addr),
         "movw $rd, $addr",
@@ -1231,6 +1295,7 @@ let usesCustomInserter = 1 in {
 //MOVW BC, ES:!addr16   11 DB adrl adrh
 //MOVW DE, ES:!addr16   11 EB adrl adrh
 //MOVW HL, ES:!addr16   11 FB adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD16_rp_esaddr16 : InstRL78_32bit<0x11AF0000,
         (outs RL78RPRegs:$rd), (ins EsAddr16:$addr),
         "movw $rd, $addr",
@@ -1245,6 +1310,7 @@ def MOVW_rp_stack_slot : Pseudo<
 
 //Instruction           Opcode
 //MOVW !addr16, AX      BF adrl adrh
+let isCodeGenOnly = 1 in
 def STORE16_abs16_rp : InstRL78_24bit<0xBF0000,
         (outs), (ins ABS16:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
@@ -1253,6 +1319,7 @@ def STORE16_abs16_rp : InstRL78_24bit<0xBF0000,
 //Instruction           Opcode
 //MOVW AX, word[B]      59 adrl adrh
 //MOVW AX, word[C]      69 adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD16_rp_memBorCi : InstRL78_24bit<0x590000,
         (outs RL78RPRegs:$rd), (ins RegBorCOffsetAddr:$addr),
         "movw $rd, $addr",
@@ -1267,12 +1334,14 @@ def LOAD16_rp_rpi : InstRL78_24bit<0x790000,
 
 //Instruction        Opcode
 //MOVW saddrp, AX    BD saddr
+let isCodeGenOnly = 1 in
 def STORE16_saddrp_rp : InstRL78_16bit<0xBD00,
         (outs ), (ins ABS8:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
         [(store i16:$rsrc, SADDR:$addr)]>;
 
 //MOVW AX, [DE]       A9
+let isCodeGenOnly = 1 in
 def LOAD16_rp_memDE : InstRL78_8bit<0xA9,
         (outs RL78RPRegs:$rd), (ins RegOffsetAddr:$addr),
         "movw $rd, $addr",
@@ -1302,6 +1371,7 @@ def LOAD16_rp_memHLi : InstRL78_16bit<0xAC00,
 
 //MOVW AX, es:word[B]   11 59 adrl adrh
 //MOVW AX, es:word[C]   11 69 adrl adrh
+let isCodeGenOnly = 1 in
 def LOAD16_rp_esmemBorCi : InstRL78_32bit<0x11590000,
         (outs RL78RPRegs:$rd), (ins EsRegBorCRegAddr:$addr),
         "movw $rd, $addr",
@@ -1317,6 +1387,7 @@ def LOAD16_rp_esrpi : InstRL78_32bit<0x11790000,
 let mayLoad = 1, mayStore = 0 in {
 
 //MOVW AX, es:[DE]       11 A9
+let isCodeGenOnly = 1 in
 def LOAD16_rp_esmemDE : InstRL78_16bit<0x11A9,
         (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
         "movw $rd, $addr",
@@ -1345,6 +1416,7 @@ def LOAD16_rp_esmemHLi : InstRL78_24bit<0x11AC00,
 //Instruction           Opcode
 //MOVW word[B], AX     58 adrl adrh
 //MOVW word[C], AX     68 adrl adrh
+let isCodeGenOnly = 1 in
 def STORE16_memBorCi_rp : InstRL78_24bit<0x580000,
         (outs), (ins RegBorCOffsetAddr:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
@@ -1358,6 +1430,7 @@ def STORE16_rpi_rp : InstRL78_24bit<0x780000,
 
 
 //MOVW [DE], AX         B9
+let isCodeGenOnly = 1 in
 def STORE16_memDE_rp : InstRL78_8bit<0xB9,
         (outs), (ins RegOffsetAddr:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
@@ -1389,6 +1462,7 @@ let mayLoad = 0, mayStore = 1 in {
 
 // MOVW es:word[B], AX     11 58 adrl adrh
 // MOVW es:word[C], AX     11 68 adrl adrh
+let isCodeGenOnly = 1 in
 def STORE16_esmemBorCi_rp : InstRL78_32bit<0x11580000,
        (outs), (ins EsRegBorCRegAddr:$addr, RL78RPRegs:$rsrc),
        "movw $addr, $rsrc",
@@ -1401,6 +1475,7 @@ def STORE16_esrpi_rp : InstRL78_32bit<0x11780000,
        [(store i16:$rsrc, ESADDRri16orBC:$addr)]>;
 
 // MOVW es:[DE], AX         11 B9
+let isCodeGenOnly = 1 in
 def STORE16_esmemDE_rp : InstRL78_16bit<0x11B9,
        (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
        "movw $addr, $rsrc",
@@ -1428,18 +1503,21 @@ def STORE16_esmemHLi_rp : InstRL78_24bit<0x11BC00,
 } // mayLoad = 0, mayStore = 1
 
 //MOVW AX, [SP+byte]    A8 adr
+  let isCodeGenOnly = 1 in
   def LOAD16_rp_stack_slot : InstRL78_16bit<0xA800,
         (outs RL78RPRegs:$rd), (ins STACKSlot:$addr),
         "movw $rd, $addr",
         [(set i16:$rd, (load ADDRSPi:$addr))]>;
 
 //MOVW [SP+byte], AX    B8 adr
+  let isCodeGenOnly = 1 in
   def STORE16_stack_slot_rp : InstRL78_16bit<0xB800,
         (outs), (ins STACKSlot:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
         [(store i16:$rsrc, ADDRSPi:$addr)]>;
 
 //MOVW ES:!addr16, AX   ;11 BF adrl adrh
+let isCodeGenOnly = 1 in
 def STORE16_esaddr16_rp : InstRL78_32bit<0x11BF0000,
         (outs), (ins EsAddr16:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
@@ -1448,12 +1526,14 @@ def STORE16_esaddr16_rp : InstRL78_32bit<0x11BF0000,
 let hasSideEffects = 1 in {
 
 //MOVW AX, sfrp ;AE sfr
+let isCodeGenOnly = 1 in
 def LOAD16_rp_sfrp : InstRL78_16bit<0xAE00,
         (outs RL78RPRegs:$rd), (ins Sfrp:$addr),
         "movw $rd, $addr",
         [(set i16:$rd, (load SFR:$addr))]>;
 
 //MOVW sfrp, AX ;BE sfr
+let isCodeGenOnly = 1 in
 def STORE16_sfrp_rp : InstRL78_16bit<0xBE00,
         (outs), (ins Sfrp:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
@@ -1507,7 +1587,8 @@ let Constraints = "$rsrc = $rd, $rsrc2 = $rd2" in
 //XCHW AX, DE   35
 //XCHW AX, HL   37
 let mayLoad = 0, mayStore = 0 in
-def XCHW_AX_rp  : InstRL78_8bit<0x33,
+let isCodeGenOnly = 1 in
+def XCHW_AX_rp_cg  : InstRL78_8bit<0x33,
         (outs RL78AXRP:$rd, RL78BCDEHL:$rd2), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
         "xchw $rd, $rsrc2",
         []>;
@@ -3481,6 +3562,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 
 //Instruction       Opcode
 //SHR A, X          31 XA (X -> 1..7)
+  let isCodeGenOnly = 1 in
   def SHR_r_i  : InstRL78_16bit<0x310A,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "shr $rd, $imm",
@@ -3519,6 +3601,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHRW AX, 13       31 DE
 //SHRW AX, 14       31 EE
 //SHRW AX, 15       31 FE
+  let isCodeGenOnly = 1 in
   def SHRW_rp_i  : InstRL78_16bit<0x311E,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "shrw $rd, $imm",
@@ -3542,6 +3625,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHL A, X          31 X9 (X -> 1..7)
 //SHL B, X          31 X8 (X -> 1..7)
 //SHL C, X          31 X7 (X -> 1..7)
+  let isCodeGenOnly = 1 in
   def SHL_r_imm  : InstRL78_16bit<0x3119,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "shl $rd, $imm",
@@ -3566,6 +3650,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //Instruction       Opcode
 //SHLW AX, X        31 XD (X -> 1..15)
 //SHLW BC, X        31 XC (X -> 1..15)
+  let isCodeGenOnly = 1 in
   def SHLW_rp_imm  : InstRL78_16bit<0x311D,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "shlw $rd, $imm",
@@ -3587,6 +3672,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 
 //Instruction       Opcode
 //SAR A, X          31 XB (X -> 1..7)
+  let isCodeGenOnly = 1 in
   def SAR_r_i  : InstRL78_16bit<0x310B,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "sar $rd, $imm",
@@ -3624,6 +3710,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SARW AX, 13       31 DF
 //SARW AX, 14       31 EF
 //SARW AX, 15       31 FF
+  let isCodeGenOnly = 1 in
   def SARW_rp_i  : InstRL78_16bit<0x311F,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "sarw $rd, $imm",
@@ -3697,6 +3784,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1  in
 {
 //Instruction       Opcode
 //ROR A, 1          61 DB
+  let isCodeGenOnly = 1 in
   def ROR_r_1 : InstRL78_16bit<0x61DB,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "ror $rd, 1",
@@ -3710,6 +3798,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1  in
 let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //Instruction       Opcode
 //ROL A, 1          61 EB
+  let isCodeGenOnly = 1 in
   def ROL_r_1  : InstRL78_16bit<0x61EB,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "rol $rd, 1",
@@ -3724,6 +3813,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], Uses = [CCreg] in {
 //Instruction       Opcode
 //RORC A, 1         61 FB
 let mayLoad = 0, mayStore = 0 in
+let isCodeGenOnly = 1 in
 def RORC_r_1 : InstRL78_16bit<0x61FB,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "rorc $rd, 1",
@@ -3738,6 +3828,7 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], Uses = [CCreg] in {
 //Instruction       Opcode
 //ROLC A, 1         61 DC
 let mayLoad = 0, mayStore = 0 in
+  let isCodeGenOnly = 1 in
   def ROLC_r_1  : InstRL78_16bit<0x61DC,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "rolc $rd, 1",
@@ -3754,7 +3845,8 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], Uses = [CCreg] in {
 //ROLWC AX, 1       61 EE
 //ROLWC BC, 1       61 FE
 let mayLoad = 0, mayStore = 0 in
-def ROLWC_rp_1  : InstRL78_16bit<0x61EE,
+let isCodeGenOnly = 1 in
+def ROLWC_rp_1_cg  : InstRL78_16bit<0x61EE,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
         "rolwc $rd, 1",
         []>;

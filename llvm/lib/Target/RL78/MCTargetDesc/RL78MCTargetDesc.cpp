@@ -144,7 +144,7 @@ public:
       return (Inst.getOperand(1).getImm() & 0xFFFF) + 0xF0000;
     case RL78::ADDC_r_abs16:
     case RL78::ADD_r_abs16:
-    case RL78::XCH_A_abs16:
+    case RL78::XCH_A_abs16_cg:
     case RL78::XOR_r_abs16:
     case RL78::OR_r_abs16:
     case RL78::AND_r_abs16:

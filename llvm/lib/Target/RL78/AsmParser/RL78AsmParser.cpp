@@ -941,6 +941,106 @@ public:
            (EsRegRegReg.Reg.RegNum == RL78::R2 ||
             EsRegRegReg.Reg.RegNum == RL78::R3);
   }
+  static bool isDEorHL(unsigned Reg) {
+    return Reg == RL78::RP4 || Reg == RL78::RP6;
+  }
+  // [DE], [HL] (and [DE+0], [HL+0]); [DE+byte], [HL+byte].
+  bool isMemRP() const {
+    return (Kind == k_HLAddr && HLAddr.HlReg.RegNum == RL78::RP6) ||
+           (Kind == k_RegOffsetAddr && isDEorHL(RegOffsetAddr.RPReg.RegNum) &&
+            isZero(RegOffsetAddr.Val));
+  }
+  bool isMemRPi() const {
+    return (Kind == k_HLAddr && HLAddr.HlReg.RegNum == RL78::RP6) ||
+           (Kind == k_RegOffsetAddr && isDEorHL(RegOffsetAddr.RPReg.RegNum));
+  }
+  bool isMemSPi() const { return Kind == k_STACKSlot; }
+  // word[B], word[C], word[BC]
+  bool isMemBw() const {
+    return Kind == k_RegBorCOffsetAddr && RegBorCOffsetAddr.Reg.RegNum == RL78::R3;
+  }
+  bool isMemCw() const {
+    return Kind == k_RegBorCOffsetAddr && RegBorCOffsetAddr.Reg.RegNum == RL78::R2;
+  }
+  bool isMemBCw() const {
+    return Kind == k_RegOffsetAddr && RegOffsetAddr.RPReg.RegNum == RL78::RP2;
+  }
+  bool isESMemRP() const {
+    return (Kind == k_EsHlRegAddr && EsHlRegAddr.RL78HL.RegNum == RL78::RP6) ||
+           (Kind == k_EsRegRegAddr && isDEorHL(EsRegRegAddr.RPReg.RegNum) &&
+            isZero(EsRegRegAddr.Val));
+  }
+  bool isESMemRPi() const {
+    return (Kind == k_EsHlRegAddr && EsHlRegAddr.RL78HL.RegNum == RL78::RP6) ||
+           (Kind == k_EsRegRegAddr && isDEorHL(EsRegRegAddr.RPReg.RegNum));
+  }
+  bool isESMemBw() const {
+    return Kind == k_EsRegBorCRegAddr && EsRegBorCRegAddr.Reg.RegNum == RL78::R3;
+  }
+  bool isESMemCw() const {
+    return Kind == k_EsRegBorCRegAddr && EsRegBorCRegAddr.Reg.RegNum == RL78::R2;
+  }
+  bool isESMemBCw() const {
+    return Kind == k_EsRegRegAddr && EsRegRegAddr.RPReg.RegNum == RL78::RP2;
+  }
+  unsigned getRPBase() const {
+    if (Kind == k_HLAddr)
+      return HLAddr.HlReg.RegNum;
+    if (Kind == k_RegOffsetAddr)
+      return RegOffsetAddr.RPReg.RegNum;
+    if (Kind == k_EsHlRegAddr)
+      return EsHlRegAddr.RL78HL.RegNum;
+    assert(Kind == k_EsRegRegAddr && "not a [rp+byte] operand");
+    return EsRegRegAddr.RPReg.RegNum;
+  }
+  void addDisp(MCInst &Inst) const {
+    if (const MCExpr *Disp = getMemDisp())
+      addExpr(Inst, Disp);
+    else
+      Inst.addOperand(MCOperand::createImm(0));
+  }
+  void addMemRPOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getRPBase()));
+  }
+  void addMemRPiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getRPBase()));
+    addDisp(Inst);
+  }
+  void addMemSPiOperands(MCInst &Inst, unsigned N) const {
+    addSTACKSlotNoOperands(Inst, N);
+  }
+  void addMemBwOperands(MCInst &Inst, unsigned N) const {
+    addRegBorCOffsetAddrOperands(Inst, N);
+  }
+  void addMemCwOperands(MCInst &Inst, unsigned N) const {
+    addRegBorCOffsetAddrOperands(Inst, N);
+  }
+  void addMemBCwOperands(MCInst &Inst, unsigned N) const {
+    addRegOffsetAddrOperands(Inst, N);
+  }
+  void addESMemRPOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::ES));
+    Inst.addOperand(MCOperand::createReg(getRPBase()));
+  }
+  void addESMemRPiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(RL78::ES));
+    Inst.addOperand(MCOperand::createReg(getRPBase()));
+    addDisp(Inst);
+  }
+  void addESMemBwOperands(MCInst &Inst, unsigned N) const {
+    addEsRegBorCRegAddrOperands(Inst, N);
+  }
+  void addESMemCwOperands(MCInst &Inst, unsigned N) const {
+    addEsRegBorCRegAddrOperands(Inst, N);
+  }
+  void addESMemBCwOperands(MCInst &Inst, unsigned N) const {
+    addEsRegRegAddrOperands(Inst, N);
+  }
+
   const MCExpr *getMemDisp() const {
     if (Kind == k_RegOffsetAddr)
       return RegOffsetAddr.Val;

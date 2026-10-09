@@ -146,7 +146,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_cs), RL78::R1)
           .addReg(RL78::CS)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A), RL78::R0)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A_cg), RL78::R0)
           .addReg(RL78::R1)
           .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
@@ -254,14 +254,14 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       if (MBB.isLiveIn(RL78::RP0) || MBB.isLiveIn(RL78::R0) ||
           MBB.isLiveIn(RL78::R1)) {
         // Number of bytes taken by the instructions:
-        // XCHW_AX_rp = 1; MOVW_rp_sp = 2; SUBW_rp_imm = 3; MOVW_sp_rp = 2;
+        // XCHW_AX_rp_cg = 1; MOVW_rp_sp = 2; SUBW_rp_imm = 3; MOVW_sp_rp = 2;
         // Total:
         // 1 + 2 + 3 + 2 + 1 = 9 bytes
         // Number of cycles each instruction takes:
-        // XCHW_AX_rp = 1; MOVW_rp_sp = 1; SUBW_rp_imm = 1; MOVW_sp_rp = 1;
+        // XCHW_AX_rp_cg = 1; MOVW_rp_sp = 1; SUBW_rp_imm = 1; MOVW_sp_rp = 1;
         // Total:
         // 1 + 1 + 1 + 1 + 1 = 5 cycles
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -276,7 +276,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -327,7 +327,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
           .addImm(alignment >> 8)
           .setMIFlags(MachineInstr::FrameSetup);
 
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r), RL78::R1)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r_cg), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
         .addReg(RL78::R1, RegState::Kill)
         .addReg(RL78::R0, RegState::Kill)
@@ -336,7 +336,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         .addReg(RL78::R1)
         .addImm(alignment & 0xff)
         .setMIFlags(MachineInstr::FrameSetup);
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r), RL78::R1)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCH_A_r_cg), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
         .addReg(RL78::R1, RegState::Kill)
         .addReg(RL78::R0, RegState::Kill)
@@ -348,7 +348,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         .setMIFlags(MachineInstr::FrameSetup);
 
     // Save the old sp just above the new stack start.
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp_cg), RL78::RP0)
         .addReg(RL78::RP6)
         .setMIFlags(MachineInstr::FrameSetup);
     if (isUInt<8>(NumBytes)) {
@@ -379,10 +379,10 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
           .setMIFlags(MachineInstr::FrameSetup);
 
       // Restore old ax value.
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp_cg), RL78::RP0)
           .addReg(RL78::RP6, RegState::Kill)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_AX), RL78::RP2)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_AX_cg), RL78::RP2)
           .addReg(RL78::RP0, RegState::Kill)
           .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_rpi), RL78::RP0)
@@ -499,7 +499,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       MF.getSubtarget().getRegisterInfo());
 
   if (RegInfo.shouldRealignStack(MF)) {
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP6, RegState::Kill)
@@ -530,7 +530,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
     BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
         .addReg(RL78::RP0)
         .setMIFlags(MachineInstr::FrameDestroy);
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP6, RegState::Kill)
@@ -589,15 +589,15 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
     } else if (NumBytesAdjusted < 0x10000) {
       if (RP0Live || R0Live || R1Live) {
         // Number of bytes taken by the instructions:
-        // XCHW_AX_rp = 1; MOVW_rp_sp = 2; ADDW_rp_imm = 3; MOVW_sp_rp = 2;
+        // XCHW_AX_rp_cg = 1; MOVW_rp_sp = 2; ADDW_rp_imm = 3; MOVW_sp_rp = 2;
         // Total:
         // 1 + 2 + 3 + 2 + 1 = 9 bytes
         // Number of cycles each instruction takes:
-        // XCHW_AX_rp = 1; MOVW_rp_sp = 1; ADDW_rp_imm = 1; MOVW_sp_rp = 1;
+        // XCHW_AX_rp_cg = 1; MOVW_rp_sp = 1; ADDW_rp_imm = 1; MOVW_sp_rp = 1;
         // Total:
         // 1 + 1 + 1 + 1 + 1 = 5 cycles
 
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -612,7 +612,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
         BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -661,7 +661,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_es_A), RL78::ES)
           .addReg(RL78::R1)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r), RL78::R1)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r_cg), RL78::R1)
           .addReg(RL78::R0)
           .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_cs_A), RL78::CS)

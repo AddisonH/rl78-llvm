@@ -78,6 +78,8 @@ def RL78XBCEDHLReg : RegisterClass<"RL78", [i8], 8, (add R0, R2, R3, R4, R5, R6,
 
 //this is for ADDrr
 def RL78BCReg : RegisterClass<"RL78", [i8], 8, (add R2, R3)>;
+def RL78BReg8 : RegisterClass<"RL78", [i8], 8, (add R3)>;
+def RL78CReg8 : RegisterClass<"RL78", [i8], 8, (add R2)>;
 
 def RL78BCXReg : RegisterClass<"RL78", [i8], 8, (add R0, R2, R3)>;
 

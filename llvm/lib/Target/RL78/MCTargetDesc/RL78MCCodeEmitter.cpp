@@ -98,16 +98,24 @@ public:
       const;
   RL78_OPERAND_ENCODER(getImm8OpValue)
   RL78_OPERAND_ENCODER(getImm16OpValue)
-  RL78_OPERAND_ENCODER(getSaddrpOpValue)
-  RL78_OPERAND_ENCODER(getAddr16wOpValue)
-  RL78_OPERAND_ENCODER(getESAddr16wOpValue)
   RL78_OPERAND_ENCODER(getSaddrOpValue)
+  RL78_OPERAND_ENCODER(getSaddrpOpValue)
+  RL78_OPERAND_ENCODER(getSfrOpValue)
   RL78_OPERAND_ENCODER(getAddr16OpValue)
-  RL78_OPERAND_ENCODER(getESAddr16OpValue)
-  RL78_OPERAND_ENCODER(getMemDisp8OpValue)
-  RL78_OPERAND_ENCODER(getESMemDisp8OpValue)
-  RL78_OPERAND_ENCODER(getMemIndexOpValue)
-  RL78_OPERAND_ENCODER(getESMemIndexOpValue)
+  RL78_OPERAND_ENCODER(getAddr16wOpValue)
+  RL78_OPERAND_ENCODER(getFarAddr16OpValue)
+  RL78_OPERAND_ENCODER(getFarAddr16wOpValue)
+  RL78_OPERAND_ENCODER(getIsCOpValue)
+  RL78_OPERAND_ENCODER(getIsBOpValue)
+  RL78_OPERAND_ENCODER(getIsHLOpValue)
+  RL78_OPERAND_ENCODER(getIsDEOpValue)
+  RL78_OPERAND_ENCODER(getDEHLDispOpValue)
+  RL78_OPERAND_ENCODER(getLowSaddrOpcode)
+  RL78_OPERAND_ENCODER(getLowAbsOpcode)
+  RL78_OPERAND_ENCODER(getRpSaddrpOpcode)
+  RL78_OPERAND_ENCODER(getRpAbsOpcode)
+  RL78_OPERAND_ENCODER(getShlRegOpValue)
+  RL78_OPERAND_ENCODER(getShlwRegOpValue)
 #undef RL78_OPERAND_ENCODER
 };
 
@@ -199,11 +207,11 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     return;
   }
   switch (MI.getOpcode()) {
-  case RL78::MOV_A_PSW:
+  case RL78::MOV_A_PSW_cg:
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
                     "Instruction using illegal register.");
     break;
-  case RL78::MOV_PSW_A:
+  case RL78::MOV_PSW_A_cg:
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
                     "Instruction using illegal register.");
     break;
@@ -376,7 +384,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits |= (uaddr | laddr);
     break;
   }
-  case RL78::MOV_A_r:
+  case RL78::MOV_A_r_cg:
     // MOV A, X          60
     // MOV A, C          62
     // MOV A, B          63
@@ -386,7 +394,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     // MOV A, H          67
     Bits |= MI.getOperand(1).getReg() - RL78::R0;
     break;
-  case RL78::MOV_r_A:
+  case RL78::MOV_r_A_cg:
     // MOV X, A          70
     // MOV C, A          72
     // MOV B, A          73
@@ -833,8 +841,8 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits = (MI.getOperand(2).getReg() == RL78::R3) ? 0x1161D9 : 0x1161F9;
     break;
   }
-  case RL78::XCH_A_X:
-  case RL78::XCH_A_r:
+  case RL78::XCH_A_X_cg:
+  case RL78::XCH_A_r_cg:
     // XCH A, X          08
     // XCH A, C          61 8A
     // XCH A, B          61 8B
@@ -848,7 +856,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     } else
       Bits += (MI.getOperand(3).getReg() - RL78::R2);
     break;
-  case RL78::XCH_A_sfr: {
+  case RL78::XCH_A_sfr_cg: {
     // XCH A, sfr      61 AB sfr.
     RL78ReportError(MI.getOperand(0).getReg() == RL78::R1,
                     "Instruction using illegal register.");
@@ -873,7 +881,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits |= addr & 0xFF;
     break;
   }
-  case RL78::XCH_A_abs16: {
+  case RL78::XCH_A_abs16_cg: {
     // XCH A, !addr16    61 AA adrl adrh.
     unsigned int addressValue = getTargetOpValue(
         MI, 2, 2, Fixups, STI, (MCFixupKind)RL78::fixup_RL78_DIR16U_RAM);
@@ -1202,13 +1210,13 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     Bits |= (datal | datah);
     break;
   }
-  case RL78::MOVW_AX_rp:
+  case RL78::MOVW_AX_rp_cg:
     // First/Only byte: BC -> 0x13, DE -> 0x15, HL -> 0x17.
     RL78ReportError(MI.getOperand(1).getReg() != MI.getOperand(0).getReg(),
                     "Invalid Instruction.");
     Bits += (MI.getOperand(1).getReg() - RL78::RP2) * 2;
     break;
-  case RL78::MOVW_rp_AX:
+  case RL78::MOVW_rp_AX_cg:
     // MOVW BC, AX       12
     // MOVW DE, AX       14
     // MOVW HL, AX       16
@@ -1574,14 +1582,14 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
     // AX -> x6, BC -> x7.
     Bits |= (MI.getOperand(0).getReg() == RL78::RP0) ? 0 : 1;
     break;
-  case RL78::XCHW_AX_rp:
+  case RL78::XCHW_AX_rp_cg:
     // XCHW AX, BC   33
     // XCHW AX, DE   35
     // XCHW AX, HL   37
     Bits += (MI.getOperand(1).getReg() - RL78::RP2) * 2;
     break;
   case RL78::BSWAP32_rp:
-    // Same as XCHW_AX_rp + 2 x XCH A, X.
+    // Same as XCHW_AX_rp_cg + 2 x XCH A, X.
     Bits += ((MI.getOperand(1).getReg() - RL78::RP2) * 2) << 8;
     break;
   case RL78::ADD_r_r:
@@ -2535,7 +2543,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI, SmallVectorImpl<char
                     "Instruction using illegal register.");
     Bits += (MI.getOperand(2).getImm() - 1) << 4;
     break;
-  case RL78::ROLWC_rp_1:
+  case RL78::ROLWC_rp_1_cg:
     // ROLWC AX, 1       61 EE
     // ROLWC BC, 1       61 FE
     RL78ReportError(MI.getOperand(1).getReg() == RL78::RP0 ||
@@ -3417,99 +3425,158 @@ unsigned RL78MCCodeEmitter::getFieldValue(const MCInst &MI, unsigned Field,
   return getTargetOpValue(MI, Val, Offset, Fixups, STI, MCFixupKind(Kind));
 }
 
-unsigned RL78MCCodeEmitter::getImm8OpValue(const MCInst &MI, unsigned OpNo,
+#define RL78_FIXUP_ENCODER(NAME, KIND)                                          \
+  unsigned RL78MCCodeEmitter::NAME(const MCInst &MI, unsigned OpNo,            \
+                                   SmallVectorImpl<MCFixup> &Fixups,           \
+                                   const MCSubtargetInfo &STI) const {         \
+    return getFieldValue(MI, OpNo, OpNo, Fixups, STI, RL78::KIND);             \
+  }
+// #byte and [rp+byte] displacements; #word.
+RL78_FIXUP_ENCODER(getImm8OpValue, fixup_RL78_DIR8U)
+RL78_FIXUP_ENCODER(getImm16OpValue, fixup_RL78_DIR16U)
+// saddr, saddrp: the linker checks the address is in FFE20H-FFF1FH.
+RL78_FIXUP_ENCODER(getSaddrOpValue, fixup_RL78_DIR8U_SAD)
+RL78_FIXUP_ENCODER(getSaddrpOpValue, fixup_RL78_DIR8UW_SAD)
+// !addr16 data: the linker checks the address is in F0000H-FFFFFH.
+RL78_FIXUP_ENCODER(getAddr16OpValue, fixup_RL78_DIR16U_RAM)
+RL78_FIXUP_ENCODER(getAddr16wOpValue, fixup_RL78_DIR16UW_RAM)
+// ES:!addr16: ES supplies bits 19-16, any 20-bit address will do.
+RL78_FIXUP_ENCODER(getFarAddr16OpValue, fixup_RL78_DIR20U_16)
+RL78_FIXUP_ENCODER(getFarAddr16wOpValue, fixup_RL78_DIR20UW_16)
+#undef RL78_FIXUP_ENCODER
+
+// sfr, sfrp: a fixed address in FFF00H-FFFFFH; the low byte is encoded.
+unsigned RL78MCCodeEmitter::getSfrOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  int64_t Value;
+  if (MO.isImm())
+    Value = MO.getImm();
+  else if (!MO.getExpr()->evaluateAsAbsolute(Value))
+    reportFatalUsageError("sfr operand must be an absolute address");
+  RL78ReportError((Value & 0xFFFFF) >= 0xFFF00, "sfr operand not in range");
+  return Value & 0xFF;
+}
+
+static MCRegister reg(const MCInst &MI, unsigned OpNo) {
+  return MI.getOperand(OpNo).getReg();
+}
+
+// [HL+B]/[HL+C].
+unsigned RL78MCCodeEmitter::getIsCOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  return reg(MI, OpNo) == RL78::R2;
+}
+unsigned RL78MCCodeEmitter::getIsBOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  return reg(MI, OpNo) == RL78::R3;
+}
+
+// [DE]/[HL], [DE+byte]/[HL+byte].
+unsigned RL78MCCodeEmitter::getIsHLOpValue(const MCInst &MI, unsigned OpNo,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI, RL78::fixup_RL78_DIR8U);
+  return reg(MI, OpNo) == RL78::RP6;
+}
+unsigned RL78MCCodeEmitter::getIsDEOpValue(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  return reg(MI, OpNo) == RL78::RP4;
+}
+unsigned
+RL78MCCodeEmitter::getDEHLDispOpValue(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
+  return reg(MI, OpNo) == RL78::RP6 ? 2 : 1;
 }
 
-unsigned RL78MCCodeEmitter::getImm16OpValue(const MCInst &MI, unsigned OpNo,
+// MOV r, saddr and MOV r, !addr16 (r: X, A, C, B); MOVW rp, saddrp and
+// MOVW rp, !addr16: the opcode byte.
+unsigned RL78MCCodeEmitter::getLowSaddrOpcode(const MCInst &MI, unsigned OpNo,
+                                              SmallVectorImpl<MCFixup> &Fixups,
+                                              const MCSubtargetInfo &STI) const {
+  switch (reg(MI, OpNo)) {
+  case RL78::R0:
+    return 0xD8;
+  case RL78::R1:
+    return 0x8D;
+  case RL78::R2:
+    return 0xF8;
+  case RL78::R3:
+    return 0xE8;
+  }
+  llvm_unreachable("MOV r, saddr takes X, A, C or B");
+}
+unsigned RL78MCCodeEmitter::getLowAbsOpcode(const MCInst &MI, unsigned OpNo,
                                             SmallVectorImpl<MCFixup> &Fixups,
                                             const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI, RL78::fixup_RL78_DIR16U);
+  switch (reg(MI, OpNo)) {
+  case RL78::R0:
+    return 0xD9;
+  case RL78::R1:
+    return 0x8F;
+  case RL78::R2:
+    return 0xF9;
+  case RL78::R3:
+    return 0xE9;
+  }
+  llvm_unreachable("MOV r, !addr16 takes X, A, C or B");
+}
+unsigned RL78MCCodeEmitter::getRpSaddrpOpcode(const MCInst &MI, unsigned OpNo,
+                                              SmallVectorImpl<MCFixup> &Fixups,
+                                              const MCSubtargetInfo &STI) const {
+  switch (reg(MI, OpNo)) {
+  case RL78::RP0:
+    return 0xAD;
+  case RL78::RP2:
+    return 0xDA;
+  case RL78::RP4:
+    return 0xEA;
+  case RL78::RP6:
+    return 0xFA;
+  }
+  llvm_unreachable("MOVW rp, saddrp takes a register pair");
+}
+unsigned RL78MCCodeEmitter::getRpAbsOpcode(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  switch (reg(MI, OpNo)) {
+  case RL78::RP0:
+    return 0xAF;
+  case RL78::RP2:
+    return 0xDB;
+  case RL78::RP4:
+    return 0xEB;
+  case RL78::RP6:
+    return 0xFB;
+  }
+  llvm_unreachable("MOVW rp, !addr16 takes a register pair");
 }
 
-unsigned RL78MCCodeEmitter::getSaddrpOpValue(const MCInst &MI, unsigned OpNo,
+// SHL A/B/C: 9, 8, 7 in the low nibble.
+unsigned RL78MCCodeEmitter::getShlRegOpValue(const MCInst &MI, unsigned OpNo,
                                              SmallVectorImpl<MCFixup> &Fixups,
                                              const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
-                       RL78::fixup_RL78_DIR8UW_SAD);
+  switch (reg(MI, OpNo)) {
+  case RL78::R1:
+    return 9;
+  case RL78::R3:
+    return 8;
+  case RL78::R2:
+    return 7;
+  }
+  llvm_unreachable("SHL takes A, B or C");
 }
 
+// SHLW AX/BC: D, C in the low nibble.
 unsigned
-RL78MCCodeEmitter::getAddr16wOpValue(const MCInst &MI, unsigned OpNo,
+RL78MCCodeEmitter::getShlwRegOpValue(const MCInst &MI, unsigned OpNo,
                                      SmallVectorImpl<MCFixup> &Fixups,
                                      const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
-                       RL78::fixup_RL78_DIR16UW_RAM);
-}
-
-unsigned
-RL78MCCodeEmitter::getESAddr16wOpValue(const MCInst &MI, unsigned OpNo,
-                                       SmallVectorImpl<MCFixup> &Fixups,
-                                       const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo + 1, Fixups, STI,
-                       RL78::fixup_RL78_DIR20UW_16);
-}
-
-unsigned RL78MCCodeEmitter::getSaddrOpValue(const MCInst &MI, unsigned OpNo,
-                                            SmallVectorImpl<MCFixup> &Fixups,
-                                            const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
-                       RL78::fixup_RL78_DIR8U_SAD);
-}
-
-unsigned RL78MCCodeEmitter::getAddr16OpValue(const MCInst &MI, unsigned OpNo,
-                                             SmallVectorImpl<MCFixup> &Fixups,
-                                             const MCSubtargetInfo &STI) const {
-  // A data address: the linker checks it is in the F0000H-FFFFFH window.
-  return getFieldValue(MI, OpNo, OpNo, Fixups, STI,
-                       RL78::fixup_RL78_DIR16U_RAM);
-}
-
-unsigned
-RL78MCCodeEmitter::getESAddr16OpValue(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const {
-  // ES supplies bits 19-16: any 20-bit address, its low 16 bits encoded.
-  return getFieldValue(MI, OpNo, OpNo + 1, Fixups, STI,
-                       RL78::fixup_RL78_DIR20U_16);
-}
-
-unsigned
-RL78MCCodeEmitter::getMemDisp8OpValue(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo + 1, Fixups, STI,
-                       RL78::fixup_RL78_DIR8U);
-}
-
-unsigned
-RL78MCCodeEmitter::getESMemDisp8OpValue(const MCInst &MI, unsigned OpNo,
-                                        SmallVectorImpl<MCFixup> &Fixups,
-                                        const MCSubtargetInfo &STI) const {
-  return getFieldValue(MI, OpNo, OpNo + 2, Fixups, STI,
-                       RL78::fixup_RL78_DIR8U);
-}
-
-// [HL+B] and [HL+C] differ in bit 1 of the opcode.
-static unsigned getIndexValue(MCRegister Reg) {
-  assert((Reg == RL78::R3 || Reg == RL78::R2) && "index register is B or C");
-  return Reg == RL78::R2 ? 2 : 0;
-}
-
-unsigned
-RL78MCCodeEmitter::getMemIndexOpValue(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const {
-  return getIndexValue(MI.getOperand(OpNo + 1).getReg());
-}
-
-unsigned
-RL78MCCodeEmitter::getESMemIndexOpValue(const MCInst &MI, unsigned OpNo,
-                                        SmallVectorImpl<MCFixup> &Fixups,
-                                        const MCSubtargetInfo &STI) const {
-  return getIndexValue(MI.getOperand(OpNo + 2).getReg());
+  return reg(MI, OpNo) == RL78::RP0 ? 0xD : 0xC;
 }
 
 MCCodeEmitter *llvm::createRL78MCCodeEmitter(const MCInstrInfo &MCII,

@@ -80,10 +80,10 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
   // MBB.dump();
   // MI.dump();
 
-  if (opIndex == 0 && MI.getOpcode() != RL78::XCH_A_r &&
+  if (opIndex == 0 && MI.getOpcode() != RL78::XCH_A_r_cg &&
       MI.getOperand(opIndex).isTied()) {
     if ((!isALive) && MI.getOperand(opIndex + 1).isKill()) {
-      BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r), RL78::R1)
+      BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r_cg), RL78::R1)
           .addReg(MI.getOperand(opIndex).getReg(), RegState::Kill);
     }
   }
@@ -92,13 +92,13 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
   if (!RL78::RL78ARegRegClass.contains(MI.getOperand(opIndex).getReg())) {
     // Pure use and A dead: MOV leaves the source intact, so no kill needed.
     if ((!isALive) && !MI.getOperand(opIndex).isDef()) {
-      BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r), RL78::R1)
+      BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r_cg), RL78::R1)
           .addReg(MI.getOperand(opIndex).getReg(),
                   getKillRegState(MI.getOperand(opIndex).isKill()));
     }
     // if register is "Def"
     else if ((!isALive) && MI.getOperand(opIndex).isDef()) {
-      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOV_r_A),
+      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOV_r_A_cg),
               MI.getOperand(opIndex).getReg())
           .addReg(RL78::R1, RegState::Kill);
     } else {
@@ -110,11 +110,11 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
       // xch A, Rx
       // op A, <...>
       // xch A, Rx
-      BuildMI(MBB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
+      BuildMI(MBB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
           .addReg(MI.getOperand(opIndex).getReg(), RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
           .addReg(MI.getOperand(opIndex).getReg(), RegState::Kill);
-      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::XCH_A_r),
+      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::XCH_A_r_cg),
               RL78::R1)
           .addReg(MI.getOperand(opIndex).getReg(), RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
@@ -122,7 +122,7 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
     }
   }
   //
-  if (MI.getOpcode() != RL78::XCH_A_r) {
+  if (MI.getOpcode() != RL78::XCH_A_r_cg) {
     MI.getOperand(opIndex).ChangeToRegister(RL78::R1, isDefOp0);
     // In case we have all 3 operands are equal.
     if (MI.getOpcode() == RL78::XOR_r_r || MI.getOpcode() == RL78::AND_r_r ||
@@ -161,13 +161,13 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
   if (Reg != RL78::RP0) {
     // Pure use and AX dead: copying in is enough, and MOVW leaves Reg intact.
     if ((!isAXLive) && !IsDef) {
-      BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
+      BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp_cg), RL78::RP0)
           .addReg(Reg, getKillRegState(MI.getOperand(opIndex).isKill()));
     }
     // Pure def and AX dead: copy out only. A tied operand is also read, so it
     // falls through to the exchange below.
     else if ((!isAXLive) && IsDef && !IsTied) {
-      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOVW_rp_AX),
+      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOVW_rp_AX_cg),
               Reg)
           .addReg(RL78::RP0, RegState::Kill);
     } else {
@@ -184,19 +184,19 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
       // xchw A, Rx
       if (!MBB.getParent()->getRegInfo().isReserved(Reg) &&
           Reg != RL78::MACRH && Reg != RL78::MACRL) {
-        BuildMI(MBB, MI, DL, TII->get(RL78::XCHW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MI, DL, TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(Reg, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(Reg, RegState::Kill);
         BuildMI(MBB, std::next(MI.getIterator()), DL,
-                TII->get(RL78::XCHW_AX_rp), RL78::RP0)
+                TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
             .addReg(Reg, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(Reg, RegState::Kill);
       } else {
         BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
             .addReg(RL78::RP0, RegState::Kill);
-        BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
+        BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp_cg), RL78::RP0)
             .addReg(Reg, RegState::Kill);
         // OBS. the order of the next 2 instruction is not wrong, they will be
         // inserted in the right order
@@ -205,7 +205,7 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
         // Only if the operand is def we need to copy it back from AX.
         if (MI.getOperand(opIndex).isDef())
           BuildMI(MBB, std::next(MI.getIterator()), DL,
-                  TII->get(RL78::MOVW_rp_AX), Reg)
+                  TII->get(RL78::MOVW_rp_AX_cg), Reg)
               .addReg(RL78::RP0, RegState::Kill);
 
         // In case of stack operations we need to compensate for the stack
@@ -299,8 +299,8 @@ static void updateAAXLiveness(const MachineInstr &MI, bool &isALive,
 
   // second mark is(A/AX)Live as true if A/AX isDef
   if (MI.getOpcode() == TargetOpcode::BUNDLE ||
-      MI.getOpcode() == RL78::XCHW_AX_rp ||
-      MI.getOpcode() == RL78::XCH_A_r ||
+      MI.getOpcode() == RL78::XCHW_AX_rp_cg ||
+      MI.getOpcode() == RL78::XCH_A_r_cg ||
       MI.isCall()) {
     // Bundle instructions can have multiple defs
     // Call defs are not first
@@ -361,8 +361,8 @@ void RemoveMOVWs(MachineInstr &MI, MachineBasicBlock &MBB,
       NextIt != MBB.end()) {
     MachineInstr &MI2 = *PrevIt;
     MachineInstr &MI3 = *NextIt;
-    if ((MI2.getOpcode() == RL78::MOVW_AX_rp) &&
-        (MI3.getOpcode() == RL78::MOVW_rp_AX) &&
+    if ((MI2.getOpcode() == RL78::MOVW_AX_rp_cg) &&
+        (MI3.getOpcode() == RL78::MOVW_rp_AX_cg) &&
         (MI3.getOperand(0).getReg() == MI2.getOperand(1).getReg()) &&
         (!Reg || (MI2.getOperand(1).getReg() == Reg)) &&
         MI3.getOperand(1).isKill()) {
@@ -560,7 +560,7 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
     // instruction path. This is the prologue shape: parameters arriving in
     // BC/DE are spilled while AX still holds another one.
     for (MachineInstr &MI : MBB) {
-      if (MI.getOpcode() != RL78::MOVW_rp_AX)
+      if (MI.getOpcode() != RL78::MOVW_rp_AX_cg)
         continue;
       Register Dst = MI.getOperand(0).getReg();
       if (Dst == RL78::RP0 || !AXLiveBefore.lookup(&MI))
@@ -679,7 +679,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
             (MI.getOperand(1).getImm() == 0) &&
             prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
           MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
-          if ((MI2.getOpcode() == RL78::MOV_r_A) &&
+          if ((MI2.getOpcode() == RL78::MOV_r_A_cg) &&
               (MI2.getOperand(0).getReg() == RL78::R0)) {
             assert(MI2.getOperand(1).getReg() == RL78::R1);
             // Build the SHRW instruction.
@@ -773,10 +773,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
             nextNonDebug(MBB, MI.getIterator()) != MBB.end()) {
           MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
           MachineInstr &MI3 = *nextNonDebug(MBB, MI.getIterator());
-          if ((MI2.getOpcode() == RL78::MOV_A_r) &&
+          if ((MI2.getOpcode() == RL78::MOV_A_r_cg) &&
               ((MI2.getOperand(1).getReg() == RL78::R2) ||
                (MI2.getOperand(1).getReg() == RL78::R3)) &&
-              (MI3.getOpcode() == RL78::MOV_r_A) &&
+              (MI3.getOpcode() == RL78::MOV_r_A_cg) &&
               ((MI3.getOperand(0).getReg() == RL78::R2) ||
                (MI3.getOperand(0).getReg() == RL78::R3)) &&
               (MI2.getOperand(1).getReg() == MI3.getOperand(0).getReg()) &&
@@ -813,9 +813,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         if (MI.getOperand(0).getReg() != RL78::R1)
           insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
-      case RL78::XCH_A_r:
-      case RL78::MOV_A_PSW:
-      case RL78::MOV_PSW_A:
+      case RL78::XCH_A_r_cg:
+      case RL78::MOV_A_PSW_cg:
+      case RL78::MOV_PSW_A_cg:
         insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
       case RL78::CLRB_r_cg:
@@ -823,7 +823,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         if (prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
           MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
           if ((MI.getOperand(0).getReg() == RL78::R1) &&
-              (MI2.getOpcode() == RL78::MOV_r_A) &&
+              (MI2.getOpcode() == RL78::MOV_r_A_cg) &&
               (MI2.getOperand(0).getReg() == RL78::R0)) {
             assert(MI2.getOperand(1).getReg() == RL78::R1);
             // Build the SHRW instruction.
@@ -843,7 +843,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // Replace MOV A, X + CMP A, [HL+byte] with CMPS X, [HL+byte].
         //
         // ExpandPostRAPseudos has already turned the copy feeding A into a real
-        // MOV_A_r, so matching RL78::COPY here would never fire.
+        // MOV_A_r_cg, so matching RL78::COPY here would never fire.
         {
           auto AAfter = ALiveAfterMI.find(&MI);
           bool ADeadAfter =
@@ -851,7 +851,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // The MOV may be separated from the CMP by instructions that do not
           // touch A or X (setting up HL, say).
           MachineBasicBlock::iterator MovIt = prevNonDebug(MBB, MI.getIterator());
-          while (MovIt != MBB.end() && MovIt->getOpcode() != RL78::MOV_A_r &&
+          while (MovIt != MBB.end() && MovIt->getOpcode() != RL78::MOV_A_r_cg &&
                  !MovIt->isCall() && !MovIt->hasUnmodeledSideEffects() &&
                  !MovIt->readsRegister(RL78::R1, TRI) &&
                  !MovIt->modifiesRegister(RL78::R1, TRI) &&
@@ -860,7 +860,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           if (ADeadAfter && MovIt != MBB.end() &&
               (!MI.getOperand(4).isDead()) && !CCLiveOut) {
             MachineInstr &MI2 = *MovIt;
-            if ((MI2.getOpcode() == RL78::MOV_A_r) &&
+            if ((MI2.getOpcode() == RL78::MOV_A_r_cg) &&
                 (MI2.getOperand(1).getReg() == RL78::R0) &&
                 (MI2.getOperand(0).getReg() == RL78::R1)) {
               MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
@@ -951,10 +951,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         Register src = MI.getOperand(1).getReg();
         if (dst != src) {
           if (dst == RL78::RP0) {
-            BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), dst)
+            BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp_cg), dst)
                 .add(MI.getOperand(1));
           } else if (src == RL78::RP0) {
-            BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_rp_AX), dst)
+            BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_rp_AX_cg), dst)
                 .add(MI.getOperand(1));
           } else {
             BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
@@ -1008,7 +1008,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           //   BRCC
           // or:
           //   CMPW rp0, rp0
-          //   <one or more non-branch instructions> e.g. rp0 = MOVW_AX_rp rp2
+          //   <one or more non-branch instructions> e.g. rp0 = MOVW_AX_rp_cg rp2
           //   BRCC
           // we can't have XOR1 instructions since this is not
           // caused by the DAGCombiner.
@@ -1198,8 +1198,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // if the 2 opcodes are equal, XCH/XCHW instructions using the same
         // registers(first one is A anyways)
         if ((MI1.getOpcode() == MI2.getOpcode()) &&
-            ((MI1.getOpcode() == RL78::XCH_A_r) ||
-             ((MI1.getOpcode() == RL78::XCHW_AX_rp))) &&
+            ((MI1.getOpcode() == RL78::XCH_A_r_cg) ||
+             ((MI1.getOpcode() == RL78::XCHW_AX_rp_cg))) &&
             (MI1.getOperand(1).getReg() == MI2.getOperand(1).getReg())) {
           // update iterator
           ++Next;
@@ -1208,9 +1208,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           MI2.eraseFromParent();
         } else if ((MI2.getOpcode() == RL78::COPY) &&
                    (MI2.getOperand(1).isKill()) &&
-                   (((MI1.getOpcode() == RL78::XCH_A_r) &&
+                   (((MI1.getOpcode() == RL78::XCH_A_r_cg) &&
                      (MI2.getOperand(0).getReg() == RL78::R1)) ||
-                    ((MI1.getOpcode() == RL78::XCHW_AX_rp) &&
+                    ((MI1.getOpcode() == RL78::XCHW_AX_rp_cg) &&
                      (MI2.getOperand(0).getReg() == RL78::RP0))) &&
                    (MI1.getOperand(1).getReg() == MI2.getOperand(1).getReg())) {
           // update iterator
@@ -1264,8 +1264,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       // if this wasn't the last instruction in BB
       if (Next != MBB.end()) {
         MachineInstr &MI2 = *Next;
-        if ((MI1.getOpcode() == RL78::MOVW_rp_AX) &&
-            (MI2.getOpcode() == RL78::MOVW_AX_rp) &&
+        if ((MI1.getOpcode() == RL78::MOVW_rp_AX_cg) &&
+            (MI2.getOpcode() == RL78::MOVW_AX_rp_cg) &&
             (MI1.getOperand(0).getReg() == MI2.getOperand(1).getReg()) &&
             MI2.getOperand(1).isKill()) {
           // update iterator
