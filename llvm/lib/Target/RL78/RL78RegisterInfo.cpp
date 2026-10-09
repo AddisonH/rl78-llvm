@@ -40,6 +40,20 @@ RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   return RC;
 }
 
+static cl::opt<float> RL78AccSpillScale(
+    "rl78-acc-spill-scale", cl::Hidden, cl::init(4.0),
+    cl::desc("Spill weight scale for values that must be in AX or A"));
+
+// A value that can only be in AX (or A) has nowhere else to go, while the
+// values competing for AX usually do: let it evict them rather than be split
+// or spilled itself.
+float RL78RegisterInfo::getSpillWeightScaleFactor(
+    const TargetRegisterClass *RC) const {
+  if (RL78VirtualAcc && RC->getNumRegs() == 1)
+    return RL78AccSpillScale;
+  return 1.0;
+}
+
 static cl::opt<bool> RL78AccCoalesce(
     "rl78-acc-coalesce", cl::Hidden, cl::init(false),
     cl::desc("Let the coalescer narrow values to AX or A"));

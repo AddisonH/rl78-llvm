@@ -50,6 +50,8 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
   getLargestLegalSuperClass(const TargetRegisterClass *RC,
                             const MachineFunction &MF) const override;
 
+  float getSpillWeightScaleFactor(const TargetRegisterClass *RC) const override;
+
   bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
                       unsigned SubReg, const TargetRegisterClass *DstRC,
                       unsigned DstSubReg, const TargetRegisterClass *NewRC,
