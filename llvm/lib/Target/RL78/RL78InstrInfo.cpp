@@ -291,6 +291,74 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   return true;
 }
 
+void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator I,
+                                     const DebugLoc &DL,
+                                     const TargetInstrInfo &TII, unsigned Op8,
+                                     const MachineOperand *Src, uint64_t Imm) {
+  auto Xch = [&] {
+    BuildMI(MBB, I, DL, TII.get(RL78::XCH_A_r), RL78::R1)
+        .addReg(RL78::R0, RegState::Define)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(RL78::R0, RegState::Kill);
+  };
+  if (Src) {
+    // A register pair: its halves, as subregisters before allocation.
+    auto Half = [&](MachineInstrBuilder MIB, unsigned Idx) {
+      Register R = Src->getReg();
+      if (R.isVirtual())
+        MIB.addReg(R, RegState::NoFlags, Idx);
+      else
+        MIB.addReg(MBB.getParent()->getSubtarget().getRegisterInfo()->getSubReg(
+            R, Idx));
+    };
+    // Both operands the same value, allocated to AX: x & x = x | x = x,
+    // x ^ x = 0.
+    if (Src->getReg() == RL78::RP0) {
+      if (Op8 == RL78::XOR_r_r)
+        BuildMI(MBB, I, DL, TII.get(RL78::CLRW_rp), RL78::RP0);
+      return;
+    }
+    Half(BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1).addReg(RL78::R1,
+                                                            RegState::Kill),
+         RL78::sub_hi);
+    Xch();
+    Half(BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1).addReg(RL78::R1,
+                                                            RegState::Kill),
+         RL78::sub_lo);
+    Xch();
+    return;
+  }
+  unsigned ImmLo = Imm & 0xFF;
+  unsigned ImmHi = (Imm >> 8) & 0xFF;
+  // Per byte (X low, A high): AND with 0 clears it, AND with 0xff and
+  // OR/XOR with 0 leave it, OR with 0xff sets it; otherwise operate in A.
+  if (ImmLo == 0x00 && Op8 == RL78::AND_r_imm) {
+    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r), RL78::R0);
+  } else if ((ImmLo != 0xff && Op8 == RL78::AND_r_imm) ||
+             (ImmLo != 0x00 &&
+              (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
+    Xch();
+    BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1)
+        .addReg(RL78::R1, RegState::Kill)
+        .addImm(ImmLo);
+    Xch();
+  } else if (Op8 == RL78::OR_r_imm && ImmLo == 0xff) {
+    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_imm), RL78::R0).addImm(ImmLo);
+  }
+  if (ImmHi == 0x00 && Op8 == RL78::AND_r_imm) {
+    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r), RL78::R1);
+  } else if ((ImmHi != 0xff && Op8 == RL78::AND_r_imm) ||
+             (ImmHi != 0x00 &&
+              (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
+    BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1)
+        .addReg(RL78::R1, RegState::Kill)
+        .addImm(ImmHi);
+  } else if (ImmHi == 0xff && Op8 == RL78::OR_r_imm) {
+    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_imm), RL78::R1).addImm(ImmHi);
+  }
+}
+
 bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineBasicBlock *BB = MI.getParent();
   DebugLoc DL = BB->findDebugLoc(MI);
@@ -360,6 +428,36 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp, RL78::SUBW_rp_rp);
   case RL78::MUL16_rp_rp_S1_S2:
     return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
+  // Left for after allocation by -rl78-virtual-acc (see LowerAndOrXor16_*).
+  case RL78::AND16_rp_rp:
+  case RL78::AND2_16_rp_rp:
+  case RL78::OR16_rp_rp:
+  case RL78::OR2_16_rp_rp:
+  case RL78::XOR16_rp_rp:
+  case RL78::XOR2_16_rp_rp:
+  case RL78::AND16_rp_imm:
+  case RL78::OR16_rp_imm:
+  case RL78::XOR16_rp_imm: {
+    assert(MI.getOperand(0).getReg() == RL78::RP0 &&
+           MI.getOperand(1).getReg() == RL78::RP0 && "not in AX");
+    unsigned Op8;
+    switch (MI.getOpcode()) {
+    case RL78::AND16_rp_rp:
+    case RL78::AND2_16_rp_rp: Op8 = RL78::AND_r_r; break;
+    case RL78::OR16_rp_rp:
+    case RL78::OR2_16_rp_rp: Op8 = RL78::OR_r_r; break;
+    case RL78::XOR16_rp_rp:
+    case RL78::XOR2_16_rp_rp: Op8 = RL78::XOR_r_r; break;
+    case RL78::AND16_rp_imm: Op8 = RL78::AND_r_imm; break;
+    case RL78::OR16_rp_imm: Op8 = RL78::OR_r_imm; break;
+    default: Op8 = RL78::XOR_r_imm; break;
+    }
+    const MachineOperand &Src = MI.getOperand(2);
+    buildLogic16OnAX(*BB, MI, DL, *this, Op8, Src.isReg() ? &Src : nullptr,
+                     Src.isImm() ? Src.getImm() : 0);
+    MI.eraseFromParent();
+    return true;
+  }
   default:
     return false;
     break;

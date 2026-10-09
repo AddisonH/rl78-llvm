@@ -53,6 +53,15 @@ public:
   /// to it, or takes any register.
   static bool acceptsAccumulator(unsigned Opcode, unsigned OpNum);
 
+  /// A 16-bit AND/OR/XOR of AX, a byte at a time through A, with AX already
+  /// holding the left operand: Op8 is AND_r_r/OR_r_r/XOR_r_r with Src the
+  /// right register pair, or AND_r_imm/OR_r_imm/XOR_r_imm with Imm.
+  static void buildLogic16OnAX(MachineBasicBlock &MBB,
+                               MachineBasicBlock::iterator I,
+                               const DebugLoc &DL, const TargetInstrInfo &TII,
+                               unsigned Op8, const MachineOperand *Src,
+                               uint64_t Imm);
+
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).

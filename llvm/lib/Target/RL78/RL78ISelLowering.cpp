@@ -3825,38 +3825,21 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
 MachineBasicBlock *
 RL78TargetLowering::LowerAndOrXor16_rp_rp(unsigned int opcode, MachineInstr &MI,
                                           MachineBasicBlock *BB) const {
+  // With -rl78-virtual-acc only the AX operands are fixed here: the
+  // allocator then sees one instruction, expanded once the other operand has
+  // its register (RL78InstrInfo::expandPostRAPseudo).
+  if (RL78VirtualAcc)
+    return Lower16BitOpAXAX(MI, BB);
   DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  // MI.dump();
-  //
+  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(MI.getOperand(2).getReg(), RegState::NoFlags, RL78::sub_hi);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(MI.getOperand(2).getReg(), RegState::NoFlags, RL78::sub_lo);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-
+  RL78InstrInfo::buildLogic16OnAX(*BB, MI, DL, *TII, opcode, &MI.getOperand(2),
+                                  0);
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
       .add(MI.getOperand(0))
       .addReg(RL78::RP0, RegState::Kill);
-
   // The pseudo instruction is gone now.
   MI.eraseFromParent();
-  // BB->dump();
   return BB;
 }
 
@@ -4484,68 +4467,21 @@ static bool LowerXorSpecialCases(unsigned int opcode, MachineInstr &MI, MachineB
 
 MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
     unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
+  if (LowerXorSpecialCases(opcode, MI, BB))
+    return BB;
+  // See LowerAndOrXor16_rp_rp.
+  if (RL78VirtualAcc)
+    return Lower16BitOpAXAX(MI, BB);
   DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  // BB->dump();
-  unsigned ImmLo = (unsigned)MI.getOperand(2).getImm() & 0xFF;
-  unsigned ImmHi = ((unsigned)MI.getOperand(2).getImm() >> 8) & 0xFF;
-
-  if(LowerXorSpecialCases(opcode, MI, BB))
-      return BB;
-
+  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-  // Part Low -> rs = R0    Part High -> rs = R1
-  // ImmLo == 0x00 -> AND  -> clrb rs.
-  // ImmLo == 0x00 -> OR   -> no instruction needs to be generated.
-  // ImmLo == 0x00 -> XOR  -> no instruction needs to be generated.
-  // ImmLo == 0xFF -> AND  -> no instruction needs to be generated.
-  // ImmLo == 0xFF -> OR   -> mov rs, 0xff
-  // ImmLo == 0xFF -> XOR  -> xch r1, r0 && xor r1, ImmLo
-  // ImmLo != 0x00 && ImmLo != 0xff  -> xch r1, r0 && opcode r1, ImmLo
-  // Part Low
-  if (ImmLo == 0x00 && opcode == RL78::AND_r_imm) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r), RL78::R0);
-  } else if ((ImmLo != 0xff && opcode == RL78::AND_r_imm) ||
-             (ImmLo != 0x00 &&
-              (opcode == RL78::OR_r_imm || opcode == RL78::XOR_r_imm))) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(ImmLo);
-
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-  } else if (opcode == RL78::OR_r_imm && ImmLo == 0xff) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_imm), RL78::R0).addImm(ImmLo);
-  }
-  // Part High
-  if (ImmHi == 0x00 && opcode == RL78::AND_r_imm) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r), RL78::R1);
-  } else if ((ImmHi != 0xff && opcode == RL78::AND_r_imm) ||
-             (ImmHi != 0x00 &&
-              (opcode == RL78::OR_r_imm || opcode == RL78::XOR_r_imm))) {
-
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(ImmHi);
-  } else if (ImmHi == 0xff && opcode == RL78::OR_r_imm) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_imm), RL78::R1).addImm(ImmHi);
-  }
-
+  RL78InstrInfo::buildLogic16OnAX(*BB, MI, DL, *TII, opcode, nullptr,
+                                  MI.getOperand(2).getImm());
   BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
       .add(MI.getOperand(0))
       .addReg(RL78::RP0, RegState::Kill);
-
   // The pseudo instruction is gone now.
   MI.eraseFromParent();
-  // BB->dump();
   return BB;
 }
 

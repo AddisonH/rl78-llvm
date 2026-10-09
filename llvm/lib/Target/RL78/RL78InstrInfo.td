@@ -2088,11 +2088,17 @@ def andmem : SDNode<"RL78ISD::ANDMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssoci
 
 let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def AND16_rp_imm  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
         ";and $rd, $rsrc, $imm16",
         [(set i16:$rd, (and i16:$rsrc, (i16 imm:$imm16)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def AND16_rp_rp  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";and $rd, $rsrc, $rsrc2",
@@ -2108,6 +2114,9 @@ def AND16_rp_abs16 : Pseudo<
         ";and a, $addr",
         [(set i16:$rd, (andmem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def AND2_16_rp_rp  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";and $rd, $rsrc, $rsrc2",
@@ -2226,11 +2235,17 @@ def ormem : SDNode<"RL78ISD::ORMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssociat
 
 let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def OR16_rp_imm  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
         ";or $rd, $rsrc, $imm16",
         [(set i16:$rd, (or i16:$rsrc, (i16 imm:$imm16)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def OR16_rp_rp  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";or $rd, $rsrc, $rsrc2",
@@ -2246,6 +2261,9 @@ def OR16_rp_abs16 : Pseudo<
         ";or a, $addr",
         [(set i16:$rd, (ormem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def OR2_16_rp_rp  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";or $rd, $rsrc, $rsrc2",
@@ -2363,11 +2381,17 @@ def xormem : SDNode<"RL78ISD::XORMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssoci
 
 let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def XOR16_rp_imm  : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
         ";xor $rd, $rsrc, $imm16",
         [(set i16:$rd, (xor i16:$rsrc, (i16 imm:$imm16)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def XOR16_rp_rp : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";xor $rd, $rsrc, $rsrc2",
@@ -2383,6 +2407,9 @@ def XOR16_rp_abs16 : Pseudo<
         ";xor a, $addr",
         [(set i16:$rd, (xormem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
+// Clobbers CY; Z reflects only the last byte, so no Zflag (see
+// RL78CMPWithZeroElimination).
+let Defs = [CCreg] in
 def XOR2_16_rp_rp : Pseudo<
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         ";xor $rd, $rsrc, $rsrc2",
