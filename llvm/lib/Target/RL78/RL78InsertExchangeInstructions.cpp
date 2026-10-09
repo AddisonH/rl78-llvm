@@ -848,9 +848,18 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           auto AAfter = ALiveAfterMI.find(&MI);
           bool ADeadAfter =
               (AAfter != ALiveAfterMI.end()) ? !AAfter->second : false;
-          if (ADeadAfter && prevNonDebug(MBB, MI.getIterator()) != MBB.end() &&
+          // The MOV may be separated from the CMP by instructions that do not
+          // touch A or X (setting up HL, say).
+          MachineBasicBlock::iterator MovIt = prevNonDebug(MBB, MI.getIterator());
+          while (MovIt != MBB.end() && MovIt->getOpcode() != RL78::MOV_A_r &&
+                 !MovIt->isCall() && !MovIt->hasUnmodeledSideEffects() &&
+                 !MovIt->readsRegister(RL78::R1, TRI) &&
+                 !MovIt->modifiesRegister(RL78::R1, TRI) &&
+                 !MovIt->modifiesRegister(RL78::R0, TRI))
+            MovIt = prevNonDebug(MBB, MovIt);
+          if (ADeadAfter && MovIt != MBB.end() &&
               (!MI.getOperand(4).isDead()) && !CCLiveOut) {
-            MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
+            MachineInstr &MI2 = *MovIt;
             if ((MI2.getOpcode() == RL78::MOV_A_r) &&
                 (MI2.getOperand(1).getReg() == RL78::R0) &&
                 (MI2.getOperand(0).getReg() == RL78::R1)) {
