@@ -328,6 +328,24 @@ static void updateAAXLiveness(const MachineInstr &MI, bool &isALive,
   }
 }
 
+// The instruction before I, skipping debug instructions, or MBB.end() if
+// there is none: the peepholes below must see the same code with -g.
+static MachineBasicBlock::iterator prevNonDebug(MachineBasicBlock &MBB,
+                                                MachineBasicBlock::iterator I) {
+  while (I != MBB.begin()) {
+    --I;
+    if (!I->isDebugInstr())
+      return I;
+  }
+  return MBB.end();
+}
+
+// The instruction after I, skipping debug instructions, or MBB.end().
+static MachineBasicBlock::iterator nextNonDebug(MachineBasicBlock &MBB,
+                                                MachineBasicBlock::iterator I) {
+  return skipDebugInstructionsForward(std::next(I), MBB.end());
+}
+
 // Replace:
 // MOVW AX, RP
 // <OP> AX, <...>
@@ -337,16 +355,12 @@ static void updateAAXLiveness(const MachineInstr &MI, bool &isALive,
 void RemoveMOVWs(MachineInstr &MI, MachineBasicBlock &MBB,
                  MachineBasicBlock::iterator &Next, llvm::Register Reg = 0) {
 
-  if (MI.getOperand(0).getReg() == RL78::RP0 &&
-      (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
-      (MachineBasicBlock::iterator(MI) != MBB.end()) &&
-      !MachineBasicBlock::iterator(MI)->isKnownSentinel() &&
-      MachineBasicBlock::iterator(MI)->getPrevNode() &&
-      !MachineBasicBlock::iterator(MI)->getPrevNode()->isKnownSentinel() &&
-      MachineBasicBlock::iterator(MI)->getNextNode() &&
-      !MachineBasicBlock::iterator(MI)->getNextNode()->isKnownSentinel()) {
-    MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
-    MachineInstr &MI3 = *std::next(MachineBasicBlock::iterator(MI));
+  auto PrevIt = prevNonDebug(MBB, MI.getIterator());
+  auto NextIt = nextNonDebug(MBB, MI.getIterator());
+  if (MI.getOperand(0).getReg() == RL78::RP0 && PrevIt != MBB.end() &&
+      NextIt != MBB.end()) {
+    MachineInstr &MI2 = *PrevIt;
+    MachineInstr &MI3 = *NextIt;
     if ((MI2.getOpcode() == RL78::MOVW_AX_rp) &&
         (MI3.getOpcode() == RL78::MOVW_rp_AX) &&
         (MI3.getOperand(0).getReg() == MI2.getOperand(1).getReg()) &&
@@ -368,10 +382,9 @@ void RemoveMOVWs(MachineInstr &MI, MachineBasicBlock &MBB,
 bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
                           DebugLoc &DL, const TargetInstrInfo *TII) {
   auto I = MachineBasicBlock::iterator(MI);
-  if (I == MBB.begin())
+  auto PrevIt = prevNonDebug(MBB, I);
+  if (PrevIt == MBB.end())
     return false;
-
-  auto PrevIt = std::prev(I);
   Register Reg = MI.getOperand(2).getReg();
 
   // Replace the unnecessary movw instruction and change the register of the 'push'
@@ -385,11 +398,9 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
       MI.eraseFromParent();
       return true;
     } else if (PrevIt->getOpcode() == RL78::CALL_STACK_SETUP) {
-      auto PushInstr = MachineBasicBlock::iterator(PrevIt);
-      if (PushInstr == MBB.begin())
+      auto PushInstr = prevNonDebug(MBB, PrevIt);
+      if (PushInstr == MBB.end())
         return false;
-
-      PushInstr = std::prev(PrevIt);
       if (PushInstr->getOpcode() == RL78::PUSH_rp) {
         PushInstr->getOperand(0).setReg(Reg);
         MI.eraseFromParent();
@@ -419,11 +430,8 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
   Reg = MI.getOperand(2).getReg();
 
   I = MI.getIterator();
-  if (I == MBB.begin())
-      return false;
-
-  PrevIt = std::prev(I);
-  if (PrevIt->getOpcode() != RL78::STORE16_stack_slot_rp)
+  PrevIt = prevNonDebug(MBB, I);
+  if (PrevIt == MBB.end() || PrevIt->getOpcode() != RL78::STORE16_stack_slot_rp)
       return false;
 
   // Check if the 2nd movw has an offset of 0 or 2, and uses a different
@@ -435,10 +443,9 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
   if (PrevIt->getOperand(2).getReg() != Reg)
       return false;
 
-  if (PrevIt == MBB.begin())
+  auto SubwIt = prevNonDebug(MBB, PrevIt);
+  if (SubwIt == MBB.end())
       return false;
-
-  auto SubwIt = std::prev(PrevIt);
   if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
       SubwIt->getOperand(2).getImm() == 4) {
       BuildMI(MBB, I, DL, TII->get(RL78::PUSH_rp)).addReg(Reg);
@@ -454,10 +461,9 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
   // SubwIt is actually a CALL_STACK_SETUP.
   auto StackSetupIt = SubwIt;
   if (StackSetupIt->getOpcode() == RL78::CALL_STACK_SETUP) {
-      if (StackSetupIt == MBB.begin())
+      auto SubwIt = prevNonDebug(MBB, StackSetupIt);
+      if (SubwIt == MBB.end())
       return false;
-
-      auto SubwIt = std::prev(StackSetupIt);
 
       if (SubwIt->getOpcode() == RL78::SUBW_sp_imm &&
           SubwIt->getOperand(2).getImm() == 4) {
@@ -482,12 +488,12 @@ bool ReplaceStoreWithPush(MachineInstr &MI, MachineBasicBlock &MBB,
 static bool isStoreFoldableIntoPush(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator It) {
   if (It->getOpcode() != RL78::STORE16_stack_slot_rp ||
-      It->getOperand(1).getImm() != 0 || It == MBB.begin())
+      It->getOperand(1).getImm() != 0)
     return false;
-  auto Prev = std::prev(It);
-  if (Prev->getOpcode() == RL78::CALL_STACK_SETUP && Prev != MBB.begin())
-    Prev = std::prev(Prev);
-  return Prev->getOpcode() == RL78::PUSH_rp;
+  auto Prev = prevNonDebug(MBB, It);
+  if (Prev != MBB.end() && Prev->getOpcode() == RL78::CALL_STACK_SETUP)
+    Prev = prevNonDebug(MBB, Prev);
+  return Prev != MBB.end() && Prev->getOpcode() == RL78::PUSH_rp;
 }
 
 static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
@@ -520,8 +526,12 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
 
       MachineBasicBlock::iterator Target = MBB.end();
       MachineBasicBlock::iterator It(MI);
-      for (unsigned N = 0; N != WindowSize && It != MBB.begin(); ++N) {
+      for (unsigned N = 0; N != WindowSize && It != MBB.begin();) {
         --It;
+        // Debug instructions neither count nor block: -g must not change code.
+        if (It->isDebugInstr())
+          continue;
+        ++N;
         MachineInstr &Prev = *It;
         // A store may write the slot being loaded, and moving SP changes what
         // [sp+N] means.
@@ -559,8 +569,12 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
       MachineBasicBlock::iterator Target = MBB.end();
       MachineBasicBlock::iterator It(MI);
       bool SawStore = false;
-      for (unsigned N = 0; N != WindowSize && It != MBB.begin(); ++N) {
+      for (unsigned N = 0; N != WindowSize && It != MBB.begin();) {
         --It;
+        // Debug instructions neither count nor block: -g must not change code.
+        if (It->isDebugInstr())
+          continue;
+        ++N;
         MachineInstr &Prev = *It;
         if (Prev.isCall() || Prev.isTerminator() || Prev.isInlineAsm() ||
             Prev.hasUnmodeledSideEffects())
@@ -663,8 +677,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // Replace mov X, A + mov A, #0 with shrw AX, 8.
         if ((MI.getOperand(0).getReg() == RL78::R1) &&
             (MI.getOperand(1).getImm() == 0) &&
-            (MachineBasicBlock::iterator(MI) != MBB.begin())) {
-          MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
+            prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
+          MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
           if ((MI2.getOpcode() == RL78::MOV_r_A) &&
               (MI2.getOperand(0).getReg() == RL78::R0)) {
             assert(MI2.getOperand(1).getReg() == RL78::R1);
@@ -754,13 +768,11 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         break;
       case RL78::SHL_r_imm:
         // Replace MOV R1, (R2/R3) + SHL R2/R3, #imm + MOV (R2/R3), R1 with SHL R2/R3, #imm.
-        if ( MI.getOperand(0).getReg() == RL78::R1 &&
-            (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
-            (MachineBasicBlock::iterator(MI) != MBB.end()) &&
-            (std::prev(MachineBasicBlock::iterator(MI)) != MBB.begin()) &&
-            (std::next(MachineBasicBlock::iterator(MI)) != MBB.end())) {
-          MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
-          MachineInstr &MI3 = *std::next(MachineBasicBlock::iterator(MI));
+        if (MI.getOperand(0).getReg() == RL78::R1 &&
+            prevNonDebug(MBB, MI.getIterator()) != MBB.end() &&
+            nextNonDebug(MBB, MI.getIterator()) != MBB.end()) {
+          MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
+          MachineInstr &MI3 = *nextNonDebug(MBB, MI.getIterator());
           if ((MI2.getOpcode() == RL78::MOV_A_r) &&
               ((MI2.getOperand(1).getReg() == RL78::R2) ||
                (MI2.getOperand(1).getReg() == RL78::R3)) &&
@@ -808,8 +820,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         break;
       case RL78::CLRB_r:
         // Replace MOV X, A + CLRB A with SHRW AX.
-        if (MachineBasicBlock::iterator(MI) != MBB.begin()) {
-          MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
+        if (prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
+          MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
           if ((MI.getOperand(0).getReg() == RL78::R1) &&
               (MI2.getOpcode() == RL78::MOV_r_A) &&
               (MI2.getOperand(0).getReg() == RL78::R0)) {
@@ -836,9 +848,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           auto AAfter = ALiveAfterMI.find(&MI);
           bool ADeadAfter =
               (AAfter != ALiveAfterMI.end()) ? !AAfter->second : false;
-          if (ADeadAfter && (MachineBasicBlock::iterator(MI) != MBB.begin()) &&
+          if (ADeadAfter && prevNonDebug(MBB, MI.getIterator()) != MBB.end() &&
               (!MI.getOperand(4).isDead()) && !CCLiveOut) {
-            MachineInstr &MI2 = *std::prev(MachineBasicBlock::iterator(MI));
+            MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
             if ((MI2.getOpcode() == RL78::MOV_A_r) &&
                 (MI2.getOperand(1).getReg() == RL78::R0) &&
                 (MI2.getOperand(0).getReg() == RL78::R1)) {
@@ -947,19 +959,20 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         assert(MI.getOperand(0).isReg());
         assert(MI.getOperand(1).isImm());
         if (MI.getOperand(1).getImm() == 0) {
-          if (Next == MBB.end())
+          auto It1 = skipDebugInstructionsForward(Next, MBB.end());
+          if (It1 == MBB.end())
             break;
-          MachineInstr &MI1 = *Next;
-          if (std::next(Next) == MBB.end())
+          MachineInstr &MI1 = *It1;
+          auto It2 = skipDebugInstructionsForward(std::next(It1), MBB.end());
+          if (It2 == MBB.end())
             break;
-          MachineInstr &MI2 = *std::next(Next);
+          MachineInstr &MI2 = *It2;
           if ((MI1.getOpcode() == RL78::XOR1_cy_r) &&
               MI1.getOperand(0).isKill() &&
               (MI2.getOpcode() == RL78::BRCC) &&
               ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_H) ||
                 (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH))) {
-            ++Next;
-            ++Next;
+            Next = std::next(It2);
             BuildMI(MBB, MI, DL, TII->get(RL78::ADDW_rp_rp))
                 .addReg(RL78::RP0, RegState::DefineNoRead)
                 .addReg(RL78::RP0, RegState::Kill)
@@ -1161,6 +1174,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
          Next != E;) {
       MachineInstr &MI1 = *Next;
       ++Next;
+      if (MI1.isDebugInstr())
+        continue;
+      // Pairs are matched across debug instructions, as without -g.
+      Next = skipDebugInstructionsForward(Next, MBB.end());
       // if this wasn't the last instruction in BB
       if (Next != MBB.end()) {
         MachineInstr &MI2 = *Next;
@@ -1204,6 +1221,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // POP BC
           // PUSH BC
           // MOVW BC, SP
+          Next = skipDebugInstructionsForward(Next, MBB.end());
           if ((Next != MBB.end())) {
             MachineInstr &MI3 = *Next;
             if ((MI3.getOpcode() == RL78::MOVW_rp_sp) &&
@@ -1226,6 +1244,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
          Next != E;) {
       MachineInstr &MI1 = *Next;
       ++Next;
+      if (MI1.isDebugInstr())
+        continue;
+      // Pairs are matched across debug instructions, as without -g.
+      Next = skipDebugInstructionsForward(Next, MBB.end());
       // if this wasn't the last instruction in BB
       if (Next != MBB.end()) {
         MachineInstr &MI2 = *Next;

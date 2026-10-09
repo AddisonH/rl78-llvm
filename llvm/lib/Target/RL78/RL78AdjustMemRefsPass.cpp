@@ -106,10 +106,14 @@ static bool isLoadedPointer(Register R, const MachineRegisterInfo &MRI,
   Register Src = Def->getOperand(1).getReg();
   if (Src.isVirtual())
     return isLoadedPointer(Src, MRI, Seen, Depth + 1);
-  auto It = Def->getIterator();
-  if (It == Def->getParent()->begin())
+  MachineBasicBlock::const_iterator Begin = Def->getParent()->begin();
+  MachineBasicBlock::const_iterator It = Def->getIterator();
+  if (It == Begin)
     return false;
-  const MachineInstr &Prev = *std::prev(It);
+  It = skipDebugInstructionsBackward(std::prev(It), Begin);
+  if (It->isDebugInstr())
+    return false;
+  const MachineInstr &Prev = *It;
   return Prev.mayLoad() && Prev.getNumOperands() &&
          Prev.getOperand(0).isReg() && Prev.getOperand(0).getReg() == Src;
 }
@@ -128,6 +132,12 @@ bool RL78AdjustMemRefsPass::runOnMachineFunction(MachineFunction &MF) {
     for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end();
          Next != E;) {
       MachineInstr &MI = *Next;
+      // Debug instructions must not lengthen the intervals: -g would change
+      // the HL/DE assignment.
+      if (MI.isDebugInstr()) {
+        Next++;
+        continue;
+      }
       for (unsigned i = 0; i < MI.getNumOperands(); i++) {
         if (i == 0 && MI.getOperand(i).isReg() && MI.getOperand(i).isDef())
           continue;

@@ -54,6 +54,8 @@ static bool isSingleInstructionBB(MachineBasicBlock &MBB) {
   for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end(); Next != E;
        Next++) {
     MachineInstr &MI = *Next;
+    if (MI.isDebugInstr())
+      continue;
     switch (MI.getOpcode()) {
     case RL78::ADJCALLSTACKDOWN:
     case RL78::ADJCALLSTACKUP:
@@ -109,7 +111,8 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
   // if this is the last instruction in MBB and the next (fall-through) block
   // has only 1 instruction.
   if ((MI.getOpcode() == RL78::BRCC) && (MI == MBB.getLastNonDebugInstr()) &&
-      isSingleInstructionBB(*NextMBBI) && !NextMBBI->begin()->isPseudo() &&
+      isSingleInstructionBB(*NextMBBI) &&
+      !NextMBBI->SkipPHIsLabelsAndDebug(NextMBBI->begin())->isPseudo() &&
       (std::next(NextMBBI) == targetMBB.getIterator())) {
     // Insert a conditional skip instruction.
     BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SK_cc))
