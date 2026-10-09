@@ -24,7 +24,7 @@ define void @test_DAGCombine_BRCOND(i32 %x, i32 %y) {
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    cmpw ax, hl
-; CHECK-NEXT:    skc ;#.LBB0_2
+; CHECK-NEXT:    skc
 ; CHECK-NEXT:    br $!.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %t
 ; CHECK-NEXT:    ;APP

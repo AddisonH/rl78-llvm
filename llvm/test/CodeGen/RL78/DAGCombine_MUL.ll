@@ -7,7 +7,7 @@ target triple = "rl78-unknown-unknown-elf"
 @b = dso_local global i16 0, align 2
 
 ; CHECK-LABEL: _test_DAGCombine_MUL
-; CHECK: mulhu ;ax, bc, ax, bc
+; CHECK: mulhu
 define dso_local i32 @test_DAGCombine_MUL(i16 %a, i16 %b) {
   %za = zext i16 %a to i32
   %zb = zext i16 %b to i32
@@ -16,7 +16,7 @@ define dso_local i32 @test_DAGCombine_MUL(i16 %a, i16 %b) {
 }
 
 ; CHECK-LABEL: _test_DAGCombine_MULH
-; CHECK: mulh ;ax, bc, ax, bc
+; CHECK: mulh
 define dso_local i32 @test_DAGCombine_MULH(i16 %a, i16 %b) {
   %sa = sext i16 %a to i32
   %sb = sext i16 %b to i32
@@ -28,7 +28,7 @@ define dso_local i32 @test_DAGCombine_MULH(i16 %a, i16 %b) {
 ; (asserted in SelectionDAG::getConstant).
 ; CHECK-LABEL: _test_DAGCombine_MULH_negconst
 ; CHECK: movw bc, #-3
-; CHECK-NEXT: mulh ;ax, bc, ax, bc
+; CHECK-NEXT: mulh
 define dso_local i32 @test_DAGCombine_MULH_negconst(i16 %a) {
 entry:
   %conv = sext i16 %a to i32

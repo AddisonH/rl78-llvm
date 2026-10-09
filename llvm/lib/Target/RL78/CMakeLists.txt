@@ -23,6 +23,7 @@ add_llvm_target(RL78CodeGen
   RL78Subtarget.cpp
   RL78TargetMachine.cpp
   RL78MCInstLower.cpp
+  RL78LowerToHardware.cpp
   RL78TargetObjectFile.cpp
   RL78CMPWithZeroElimination.cpp
   RL78SelectBTCLR.cpp

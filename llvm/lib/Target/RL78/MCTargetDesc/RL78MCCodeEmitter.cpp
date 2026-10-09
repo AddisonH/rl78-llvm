@@ -124,6 +124,10 @@ public:
   RL78_OPERAND_ENCODER(getHccOpValue)
   RL78_OPERAND_ENCODER(getBtBfOpValue)
   RL78_OPERAND_ENCODER(getMachineOpValueImm)
+  RL78_OPERAND_ENCODER(getBitOpValue)
+  RL78_OPERAND_ENCODER(getShift8OpValue)
+  RL78_OPERAND_ENCODER(getShift16OpValue)
+  RL78_OPERAND_ENCODER(getRBOpValue)
   RL78_OPERAND_ENCODER(getShlwRegOpValue)
 #undef RL78_OPERAND_ENCODER
 };
@@ -3506,6 +3510,45 @@ unsigned RL78MCCodeEmitter::getBtBfOpValue(const MCInst &MI, unsigned OpNo,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
   return MI.getOperand(OpNo).getImm() == RL78CC::RL78CC_Z ? 1 : 2;
+}
+
+// Small fields the encoding would otherwise silently truncate.
+static unsigned checkedField(const MCOperand &MO, int64_t Lo, int64_t Hi,
+                             StringRef Message) {
+  RL78ReportError(MO.isImm() && MO.getImm() >= Lo && MO.getImm() <= Hi,
+                  Message);
+  return MO.getImm();
+}
+
+// A bit number, 0-7.
+unsigned RL78MCCodeEmitter::getBitOpValue(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  return checkedField(MI.getOperand(OpNo), 0, 7,
+                      "Instruction using operand outside of range 0-7.");
+}
+
+// A shift count, 1-7 or 1-15.
+unsigned RL78MCCodeEmitter::getShift8OpValue(const MCInst &MI, unsigned OpNo,
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             const MCSubtargetInfo &STI) const {
+  return checkedField(MI.getOperand(OpNo), 1, 7,
+                      "Instruction using operand outside of range 1-7.");
+}
+unsigned
+RL78MCCodeEmitter::getShift16OpValue(const MCInst &MI, unsigned OpNo,
+                                     SmallVectorImpl<MCFixup> &Fixups,
+                                     const MCSubtargetInfo &STI) const {
+  return checkedField(MI.getOperand(OpNo), 1, 15,
+                      "Instruction using operand outside of range 1-15.");
+}
+
+// SEL RBn: a register bank, 0-3.
+unsigned RL78MCCodeEmitter::getRBOpValue(const MCInst &MI, unsigned OpNo,
+                                         SmallVectorImpl<MCFixup> &Fixups,
+                                         const MCSubtargetInfo &STI) const {
+  return checkedField(MI.getOperand(OpNo), 0, 3,
+                      "Instruction using operand outside of range 0-3.");
 }
 
 unsigned

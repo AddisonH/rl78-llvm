@@ -7,7 +7,7 @@ target triple = "rl78-unknown-unknown-elf"
 @b = dso_local global i16 0, align 2
 
 ; CHECK-LABEL: test_DAGCombine_UREM
-; CHECK: 	divwu ;ax, bc, de, hl, ax, bc, de, hl
+; CHECK: 	divwu
 ; CHECK: movw ax, de 
 ; CHECK-NEXT: push hl
 ; CHECK-NEXT: pop bc

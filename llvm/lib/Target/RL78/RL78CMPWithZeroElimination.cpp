@@ -180,10 +180,12 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
             prevI->getOperand(1).getImm() == -1 &&
             prevI->getOperand(0).isKill()) {
             const TargetInstrInfo *TII = MBB.getParent()->getSubtarget<RL78Subtarget>().getInstrInfo();
+            // INC r writes r, which the CMP left dead: only Z is wanted.
+            Register R = prevI->getOperand(0).getReg();
             BuildMI(MBB, prevI.getReverse(), prevI->getDebugLoc(),
-                  TII->get(RL78::INC_r_cg))
-              .add(prevI->getOperand(0))
-              .add(prevI->getOperand(1));
+                    TII->get(RL78::INC_r_cg))
+                .addReg(R, RegState::Define | RegState::Dead)
+                .addReg(R, RegState::Kill);
             BuildMI(MBB, BRCC, BRCC.getDebugLoc(),
                   TII->get(RL78::BRCC))
               .add(BRCC.getOperand(0))

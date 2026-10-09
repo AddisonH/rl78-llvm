@@ -57,7 +57,7 @@ define dso_local [2 x i16] @ret4w() local_unnamed_addr  {
 ; CHECK-NEXT: mov [hl+3], #4
 ; CHECK-NEXT: mov [hl+2], #3
 ; CHECK-NEXT: mov [hl+1], #2
-; CHECK-NEXT: mov [hl], #1
+; CHECK-NEXT: mov [hl+0], #1
 define dso_local void @ret5(ptr noalias nocapture writeonly sret(%struct.S5) align 1 %0) local_unnamed_addr #2 {
   tail call void @llvm.memcpy.p0.p0.i16(ptr noundef nonnull align 1 dereferenceable(5) %0, ptr noundef nonnull align 1 dereferenceable(5) @__const.ret5.s, i16 5, i1 false)
   ret void

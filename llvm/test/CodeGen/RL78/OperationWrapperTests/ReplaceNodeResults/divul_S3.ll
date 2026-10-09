@@ -4,7 +4,7 @@
 
 ; CHECK: _test__divul:
 ; CHECK: 	movw hl, #0
-; CHECK: 	divwu ;ax, bc, de, hl, ax, bc, de, hl
+; CHECK: 	divwu
 ; CHECK: 	nop
 ; CHECK: 	ret
 

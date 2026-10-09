@@ -6,7 +6,7 @@
 ; CHECK: _func:
 ; CHECK: 	cmpw ax, #0
 ; CHECK: 	clrw ax
-; CHECK: 	skz ;#.LBB0_2
+; CHECK: 	skz
 ; CHECK: ; %bb.1:
 ; CHECK: 	movw ax, #15
 

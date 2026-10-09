@@ -20,8 +20,8 @@ define void @foo(ptr %a, ptr %b, ptr %c) {
   ret void
 }
 
-; CHECK: mov [hl], #1
-; CHECK: mov [de], #2
+; CHECK: mov [hl+0], #1
+; CHECK: mov [de+0], #2
 ; CHECK mov [hl], #3
 ; CHECK: mov [hl+1], #4
 ; CHECK: mov [de+1], #5

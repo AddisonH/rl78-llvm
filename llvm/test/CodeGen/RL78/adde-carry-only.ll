@@ -6,7 +6,7 @@
 
 ; CHECK-LABEL: _inc:
 ; CHECK:       movw ax, [hl+2]
-; CHECK:       addw ax, [hl]
+; CHECK:       addw ax, [hl+0]
 ; CHECK-NEXT:  sknc
 ; CHECK:       incw bc
 ; CHECK-NOT:   addc

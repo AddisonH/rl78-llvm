@@ -60,6 +60,7 @@ public:
   void emitFunctionBodyEnd() override;
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
   void emitInstruction(const MachineInstr *MI) override;
+  void emitHardware(const MachineInstr *MI);
   void emitGlobalVariable(const GlobalVariable *GV) override;
 
   const MCExpr *lowerConstant(const Constant *CV,
@@ -90,6 +91,16 @@ private:
 };
 } // end of anonymous namespace
 
+void RL78AsmPrinter::emitHardware(const MachineInstr *MI) {
+  MCInst TmpInst;
+  LowerRL78MachineInstrToMCInst(MI, TmpInst, *this);
+  SmallVector<MCInst, 3> Hardware;
+  lowerToHardware(TmpInst, Hardware, *MF->getSubtarget().getInstrInfo(),
+                  *OutContext.getRegisterInfo());
+  for (const MCInst &I : Hardware)
+    EmitToStreamer(*OutStreamer, I);
+}
+
 void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
@@ -107,14 +118,10 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
     while (++I != E && I->isInsideBundle()) {
       assert(!I->isBundle() && "No nested bundle!");
-      MCInst TmpInst;
-      LowerRL78MachineInstrToMCInst(&*I, TmpInst, *this);
-      EmitToStreamer(*OutStreamer, TmpInst);
+      emitHardware(&*I);
     }
   } else {
-    MCInst TmpInst;
-    LowerRL78MachineInstrToMCInst(MI, TmpInst, *this);
-    EmitToStreamer(*OutStreamer, TmpInst);
+    emitHardware(MI);
   }
 
   if (hasDebugInfo()) {
@@ -267,7 +274,7 @@ void RL78AsmPrinter::emitFunctionBodyEnd() {
   if (MF->getFunction().hasFnAttribute("inline_asm")) {
     // Since we marked with naked the inline_asm function, we need to add a
     // return to it's end.
-    getTargetStreamer().getStreamer().emitInstruction(MCInstBuilder(RL78::RET_cg),
+    getTargetStreamer().getStreamer().emitInstruction(MCInstBuilder(RL78::RET),
                                                       getSubtargetInfo());
   }
 }

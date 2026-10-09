@@ -2,8 +2,8 @@
 ; from InstrInfo is not deadcode
 ; RUN: llc -mtriple=rl78 < %s | FileCheck %s
 
-; CHECK: machu ; macr, ax, bc
-; CHECK: machu ; macr, ax, bc
+; CHECK: machu
+; CHECK: machu
 ; CHECK-NEXT: movw ax, !0xffff0
 ; CHECK: mulhu
 ; CHECK: mulhu

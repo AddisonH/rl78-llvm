@@ -19,7 +19,7 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    onew ax
-; CHECK-NEXT:    skc ;#.LBB0_2
+; CHECK-NEXT:    skc
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:  .LBB0_2:

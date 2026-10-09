@@ -8,7 +8,7 @@ target triple = "rl78-unknown-unknown-elf"
 
 ; Verifies DAGCombine/ISel for UDIV.
 ; CHECK-LABEL: _test_DAGCombine_UDIV
-; CHECK: divwu ;ax, bc, de, hl, ax, bc, de, hl
+; CHECK: divwu
 ; CHECK-NOT: divhu 
 define i32 @test_DAGCombine_UDIV(i32 %a, i32 %b) {
   %d = udiv i32 %a, %b

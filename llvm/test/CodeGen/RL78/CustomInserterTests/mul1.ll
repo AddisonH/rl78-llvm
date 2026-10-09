@@ -8,7 +8,7 @@
 define dso_local i32 @aa(i16 noundef %0, i16 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: aa:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mulhu ;ax, bc, ax, bc
+; CHECK-NEXT:    mulhu
 ; CHECK-NEXT:    ret
   %3 = zext i16 %0 to i32
   %4 = zext i16 %1 to i32
@@ -21,7 +21,7 @@ define dso_local i32 @aa(i16 noundef %0, i16 noundef %1) local_unnamed_addr #0 {
 define dso_local i16 @ac(i8 noundef %0, i8 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: ac:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mulu x ; ax, a, x
+; CHECK-NEXT:    mulu x
 ; CHECK-NEXT:    ret
   %3 = zext i8 %0 to i16
   %4 = zext i8 %1 to i16
@@ -34,7 +34,7 @@ define dso_local i16 @ac(i8 noundef %0, i8 noundef %1) local_unnamed_addr #0 {
 define dso_local i8 @ad(i8 noundef %0, i8 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: ad:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mulu x ; x trunk to i8
+; CHECK-NEXT:    mulu x
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    ret
   %3 = mul i8 %0, %1
@@ -55,7 +55,7 @@ define dso_local i32 @ae(i16 noundef %0, i16 noundef %1, i32 noundef %2) local_u
 ; CHECK-NEXT:    movw !0xffff2, ax
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    mach ; macr, ax, bc
+; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, !0xffff0
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, !0xffff2

@@ -61,6 +61,10 @@ void initializeRL78NarrowDemandedOpsPass(PassRegistry &);
 void initializeRL78NarrowLoopCountersPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 
+/// Turns an MCInst of an older (code generation) definition into the
+/// hardware instruction(s) of RL78InstrISA.td that encode it.
+void lowerToHardware(const MCInst &In, SmallVectorImpl<MCInst> &Out,
+                     const MCInstrInfo &MII, const MCRegisterInfo &MRI);
 void LowerRL78MachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                    AsmPrinter &AP);
 } // end namespace llvm

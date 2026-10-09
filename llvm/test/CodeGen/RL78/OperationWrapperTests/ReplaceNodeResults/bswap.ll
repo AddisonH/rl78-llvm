@@ -8,16 +8,16 @@
 ; CHECK: ; %bb.0:
 ; CHECK: 	movw hl, ax
 ; CHECK: 	movw ax, [sp+4]
-; CHECK: 	xch a, x ;bswap ax
+; CHECK: 	xch a, x
 ; CHECK: 	movw [hl+6], ax
 ; CHECK: 	movw ax, [sp+6]
-; CHECK: 	xch a, x ;bswap ax
+; CHECK: 	xch a, x
 ; CHECK: 	movw [hl+4], ax
 ; CHECK: 	movw ax, [sp+8]
-; CHECK: 	xch a, x ;bswap ax
+; CHECK: 	xch a, x
 ; CHECK: 	movw [hl+2], ax
 ; CHECK: 	movw ax, [sp+10]
-; CHECK: 	xch a, x ;bswap ax
+; CHECK: 	xch a, x
 
 define dso_local void @aa(ptr noalias nocapture writeonly sret(i64) align 2 %0, i64 noundef %1) local_unnamed_addr #0 {
   %3 = tail call i64 @llvm.bswap.i64(i64 %1)

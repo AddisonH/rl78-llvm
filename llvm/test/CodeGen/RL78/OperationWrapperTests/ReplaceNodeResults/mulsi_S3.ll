@@ -14,7 +14,7 @@ declare i32 @llvm.rl78.mulsi(i16, i16) #1
 
 ; CHECK: _var:
 ; CHECK: ; %bb.0:
-; CHECK-NEXT: 	mulh ;ax, bc, ax, bc
+; CHECK-NEXT: 	mulh
 
 define dso_local i32 @main() local_unnamed_addr #0 {
   %1 = tail call i32 @llvm.rl78.mulsi(i16 32767, i16 4)

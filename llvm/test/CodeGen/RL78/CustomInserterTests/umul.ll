@@ -7,7 +7,7 @@
 ; CHECK: ; %bb.0:
 ; CHECK: 	mov x, #79
 ; CHECK: 	mov c, a
-; CHECK: 	mulu x ; x, a, a, x
+; CHECK: 	mulu x
 ; CHECK: 	mov x, #26
 
 define dso_local i8 @main(i8 %input) local_unnamed_addr {

@@ -4,7 +4,7 @@
 
 ; CHECK: _test__mului:
 ; CHECK: ; %bb.0:
-; CHECK:  mulhu ;ax, bc, ax, bc
+; CHECK:  mulhu
 
 define dso_local i32 @test__mului(i16 noundef %0, i16 noundef %1) local_unnamed_addr #0 {
   %3 = tail call i32 @llvm.rl78.mului(i16 %0, i16 %1)

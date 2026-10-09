@@ -273,6 +273,7 @@ def RL78SELRBxAsmOperand : AsmOperandClass {
 def SELRBx : Operand<i8> {
   let PrintMethod = "printSELRBxOperand";
   let ParserMatchClass = RL78SELRBxAsmOperand;
+  let EncoderMethod = "getRBOpValue";
 }
 //=============================================================================================================
 // Branch targets have OtherVT type.
@@ -320,6 +321,7 @@ def Imm0_7Operand : AsmOperandClass {
 def bitimm  : Operand<i8> {
   let ParserMatchClass = Imm0_7Operand;
   let PrintMethod = "printBitOperand";
+  let EncoderMethod = "getBitOpValue";
 }
 //=============================================================================================================
 def i3imm  : Operand<i8> {
@@ -334,6 +336,7 @@ def Imm1_7Operand : AsmOperandClass {
 def shift8imm  : Operand<i8> {
   let ParserMatchClass = Imm1_7Operand;
   let PrintMethod = "printShiftOperand";
+  let EncoderMethod = "getShift8OpValue";
 }
 //=============================================================================================================
 def Imm1_15Operand : AsmOperandClass {
@@ -343,6 +346,7 @@ def Imm1_15Operand : AsmOperandClass {
 def shift16imm  : Operand<i8> {
   let ParserMatchClass = Imm1_15Operand;
   let PrintMethod = "printShiftOperand";
+  let EncoderMethod = "getShift16OpValue";
 }
 //=============================================================================================================
 
