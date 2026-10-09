@@ -9352,6 +9352,12 @@ def ext_typecheck_convert_incompatible_pointer : ExtWarn<
   "; remove *|"
   "; remove &}3">,
   InGroup<IncompatiblePointerTypes>, DefaultError;
+// RL78: -Wincompatible-pointer-types stays a warning by default (as in the
+// vendor's LLVM 17 toolchain and CC-RL, and as the RL78 near/far conversion
+// tests require: -w silences it, -Werror makes it an error).
+def warn_rl78_typecheck_convert_incompatible_pointer : ExtWarn<
+  ext_typecheck_convert_incompatible_pointer.Summary>,
+  InGroup<IncompatiblePointerTypes>;
 def err_typecheck_convert_incompatible_pointer : Error<
   "incompatible pointer types "
   "%select{%diff{assigning to $ from $|assigning to different types}0,1"
