@@ -2,5 +2,5 @@
 # RUN:     | FileCheck -check-prefix=CHECK-ERR %s
 
 
-# CHECK-ERR: error: Instruction using illegal register.
+# CHECK-ERR: error: invalid operand for instruction
 cmpw BC, #0x1212

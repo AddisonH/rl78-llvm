@@ -26,10 +26,10 @@
 # CHECK: addw  ax, #44
 
 .irp reg,ax,bc
-  subw  \reg, #2\@
+  movw  \reg, #2\@
 .endr
-# CHECK: subw ax, #24
-# CHECK: subw bc, #24
+# CHECK: movw ax, #24
+# CHECK: movw bc, #24
 
 # Test that .irp(c) and .rep(t) do not increase \@.
 # Only the use of A should increase \@, so we can test that it increases by 1
@@ -43,7 +43,7 @@
 # CHECK: addw  ax, #14
 
 .irp reg,ax,bc
-  subw  \reg, #4
+  movw  \reg, #4
 .endr
 
   A

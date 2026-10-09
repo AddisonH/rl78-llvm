@@ -915,23 +915,23 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // CLR1 sfr.7
     {0x71U, {RL78::CLR1_sfr, {0x7BU, SBP::sfr}, {OPT::sfr,OPT::imm7}}},
     // CLRB !addr16
-    {0xF5U, {RL78::CLRB_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xF5U, {RL78::CLRB_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // CLRB X*/ 
-    {0xF0U, {RL78::CLRB_r, {}, {RL78::R0}}},
+    {0xF0U, {RL78::CLRB_r_cg, {}, {RL78::R0}}},
     // CLRB A*/ 
-    {0xF1U, {RL78::CLRB_r, {}, {RL78::R1}}},
+    {0xF1U, {RL78::CLRB_r_cg, {}, {RL78::R1}}},
     // CLRB C*/ 
-    {0xF2U, {RL78::CLRB_r, {}, {RL78::R2}}},
+    {0xF2U, {RL78::CLRB_r_cg, {}, {RL78::R2}}},
     // CLRB B*/ 
-    {0xF3U, {RL78::CLRB_r, {}, {RL78::R3}}},
+    {0xF3U, {RL78::CLRB_r_cg, {}, {RL78::R3}}},
     // CLRB saddr*/ 
-    {0xF4U, {RL78::CLRB_saddr, {SBP::saddr}, {OPT::saddr}}},
+    {0xF4U, {RL78::CLRB_saddr_cg, {SBP::saddr}, {OPT::saddr}}},
     // CLRB ES:!addr16
     {0x11U, {RL78::CLRB_esaddr16, {0xF5U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // CLRW AX*/ 
-    {0xF6U, {RL78::CLRW_rp, {}, {RL78::RP0}}},
+    {0xF6U, {RL78::CLRW_rp_cg, {}, {RL78::RP0}}},
     // CLRW BC*/ 
-    {0xF7U, {RL78::CLRW_rp, {}, {RL78::RP2}}},
+    {0xF7U, {RL78::CLRW_rp_cg, {}, {RL78::RP2}}},
     // CMP !addr16,#byte
     {0x40U, {RL78::CMP_abs16_imm, {SBP::adrl, SBP::adrh, SBP::data}, {OPT::I_addr16, OPT::byte}}},
     // CMP A,!addr16
@@ -993,17 +993,17 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // CMP ES:!addr16,#byte
     {0x11U, {RL78::CMP_esaddr16_imm, {0x40U, SBP::adrl, SBP::adrh, SBP::data}, {OPT::ES_I_addr16,OPT::byte}}},
     // CMP0 !addr16
-    {0xD5U, {RL78::CMP0_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xD5U, {RL78::CMP0_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // CMP0 X*/ 
-    {0xD0U, {RL78::CMP0_r, {}, {RL78::R0}}},
+    {0xD0U, {RL78::CMP0_r_cg, {}, {RL78::R0}}},
     // CMP0 A*/ 
-    {0xD1U, {RL78::CMP0_r, {}, {RL78::R1}}},
+    {0xD1U, {RL78::CMP0_r_cg, {}, {RL78::R1}}},
     // CMP0 C*/ 
-    {0xD2U, {RL78::CMP0_r, {}, {RL78::R2}}},
+    {0xD2U, {RL78::CMP0_r_cg, {}, {RL78::R2}}},
     // CMP0 B*/ 
-    {0xD3U, {RL78::CMP0_r, {}, {RL78::R3}}},
+    {0xD3U, {RL78::CMP0_r_cg, {}, {RL78::R3}}},
     // CMP0 saddr*/ 
-    {0xD4U, {RL78::CMP0_saddr, {SBP::saddr}, {OPT::saddr}}},
+    {0xD4U, {RL78::CMP0_saddr_cg, {SBP::saddr}, {OPT::saddr}}},
     // CMP0 ES:!addr16
     {0x11U, {RL78::CMP0_esaddr16, {0xD5U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // CMPS X,[HL+byte]
@@ -1029,45 +1029,45 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // CMPW AX,ES:[HL+byte]
     {0x11U, {RL78::CMPW_rp_esmemHLi, {0x61U, 0x49U, SBP::adr}, {RL78::RP0,OPT::ES_memHL_byte}}},
     // DEC !addr16
-    {0xB0U, {RL78::DEC_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xB0U, {RL78::DEC_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // DEC [HL+byte]
     {0x61U, {RL78::DEC_memri, {0x69U, SBP::adr}, {OPT::memHL_byte}}},
     // DEC X
-    {0x90U, {RL78::DEC_r, {}, {RL78::R0}}},
+    {0x90U, {RL78::DEC_r_cg, {}, {RL78::R0}}},
     // DEC A
-    {0x91U, {RL78::DEC_r, {}, {RL78::R1}}},
+    {0x91U, {RL78::DEC_r_cg, {}, {RL78::R1}}},
     // DEC C
-    {0x92U, {RL78::DEC_r, {}, {RL78::R2}}},
+    {0x92U, {RL78::DEC_r_cg, {}, {RL78::R2}}},
     // DEC B
-    {0x93U, {RL78::DEC_r, {}, {RL78::R3}}},
+    {0x93U, {RL78::DEC_r_cg, {}, {RL78::R3}}},
     // DEC E
-    {0x94U, {RL78::DEC_r, {}, {RL78::R4}}},
+    {0x94U, {RL78::DEC_r_cg, {}, {RL78::R4}}},
     // DEC D
-    {0x95U, {RL78::DEC_r, {}, {RL78::R5}}},
+    {0x95U, {RL78::DEC_r_cg, {}, {RL78::R5}}},
     // DEC L
-    {0x96U, {RL78::DEC_r, {}, {RL78::R6}}},
+    {0x96U, {RL78::DEC_r_cg, {}, {RL78::R6}}},
     // DEC H
-    {0x97U, {RL78::DEC_r, {}, {RL78::R7}}},
+    {0x97U, {RL78::DEC_r_cg, {}, {RL78::R7}}},
     // DEC saddr
-    {0xB4U, {RL78::DEC_saddr, {SBP::saddr}, {OPT::saddr}}},
+    {0xB4U, {RL78::DEC_saddr_cg, {SBP::saddr}, {OPT::saddr}}},
     // DEC ES:!addr16
     {0x11U, {RL78::DEC_esaddr16, {0xB0U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // DEC ES:[HL+byte]
     {0x11U, {RL78::DEC_esmemHLi, {0x61U, 0x69U, SBP::adr}, {OPT::ES_memHL_byte}}},
     // DECW !addr16
-    {0xB2U, {RL78::DECW_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xB2U, {RL78::DECW_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // DECW [HL+byte]
     {0x61U, {RL78::DECW_memri, {0x89U, SBP::adr}, {OPT::memHL_byte}}},
     // DECW AX*/ 
-    {0xB1U, {RL78::DECW_rp, {}, {RL78::RP0}}},
+    {0xB1U, {RL78::DECW_rp_cg, {}, {RL78::RP0}}},
     // DECW BC*/ 
-    {0xB3U, {RL78::DECW_rp, {}, {RL78::RP2}}},
+    {0xB3U, {RL78::DECW_rp_cg, {}, {RL78::RP2}}},
     // DECW DE*/ 
-    {0xB5U, {RL78::DECW_rp, {}, {RL78::RP4}}},
+    {0xB5U, {RL78::DECW_rp_cg, {}, {RL78::RP4}}},
     // DECW saddrp*/ 
     {0xB6U, {RL78::DECW_saddr, {SBP::saddr}, {OPT::saddrp}}},
     // DECW HL*/ 
-    {0xB7U, {RL78::DECW_rp, {}, {RL78::RP6}}},
+    {0xB7U, {RL78::DECW_rp_cg, {}, {RL78::RP6}}},
     // DECW ES:!addr16
     {0x11U, {RL78::DECW_esaddr16, {0xB2U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // DECW ES:[HL+byte]
@@ -1079,45 +1079,45 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // HALT nan*/ 
     {0x61U, {RL78::HALT, {0xEDU}, {}}},
     // INC !addr16
-    {0xA0U, {RL78::INC_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xA0U, {RL78::INC_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // INC [HL+byte]
     {0x61U, {RL78::INC_memri, {0x59U, SBP::adr}, {OPT::memHL_byte}}},
     // INC X*/ 
-    {0x80U, {RL78::INC_r, {}, {RL78::R0}}},
+    {0x80U, {RL78::INC_r_cg, {}, {RL78::R0}}},
     // INC A*/ 
-    {0x81U, {RL78::INC_r, {}, {RL78::R1}}},
+    {0x81U, {RL78::INC_r_cg, {}, {RL78::R1}}},
     // INC C*/ 
-    {0x82U, {RL78::INC_r, {}, {RL78::R2}}},
+    {0x82U, {RL78::INC_r_cg, {}, {RL78::R2}}},
     // INC B*/ 
-    {0x83U, {RL78::INC_r, {}, {RL78::R3}}},
+    {0x83U, {RL78::INC_r_cg, {}, {RL78::R3}}},
     // INC E*/ 
-    {0x84U, {RL78::INC_r, {}, {RL78::R4}}},
+    {0x84U, {RL78::INC_r_cg, {}, {RL78::R4}}},
     // INC D*/ 
-    {0x85U, {RL78::INC_r, {}, {RL78::R5}}},
+    {0x85U, {RL78::INC_r_cg, {}, {RL78::R5}}},
     // INC L*/ 
-    {0x86U, {RL78::INC_r, {}, {RL78::R6}}},
+    {0x86U, {RL78::INC_r_cg, {}, {RL78::R6}}},
     // INC H*/ 
-    {0x87U, {RL78::INC_r, {}, {RL78::R7}}},
+    {0x87U, {RL78::INC_r_cg, {}, {RL78::R7}}},
     // INC saddr
-    {0xA4U, {RL78::INC_saddr, {SBP::saddr}, {OPT::saddr}}},
+    {0xA4U, {RL78::INC_saddr_cg, {SBP::saddr}, {OPT::saddr}}},
     // INC ES:!addr16
     {0x11U, {RL78::INC_esaddr16, {0xA0U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // INC ES:[HL+byte]
     {0x11U, {RL78::INC_esmemHLi, {0x61U, 0x59U, SBP::adr}, {OPT::ES_memHL_byte}}},
     // INCW !addr16
-    {0xA2U, {RL78::INCW_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xA2U, {RL78::INCW_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // INCW [HL+byte]
     {0x61U, {RL78::INCW_memri, {0x79U, SBP::adr}, {OPT::memHL_byte}}},
     // INCW AX*/ 
-    {0xA1U, {RL78::INCW_rp, {}, {RL78::RP0}}},
+    {0xA1U, {RL78::INCW_rp_cg, {}, {RL78::RP0}}},
     // INCW BC*/ 
-    {0xA3U, {RL78::INCW_rp, {}, {RL78::RP2}}},
+    {0xA3U, {RL78::INCW_rp_cg, {}, {RL78::RP2}}},
     // INCW DE*/ 
-    {0xA5U, {RL78::INCW_rp, {}, {RL78::RP4}}},
+    {0xA5U, {RL78::INCW_rp_cg, {}, {RL78::RP4}}},
     // INCW saddrp*/ 
     {0xA6U, {RL78::INCW_saddr, {SBP::saddr}, {OPT::saddrp}}},
     // INCW HL*/ 
-    {0xA7U, {RL78::INCW_rp, {}, {RL78::RP6}}},
+    {0xA7U, {RL78::INCW_rp_cg, {}, {RL78::RP6}}},
     // INCW ES:!addr16
     {0x11U, {RL78::INCW_esaddr16, {0xA2U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // INCW ES:[HL+byte]
@@ -1659,23 +1659,23 @@ static std::multimap<unsigned int, InstructionInfo> instructions = {
     // NOT1 CY*/ 
     {0x71U, {RL78::NOT1_cy, {0xC0U}, {}}},
     // ONEB !addr16
-    {0xE5U, {RL78::ONEB_abs16, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
+    {0xE5U, {RL78::ONEB_abs16_cg, {SBP::adrl, SBP::adrh}, {OPT::I_addr16}}},
     // ONEB X*/ 
-    {0xE0U, {RL78::ONEB_r, {}, {RL78::R0}}},
+    {0xE0U, {RL78::ONEB_r_cg, {}, {RL78::R0}}},
     // ONEB A*/ 
-    {0xE1U, {RL78::ONEB_r, {}, {RL78::R1}}},
+    {0xE1U, {RL78::ONEB_r_cg, {}, {RL78::R1}}},
     // ONEB C*/ 
-    {0xE2U, {RL78::ONEB_r, {}, {RL78::R2}}},
+    {0xE2U, {RL78::ONEB_r_cg, {}, {RL78::R2}}},
     // ONEB B*/ 
-    {0xE3U, {RL78::ONEB_r, {}, {RL78::R3}}},
+    {0xE3U, {RL78::ONEB_r_cg, {}, {RL78::R3}}},
     // ONEB saddr*/ 
-    {0xE4U, {RL78::ONEB_saddr, {SBP::saddr}, {OPT::saddr}}},
+    {0xE4U, {RL78::ONEB_saddr_cg, {SBP::saddr}, {OPT::saddr}}},
     // ONEB ES:!addr16
     {0x11U, {RL78::ONEB_esaddr16, {0xE5U, SBP::adrl, SBP::adrh}, {OPT::ES_I_addr16}}},
     // ONEW AX*/ 
-    {0xE6U, {RL78::ONEW_rp, {}, {RL78::RP0}}},
+    {0xE6U, {RL78::ONEW_rp_cg, {}, {RL78::RP0}}},
     // ONEW BC*/ 
-    {0xE7U, {RL78::ONEW_rp, {}, {RL78::RP2}}},
+    {0xE7U, {RL78::ONEW_rp_cg, {}, {RL78::RP2}}},
     // OR A,!addr16
     {0x6FU, {RL78::OR_r_abs16, {SBP::adrl, SBP::adrh}, {RL78::R1, RL78::R1, OPT::I_addr16}}},
     // OR saddr,#byte

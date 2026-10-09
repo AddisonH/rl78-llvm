@@ -88,12 +88,12 @@ public:
                                uint64_t Addr, uint64_t Size) const override {
     unsigned Opcode = Inst.getOpcode();
     switch (Opcode) {
-    case RL78::CMP0_abs16:
-    case RL78::CLRB_abs16:
-    case RL78::DECW_abs16:
-    case RL78::INCW_abs16:
-    case RL78::DEC_abs16:
-    case RL78::INC_abs16:
+    case RL78::CMP0_abs16_cg:
+    case RL78::CLRB_abs16_cg:
+    case RL78::DECW_abs16_cg:
+    case RL78::INCW_abs16_cg:
+    case RL78::DEC_abs16_cg:
+    case RL78::INC_abs16_cg:
       return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;
     case RL78::SUBW_rp_saddr:
     case RL78::ADDW_rp_saddr:
@@ -126,12 +126,12 @@ public:
     case RL78::STORE8_saddr_imm:
     case RL78::DECW_saddr:
     case RL78::INCW_saddr:
-    case RL78::DEC_saddr:
-    case RL78::INC_saddr:
-    case RL78::CMP0_saddr:
+    case RL78::DEC_saddr_cg:
+    case RL78::INC_saddr_cg:
+    case RL78::CMP0_saddr_cg:
     case RL78::STORE16_saddrp_rp:
-    case RL78::CLRB_saddr:
-    case RL78::ONEB_saddr:
+    case RL78::CLRB_saddr_cg:
+    case RL78::ONEB_saddr_cg:
       return getsaddrRange(Inst.getOperand(0).getImm());
     case RL78::CMPW_rp_saddr:
     case RL78::CMP_r_saddr:
@@ -155,7 +155,7 @@ public:
       return (Inst.getOperand(2).getImm() & 0xFFFF) + 0xF0000;
     case RL78::CMP_abs16_imm:
     case RL78::STORE8_abs16_imm:
-    case RL78::ONEB_abs16:
+    case RL78::ONEB_abs16_cg:
     case RL78::STORE16_abs16_rp:
     case RL78::STORE8_abs16_r:
       return (Inst.getOperand(0).getImm() & 0xFFFF) + 0xF0000;

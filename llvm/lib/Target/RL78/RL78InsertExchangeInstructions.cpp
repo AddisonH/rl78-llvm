@@ -697,13 +697,13 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           if (MI.getOperand(1).isImm()) {
             if (MI.getOperand(1).getImm() == 0) {
               // Build the CLRB instruction.
-              BuildMI(MBB, MI, DL, TII->get(RL78::CLRB_r))
+              BuildMI(MBB, MI, DL, TII->get(RL78::CLRB_r_cg))
                   .add(MI.getOperand(0));
               // Erase the MOV instruction.
               MI.eraseFromParent();
             } else if (MI.getOperand(1).getImm() == 1) {
               // Build the CLRB instruction.
-              BuildMI(MBB, MI, DL, TII->get(RL78::ONEB_r))
+              BuildMI(MBB, MI, DL, TII->get(RL78::ONEB_r_cg))
                   .add(MI.getOperand(0));
               // Erase the MOV instruction.
               MI.eraseFromParent();
@@ -717,13 +717,13 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           if (MI.getOperand(1).isImm()) {
             if (MI.getOperand(1).getImm() == 0) {
               // Build the CLRW instruction.
-              BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp))
+              BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp_cg))
                   .add(MI.getOperand(0));
               // Erase the MOVW instruction.
               MI.eraseFromParent();
             } else if (MI.getOperand(1).getImm() == 1) {
               // Build the ONEW instruction.
-              BuildMI(MBB, MI, DL, TII->get(RL78::ONEW_rp))
+              BuildMI(MBB, MI, DL, TII->get(RL78::ONEW_rp_cg))
                   .add(MI.getOperand(0));
               // Erase the MOVW instruction.
               MI.eraseFromParent();
@@ -740,14 +740,14 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                 unsigned RHi = RL78::R1;
                 unsigned RLo = RL78::R0;
                 unsigned opcode = (MI.getOperand(1).getImm() == 0x101)
-                                      ? RL78::ONEB_r
-                                      : RL78::CLRB_r;
+                                      ? RL78::ONEB_r_cg
+                                      : RL78::CLRB_r_cg;
                 if (MI.getOperand(0).getReg() == RL78::RP2) {
                   RHi = RL78::R3;
                   RLo = RL78::R2;
                 }
                 // Build the ONEB/CLRB instructions.
-                BuildMI(MBB, MI, DL, TII->get(RL78::ONEB_r), RHi);
+                BuildMI(MBB, MI, DL, TII->get(RL78::ONEB_r_cg), RHi);
                 BuildMI(MBB, MI, DL, TII->get(opcode), RLo);
                 // Erase the MOVW instruction.
                 MI.eraseFromParent();
@@ -755,9 +755,9 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               // 3. MOVW AX, #-1 (3 bytes, 2/1 clocks) can be replaced with CLRW
               // AX (1 byte, 1 clock) + DECW AX(1 byte, 2/1 clocks)
               if (MI.getOperand(1).getImm() == -1) {
-                BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp))
+                BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp_cg))
                     .add(MI.getOperand(0));
-                BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
+                BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp_cg))
                     .add(MI.getOperand(0))
                     .add(MI.getOperand(0));
                 MI.eraseFromParent();
@@ -801,7 +801,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         // SUBW ax, ax is not permitted.
         if (MI.getOperand(2).getReg() == RL78::RP0 &&
             MI.getOperand(1).getReg() == MI.getOperand(2).getReg()) {
-          BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp))
+          BuildMI(MBB, MI, DL, TII->get(RL78::CLRW_rp_cg))
               .addReg(MI.getOperand(0).getReg());
           MI.eraseFromParent();
         }
@@ -818,7 +818,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       case RL78::MOV_PSW_A:
         insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
-      case RL78::CLRB_r:
+      case RL78::CLRB_r_cg:
         // Replace MOV X, A + CLRB A with SHRW AX.
         if (prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
           MachineInstr &MI2 = *prevNonDebug(MBB, MI.getIterator());
@@ -896,10 +896,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         if (MI.getOperand(2).getImm() == 2) {
           RemoveMOVWs(MI, MBB, Next);
           // Insert 2 x INCW instructions
-          BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp))
+          BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp_cg))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
-          BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp))
+          BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp_cg))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
           // Erase the ADDW instruction.
@@ -909,10 +909,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         else if (MI.getOperand(2).getImm() == -2) {
           RemoveMOVWs(MI, MBB, Next);
           // Insert 2 x DECW instructions
-          BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
+          BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp_cg))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
-          BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
+          BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp_cg))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
           // Erase the ADDW instruction.

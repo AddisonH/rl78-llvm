@@ -137,7 +137,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
 
   unsigned JumpSize = OpSize * RdOpAmount;
   if (RdOpAmount == 1) {
-    FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::CMP0_r))
+    FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::CMP0_r_cg))
                            .addReg(RL78::R3, RegState::Kill);
     if (OpInstrCount > 1)
       BuildMI(*BB, MI, DL, II->get(RL78::B_cc))
@@ -258,7 +258,7 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   BuildMI(*BB, MI, DL, II->get(RL78::DI));
 
   // 0 is transferred to the MDUC address.
-  BuildMI(*BB, MI, DL, II->get(RL78::CLRB_abs16)).addImm(MDUC);
+  BuildMI(*BB, MI, DL, II->get(RL78::CLRB_abs16_cg)).addImm(MDUC);
 
   // AX register contents is transferred to the MDAL address.
   BuildMI(*BB, MI, DL, II->get(RL78::STORE16_sfrp_rp))
@@ -316,7 +316,7 @@ void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
     // x ^ x = 0.
     if (Src->getReg() == RL78::RP0) {
       if (Op8 == RL78::XOR_r_r)
-        BuildMI(MBB, I, DL, TII.get(RL78::CLRW_rp), RL78::RP0);
+        BuildMI(MBB, I, DL, TII.get(RL78::CLRW_rp_cg), RL78::RP0);
       return;
     }
     Half(BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1).addReg(RL78::R1,
@@ -334,7 +334,7 @@ void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
   // Per byte (X low, A high): AND with 0 clears it, AND with 0xff and
   // OR/XOR with 0 leave it, OR with 0xff sets it; otherwise operate in A.
   if (ImmLo == 0x00 && Op8 == RL78::AND_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r), RL78::R0);
+    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r_cg), RL78::R0);
   } else if ((ImmLo != 0xff && Op8 == RL78::AND_r_imm) ||
              (ImmLo != 0x00 &&
               (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
@@ -347,7 +347,7 @@ void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_imm), RL78::R0).addImm(ImmLo);
   }
   if (ImmHi == 0x00 && Op8 == RL78::AND_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r), RL78::R1);
+    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r_cg), RL78::R1);
   } else if ((ImmHi != 0xff && Op8 == RL78::AND_r_imm) ||
              (ImmHi != 0x00 &&
               (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
@@ -423,9 +423,9 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     OpSize = 2;
     break;
   case RL78::ADDE_rp_rp:
-      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::INCW_rp, RL78::ADDW_rp_rp);
+      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::INCW_rp_cg, RL78::ADDW_rp_rp);
   case RL78::SUBE_rp_rp:
-      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp, RL78::SUBW_rp_rp);
+      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp_cg, RL78::SUBW_rp_rp);
   case RL78::MUL16_rp_rp_S1_S2:
     return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
   // Left for after allocation (see LowerAndOrXor16_*).

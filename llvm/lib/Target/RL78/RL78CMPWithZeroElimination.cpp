@@ -100,14 +100,14 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
         if (prevI == MBB.rend())
           break;
         // If compare with 0 instruction.
-        // We don't check for CMP0_abs16 because it's highly unlikely to happen:
+        // We don't check for CMP0_abs16_cg because it's highly unlikely to happen:
         // We will not have a store and a load (maybe in case of volatile in
         // which case we don't realy want to touch it) normally the compiler
         // will do a store and a compare using the same registers (which
         // contains the store value) as operand 0. We also ignore any signed
         // comparisons which needed extra instruction (XOR1_cy_r etc.), see
         // RL78TargetLowering::LowerSignedCMP.
-        if ((prevI->getOpcode() == RL78::CMP0_r) ||
+        if ((prevI->getOpcode() == RL78::CMP0_r_cg) ||
             ((prevI->getOpcode() == RL78::CMPW_rp_imm) &&
              (prevI->getOperand(1).getImm() == 0))) {
           MachineInstr &CMPI = *prevI;
@@ -181,7 +181,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
             prevI->getOperand(0).isKill()) {
             const TargetInstrInfo *TII = MBB.getParent()->getSubtarget<RL78Subtarget>().getInstrInfo();
             BuildMI(MBB, prevI.getReverse(), prevI->getDebugLoc(),
-                  TII->get(RL78::INC_r))
+                  TII->get(RL78::INC_r_cg))
               .add(prevI->getOperand(0))
               .add(prevI->getOperand(1));
             BuildMI(MBB, BRCC, BRCC.getDebugLoc(),
