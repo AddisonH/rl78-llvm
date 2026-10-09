@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "RL78Subtarget.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "rl78-reginfo"
 
 #define GET_REGINFO_TARGET_DESC
 #include "RL78GenRegisterInfo.inc"
@@ -57,8 +60,62 @@ bool RL78RegisterInfo::shouldCoalesce(
   // makes %p RL78AXRP).
   if (SrcRC->getNumRegs() == 1 && DstRC->getNumRegs() == 1)
     return true;
-  if (!RL78AccCoalesce || SubReg || DstSubReg)
+  if (SubReg || DstSubReg)
     return false;
+  // Joining is free when nothing else needs the accumulator while either
+  // value is live: no pinned use or clobber of AX/A overlaps them. The value
+  // can then simply stay in AX/A and the copies disappear.
+  if (!RL78AccCoalesce) {
+    MCRegister Acc = *NewRC->begin();
+    const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
+    Register Dst = MI->getOperand(0).getReg(), Src = MI->getOperand(1).getReg();
+    // A copy of the joined value (or the value it is a copy of) is the same
+    // value and will be joined as well: no competition for the accumulator.
+    auto SameValue = [&](Register R) {
+      for (const MachineInstr &DI : MRI.def_instructions(R))
+        if (DI.isCopy() && (DI.getOperand(1).getReg() == Dst ||
+                            DI.getOperand(1).getReg() == Src))
+          return true;
+      for (Register J : {Dst, Src})
+        for (const MachineInstr &DI : MRI.def_instructions(J))
+          if (DI.isCopy() && DI.getOperand(1).getReg() == R)
+            return true;
+      return false;
+    };
+    for (Register R : {Dst, Src}) {
+      const LiveInterval &LI = LIS.getInterval(R);
+      for (MCRegUnit Unit : regunits(Acc))
+        if (LIS.getRegUnit(Unit).overlaps(LI)) {
+          LLVM_DEBUG(dbgs() << "RL78 no acc join: " << printReg(R, this)
+                            << " overlaps a use of " << printReg(Acc, this)
+                            << " in " << *MI);
+          return false;
+        }
+      // Nor may another value that has to be in the accumulator be read or
+      // written while this one is live.
+      for (const LiveRange::Segment &Seg : LI) {
+        for (SlotIndex I = Seg.start.getBaseIndex(); I < Seg.end;
+             I = I.getNextIndex()) {
+          const MachineInstr *UI = LIS.getInstructionFromIndex(I);
+          if (!UI)
+            continue;
+          for (const MachineOperand &MO : UI->operands()) {
+            if (!MO.isReg() || !MO.getReg().isVirtual() || MO.getReg() == Dst ||
+                MO.getReg() == Src)
+              continue;
+            const TargetRegisterClass *RC = MRI.getRegClass(MO.getReg());
+            if (RC->getNumRegs() == 1 && regsOverlap(*RC->begin(), Acc) &&
+                !SameValue(MO.getReg())) {
+              LLVM_DEBUG(dbgs() << "RL78 no acc join: " << printReg(R, this)
+                                << " overlaps " << printReg(MO.getReg(), this)
+                                << " at " << *UI);
+              return false;
+            }
+          }
+        }
+      }
+    }
+  }
   // Nor when either value is read or written in part elsewhere: splitting
   // the pinned value around such accesses does not always succeed.
   const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
