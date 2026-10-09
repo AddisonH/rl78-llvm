@@ -68,7 +68,8 @@ private:
   // A value in AX or A: its definition and the operands that read it.
   struct Span {
     MachineOperand *Def = nullptr;
-    SmallVector<MachineOperand *, 4> Uses;
+    // Each read, with the subregister index it reads (A or X of AX), or 0.
+    SmallVector<std::pair<MachineOperand *, unsigned>, 4> Uses;
     bool OK = false;
     // The span whose value this one's definition is tied to, or -1. The two
     // are rewritten together or not at all.
@@ -101,8 +102,9 @@ void RL78VirtualizeAccumulator::rewrite(Span &S) {
   Register V = MRI->createVirtualRegister(accClass(S.Def->getReg()));
   S.Def->setReg(V);
   S.Def->setIsDead(S.Uses.empty());
-  for (MachineOperand *MO : S.Uses) {
+  for (auto [MO, SubIdx] : S.Uses) {
     MO->setReg(V);
+    MO->setSubReg(SubIdx);
     MO->setIsKill(false);
   }
 }
@@ -141,12 +143,24 @@ bool RL78VirtualizeAccumulator::runOnBlock(MachineBasicBlock &MBB) {
       if (!MO.isReg() || !MO.readsReg() || !MO.getReg().isPhysical() ||
           !TRI->regsOverlap(MO.getReg(), RL78::RP0))
         continue;
+      // A read of A or X alone of a value in AX reads a subregister of it.
+      unsigned SubIdx = 0;
+      if (Open.Def && Open.Def->getReg() == RL78::RP0 &&
+          MO.getReg() != RL78::RP0)
+        SubIdx = TRI->getSubRegIndex(RL78::RP0, MO.getReg());
       if (Open.Def && !MO.isImplicit() && !MO.getSubReg() &&
-          MO.getReg() == Open.Def->getReg() && Accepts(MO)) {
-        Open.Uses.push_back(&MO);
+          (MO.getReg() == Open.Def->getReg() || SubIdx) && !MO.isTied() &&
+          Accepts(MO)) {
+        Open.Uses.push_back({&MO, SubIdx});
+        ++NumReads;
+      } else if (Open.Def && !MO.isImplicit() && !MO.getSubReg() &&
+                 MO.getReg() == Open.Def->getReg() && Accepts(MO)) {
+        Open.Uses.push_back({&MO, 0});
         ++NumReads;
         TiedRead |= MO.isTied();
       } else {
+        if (Open.Def && Open.OK)
+          LLVM_DEBUG(dbgs() << "kept: read by " << MI);
         Open.OK = false;
       }
     }
@@ -169,6 +183,8 @@ bool RL78VirtualizeAccumulator::runOnBlock(MachineBasicBlock &MBB) {
       else
         Other = true;
     }
+    if (Other && Open.Def && Open.OK)
+      LLVM_DEBUG(dbgs() << "kept: written by " << MI);
     if (!NewDef && !Other)
       continue;
     // A write of A leaves X of an open AX value in place.
