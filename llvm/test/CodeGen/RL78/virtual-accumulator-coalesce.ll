@@ -1,8 +1,8 @@
-; -rl78-virtual-acc: a byte compared several times stays in A when nothing
+; A byte compared several times stays in A when nothing
 ; else needs A meanwhile (RL78RegisterInfo::shouldCoalesce joins the copies
 ; into A), instead of living in another register with MOV A, r before each
 ; compare.
-; RUN: llc -mtriple=rl78 -O2 -rl78-virtual-acc < %s | FileCheck %s
+; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; CHECK-LABEL: _classify:
 ; CHECK:     mov a, [hl]

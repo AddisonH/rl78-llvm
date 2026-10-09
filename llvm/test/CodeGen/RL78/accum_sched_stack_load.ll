@@ -18,11 +18,11 @@ target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16
 target triple = "rl78-unknown-unknown-elf"
 
 ; Without the reordering every conflicting reload costs an exchange pair.
-; NOSCHED-COUNT-40: xchw
+; NOSCHED-COUNT-46: xchw
 ; NOSCHED-NOT: xchw
 
-; With it, eight of those pairs collapse to a copy out of AX.
-; SCHED-COUNT-32: xchw
+; With it, six of those pairs collapse to a copy out of AX.
+; SCHED-COUNT-34: xchw
 ; SCHED-NOT: xchw
 
 define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_unnamed_addr {

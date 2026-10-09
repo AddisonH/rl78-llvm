@@ -18,7 +18,7 @@ body: |
     liveins: $rp0, $rp2, $rp4
     $macrh = COPY $rp0
     $macrl = COPY $rp0
-    $macrl, $macrh = MACH_CG killed $macrl, killed $macrh, $rp2, $rp4, implicit-def dead $ccreg
+    $macrl, $macrh = MACH_CG killed $macrl, killed $macrh, $rp0, $rp2, implicit-def dead $ccreg
     $rp0 = COPY killed $macrl
     STORE16_abs16_rp 0, killed $rp0
     $rp0 = COPY killed $macrh

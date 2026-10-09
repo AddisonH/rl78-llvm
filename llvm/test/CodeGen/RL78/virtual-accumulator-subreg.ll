@@ -1,7 +1,7 @@
-; -rl78-virtual-acc: a read of A (or X) alone of a value in AX is the
+; A read of A (or X) alone of a value in AX is the
 ; subregister of its virtual register, so the value of a signed 16-bit
 ; compare (CMPW AX, #imm; XOR1 CY, A.7) need not stay in physical AX.
-; RUN: llc -mtriple=rl78 -O2 -rl78-virtual-acc -stop-before=register-coalescer < %s | FileCheck %s
+; RUN: llc -mtriple=rl78 -O2 -stop-before=register-coalescer < %s | FileCheck %s
 
 @g = global i16 0
 

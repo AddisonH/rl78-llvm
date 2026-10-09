@@ -1,12 +1,12 @@
-; -rl78-virtual-acc: AX/A operands pinned by the custom inserters are carried
-; in virtual registers of the single-register classes (RL78AXRP, RL78AReg),
+; AX/A operands fixed by the custom inserters are carried in virtual registers
+; of the single-register classes (RL78AXRP, RL78AReg),
 ; and the allocator learns which operands must be AX/A from
 ; RL78AccumulatorOperands.def.
-; RUN: llc -O2 -mcpu=RL78_S3 -rl78-virtual-acc -stop-before=register-coalescer < %s | FileCheck %s --check-prefix=MIR
-; RUN: llc -O2 -mcpu=RL78_S3 -rl78-virtual-acc < %s | FileCheck %s --check-prefix=ASM
+; RUN: llc -O2 -mcpu=RL78_S3 -stop-before=register-coalescer < %s | FileCheck %s --check-prefix=MIR
+; RUN: llc -O2 -mcpu=RL78_S3 < %s | FileCheck %s --check-prefix=ASM
 ; Everything allocates also when the coalescer may keep values in AX and the
 ; machine scheduler reorders around them.
-; RUN: llc -O2 -mcpu=RL78_S3 -rl78-virtual-acc -rl78-acc-coalesce -rl78-acc-misched -o /dev/null < %s
+; RUN: llc -O2 -mcpu=RL78_S3 -rl78-acc-coalesce -rl78-acc-misched -o /dev/null < %s
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
 target triple = "rl78-unknown-unknown-elf"
 

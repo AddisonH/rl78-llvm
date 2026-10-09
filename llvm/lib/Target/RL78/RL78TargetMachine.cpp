@@ -199,7 +199,7 @@ public:
 
 static cl::opt<bool> RL78AccMisched(
     "rl78-acc-misched", cl::Hidden, cl::init(false),
-    cl::desc("Schedule before register allocation (with -rl78-virtual-acc)"));
+    cl::desc("Schedule before register allocation"));
 
 bool RL78Subtarget::enableMachineScheduler() const { return RL78AccMisched; }
 

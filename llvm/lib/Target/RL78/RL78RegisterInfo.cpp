@@ -31,12 +31,10 @@ RL78RegisterInfo::RL78RegisterInfo() : RL78GenRegisterInfo(RL78::PCreg) {}
 const TargetRegisterClass *
 RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
                                             const MachineFunction &MF) const {
-  if (RL78VirtualAcc) {
-    if (RC == &RL78::RL78AXRPRegClass)
-      return &RL78::RL78RPRegsRegClass;
-    if (RC == &RL78::RL78ARegRegClass)
-      return &RL78::RL78RegRegClass;
-  }
+  if (RC == &RL78::RL78AXRPRegClass)
+    return &RL78::RL78RPRegsRegClass;
+  if (RC == &RL78::RL78ARegRegClass)
+    return &RL78::RL78RegRegClass;
   return RC;
 }
 
@@ -49,7 +47,7 @@ static cl::opt<float> RL78AccSpillScale(
 // or spilled itself.
 float RL78RegisterInfo::getSpillWeightScaleFactor(
     const TargetRegisterClass *RC) const {
-  if (RL78VirtualAcc && RC->getNumRegs() == 1)
+  if (RC->getNumRegs() == 1)
     return RL78AccSpillScale;
   return 1.0;
 }

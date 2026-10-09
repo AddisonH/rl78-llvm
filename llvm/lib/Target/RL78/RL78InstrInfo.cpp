@@ -428,7 +428,7 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp, RL78::SUBW_rp_rp);
   case RL78::MUL16_rp_rp_S1_S2:
     return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
-  // Left for after allocation by -rl78-virtual-acc (see LowerAndOrXor16_*).
+  // Left for after allocation (see LowerAndOrXor16_*).
   case RL78::AND16_rp_rp:
   case RL78::AND2_16_rp_rp:
   case RL78::OR16_rp_rp:
@@ -690,15 +690,6 @@ bool RL78InstrInfo::reverseBranchCondition(
   return false;
 }
 
-// Lets MachineCopyPropagation see the moves this target emits: by the time the
-// pre-emit passes run there are no COPY pseudos left for it to match.
-// The 8-bit MOV_A_r/MOV_r_A are deliberately not listed. Their register classes
-// span A and X, which are the two halves of AX, and propagating across that
-// miscompiles CoreMark (wrong crclist and crcstate).
-cl::opt<bool> llvm::RL78VirtualAcc(
-    "rl78-virtual-acc", cl::Hidden, cl::init(false),
-    cl::desc("Allocate AX/A operands as virtual registers"));
-
 static uint32_t accKey(unsigned Opcode, unsigned OpNum) {
   return Opcode << 8 | OpNum;
 }
@@ -732,10 +723,9 @@ bool RL78InstrInfo::acceptsAccumulator(unsigned Opcode, unsigned OpNum) {
 
 const TargetRegisterClass *RL78InstrInfo::getRegClass(const MCInstrDesc &MCID,
                                                       unsigned OpNum) const {
-  if (RL78VirtualAcc)
-    if (const TargetRegisterClass *RC =
-            getAccumulatorClass(MCID.getOpcode(), OpNum))
-      return RC;
+  if (const TargetRegisterClass *RC =
+          getAccumulatorClass(MCID.getOpcode(), OpNum))
+    return RC;
   return TargetInstrInfo::getRegClass(MCID, OpNum);
 }
 
@@ -755,6 +745,11 @@ bool RL78InstrInfo::findCommutedOpIndices(const MachineInstr &MI,
   return true;
 }
 
+// Lets MachineCopyPropagation see the moves this target emits: by the time the
+// pre-emit passes run there are no COPY pseudos left for it to match.
+// The 8-bit MOV_A_r/MOV_r_A are deliberately not listed. Their register classes
+// span A and X, which are the two halves of AX, and propagating across that
+// miscompiles CoreMark (wrong crclist and crcstate).
 std::optional<DestSourcePair>
 RL78InstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
   switch (MI.getOpcode()) {

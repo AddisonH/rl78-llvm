@@ -55,7 +55,6 @@ FunctionPass *createRL78MACRLoopPromotePass();
 FunctionPass *createRL78SinkToAccumulatorPass();
 FunctionPass *createRL78VirtualizeAccumulatorPass(bool WidenOnly = false);
 FunctionPass *createRL78SeparateAccumulatorOperandsPass();
-extern cl::opt<bool> RL78VirtualAcc;
 
 void initializeRL78DAGToDAGISelLegacyPass(PassRegistry &);
 void initializeRL78NarrowDemandedOpsPass(PassRegistry &);

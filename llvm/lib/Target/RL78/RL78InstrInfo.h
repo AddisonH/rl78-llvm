@@ -39,7 +39,7 @@ public:
   bool findCommutedOpIndices(const MachineInstr &MI, unsigned &SrcOpIdx1,
                              unsigned &SrcOpIdx2) const override;
 
-  /// With -rl78-virtual-acc, accumulator operands carry their real class
+  /// Accumulator operands carry their real class
   /// (RL78AXRP or RL78AReg) instead of the general one.
   const TargetRegisterClass *getRegClass(const MCInstrDesc &MCID,
                                          unsigned OpNum) const override;

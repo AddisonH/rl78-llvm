@@ -1,7 +1,6 @@
 ; A variable 16-bit shift whose result must be in AX (here for the store) has
-; the class RL78AXRP under -rl78-virtual-acc, not RL78RPRegs; the inserter
+; the class RL78AXRP, not RL78RPRegs; the inserter
 ; for speed (-O3) must still shift in AX, not in A.
-; RUN: llc -mtriple=rl78 -O3 -rl78-virtual-acc < %s | FileCheck %s
 ; RUN: llc -mtriple=rl78 -O3 < %s | FileCheck %s
 
 @g = global i16 0

@@ -265,8 +265,6 @@ bool RL78VirtualizeAccumulator::runOnMachineFunction(MachineFunction &MF) {
         }
       }
   }
-  if (!RL78VirtualAcc)
-    return false;
   MRI = &MF.getRegInfo();
   TRI = MF.getSubtarget().getRegisterInfo();
   if (!MRI->isSSA())
@@ -359,8 +357,6 @@ static bool isSingleAccClass(const TargetRegisterClass *RC) {
 
 bool RL78SeparateAccumulatorOperands::runOnMachineFunction(
     MachineFunction &MF) {
-  if (!RL78VirtualAcc)
-    return false;
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
   LiveIntervals &LIS = getAnalysis<LiveIntervalsWrapperPass>().getLIS();

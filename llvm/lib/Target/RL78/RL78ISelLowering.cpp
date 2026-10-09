@@ -3825,22 +3825,10 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
 MachineBasicBlock *
 RL78TargetLowering::LowerAndOrXor16_rp_rp(unsigned int opcode, MachineInstr &MI,
                                           MachineBasicBlock *BB) const {
-  // With -rl78-virtual-acc only the AX operands are fixed here: the
-  // allocator then sees one instruction, expanded once the other operand has
-  // its register (RL78InstrInfo::expandPostRAPseudo).
-  if (RL78VirtualAcc)
-    return Lower16BitOpAXAX(MI, BB);
-  DebugLoc DL = MI.getDebugLoc();
-  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-  RL78InstrInfo::buildLogic16OnAX(*BB, MI, DL, *TII, opcode, &MI.getOperand(2),
-                                  0);
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  // The pseudo instruction is gone now.
-  MI.eraseFromParent();
-  return BB;
+  // Only the AX operands are fixed here: the allocator then sees one
+  // instruction, expanded once the other operand has its register
+  // (RL78InstrInfo::expandPostRAPseudo).
+  return Lower16BitOpAXAX(MI, BB);
 }
 
 MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_memri(
@@ -4470,19 +4458,7 @@ MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
   if (LowerXorSpecialCases(opcode, MI, BB))
     return BB;
   // See LowerAndOrXor16_rp_rp.
-  if (RL78VirtualAcc)
-    return Lower16BitOpAXAX(MI, BB);
-  DebugLoc DL = MI.getDebugLoc();
-  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-  RL78InstrInfo::buildLogic16OnAX(*BB, MI, DL, *TII, opcode, nullptr,
-                                  MI.getOperand(2).getImm());
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  // The pseudo instruction is gone now.
-  MI.eraseFromParent();
-  return BB;
+  return Lower16BitOpAXAX(MI, BB);
 }
 
 static bool IsCarryDead(MachineInstr &MI) {
@@ -5182,8 +5158,8 @@ RL78TargetLowering::LowerShiftOrRotateForSpeed(MachineInstr &MI,
   unsigned Rs1 = MI.getOperand(1).getReg();
   unsigned Rs2 = MI.getOperand(2).getReg();
 
-  // The result class may be any 16-bit class (RL78AXRP under
-  // -rl78-virtual-acc), so go by its width.
+  // The result class may be any 16-bit class (RL78AXRP among them), so go by
+  // its width.
   const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
   Register NewRd =
       TRI->getRegSizeInBits(*MRI.getRegClass(MI.getOperand(0).getReg())) == 16

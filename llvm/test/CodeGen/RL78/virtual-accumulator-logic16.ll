@@ -1,6 +1,6 @@
-; -rl78-virtual-acc leaves 16-bit AND/OR/XOR as one pseudo on AX until after
-; allocation, where they become a byte at a time through A and XCH A, X.
-; RUN: llc -mtriple=rl78 -O2 -rl78-virtual-acc < %s | FileCheck %s
+; 16-bit AND/OR/XOR stay one pseudo on AX until after allocation, where they
+; become a byte at a time through A and XCH A, X.
+; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
 
 @g = global i16 0
 

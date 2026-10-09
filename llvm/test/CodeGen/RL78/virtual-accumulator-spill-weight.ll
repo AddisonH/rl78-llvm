@@ -1,8 +1,8 @@
-; -rl78-virtual-acc: a value that can only be in AX has a higher spill weight
+; A value that can only be in AX has a higher spill weight
 ; (RL78RegisterInfo::getSpillWeightScaleFactor), so it evicts a value that
 ; was only hinted to AX instead of being spilled itself. Four halves of two
 ; longs fit AX, BC, DE and HL.
-; RUN: llc -mtriple=rl78 -O2 -rl78-virtual-acc < %s | FileCheck %s
+; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
 
 @a = global [4 x i32] zeroinitializer
 @b = global [4 x i32] zeroinitializer
