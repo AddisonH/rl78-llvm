@@ -130,28 +130,28 @@ set1 !0x1111.6
 set1 !0x1111.7
 
 
-# CHECK-INST: set1 0xffffa.0                      ; encoding: [0x71,0x0a,0xfa]
+# CHECK-INST: set1 psw.0                      ; encoding: [0x71,0x0a,0xfa]
 set1 PSW.0
 
-# CHECK-INST: set1 0xffffa.1                      ; encoding: [0x71,0x1a,0xfa]
+# CHECK-INST: set1 psw.1                      ; encoding: [0x71,0x1a,0xfa]
 set1 PSW.1
 
-# CHECK-INST: set1 0xffffa.2                      ; encoding: [0x71,0x2a,0xfa]
+# CHECK-INST: set1 psw.2                      ; encoding: [0x71,0x2a,0xfa]
 set1 PSW.2
 
-# CHECK-INST: set1 0xffffa.3                      ; encoding: [0x71,0x3a,0xfa]
+# CHECK-INST: set1 psw.3                      ; encoding: [0x71,0x3a,0xfa]
 set1 PSW.3
 
-# CHECK-INST: set1 0xffffa.4                      ; encoding: [0x71,0x4a,0xfa]
+# CHECK-INST: set1 psw.4                      ; encoding: [0x71,0x4a,0xfa]
 set1 PSW.4
 
-# CHECK-INST: set1 0xffffa.5                      ; encoding: [0x71,0x5a,0xfa]
+# CHECK-INST: set1 psw.5                      ; encoding: [0x71,0x5a,0xfa]
 set1 PSW.5
 
-# CHECK-INST: set1 0xffffa.6                      ; encoding: [0x71,0x6a,0xfa]
+# CHECK-INST: set1 psw.6                      ; encoding: [0x71,0x6a,0xfa]
 set1 PSW.6
 
-# CHECK-INST: set1 0xffffa.7                      ; encoding: [0x71,0x7a,0xfa]
+# CHECK-INST: set1 psw.7                      ; encoding: [0x71,0x7a,0xfa]
 set1 PSW.7
 
 

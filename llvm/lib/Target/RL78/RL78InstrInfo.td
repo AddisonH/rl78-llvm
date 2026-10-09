@@ -115,7 +115,7 @@ def Sfr : Operand<iPTR> {
 }
 
 def Sfrp : Operand<iPTR> {
-  let PrintMethod = "printSfrOperand";
+  let PrintMethod = "printSfrpOperand";
   let ParserMatchClass = RL78SfrpAsmOperand;
 }
 

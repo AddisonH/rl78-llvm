@@ -105,28 +105,28 @@ and1 CY, A.7
 
 
 
-# CHECK-INST: and1 cy, 0xffffa.0                      ; encoding: [0x71,0x0d,0xfa]
+# CHECK-INST: and1 cy, psw.0                      ; encoding: [0x71,0x0d,0xfa]
 and1 CY, PSW.0
 
-# CHECK-INST: and1 cy, 0xffffa.1                      ; encoding: [0x71,0x1d,0xfa]
+# CHECK-INST: and1 cy, psw.1                      ; encoding: [0x71,0x1d,0xfa]
 and1 CY, PSW.1
 
-# CHECK-INST: and1 cy, 0xffffa.2                      ; encoding: [0x71,0x2d,0xfa]
+# CHECK-INST: and1 cy, psw.2                      ; encoding: [0x71,0x2d,0xfa]
 and1 CY, PSW.2
 
-# CHECK-INST: and1 cy, 0xffffa.3                      ; encoding: [0x71,0x3d,0xfa]
+# CHECK-INST: and1 cy, psw.3                      ; encoding: [0x71,0x3d,0xfa]
 and1 CY, PSW.3
 
-# CHECK-INST: and1 cy, 0xffffa.4                      ; encoding: [0x71,0x4d,0xfa]
+# CHECK-INST: and1 cy, psw.4                      ; encoding: [0x71,0x4d,0xfa]
 and1 CY, PSW.4
 
-# CHECK-INST: and1 cy, 0xffffa.5                      ; encoding: [0x71,0x5d,0xfa]
+# CHECK-INST: and1 cy, psw.5                      ; encoding: [0x71,0x5d,0xfa]
 and1 CY, PSW.5
 
-# CHECK-INST: and1 cy, 0xffffa.6                      ; encoding: [0x71,0x6d,0xfa]
+# CHECK-INST: and1 cy, psw.6                      ; encoding: [0x71,0x6d,0xfa]
 and1 CY, PSW.6
 
-# CHECK-INST: and1 cy, 0xffffa.7                      ; encoding: [0x71,0x7d,0xfa]
+# CHECK-INST: and1 cy, psw.7                      ; encoding: [0x71,0x7d,0xfa]
 and1 CY, PSW.7
 
 

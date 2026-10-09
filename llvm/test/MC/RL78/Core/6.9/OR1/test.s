@@ -105,28 +105,28 @@ or1 CY, A.7
 
 
 
-# CHECK-INST: or1 cy, 0xffffa.0                      ; encoding: [0x71,0x0e,0xfa]
+# CHECK-INST: or1 cy, psw.0                      ; encoding: [0x71,0x0e,0xfa]
 or1 CY, PSW.0
 
-# CHECK-INST: or1 cy, 0xffffa.1                      ; encoding: [0x71,0x1e,0xfa]
+# CHECK-INST: or1 cy, psw.1                      ; encoding: [0x71,0x1e,0xfa]
 or1 CY, PSW.1
 
-# CHECK-INST: or1 cy, 0xffffa.2                      ; encoding: [0x71,0x2e,0xfa]
+# CHECK-INST: or1 cy, psw.2                      ; encoding: [0x71,0x2e,0xfa]
 or1 CY, PSW.2
 
-# CHECK-INST: or1 cy, 0xffffa.3                      ; encoding: [0x71,0x3e,0xfa]
+# CHECK-INST: or1 cy, psw.3                      ; encoding: [0x71,0x3e,0xfa]
 or1 CY, PSW.3
 
-# CHECK-INST: or1 cy, 0xffffa.4                      ; encoding: [0x71,0x4e,0xfa]
+# CHECK-INST: or1 cy, psw.4                      ; encoding: [0x71,0x4e,0xfa]
 or1 CY, PSW.4
 
-# CHECK-INST: or1 cy, 0xffffa.5                      ; encoding: [0x71,0x5e,0xfa]
+# CHECK-INST: or1 cy, psw.5                      ; encoding: [0x71,0x5e,0xfa]
 or1 CY, PSW.5
 
-# CHECK-INST: or1 cy, 0xffffa.6                      ; encoding: [0x71,0x6e,0xfa]
+# CHECK-INST: or1 cy, psw.6                      ; encoding: [0x71,0x6e,0xfa]
 or1 CY, PSW.6
 
-# CHECK-INST: or1 cy, 0xffffa.7                      ; encoding: [0x71,0x7e,0xfa]
+# CHECK-INST: or1 cy, psw.7                      ; encoding: [0x71,0x7e,0xfa]
 or1 CY, PSW.7
 
 

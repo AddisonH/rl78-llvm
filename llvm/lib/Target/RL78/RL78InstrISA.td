@@ -68,7 +68,7 @@ def sfr8 : Operand<iPTR> {
   let EncoderMethod = "getSfrOpValue";
 }
 def sfrp8 : Operand<iPTR> {
-  let PrintMethod = "printSfrOperand";
+  let PrintMethod = "printSfrpOperand";
   let ParserMatchClass = RL78SfrpAsmOperand;
   let EncoderMethod = "getSfrOpValue";
 }

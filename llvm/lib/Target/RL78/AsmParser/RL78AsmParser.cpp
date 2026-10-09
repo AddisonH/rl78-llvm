@@ -497,7 +497,29 @@ public:
   bool is16BitReg() const {
     return (Kind == k_Register && Reg.Kind == rk_RegPair);
   }
-  bool isSfr() const { return Kind == k_sfr; }
+  // The registers that are sfrs: SPL, SPH, PSW, CS, ES, PMC, MEM.
+  static int64_t getSfrAddress(unsigned Reg) {
+    switch (Reg) {
+    case RL78::SPL:
+      return 0xFFFF8;
+    case RL78::SPH:
+      return 0xFFFF9;
+    case RL78::PSW:
+      return 0xFFFFA;
+    case RL78::CS:
+      return 0xFFFFC;
+    case RL78::ES:
+      return 0xFFFFD;
+    case RL78::PMC:
+      return 0xFFFFE;
+    case RL78::MEM:
+      return 0xFFFFF;
+    }
+    return 0;
+  }
+  bool isSfr() const {
+    return Kind == k_sfr || (Kind == k_Register && getSfrAddress(Reg.RegNum));
+  }
   bool isSfrp() const { return Kind == k_sfrp; }
   bool isEsAddr16() const { return Kind == k_EsAddr16; }
 
@@ -812,6 +834,10 @@ public:
 
   void addSfrOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
+    if (Kind == k_Register) {
+      Inst.addOperand(MCOperand::createImm(getSfrAddress(Reg.RegNum)));
+      return;
+    }
     const MCExpr *Expr = getSfr();
     addExpr(Inst, Expr);
   }

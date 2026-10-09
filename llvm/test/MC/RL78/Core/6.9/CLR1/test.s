@@ -130,28 +130,28 @@ clr1 !0x1111.6
 clr1 !0x1111.7
 
 
-# CHECK-INST: clr1 0xffffa.0                      ; encoding: [0x71,0x0b,0xfa]
+# CHECK-INST: clr1 psw.0                      ; encoding: [0x71,0x0b,0xfa]
 clr1 PSW.0
 
-# CHECK-INST: clr1 0xffffa.1                      ; encoding: [0x71,0x1b,0xfa]
+# CHECK-INST: clr1 psw.1                      ; encoding: [0x71,0x1b,0xfa]
 clr1 PSW.1
 
-# CHECK-INST: clr1 0xffffa.2                      ; encoding: [0x71,0x2b,0xfa]
+# CHECK-INST: clr1 psw.2                      ; encoding: [0x71,0x2b,0xfa]
 clr1 PSW.2
 
-# CHECK-INST: clr1 0xffffa.3                      ; encoding: [0x71,0x3b,0xfa]
+# CHECK-INST: clr1 psw.3                      ; encoding: [0x71,0x3b,0xfa]
 clr1 PSW.3
 
-# CHECK-INST: clr1 0xffffa.4                      ; encoding: [0x71,0x4b,0xfa]
+# CHECK-INST: clr1 psw.4                      ; encoding: [0x71,0x4b,0xfa]
 clr1 PSW.4
 
-# CHECK-INST: clr1 0xffffa.5                      ; encoding: [0x71,0x5b,0xfa]
+# CHECK-INST: clr1 psw.5                      ; encoding: [0x71,0x5b,0xfa]
 clr1 PSW.5
 
-# CHECK-INST: clr1 0xffffa.6                      ; encoding: [0x71,0x6b,0xfa]
+# CHECK-INST: clr1 psw.6                      ; encoding: [0x71,0x6b,0xfa]
 clr1 PSW.6
 
-# CHECK-INST: clr1 0xffffa.7                      ; encoding: [0x71,0x7b,0xfa]
+# CHECK-INST: clr1 psw.7                      ; encoding: [0x71,0x7b,0xfa]
 clr1 PSW.7
 
 

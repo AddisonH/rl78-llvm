@@ -52,6 +52,8 @@ public:
                         const MCSubtargetInfo &STI, raw_ostream &O);
   void printMemWord(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &O);
+  void printSfrpOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
+                        raw_ostream &O);
   void printCode16Operand(const MCInst *MI, int opNum,
                           const MCSubtargetInfo &STI, raw_ostream &O);
   void printBitCondOperand(const MCInst *MI, int opNum,

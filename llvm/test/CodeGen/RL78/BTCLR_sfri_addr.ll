@@ -23,6 +23,6 @@ if.end:
 
 declare void @llvm.rl78.clr1.p0(ptr, i8)
 
-; CHECK: btclr 0xfffff.1, $
-; CHECK-NOT: bt 0xfffff.1
-; CHECK-NOT: clr1 0xfffff.1
+; CHECK: btclr mem.1, $
+; CHECK-NOT: bt mem.1
+; CHECK-NOT: clr1 mem.1

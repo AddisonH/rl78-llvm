@@ -106,28 +106,28 @@ mov1 CY, A.7
 
 
 
-# CHECK-INST: mov1 cy, 0xffffa.0                      ; encoding: [0x71,0x0c,0xfa]
+# CHECK-INST: mov1 cy, psw.0                      ; encoding: [0x71,0x0c,0xfa]
 mov1 CY, PSW.0
 
-# CHECK-INST: mov1 cy, 0xffffa.1                      ; encoding: [0x71,0x1c,0xfa]
+# CHECK-INST: mov1 cy, psw.1                      ; encoding: [0x71,0x1c,0xfa]
 mov1 CY, PSW.1
 
-# CHECK-INST: mov1 cy, 0xffffa.2                      ; encoding: [0x71,0x2c,0xfa]
+# CHECK-INST: mov1 cy, psw.2                      ; encoding: [0x71,0x2c,0xfa]
 mov1 CY, PSW.2
 
-# CHECK-INST: mov1 cy, 0xffffa.3                      ; encoding: [0x71,0x3c,0xfa]
+# CHECK-INST: mov1 cy, psw.3                      ; encoding: [0x71,0x3c,0xfa]
 mov1 CY, PSW.3
 
-# CHECK-INST: mov1 cy, 0xffffa.4                      ; encoding: [0x71,0x4c,0xfa]
+# CHECK-INST: mov1 cy, psw.4                      ; encoding: [0x71,0x4c,0xfa]
 mov1 CY, PSW.4
 
-# CHECK-INST: mov1 cy, 0xffffa.5                      ; encoding: [0x71,0x5c,0xfa]
+# CHECK-INST: mov1 cy, psw.5                      ; encoding: [0x71,0x5c,0xfa]
 mov1 CY, PSW.5
 
-# CHECK-INST: mov1 cy, 0xffffa.6                      ; encoding: [0x71,0x6c,0xfa]
+# CHECK-INST: mov1 cy, psw.6                      ; encoding: [0x71,0x6c,0xfa]
 mov1 CY, PSW.6
 
-# CHECK-INST: mov1 cy, 0xffffa.7                      ; encoding: [0x71,0x7c,0xfa]
+# CHECK-INST: mov1 cy, psw.7                      ; encoding: [0x71,0x7c,0xfa]
 mov1 CY, PSW.7
 
 
@@ -236,28 +236,28 @@ mov1 A.7, CY
 
 
 
-# CHECK-INST: mov1 0xffffa.0, cy                      ; encoding: [0x71,0x09,0xfa]
+# CHECK-INST: mov1 psw.0, cy                      ; encoding: [0x71,0x09,0xfa]
 mov1 PSW.0, CY
 
-# CHECK-INST: mov1 0xffffa.1, cy                   ; encoding: [0x71,0x19,0xfa]
+# CHECK-INST: mov1 psw.1, cy                   ; encoding: [0x71,0x19,0xfa]
 mov1 PSW.1, CY
 
-# CHECK-INST: mov1 0xffffa.2, cy                   ; encoding: [0x71,0x29,0xfa]
+# CHECK-INST: mov1 psw.2, cy                   ; encoding: [0x71,0x29,0xfa]
 mov1 PSW.2, CY
 
-# CHECK-INST: mov1 0xffffa.3, cy                   ; encoding: [0x71,0x39,0xfa]
+# CHECK-INST: mov1 psw.3, cy                   ; encoding: [0x71,0x39,0xfa]
 mov1 PSW.3, CY
 
-# CHECK-INST: mov1 0xffffa.4, cy                   ; encoding: [0x71,0x49,0xfa]
+# CHECK-INST: mov1 psw.4, cy                   ; encoding: [0x71,0x49,0xfa]
 mov1 PSW.4, CY
 
-# CHECK-INST: mov1 0xffffa.5, cy                   ; encoding: [0x71,0x59,0xfa]
+# CHECK-INST: mov1 psw.5, cy                   ; encoding: [0x71,0x59,0xfa]
 mov1 PSW.5, CY
 
-# CHECK-INST: mov1 0xffffa.6, cy                   ; encoding: [0x71,0x69,0xfa]
+# CHECK-INST: mov1 psw.6, cy                   ; encoding: [0x71,0x69,0xfa]
 mov1 PSW.6, CY
 
-# CHECK-INST: mov1 0xffffa.7, cy                   ; encoding: [0x71,0x79,0xfa]
+# CHECK-INST: mov1 psw.7, cy                   ; encoding: [0x71,0x79,0xfa]
 mov1 PSW.7, CY
 
 

@@ -266,12 +266,30 @@ void RL78InstPrinter::printSfrOperand(const MCInst *MI, int opNum,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(opNum);
-  if (MO.isImm())
-    O << "0xfff" << format_hex_no_prefix(0xFF & MO.getImm(), 2);
-  else if (MO.isExpr())
+  if (MO.isImm()) {
+    // The sfrs that are registers print as their names.
+    static const char *const Names[8] = {"spl", "sph", "psw", nullptr,
+                                         "cs",  "es",  "pmc", "mem"};
+    unsigned Low = MO.getImm() & 0xFF;
+    if (Low >= 0xF8 && Names[Low - 0xF8])
+      O << Names[Low - 0xF8];
+    else
+      O << "0xfff" << format_hex_no_prefix(Low, 2);
+  } else if (MO.isExpr())
     MAI.printExpr(O, *MO.getExpr());
   else
     llvm_unreachable("Operand type is not Immediate or Expression!");
+}
+
+// sfrp: always the address (SP, the pair at FFFF8H, has its own forms).
+void RL78InstPrinter::printSfrpOperand(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O) {
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (MO.isImm())
+    O << "0xfff" << format_hex_no_prefix(0xFF & MO.getImm(), 2);
+  else
+    MAI.printExpr(O, *MO.getExpr());
 }
 
 void RL78InstPrinter::printABS16Operand(const MCInst *MI, int opNum,

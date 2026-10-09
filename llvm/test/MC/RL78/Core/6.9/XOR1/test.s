@@ -105,28 +105,28 @@ xor1 CY, A.7
 
 
 
-# CHECK-INST: xor1 cy, 0xffffa.0                      ; encoding: [0x71,0x0f,0xfa]
+# CHECK-INST: xor1 cy, psw.0                      ; encoding: [0x71,0x0f,0xfa]
 xor1 CY, PSW.0
 
-# CHECK-INST: xor1 cy, 0xffffa.1                      ; encoding: [0x71,0x1f,0xfa]
+# CHECK-INST: xor1 cy, psw.1                      ; encoding: [0x71,0x1f,0xfa]
 xor1 CY, PSW.1
 
-# CHECK-INST: xor1 cy, 0xffffa.2                      ; encoding: [0x71,0x2f,0xfa]
+# CHECK-INST: xor1 cy, psw.2                      ; encoding: [0x71,0x2f,0xfa]
 xor1 CY, PSW.2
 
-# CHECK-INST: xor1 cy, 0xffffa.3                      ; encoding: [0x71,0x3f,0xfa]
+# CHECK-INST: xor1 cy, psw.3                      ; encoding: [0x71,0x3f,0xfa]
 xor1 CY, PSW.3
 
-# CHECK-INST: xor1 cy, 0xffffa.4                      ; encoding: [0x71,0x4f,0xfa]
+# CHECK-INST: xor1 cy, psw.4                      ; encoding: [0x71,0x4f,0xfa]
 xor1 CY, PSW.4
 
-# CHECK-INST: xor1 cy, 0xffffa.5                      ; encoding: [0x71,0x5f,0xfa]
+# CHECK-INST: xor1 cy, psw.5                      ; encoding: [0x71,0x5f,0xfa]
 xor1 CY, PSW.5
 
-# CHECK-INST: xor1 cy, 0xffffa.6                      ; encoding: [0x71,0x6f,0xfa]
+# CHECK-INST: xor1 cy, psw.6                      ; encoding: [0x71,0x6f,0xfa]
 xor1 CY, PSW.6
 
-# CHECK-INST: xor1 cy, 0xffffa.7                      ; encoding: [0x71,0x7f,0xfa]
+# CHECK-INST: xor1 cy, psw.7                      ; encoding: [0x71,0x7f,0xfa]
 xor1 CY, PSW.7
 
 
