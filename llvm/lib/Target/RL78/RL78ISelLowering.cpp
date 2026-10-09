@@ -5247,8 +5247,11 @@ RL78TargetLowering::LowerShiftOrRotateForSpeed(MachineInstr &MI,
   unsigned Rs1 = MI.getOperand(1).getReg();
   unsigned Rs2 = MI.getOperand(2).getReg();
 
+  // The result class may be any 16-bit class (RL78AXRP under
+  // -rl78-virtual-acc), so go by its width.
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
   Register NewRd =
-      MRI.getRegClass(MI.getOperand(0).getReg()) == &RL78::RL78RPRegsRegClass
+      TRI->getRegSizeInBits(*MRI.getRegClass(MI.getOperand(0).getReg())) == 16
           ? RL78::RP0
           : RL78::R1;
 
