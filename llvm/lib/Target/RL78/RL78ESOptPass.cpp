@@ -10,11 +10,11 @@
 
 #include "RL78.h"
 #include "RL78Subtarget.h"
-#include "llvm/ADT/SparseSet.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/Support/Debug.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 
-#include <queue>
+#include <optional>
+#include <tuple>
 
 using namespace llvm;
 
@@ -38,87 +38,80 @@ char RL78ESOptPass::ID = 0;
 
 FunctionPass *llvm::createRL78ESOptPass() { return new RL78ESOptPass(); }
 
+// What a MOV es, a or MOV es, #imm puts in ES: the immediate, or the virtual
+// register (and subregister) the A operand was copied from.
+using ESValue = std::tuple<bool, Register, unsigned, int64_t>;
+
+static std::optional<ESValue> getESValue(const MachineInstr &MI,
+                                         const MachineRegisterInfo &MRI) {
+  if (MI.getOpcode() == RL78::MOV_es_imm) {
+    if (!MI.getOperand(1).isImm())
+      return std::nullopt;
+    return ESValue(true, Register(), 0, MI.getOperand(1).getImm());
+  }
+  if (MI.getOpcode() != RL78::MOV_es_A)
+    return std::nullopt;
+  Register Reg = MI.getOperand(1).getReg();
+  unsigned Sub = MI.getOperand(1).getSubReg();
+  const MachineInstr *Def = nullptr;
+  if (Reg.isVirtual())
+    Def = MRI.getUniqueVRegDef(Reg);
+  else if (MI.getIterator() != MI.getParent()->begin())
+    Def = &*std::prev(MI.getIterator()); // $r1 = COPY ... at -O0
+  if (!Def || !Def->isCopy() || Def->getOperand(0).getReg() != Reg)
+    return Reg.isVirtual() ? std::optional(ESValue(false, Reg, Sub, 0))
+                           : std::nullopt;
+  Reg = Def->getOperand(1).getReg();
+  Sub = Def->getOperand(1).getSubReg();
+  // Values in virtual registers do not change (SSA); physical ones may.
+  if (!Reg.isVirtual())
+    return std::nullopt;
+  return ESValue(false, Reg, Sub, 0);
+}
+
+// Deletes a write of ES that writes the value ES already has: LowerESSrc sets
+// ES before every far access, which repeats the same MOV es, a (and the copy
+// to A feeding it) for consecutive accesses through one far pointer:
+//   mov a, c
+//   mov es, a
+//   movw es:[hl+4], ax
+//   mov a, c      <- not needed
+//   mov es, a     <- not needed
+//   movw es:[hl+6], ax
 bool RL78ESOptPass::runOnMachineFunction(MachineFunction &MF) {
-
-  // Eliminate unnecessary re-initializations introduced by LowerESSrc.
-  // mov a, c
-  // mov es, a
-  // movw ax, #12
-  // movw es:[hl+4], ax
-  // ....
-  // mov a, c <- not needed
-  // mov es, a <- not needed
-  // movw ax, #13
-  // movw es:[hl+6], ax
-
-  bool Changed = true;
-
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  if (!MRI.isSSA())
+    return false;
+  bool Changed = false;
   for (MachineBasicBlock &MBB : MF) {
-    if (MBB.empty())
-      continue;
-
-    for (MachineBasicBlock::iterator Next = std::next(MBB.begin()),
-                                     E = MBB.end();
-         Next != E;) {
-
-      // Find the first initialization of ES and it's possible copy.
-      MachineInstr &FirstCopy = *std::prev(Next);
-      if ((Next->getOpcode() != RL78::MOV_es_A || !FirstCopy.isCopy() ||
-           FirstCopy.getOperand(0).getReg() != RL78::R1) &&
-          Next->getOpcode() != RL78::MOV_es_imm) {
-        Next++;
+    std::optional<ESValue> Current;
+    for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
+      std::optional<ESValue> V = getESValue(MI, MRI);
+      if (V && Current && *V == *Current) {
+        // The copy into A feeding MOV es, a.
+        MachineInstr *Copy = nullptr;
+        if (MI.getOpcode() == RL78::MOV_es_A) {
+          Register A = MI.getOperand(1).getReg();
+          if (A.isVirtual()) {
+            if (MRI.hasOneNonDBGUse(A))
+              Copy = MRI.getUniqueVRegDef(A);
+          } else if (MI.getOperand(1).isKill()) {
+            Copy = &*std::prev(MI.getIterator());
+          }
+        }
+        MI.eraseFromParent();
+        if (Copy && Copy->isCopy())
+          Copy->eraseFromParent();
+        Changed = true;
         continue;
       }
-      MachineInstr &Last = *Next;
-
-      Next++;
-      while (Next != E) {
-        // Calls represent a barrier, stop trying to eliminate extra copies.
-        if (Next->isCall()) {
-          Next++;
-          break;
-        }
-        // If we initialize with a different opcode we should stop and try to
-        // replace for the new value.
-        if ((Next->getOpcode() == RL78::MOV_es_A ||
-             Next->getOpcode() == RL78::MOV_es_imm) &&
-            Next->getOpcode() != Last.getOpcode())
-          break;
-
-        if (Next->getOpcode() == Last.getOpcode()) {
-          if (Next->getOpcode() == RL78::MOV_es_A &&
-              FirstCopy.getOperand(1).getReg() ==
-                  std::prev(Next)->getOperand(1).getReg() &&
-              std::prev(Next)->getOperand(0).getReg() == RL78::R1) {
-            // Eliminate the second initialization and associated copy if the
-            // source was the same register.
-            MachineInstr &Mov = *Next;
-            MachineInstr &Copy = *std::prev(Next);
-            Next++;
-            Copy.eraseFromParent();
-            Mov.eraseFromParent();
-            Changed = true;
-          } else if (Next->getOperand(1).isIdenticalTo(Last.getOperand(1)) &&
-                     (Next->getOpcode() == RL78::MOV_es_imm ||
-                      (Next->getOpcode() == RL78::MOV_es_A &&
-                       (!std::prev(Next)->isCopy() ||
-                        std::prev(Next)->getOperand(0).getReg() !=
-                            RL78::R1)))) {
-            // Eliminate the second initialization with an imm or with R1 but
-            // with missing/already eliminated copy.
-            MachineInstr &Mov = *Next;
-            Next++;
-            Mov.eraseFromParent();
-            Changed = true;
-          } else {
-            break;
-          }
-        } else {
-          Next++;
-        }
-      }
+      if (V)
+        Current = V;
+      else if (MI.isCall() || MI.isInlineAsm() ||
+               MI.modifiesRegister(RL78::ES, TRI))
+        Current = std::nullopt;
     }
   }
-
   return Changed;
 }
