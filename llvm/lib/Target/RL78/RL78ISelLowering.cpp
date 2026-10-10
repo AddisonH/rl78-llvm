@@ -5286,8 +5286,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
                : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
-  case RL78::ADD_r_imm:
-    return Lower8BitOpAA(MI, BB);
   case RL78::ADD_r_memrr:
   case RL78::SUB_r_memrr:
   case RL78::AND_r_memrr:
@@ -5296,74 +5294,31 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower8BitOpAA(
         MI,
         Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 3, RL78::R2), 2, RL78::RP6));
-  case RL78::ADD_r_esmemRpr:
-  case RL78::SUB_r_esmemRpr:
-  case RL78::AND_r_esmemRpr:
-  case RL78::OR_r_esmemRpr:
-  case RL78::XOR_r_esmemRpr:
-    return Lower8BitOpAA(
-        MI, Lower16bitAXSrc(
-                MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 2), 4, RL78::R2), 3,
-                RL78::RP6));
   case RL78::ADD_r_memri:
   case RL78::SUB_r_memri:
   case RL78::AND_r_memri:
   case RL78::OR_r_memri:
   case RL78::XOR_r_memri:
     return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, BB, 2, RL78::RP6));
-  case RL78::ADD_r_esmemHLi:
-  case RL78::SUB_r_esmemHLi:
-  case RL78::AND_r_esmemHLi:
-  case RL78::OR_r_esmemHLi:
-  case RL78::XOR_r_esmemHLi:
-    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, RL78::RP6));
   case RL78::AND_r_imm:
-  case RL78::OR_r_imm:
-  case RL78::XOR_r_imm:
-  case RL78::ADD_r_abs16:
   case RL78::ADD_r_r:
-  case RL78::ADD_r_saddr:
-  case RL78::SUB_r_imm:
-  case RL78::SUB_r_abs16:
-  case RL78::SUB_r_r:
-  case RL78::SUB_r_saddr:
-  case RL78::AND_r_abs16:
   case RL78::AND_r_r:
-  case RL78::AND_r_saddr:
-  case RL78::OR_r_abs16:
   case RL78::OR_r_r:
-  case RL78::OR_r_saddr:
   case RL78::XOR_r_abs16:
   case RL78::XOR_r_r:
   case RL78::XOR_r_saddr:
   case RL78::SHL_r_imm:
     return Lower8BitOpAA(MI, BB);
-  case RL78::ADD_r_esaddr16:
-  case RL78::SUB_r_esaddr16:
-  case RL78::AND_r_esaddr16:
-  case RL78::OR_r_esaddr16:
   case RL78::XOR_r_esaddr16:
       return Lower8bitADst(MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 2), 1));
-  case RL78::STORE8_saddr_A:
-    return Lower8bitASrc(MI, BB, 1);
   case RL78::LOAD8_r_stack_slot:
-  case RL78::LOAD8_r_sfr:
     return Lower8bitADst(MI, BB);
   case RL78::STORE8_ri_imm:
     // STORE [HL+byte] or STORE word[BC].
     return BB;
-  case RL78::STORE8_memBorCi_imm:
-    return Lower8bitASrc(MI, BB, 0, RL78::R3);
-  case RL78::STORE8_esmemBorCi_imm:
-    return Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::R3);
   case RL78::LOAD8_r_ri:
     // A = LOAD [HL+byte] or A = LOAD word[BC].
     return Lower8bitADst(MI, BB);
-  case RL78::LOAD8_r_memBorCi:
-       return Lower8bitADst(MI,  Lower8bitASrc(MI, BB, 1, RL78::R3));
-  case RL78::LOAD8_a_esmemBorCi:
-    return Lower8bitADst(MI,
-                         Lower8bitASrc(MI, LowerESSrc(MI, BB, 1), 2, RL78::R3));
   case RL78::LOAD8_r_memrr:
     return Lower8bitADst(
         MI,
@@ -5376,10 +5331,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::STORE8_ri_r:
     // STORE [HL+byte] or STORE word[BC].
     return Lower8bitASrc(MI, BB, 2);
-  case RL78::STORE8_memBorCi_r:
-      return Lower8bitASrc(MI,  Lower8bitASrc(MI, BB, 0, RL78::R3), 2);
-  case RL78::STORE8_esmemBorCi_r:
-      return Lower8bitASrc(MI,  Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::R3), 3);
   case RL78::STORE8_memrr_r:
     return Lower8bitASrc(
         MI,
@@ -5388,10 +5339,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::LOAD16_rp_rpi:
     // AX = LOAD [HL+byte] or AX = LOAD word[BC].
     return Lower16bitAXDst(MI, BB);
-  case RL78::LOAD16_rp_memBorCi:
-       return Lower16bitAXDst(MI, Lower16bitAXSrc(MI, BB, 1, RL78::R3));
-  case RL78::LOAD16_rp_esmemBorCi:
-       return Lower16bitAXDst(MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 1), 2, RL78::R3));
   case RL78::LOAD16_rp_stack_slot:
   case RL78::LOAD16_rp_sfrp:
     return Lower16bitAXDst(MI, BB);
@@ -5404,59 +5351,24 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     if (MI.getOperand(1).getReg() == MI.getOperand(2).getReg())
       MI.getOperand(2).ChangeToRegister(RL78::RP0, false);
     return Lower16BitOpAXAX(MI, BB);
-  case RL78::ADDW_rp_abs16:
   case RL78::SUBW_rp_imm:
   case RL78::SUBW_rp_rp:
-  case RL78::SUBW_rp_abs16:
-  case RL78::ADDW_rp_saddr:
-  case RL78::SUBW_rp_saddr:
     return Lower16BitOpAXAX(MI, BB);
-  case RL78::ADDW_rp_esaddr16:
-  case RL78::SUBW_rp_esaddr16:
-      return Lower16BitOpAXAX(MI, LowerESSrc(MI, BB, 2));
-  case RL78::ADDW_rp_esmemHLi:
-  case RL78::SUBW_rp_esmemHLi:
-    return Lower16BitOpAXAX(
-        MI, Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 2), 3, RL78::RP6));
   case RL78::STORE16_rpi_rp:
     // STORE [HL+byte] or STORE word[BC].
     return Lower16bitAXSrc(MI, BB, 2);
-  case RL78::STORE16_memBorCi_rp:
-    return Lower16bitAXSrc(MI,  Lower8bitASrc(MI, BB, 0, RL78::R3), 2);
-  case RL78::STORE16_esmemBorCi_rp:
-    return Lower16bitAXSrc(MI,  Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::R3), 3);
   case RL78::STORE16_stack_slot_rp:
     return Lower16bitAXSrc(MI, BB, 2);
   case RL78::STORE16_abs16_rp:
-  case RL78::STORE16_saddrp_rp:
   case RL78::STORE16_sfrp_rp:
     return Lower16bitAXSrc(MI, BB, 1);
-  case RL78::STORE8_abs16_r:
-  case RL78::STORE8_sfr_r:
-    return Lower8bitASrc(MI, BB, 1);
   case RL78::INC_memri:
   case RL78::DEC_memri:
   case RL78::INCW_memri:
   case RL78::DECW_memri:
     return Lower16bitAXSrc(MI, BB, 0, RL78::RP6);
-  case RL78::INC_esaddr16:
-  case RL78::DEC_esaddr16:
-  case RL78::INCW_esaddr16:
-  case RL78::DECW_esaddr16:
-    return LowerESSrc(MI, BB, 0);
-  case RL78::INC_esmemHLi:
-  case RL78::DEC_esmemHLi:
-  case RL78::INCW_esmemHLi:
-  case RL78::DECW_esmemHLi:
-    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::RP6);
   case RL78::STORE8_stack_slot_r:
     return Lower8bitASrc(MI, BB, 2);
-  case RL78::SET1_esmemr:
-  case RL78::CLR1_esmemr:
-    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 1, RL78::RP6);
-  case RL78::SET1_esaddr16:
-  case RL78::CLR1_esaddr16:
-    return LowerESSrc(MI, BB, 0);
   case RL78::LOAD16_rp_esrpi:
     return Lower16bitAXDst(
         MI, LowerToHLByteOrWordBC(2, 3, MI, LowerESSrc(MI, BB, 1)));
@@ -5465,29 +5377,11 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
         MI, LowerToHLByteOrWordBC(2, 3, MI, LowerESSrc(MI, BB, 1)));
   case RL78::LOAD16_rp_esaddr16:
       return Lower16bitAXDst(MI, LowerESSrc(MI, BB, 1));
-  case RL78::STORE16_esaddr16_rp:
-    return Lower16bitAXSrc(MI, LowerESSrc(MI, BB, 0), 2);
   case RL78::STORE16_esrpi_rp:
     return Lower16bitAXSrc(
         MI, LowerToHLByteOrWordBC(1, 2, MI, LowerESSrc(MI, BB, 0)), 3);
   case RL78::MOV_r_esaddr16:
       return LowerESSrc(MI, BB, 1);
-  case RL78::MOV_esaddr16_r:
-      return Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 2);
-  case RL78::MOV_esaddr16_imm:
-      return LowerESSrc(MI, BB, 0);
-  case RL78::STORE8_esmemBCi_imm:
-    return LowerToHLByteOrWordBC(1, 2, MI, LowerESSrc(MI, BB, 0));
-  case RL78::STORE8_esrpi_r:
-    return Lower8bitASrc(
-        MI, LowerToHLByteOrWordBC(1, 2, MI, LowerESSrc(MI, BB, 0)), 3);
-  case RL78::STORE8_esmemRpr_a:
-    return Lower8bitASrc(
-        MI,
-        Lower16bitAXSrc(MI,
-                        Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 2, RL78::R3),
-                        1, RL78::RP6),
-        3);
   case RL78::CLR1_memr:
   case RL78::SET1_memr:
   case RL78::MOV1_cy_memr:
@@ -5499,9 +5393,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::ONEB_r_cg:
   case RL78::CLRB_r_cg:
     return Lower8bitADst(MI, BB);
-  case RL78::ONEB_esaddr16:
-  case RL78::CLRB_esaddr16:
-    return LowerESSrc(MI, BB, 0);
   case RL78::MOV1_r_cy:
     return Lower8BitOpAA(MI, BB);
   case RL78::MOV1_cy_r:
