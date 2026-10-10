@@ -111,8 +111,13 @@ bool RL78SplitConstrainedValues::runOnMachineFunction(MachineFunction &MF) {
     if (MRI.hasOneNonDBGUse(V)) {
       MachineOperand &MO = *MRI.use_nodbg_begin(V);
       MachineInstr &Use = *MO.getParent();
-      bool Adjacent = Use.getParent() == Def->getParent() &&
-                      std::next(Def->getIterator()) == Use.getIterator();
+      // Debug instructions in between do not count: code generation must
+      // not depend on them.
+      bool Adjacent =
+          Use.getParent() == Def->getParent() &&
+          next_nodbg(MachineBasicBlock::iterator(Def),
+                     Def->getParent()->end()) ==
+              Use.getIterator();
       const TargetRegisterClass *UC = Constraint(MO);
       if (Adjacent && Def->isCopy() && UC && !MO.getSubReg() &&
           !UC->hasSubClassEq(Wide))
