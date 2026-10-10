@@ -1246,6 +1246,31 @@ RL78InstrInfo::getOutliningCandidateInfo(
       RepeatedSequenceLocs, SequenceSize, 0, MachineOutlinerDefault);
 }
 
+// Whether F is an outlined function with [SP+n] operands of the function it
+// was taken from, in its own body or in an outlined function it calls or
+// jumps to.
+static bool readsCallersFrame(const MachineModuleInfo &MMI, const Function &F,
+                              unsigned Depth = 0) {
+  if (!F.getName().starts_with("OUTLINED_FUNCTION_"))
+    return false;
+  const MachineFunction *MF = MMI.getMachineFunction(F);
+  // Deeper than the outliner is ever asked to rerun: assume the worst.
+  if (!MF || Depth > 16)
+    return true;
+  for (const MachineBasicBlock &MBB : *MF)
+    for (const MachineInstr &MI : MBB)
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.getTargetFlags() == SPII::MO_OUTLINE_SP ||
+            MO.getTargetFlags() == SPII::MO_NO_OUTLINE_SP)
+          return true;
+        if (MO.isGlobal())
+          if (const auto *Callee = dyn_cast<Function>(MO.getGlobal()))
+            if (readsCallersFrame(MMI, *Callee, Depth + 1))
+              return true;
+      }
+  return false;
+}
+
 /// Returns how or if \p MI should be outlined.
 outliner::InstrType
 RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
@@ -1346,6 +1371,11 @@ RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
         (Callee->getName() == "setjmp" || Callee->getName() == "longjmp")) {
       return outliner::InstrType::Illegal;
     }
+    // An outlined function that reads its caller's frame was given [SP+n]
+    // offsets for one return address on the stack. Called from another
+    // outlined function (-machine-outliner-reruns) there would be two.
+    if (Callee && readsCallersFrame(MMI, *Callee))
+      return outliner::InstrType::Illegal;
   }
 
   return outliner::InstrType::Legal;
