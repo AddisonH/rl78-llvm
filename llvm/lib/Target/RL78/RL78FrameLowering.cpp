@@ -12,6 +12,7 @@
 
 #include "RL78Subtarget.h"
 #include "RL78MachineFunctionInfo.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/Support/CommandLine.h"
@@ -65,6 +66,55 @@ unsigned RL78FrameLowering::calculateCSRegisterMask(MachineFunction &MF) const {
 
   MF.getInfo<RL78MachineFunctionInfo>()->setCSRegisterMask(mask);
   return mask;
+}
+
+static cl::opt<bool> PushIncomingRegisters(
+    "rl78-push-incoming", cl::Hidden, cl::init(true),
+    cl::desc("Spill registers that are unchanged since function entry with "
+             "PUSH in the prologue"));
+
+// The spills at the top of the entry block that could be done by a PUSH on
+// entry instead: 16-bit stores to a spill slot of a register that still has
+// the value it had on entry, into a slot nothing has touched before. Whether
+// one really becomes a PUSH depends on where its slot ends up (emitPrologue).
+static void findEntrySpills(MachineFunction &MF,
+                            SmallVectorImpl<MachineInstr *> &Spills) {
+  const Function &F = MF.getFunction();
+  if (!PushIncomingRegisters || F.hasFnAttribute("interrupt") ||
+      F.hasFnAttribute("brk_interrupt"))
+    return;
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  BitVector Modified(TRI->getNumRegs());
+  SmallSet<int, 8> Touched;
+  unsigned Count = 0;
+  for (MachineInstr &MI : MF.front()) {
+    if (MI.isDebugInstr())
+      continue;
+    if (MI.isCall() || MI.isTerminator() || MI.isInlineAsm() || ++Count > 16)
+      break;
+    if (MI.getOpcode() == RL78::STORE16_stack_slot_rp &&
+        MI.getOperand(0).isFI() && MI.getOperand(1).getImm() == 0) {
+      int FI = MI.getOperand(0).getIndex();
+      Register Reg = MI.getOperand(2).getReg();
+      if (FI >= 0 && MFI.isSpillSlotObjectIndex(FI) &&
+          MFI.getObjectSize(FI) == 2 && !Touched.count(FI) &&
+          RL78::RL78RPRegsRegClass.contains(Reg) && !Modified.test(Reg)) {
+        Spills.push_back(&MI);
+        Touched.insert(FI);
+        continue;
+      }
+    }
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isFI())
+        Touched.insert(MO.getIndex());
+      else if (MO.isRegMask())
+        Modified.setBitsNotInMask(MO.getRegMask());
+      else if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
+        for (MCRegAliasIterator AI(MO.getReg(), TRI, true); AI.isValid(); ++AI)
+          Modified.set(*AI);
+    }
+  }
 }
 
 void RL78FrameLowering::emitPrologue(MachineFunction &MF,
@@ -201,8 +251,40 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
 
   MFI.setStackSize(NumBytes + NumBytesForCSRegs);
 
+  // Registers that are spilled unchanged to the highest slots of the frame
+  // are pushed instead: one byte each, and the rest of the frame is allocated
+  // below them.
+  unsigned Pushed = 0;
+  if (&MBB == &MF.front() && !NeedsStackRealignment && NumBytes < 0x100) {
+    SmallVector<MachineInstr *, 4> Spills;
+    findEntrySpills(MF, Spills);
+    for (MachineInstr *Spill : Spills) {
+      int FI = Spill->getOperand(0).getIndex();
+      if (MFI.getObjectOffset(FI) != int64_t(NumBytes) - Pushed - 2)
+        break;
+      const MachineOperand &Src = Spill->getOperand(2);
+      if (MBBI != MBB.end() && &*MBBI == Spill)
+        ++MBBI;
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+          .addReg(Src.getReg(), getUndefRegState(Src.isUndef()))
+          .setMIFlags(MachineInstr::FrameSetup);
+      Spill->eraseFromParent();
+      Pushed += 2;
+    }
+  }
+
   // Emit SUBW SP, #N.
-  if (NumBytes > 0) {
+  if (Pushed) {
+    if (NumBytes - Pushed == 2)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
+          .addReg(RL78::RP0, RegState::Undef)
+          .setMIFlags(MachineInstr::FrameSetup);
+    else if (NumBytes - Pushed)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
+          .addReg(RL78::SPreg)
+          .addImm(NumBytes - Pushed)
+          .setMIFlags(MachineInstr::FrameSetup);
+  } else if (NumBytes > 0) {
     if (NumBytes == 2)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
           .addReg(RL78::RP0)
@@ -813,8 +895,22 @@ void RL78FrameLowering::orderFrameObjects(
     ObjectsSize += MFI.getObjectSize(Obj);
   }
 
-  if (ObjectsSize < 256)
+  // In a frame that [SP+byte] reaches all of, the slots of the registers
+  // spilled on entry go last, the first of them at the very end: that is the
+  // top of the frame, where a PUSH on entry writes (see emitPrologue).
+  if (ObjectsSize < 256) {
+    SmallVector<MachineInstr *, 4> Spills;
+    findEntrySpills(const_cast<MachineFunction &>(MF), Spills);
+    for (MachineInstr *Spill : llvm::reverse(Spills)) {
+      int FI = Spill->getOperand(0).getIndex();
+      auto It = llvm::find(objectsToAllocate, FI);
+      if (It == objectsToAllocate.end())
+        continue;
+      objectsToAllocate.erase(It);
+      objectsToAllocate.push_back(FI);
+    }
     return;
+  }
 
   // Count the number of uses for each object.
   for (auto &MBB : MF) {

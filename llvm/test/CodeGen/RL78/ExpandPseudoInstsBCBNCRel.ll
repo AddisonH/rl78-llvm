@@ -65,10 +65,9 @@ if.end:
 define void @br_rel16_bc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-LABEL: br_rel16_bc_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    subw sp, #36
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    subw sp, #34
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw [sp+34], ax
 ; CHECK-NEXT:  .LBB2_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de
@@ -336,10 +335,9 @@ if.end:
 define void @br_rel16_bnc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-LABEL: br_rel16_bnc_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    subw sp, #36
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    subw sp, #34
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw [sp+34], ax
 ; CHECK-NEXT:  .LBB6_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de

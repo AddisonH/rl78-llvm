@@ -7,11 +7,8 @@
 define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture noundef writeonly %2) local_unnamed_addr #0 {
 ; CHECK-LABEL: test_add:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
+; CHECK-NEXT:    push de
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    addw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    movw de, ax

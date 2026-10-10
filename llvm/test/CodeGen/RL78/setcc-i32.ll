@@ -65,11 +65,8 @@ define i16 @ule(i32 %a, i32 %b) {
 define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-LABEL: sel:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #4
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw [sp+2], ax
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    push de
+; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    movw ax, [sp+10]
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [sp+8]

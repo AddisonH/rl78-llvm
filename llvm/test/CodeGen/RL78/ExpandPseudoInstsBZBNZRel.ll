@@ -64,8 +64,8 @@ if.end:
 define void @br_rel16_bz_backward_jump_substitute(i16 %flag) {
 ; CHECK-LABEL: br_rel16_bz_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    subw sp, #34
-; CHECK-NEXT:    movw [sp+32], ax
+; CHECK-NEXT:    push ax
+; CHECK-NEXT:    subw sp, #32
 ; CHECK-NEXT:  .LBB2_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    clrw ax
