@@ -68,8 +68,6 @@ public:
                       raw_ostream &O);
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);
-  void printMemOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
-                       raw_ostream &OS, const char *Modifier = nullptr);
   void printCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
   void printSELRBxOperand(const MCInst *MI, int opNum,
@@ -89,24 +87,8 @@ public:
                         raw_ostream &O);
   void printABS20Operand(const MCInst *MI, int opNum,
                          const MCSubtargetInfo &STI, raw_ostream &O);
-  void printStackSlotOperand(const MCInst *MI, int opNum,
-                             const MCSubtargetInfo &STI, raw_ostream &O);
-  void printRel8Operand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
-                        raw_ostream &O);
-  void printRel16Operand(const MCInst *MI, int opNum,
-                         const MCSubtargetInfo &STI, raw_ostream &O);
-  void printHLMemOperand(const MCInst *MI, int opNum,
-                         const MCSubtargetInfo &STI, raw_ostream &O);
-  void printRegSumMemOperand(const MCInst *MI, int opNum,
-                             const MCSubtargetInfo &STI, raw_ostream &O);
-  void printEsRegMemOperand(const MCInst *MI, int opNum,
-                            const MCSubtargetInfo &STI, raw_ostream &O);
   void printEsAddr16Operand(const MCInst *MI, int opNum,
                             const MCSubtargetInfo &STI, raw_ostream &O);
-  void printEsRegRegSumMemOperand(const MCInst *MI, int opNum,
-                                  const MCSubtargetInfo &STI, raw_ostream &O);
-  void printEsRegHLOnlyMemOperand(const MCInst *MI, int opNum,
-                                  const MCSubtargetInfo &STI, raw_ostream &O);
 };
 } // end namespace llvm
 

@@ -153,8 +153,6 @@ class RL78AsmParser : public MCTargetAsmParser {
   bool matchRegisterNameByName(StringRef name, MCRegister &Register,
                                unsigned &RegKind);
 
-  bool is64Bit() const { return false; }
-
 private:
   struct RelocationAttributeDefault {
     StringRef DefaultSectionName;
@@ -461,15 +459,12 @@ private:
 
 public:
   RL78Operand(KindTy K) : MCParsedAsmOperand(), Kind(K) {}
-  bool isABS5() { return Kind == k_Abs5; }
   bool isABS8() { return Kind == k_Abs8; }
-  bool isCCOp() { return Kind == k_cc; }
   bool isSELRBx() { return Kind == k_selrbx; }
   bool isABS16() { return Kind == k_Abs16; }
   bool isABS20() { return Kind == k_Abs20; }
   bool isbrtargetRel8() { return Kind == k_brtargetRel8; }
   bool isbrtargetRel16() { return Kind == k_brtargetRel16; }
-  bool isbrtargetAbs16() { return Kind == k_brtargetAbs16; }
   bool isToken() const override { return Kind == k_Token; }
   bool isReg() const override { return Kind == k_Register; }
   bool isImm() const override { return Kind == k_Immediate; }
@@ -481,22 +476,6 @@ public:
   bool isMEMrr() const { return Kind == k_MemoryReg; }
   bool isMEMri() const { return Kind == k_MemoryImm; }
 
-  bool isSTACKSlotNo() const { return Kind == k_STACKSlot; }
-  bool isRegOffsetAddr() const { return Kind == k_RegOffsetAddr; }
-  bool isRegBorCOffsetAddr() const { return Kind == k_RegBorCOffsetAddr; }
-  bool isRegRegAddr() const { return Kind == k_RegRegAddr; }
-  bool isEsRegRegReg() const { return Kind == k_EsRegRegReg; }
-  bool isEsRegBorCRegAddr() const { return Kind == k_EsRegBorCRegAddr; }
-
-  bool isEsRegRegAddr() const { return Kind == k_EsRegRegAddr; }
-  bool isEsHlRegAddr() const { return Kind == k_EsHlRegAddr; }
-  bool isHLAddr() const {
-    return Kind == k_HLAddr && HLAddr.HlReg.RegNum == RL78::RP6;
-  }
-  bool is8BitReg() const { return (Kind == k_Register && Reg.Kind == rk_Reg); }
-  bool is16BitReg() const {
-    return (Kind == k_Register && Reg.Kind == rk_RegPair);
-  }
   // The registers that are sfrs: SPL, SPH, PSW, CS, ES, PMC, MEM.
   static int64_t getSfrAddress(unsigned Reg) {
     switch (Reg) {
@@ -778,12 +757,6 @@ public:
     addExpr(Inst, Expr);
   }
 
-  void addCCOpOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    const MCExpr *Expr = getCC();
-    addExpr(Inst, Expr);
-  }
-
   void addImm07Operands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     const MCExpr *Expr = getImm07();
@@ -855,12 +828,6 @@ public:
     addExpr(Inst, Expr);
   }
 
-  void addbrtargetAbs16Operands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    const MCExpr *Expr = getbrtargetAbs16();
-    addExpr(Inst, Expr);
-  }
-
   void addbrtargetRel8Operands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     const MCExpr *Expr = getbrtargetRel8();
@@ -880,11 +847,6 @@ public:
     addExpr(Inst, Expr);
   }
 
-  void addHLAddrOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getHLAddrReg()));
-  }
-
   void addRegBorCOffsetAddrOperands(MCInst &Inst, unsigned N) const {
     assert(N == 2 && "Invalid number of operands!");
     Inst.addOperand(MCOperand::createReg(getRegBorCOffsetAddrReg()));
@@ -896,19 +858,6 @@ public:
     Inst.addOperand(MCOperand::createReg(getRegOffsetAddrReg()));
     const MCExpr *Expr = gettRegOffsetAddrImm();
     addExpr(Inst, Expr);
-  }
-
-  void addRegRegAddrOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getRegRegAddrRpReg()));
-    Inst.addOperand(MCOperand::createReg(getRegRegAddrRReg()));
-  }
-
-  void addEsRegRegRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 3 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getEsRegRegRegEsReg()));
-    Inst.addOperand(MCOperand::createReg(getEsRegRegRegRpReg()));
-    Inst.addOperand(MCOperand::createReg(getEsRegRegRegRReg()));
   }
 
   void addEsRegRegAddrOperands(MCInst &Inst, unsigned N) const {
@@ -925,12 +874,6 @@ public:
     Inst.addOperand(MCOperand::createReg(getEsRegBorCRegAddrReg()));
     const MCExpr *Expr = gettEsRegBorCRegAddrImm();
     addExpr(Inst, Expr);
-  }
-
-  void addEsHlRegAddrOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getEsHlRegAddrEsReg()));
-    Inst.addOperand(MCOperand::createReg(getEsHlRegAddrHlReg()));
   }
 
   // Memory operands of the hardware instructions (RL78InstrISA.td).
@@ -1148,11 +1091,6 @@ public:
     Inst.addOperand(MCOperand::createReg(EsRegRegReg.Reg.RegNum));
   }
 
-  void addHLAddressOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getReg()));
-  }
-
   void addExpr(MCInst &Inst, const MCExpr *Expr) const {
     // Add as immediate when possible.  Null MCExpr = 0.
     if (!Expr)
@@ -1161,27 +1099,6 @@ public:
       Inst.addOperand(MCOperand::createImm(CE->getValue()));
     else
       Inst.addOperand(MCOperand::createExpr(Expr));
-  }
-
-  void addMemOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getMemBase()));
-    const MCExpr *Expr = getMemOff();
-    addExpr(Inst, Expr);
-  }
-
-  void addMEMrrOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getMemBase()));
-    assert(getMemOffsetReg() != 0 && "Invalid offset");
-    Inst.addOperand(MCOperand::createReg(getMemOffsetReg()));
-  }
-
-  void addMEMriOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getMemBase()));
-    const MCExpr *Expr = getMemOff();
-    addExpr(Inst, Expr);
   }
 
   static std::unique_ptr<RL78Operand> CreateToken(StringRef Str, SMLoc S) {
@@ -1408,17 +1325,6 @@ public:
                                                           SMLoc S, SMLoc E) {
     auto Op = std::make_unique<RL78Operand>(k_brtargetRel16);
     Op->brtargetRel16.Val = Val;
-    Op->StartLoc = S;
-    Op->EndLoc = E;
-    return Op;
-  }
-
-  static std::unique_ptr<RL78Operand> CreateMEMr(unsigned Base, SMLoc S,
-                                                 SMLoc E) {
-    auto Op = std::make_unique<RL78Operand>(k_MemoryReg);
-    Op->Mem.Base = Base;
-    Op->Mem.OffsetReg = RL78::R0; // always 0
-    Op->Mem.Off = nullptr;
     Op->StartLoc = S;
     Op->EndLoc = E;
     return Op;

@@ -18,14 +18,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "insert-exchange"
 
-// Plain counters rather than STATISTIC: this build has LLVM_ENABLE_STATS off.
-static cl::opt<bool>
-    RL78XchgStats("rl78-xchg-stats", cl::Hidden, cl::init(false),
-                  cl::desc("Print why each RL78 exchange took the "
-                           "two-instruction path"));
-static unsigned NumXchg16AXLiveTied, NumXchg16AXLive, NumXchg16TiedOnly,
-    NumXchg8AXLive;
-
 static cl::opt<bool> RL78AccumSched(
     "rl78-accum-sched", cl::Hidden, cl::init(true),
     cl::desc("Move stack-slot loads to where AX is dead before inserting "
@@ -42,20 +34,6 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  bool doFinalization(Module &M) override {
-    if (RL78XchgStats) {
-      unsigned Tot = NumXchg16AXLiveTied + NumXchg16AXLive + NumXchg16TiedOnly +
-                     NumXchg8AXLive;
-      errs() << "rl78-xchg-stats: 16bit AXlive+tied " << NumXchg16AXLiveTied
-             << ", 16bit AXlive " << NumXchg16AXLive << ", 16bit tied-only "
-             << NumXchg16TiedOnly << ", 8bit Alive " << NumXchg8AXLive
-             << ", total " << Tot
-             << "\n";
-    }
-    return false;
-  }
-
-  // private:
   static char ID;
 };
 
@@ -91,7 +69,6 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
     BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOV_r_A), Reg)
         .addReg(RL78::R1, RegState::Kill);
   } else {
-    ++NumXchg8AXLive;
     // xch A, r
     // mov A, [SP+byte] / mov [SP+byte], A
     // xch A, r
@@ -136,13 +113,6 @@ static bool insert16BitExchange(MachineInstr &MI, unsigned opIndex,
       TII->copyPhysReg(MBB, std::next(MI.getIterator()), DL, Reg, RL78::RP0,
                        true);
     } else {
-      // Ordered so each exchange is attributed to exactly one cause.
-      if (isAXLive && IsTied)
-        ++NumXchg16AXLiveTied;
-      else if (isAXLive)
-        ++NumXchg16AXLive;
-      else
-        ++NumXchg16TiedOnly;
       // generate the following sequence:
       // xchw AX, Rx
       // op AX, <...>
@@ -937,14 +907,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         break;
-      case RL78::XOR1_CY_A_b:
-        // Undo RP0 liveness hack
-        if (MI.getOperand(0).getReg() == RL78::RP0) {
-          BuildMI(MBB, MI, DL, TII->get(MI.getOpcode()))
-              .addReg(RL78::R1, MI.getOperand(0).isKill() ? RegState::Kill : RegState::NoFlags)
-              .add(MI.getOperand(1));
-          MI.eraseFromParent();
-        }
       }
     }
   }

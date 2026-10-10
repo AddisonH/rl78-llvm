@@ -139,7 +139,7 @@ void RL78MCCodeEmitter::encodeInstruction(const MCInst &MI,
   // generation's own definitions are lowered to them (RL78LowerToHardware).
   // Bits holds the bytes in order, the first one in the low bits.
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
-  if (!(Desc.TSFlags & 1))
+  if (!(Desc.TSFlags & RL78II::Hardware))
     reportFatalInternalError(Twine("RL78: not a hardware instruction: ") +
                              MCII.getName(MI.getOpcode()));
   uint64_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);

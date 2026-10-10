@@ -31,21 +31,21 @@ class StringRef;
 class raw_pwrite_stream;
 class raw_ostream;
 
-/// SPII - This namespace holds all of the target specific flags that
-/// instruction info tracks.
-///
+/// Target operand flags.
 namespace SPII {
-enum {
-  Pseudo = (1 << 0),
-  Load = (1 << 1),
-  Store = (1 << 2),
-  DelaySlot = (1 << 3)
-};
-
-///// Target Operand Flag enum.
 enum TOF { NONE, MO_OUTLINE_SP, MO_NO_OUTLINE_SP, TOF_LAST };
 
 } // end namespace SPII
+
+/// Target-specific instruction flags (TSFlags, RL78InstrFormats.td).
+namespace RL78II {
+enum {
+  /// A hardware instruction of RL78InstrISA.td.
+  Hardware = 1 << 0,
+  /// A pseudo that becomes exactly one hardware instruction.
+  OneInst = 1 << 1,
+};
+} // end namespace RL78II
 
 /// Operand types of the hardware instructions (RL78InstrISA.td).
 namespace RL78Op {

@@ -48,39 +48,21 @@ static unsigned calcBasicBlockSize(MachineBasicBlock &MBB, const TargetInstrInfo
       });
 }
 
-// Check if MBB has only 1 instruction.
+// Whether MBB is a single hardware instruction (one that a conditional skip
+// in front of it skips as a whole).
 static bool isSingleInstructionBB(MachineBasicBlock &MBB) {
-  unsigned blockSize = 0;
-  for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end(); Next != E;
-       Next++) {
-    MachineInstr &MI = *Next;
-    if (MI.isDebugInstr())
+  unsigned Count = 0;
+  for (MachineInstr &MI : MBB) {
+    // The markers of a call's stack adjustment are not printed.
+    if (MI.isDebugInstr() || MI.getOpcode() == RL78::CALL_STACK_SETUP ||
+        MI.getOpcode() == RL78::CALL_STACK_DESTROY)
       continue;
-    switch (MI.getOpcode()) {
-    case RL78::ADJCALLSTACKDOWN:
-    case RL78::ADJCALLSTACKUP:
-    case RL78::CALL_STACK_SETUP:
-    case RL78::CALL_STACK_DESTROY:
-      // Not real instructions.
-      break;
-    case RL78::BSWAP32_rp:
-      // 2 x XCH + 1 x XCHW.
-      blockSize += 3;
-      break;
-    case RL78::UDIVREM16_r_r:
-    case RL78::UDIVREM32_r_r:
-      // DIV + NOP_cg.
-      blockSize += 2;
-      break;
-    default:
-      blockSize += 1;
-      break;
-    }
-    if (blockSize > 1)
+    if (!(MI.getDesc().TSFlags & (RL78II::Hardware | RL78II::OneInst)))
+      return false;
+    if (++Count > 1)
       return false;
   }
-  //
-  return (blockSize == 1);
+  return Count == 1;
 }
 
 void RL78ExpandPseudoInsts::buildBBOffsetMap(MachineFunction &MF,
@@ -112,7 +94,6 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
   // has only 1 instruction.
   if ((MI.getOpcode() == RL78::BRCC) && (MI == MBB.getLastNonDebugInstr()) &&
       isSingleInstructionBB(*NextMBBI) &&
-      !NextMBBI->SkipPHIsLabelsAndDebug(NextMBBI->begin())->isPseudo() &&
       (std::next(NextMBBI) == targetMBB.getIterator())) {
     // Insert a conditional skip instruction.
     BuildMI(MBB, MI, MI.getDebugLoc(),

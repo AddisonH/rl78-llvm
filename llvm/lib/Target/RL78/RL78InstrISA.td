@@ -512,45 +512,24 @@ defm : RL78Alu16Sel<"CMPW", RL78ucmp>;
 
 // SKNZ, then CMPW of the low words: one instruction for code generation, so
 // that nothing is placed between the two.
-let isCodeGenOnly = 1, Uses = [CCreg], Defs = [CCreg] in {
-  def LowCMPW_rp_imm : InstRL78_40bit<0x61F8440000,
-        (outs), (ins RL78AXRP:$rsrc, i16imm:$imm16),
-        "sknz\n\tcmpw $rsrc, $imm16",
-         [(RL78lowcmp i16:$rsrc, (i16 imm:$imm16))]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, BC           43
-//CMPW AX, DE           45
-//CMPW AX, HL           47
-  def LowCMPW_rp_rp : InstRL78_24bit<0x61F843,
-        (outs), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
-        "sknz\n\tcmpw $rsrc, $rsrc2",
-         [(RL78lowcmp i16:$rsrc, i16:$rsrc2)]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, saddrp       46 saddr
-  def LowCMPW_rp_saddr : InstRL78_32bit<0x61F84600,
-        (outs), (ins RL78AXRP:$rsrc, ABS8:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-         [(RL78lowcmp i16:$rsrc, (load SADDR:$addr))]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, !addr16      42 adrl adrh
-  def LowCMPW_rp_abs16 : InstRL78_40bit<0x61F8420000,
-        (outs), (ins RL78AXRP:$rsrc, ABS16:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-        [(RL78lowcmp i16:$rsrc, (load ADDRABS16:$addr))]>;
-
-//Instruction         Opcode
-//SKNZ
-//CMPW AX, [HL+byte]  61 49 adr
-  def LowCMPW_rp_memri : InstRL78_40bit<0x61F8614900,
-        (outs), (ins RL78AXRP:$rsrc, memHLi:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-        [(RL78lowcmp i16:$rsrc, (load ADDRri8:$addr))]>;
+let Uses = [CCreg], Defs = [CCreg] in {
+def LowCMPW_rp_imm
+    : RL78Pseudo<5, (outs), (ins RL78AXRP:$rsrc, i16imm:$imm16),
+                 [(RL78lowcmp i16:$rsrc, (i16 imm:$imm16))]>;
+def LowCMPW_rp_rp
+    : RL78Pseudo<3, (outs), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
+                 [(RL78lowcmp i16:$rsrc, i16:$rsrc2)]>;
+let mayLoad = 1 in {
+def LowCMPW_rp_saddr
+    : RL78Pseudo<4, (outs), (ins RL78AXRP:$rsrc, ABS8:$addr),
+                 [(RL78lowcmp i16:$rsrc, (load SADDR:$addr))]>;
+def LowCMPW_rp_abs16
+    : RL78Pseudo<5, (outs), (ins RL78AXRP:$rsrc, ABS16:$addr),
+                 [(RL78lowcmp i16:$rsrc, (load ADDRABS16:$addr))]>;
+def LowCMPW_rp_memri
+    : RL78Pseudo<5, (outs), (ins RL78AXRP:$rsrc, memHLi:$addr),
+                 [(RL78lowcmp i16:$rsrc, (load ADDRri8:$addr))]>;
+}
 }
 
 // ADDW SP, #byte         10 data
@@ -2172,23 +2151,6 @@ def : Pat<(retb), (RETB)>;
 //===----------------------------------------------------------------------===//
 // 16-bit operations made of two 8-bit ones
 //===----------------------------------------------------------------------===//
-
-// An instruction for code generation only, with exact operand classes like
-// the hardware instructions; expanded after register allocation.
-class RL78Pseudo<int size, dag outs, dag ins, list<dag> pattern = []>
-    : Instruction {
-  let Namespace = "RL78";
-  let OutOperandList = outs;
-  let InOperandList = ins;
-  let AsmString = "";
-  let Pattern = pattern;
-  let Size = size;
-  let isCodeGenOnly = 1;
-  let isPseudo = 1;
-  let hasSideEffects = 0;
-  let mayLoad = 0;
-  let mayStore = 0;
-}
 
 // A 16-bit rotate by one: MOV1 CY, A.7 + ROLWC AX, 1 to the left and
 // SHRW AX, 1 + MOV1 A.7, CY to the right.

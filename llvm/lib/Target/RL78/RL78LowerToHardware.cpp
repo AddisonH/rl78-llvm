@@ -149,7 +149,7 @@ void llvm::lowerToHardware(const MCInst &In, SmallVectorImpl<MCInst> &Out,
                            const MCInstrInfo &MII, const MCRegisterInfo &MRI) {
   // A hardware instruction already (inline asm, or code generation using
   // the hardware definitions).
-  if (MII.get(In.getOpcode()).TSFlags & 1) {
+  if (MII.get(In.getOpcode()).TSFlags & RL78II::Hardware) {
     // Every register must be one the instruction encodes: the encoder takes
     // the register's number and would not notice.
     const MCInstrDesc &Desc = MII.get(In.getOpcode());

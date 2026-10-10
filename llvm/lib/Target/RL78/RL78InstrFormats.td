@@ -6,78 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-class InstRL78<dag outs, dag ins, string asmstr, list<dag> pattern>
-   : Instruction 
-{
-  let Namespace = "RL78";
-
-  dag OutOperandList = outs;
-  dag InOperandList = ins;
-  let AsmString   = asmstr;
-  let Pattern = pattern;
-
-  // OBS: this changes the conservative default (of 1) as most of the RL78 instructions don't have side effects,
-  // meaning that the instructions that do have side effects have to be marked with hasSideEffects = 1 explicitly
-  let hasSideEffects = 0;
-}
-
-class InstRL78_8bit<field bits<8> inst, dag outs, dag ins, string asmstr, list<dag> pattern> 
-  : InstRL78<outs, ins, asmstr, pattern>
-{
-  field bits<8> Inst = inst;
-  // Lets the disassembler reject an encoding without failing the whole decode.
-  // TableGen requires it to have the same width as Inst.
-  field bits<8> SoftFail = 0;
-  let Size = 1;
-}
-
-class InstRL78_16bit<field bits<16> inst, dag outs, dag ins, string asmstr, list<dag> pattern> 
-  : InstRL78<outs, ins, asmstr, pattern>
-{
-  field bits<16> Inst = inst;
-  // Lets the disassembler reject an encoding without failing the whole decode.
-  // TableGen requires it to have the same width as Inst.
-  field bits<16> SoftFail = 0;
-  let Size = 2;
-}
-
-class InstRL78_24bit<field bits<24> inst, dag outs, dag ins, string asmstr, list<dag> pattern> 
-  : InstRL78<outs, ins, asmstr, pattern>
-{
-  field bits<24> Inst = inst;
-  // Lets the disassembler reject an encoding without failing the whole decode.
-  // TableGen requires it to have the same width as Inst.
-  field bits<24> SoftFail = 0;
-  let Size = 3;
-}
-
-class InstRL78_32bit<field bits<32> inst, dag outs, dag ins, string asmstr, list<dag> pattern> 
-  : InstRL78<outs, ins, asmstr, pattern>
-{
-  field bits<32> Inst = inst;
-  // Lets the disassembler reject an encoding without failing the whole decode.
-  // TableGen requires it to have the same width as Inst.
-  field bits<32> SoftFail = 0;
-  let Size = 4;
-}
-
-class InstRL78_40bit<field bits<40> inst, dag outs, dag ins, string asmstr, list<dag> pattern> 
-  : InstRL78<outs, ins, asmstr, pattern>
-{
-  field bits<40> Inst = inst;
-  // Lets the disassembler reject an encoding without failing the whole decode.
-  // TableGen requires it to have the same width as Inst.
-  field bits<40> SoftFail = 0;
-  let Size = 5;
-}
-
-// Pseudo instructions.
-class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
-   : InstRL78<outs, ins, asmstr, pattern> {
-  let isCodeGenOnly = 1;
-  let isPseudo = 1;
-}
-
 // A hardware instruction: one form of the RL78 Software Manual's operation
 // list (R01US0015), with the exact register class for each register operand.
 // Byte I of the encoding is Inst{8*I+7-8*I}, so the first byte is in the low
@@ -96,8 +24,7 @@ class RL78Inst<int size, dag outs, dag ins, string asmstr,
   let DecoderNamespace = "RL78";
   field bits<40> Inst;
   field bits<40> SoftFail = 0;
-  // Encoded by the TableGen'erated encoder (the older definitions above are
-  // still encoded by hand in RL78MCCodeEmitter).
+  // A hardware instruction (RL78II::Hardware).
   let TSFlags{0} = 1;
   // Operands of a single-register class are not encoded: the disassembler
   // supplies the register (Decode<Class>RegisterClass without a value).
@@ -124,3 +51,24 @@ class RL78FixedRdRs {
   bits<0> rs;
 }
 
+// An instruction for code generation only, with exact operand classes like
+// the hardware instructions. Size is that of the hardware instructions it
+// becomes when that is known in advance, 0 otherwise.
+class RL78Pseudo<int size, dag outs, dag ins, list<dag> pattern = []>
+    : Instruction {
+  let Namespace = "RL78";
+  let OutOperandList = outs;
+  let InOperandList = ins;
+  let AsmString = "";
+  let Pattern = pattern;
+  let Size = size;
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+  // Stands for exactly one hardware instruction (RL78II::OneInst): a
+  // conditional skip may be placed in front of it.
+  bit OneInst = 0;
+  let TSFlags{1} = OneInst;
+}
