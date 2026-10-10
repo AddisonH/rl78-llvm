@@ -95,10 +95,10 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_5(
   //    bnc $.NextMBB ; 4 cycles (on condition taken)
   //  .NextMBB:
   MachineBasicBlock *NextMBB = MBB.splitAt(MI);
-  BuildMI(MBB, MI, DL, TII.get(RL78::CMP0_r_cg)).addReg(RL78::R1);
+  BuildMI(MBB, MI, DL, TII.get(RL78::CMP0_r)).addReg(RL78::R1);
   // The second operand is the condition code (an immediate, printed as "nc");
   // CY is read implicitly.
-  BuildMI(MBB, MI, DL, TII.get(RL78::B_BNC))
+  BuildMI(MBB, MI, DL, TII.get(RL78::Bcc_rel8))
       .addMBB(NextMBB)
       .addImm(RL78CC::RL78CC_NC)
       .addReg(RL78::CCreg, RegState::Implicit);
@@ -126,7 +126,7 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_6_1279(
   MachineBasicBlock *LoopBB = MBB.splitAt(MI);
   LoopBB->addSuccessor(LoopBB);
   BuildMI(MBB, MI, DL, TII.get(RL78::MOV_r_i8)).addReg(RL78::R1).addImm(AInit);
-  BuildMI(*LoopBB, LoopBB->end(), DL, TII.get(RL78::B_BNZ))
+  BuildMI(*LoopBB, LoopBB->end(), DL, TII.get(RL78::Bcc_rel8))
       .addMBB(LoopBB)
       .addImm(RL78CC::RL78CC_NZ);
   // Erase the pseudo instruction.

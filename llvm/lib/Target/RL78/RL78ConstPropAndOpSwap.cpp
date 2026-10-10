@@ -93,12 +93,7 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
         if (MI1.getOpcode() == RL78::AND16_AX_rp ||
             MI1.getOpcode() == RL78::OR16_AX_rp ||
             MI1.getOpcode() == RL78::XOR16_AX_rp ||
-            MI1.getOpcode() == RL78::ADD_r_r ||
-            MI1.getOpcode() == RL78::AND_r_r ||
-            MI1.getOpcode() == RL78::ADDW_AX_rp ||
-            MI1.getOpcode() == RL78::ADDC_r_r ||
-            MI1.getOpcode() == RL78::OR_r_r ||
-            MI1.getOpcode() == RL78::XOR_r_r) {
+            MI1.getOpcode() == RL78::ADDW_AX_rp) {
 
           std::pair<std::optional<MachineOperand>, unsigned int> crspCpyAndInstr =
               getCoresspondingCpyOrConst(MI1.getOperand(2), ACPM);

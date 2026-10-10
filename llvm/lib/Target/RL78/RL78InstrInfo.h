@@ -42,6 +42,24 @@ public:
 
 
 
+  /// XCH A, X has an encoding of its own.
+  static unsigned getXCHOpcode(Register Reg) {
+    return Reg == RL78::R0 ? RL78::XCH_A_X : RL78::XCH_A_r;
+  }
+
+  /// The conditional branch on \p CC: C, NC, Z and NZ are one instruction,
+  /// H and NH another.
+  static unsigned getBranchOpcode(int64_t CC) {
+    return CC == RL78CC::RL78CC_H || CC == RL78CC::RL78CC_NH ? RL78::BHcc_rel8
+                                                             : RL78::Bcc_rel8;
+  }
+
+  /// The conditional skip on \p CC.
+  static unsigned getSkipOpcode(int64_t CC) {
+    return CC == RL78CC::RL78CC_H || CC == RL78CC::RL78CC_NH ? RL78::SKHcc
+                                                             : RL78::SKcc;
+  }
+
   /// Expands the 16-bit pseudos that are two 8-bit operations on AX.
   bool expandWideOnAX(MachineInstr &MI) const;
 

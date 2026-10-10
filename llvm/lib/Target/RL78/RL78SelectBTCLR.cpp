@@ -48,76 +48,53 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
       continue;
     //
     MachineInstr &MI = *I;
-    // if BT.
-    if (((MI.getOpcode() == RL78::BTBF_A) ||
-         (MI.getOpcode() == RL78::BTBF_memr) ||
-         (MI.getOpcode() == RL78::BTBF_saddr) ||
-         (MI.getOpcode() == RL78::BTBF_sfri_addr)) &&
-        (MI.getOperand(1).getImm() == RL78CC::RL78CC_Z)) {
-      MachineBasicBlock *TBB = MI.getOperand(0).getMBB();
-      if (!TBB)
+    // BT: operands are the tested byte, the bit, the target and the
+    // condition.
+    unsigned Opc = MI.getOpcode();
+    if ((Opc != RL78::BTF_A_b && Opc != RL78::BTF_mHL_b &&
+         Opc != RL78::BTF_saddr_b && Opc != RL78::BTF_sfr_b) ||
+        MI.getOperand(3).getImm() != RL78CC::RL78CC_Z ||
+        !MI.getOperand(2).isMBB())
+      continue;
+    // The instruction that clears the bit goes: the branch must be the only
+    // way into the target.
+    MachineBasicBlock *TBB = MI.getOperand(2).getMBB();
+    if (TBB->pred_size() != 1)
+      continue;
+    MachineBasicBlock::iterator First = TBB->getFirstNonDebugInstr();
+    if (First == TBB->end())
+      continue;
+    MachineInstr &firstMI = *First;
+    const MachineOperand &Byte = MI.getOperand(0);
+    const MachineOperand &Bit = MI.getOperand(1);
+    MachineInstrBuilder MIB;
+    if (Opc == RL78::BTF_A_b && firstMI.getOpcode() == RL78::AND_A_i8 &&
+        firstMI.getOperand(2).getImm() == ~(1 << Bit.getImm())) {
+      // BT A.bit + AND A, #~bit.
+      MIB = BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTCLR_A_b))
+                .add(firstMI.getOperand(0))
+                .add(Byte);
+    } else if ((Opc == RL78::BTF_mHL_b &&
+                firstMI.getOpcode() == RL78::CLR1_mHL_b) ||
+               (Opc == RL78::BTF_saddr_b &&
+                firstMI.getOpcode() == RL78::CLR1_saddr_b) ||
+               (Opc == RL78::BTF_sfr_b &&
+                firstMI.getOpcode() == RL78::CLR1_sfr_b)) {
+      // BT byte.bit + CLR1 byte.bit.
+      if (!firstMI.getOperand(0).isIdenticalTo(Byte) ||
+          firstMI.getOperand(1).getImm() != Bit.getImm())
         continue;
-
-      MachineInstr &firstMI = *TBB->getFirstNonDebugInstr();
-      //
-      if ((firstMI.getOpcode() == RL78::AND_A_i8 ||
-           firstMI.getOpcode() == RL78::AND_A_i8) &&
-          (firstMI.getOperand(0).getReg() == MI.getOperand(2).getReg())) {
-        int bitPos = MI.getOperand(3).getImm();
-        int andMask = firstMI.getOperand(2).getImm();
-        if (andMask == ~(1 << bitPos)) {
-          // Replace the BT A.bit + AND with a BTCLR.
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTCLR_A))
-              .add(firstMI.getOperand(0))
-              .add(MI.getOperand(0))
-              .add(MI.getOperand(1))
-              .add(MI.getOperand(2))
-              .add(MI.getOperand(3));
-          MI.eraseFromParent();
-          firstMI.eraseFromParent();
-          Changed = true;
-        }
-      } else if ((firstMI.getOpcode() == RL78::CLR1_mHL_b) &&
-                 (firstMI.getOperand(0).getReg() ==
-                  MI.getOperand(2).getReg()) &&
-                 (firstMI.getOperand(1).getImm() ==
-                  MI.getOperand(3).getImm())) {
-        // Replace the BT [HL].bit + CLR1 [HL].bit with a BTCLR.
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTCLR_memr))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(1))
-            .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
-        MI.eraseFromParent();
-        firstMI.eraseFromParent();
-        Changed = true;
-      } else if ((firstMI.getOpcode() == RL78::CLR1_saddr_b) &&
-                 (firstMI.getOperand(1).getImm() ==
-                  MI.getOperand(3).getImm())) {
-        // Replace the BT saddr.bit + CLR1 saddr.bit with a BTCLR.
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTCLR_saddr))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(1))
-            .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
-        MI.eraseFromParent();
-        firstMI.eraseFromParent();
-        Changed = true;
-      } else if ((firstMI.getOpcode() == RL78::CLR1_sfr_b) &&
-                 (firstMI.getOperand(0).getImm() ==
-                  MI.getOperand(2).getImm()) &&
-                 (firstMI.getOperand(1).getImm() ==
-                  MI.getOperand(3).getImm())) {
-        // Replace the BT sfr.bit + CLR1 sfr.bit with a BTCLR.
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTCLR_sfri_addr))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
-        MI.eraseFromParent();
-        firstMI.eraseFromParent();
-        Changed = true;
-      }
+      unsigned NewOpc = Opc == RL78::BTF_mHL_b     ? RL78::BTCLR_mHL_b
+                        : Opc == RL78::BTF_saddr_b ? RL78::BTCLR_saddr_b
+                                                   : RL78::BTCLR_sfr_b;
+      MIB = BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(NewOpc)).add(Byte);
+    } else {
+      continue;
     }
+    MIB.add(Bit).add(MI.getOperand(2));
+    MI.eraseFromParent();
+    firstMI.eraseFromParent();
+    Changed = true;
   }
   //
   return Changed;

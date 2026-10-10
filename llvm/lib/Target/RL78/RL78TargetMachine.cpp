@@ -314,7 +314,6 @@ bool RL78PassConfig::addRegAssignAndRewriteOptimized() {
 void RL78PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(createRL78MACRLoopPromotePass());
-  addPass(createRL78AdjustMemRefsPass());
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
     addPass(createRL78SinkToAccumulatorPass());

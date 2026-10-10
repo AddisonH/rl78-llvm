@@ -107,8 +107,8 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
         // contains the store value) as operand 0. We also ignore any signed
         // comparisons which needed extra instruction (XOR1_cy_r etc.), see
         // RL78TargetLowering::LowerSignedCMP.
-        if ((prevI->getOpcode() == RL78::CMP0_r_cg) ||
-            ((prevI->getOpcode() == RL78::CMPW_rp_imm) &&
+        if ((prevI->getOpcode() == RL78::CMP0_r) ||
+            ((prevI->getOpcode() == RL78::CMPW_AX_i16) &&
              (prevI->getOperand(1).getImm() == 0))) {
           MachineInstr &CMPI = *prevI;
           ++prevI;
@@ -176,7 +176,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
           break;
 
         // Optimize compare with 0xFF to INC
-        if (prevI != MBB.rend() && prevI->getOpcode() == RL78::CMP_r_imm &&
+        if (prevI != MBB.rend() && prevI->getOpcode() == RL78::CMP_A_i8 &&
             prevI->getOperand(1).getImm() == -1 &&
             prevI->getOperand(0).isKill()) {
             const TargetInstrInfo *TII = MBB.getParent()->getSubtarget<RL78Subtarget>().getInstrInfo();

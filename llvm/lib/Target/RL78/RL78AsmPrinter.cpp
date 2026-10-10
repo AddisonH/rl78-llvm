@@ -143,13 +143,13 @@ int RL78AsmPrinter::getCFAAdjustment(const MachineInstr &MI) {
   case RL78::POP_rp:
     return -2;
   case RL78::SUBW_SP_i8:
-  case RL78::SUBW_rp_imm:
+  case RL78::SUBW_AX_i16:
     if (MI.getFlag(MachineInstr::FrameSetup) && MI.getNumOperands() >= 3 &&
         MI.getOperand(2).isImm())
       return MI.getOperand(2).getImm();
     return 0;
   case RL78::ADDW_SP_i8:
-  case RL78::ADDW_rp_imm:
+  case RL78::ADDW_AX_i16:
     if (MI.getFlag(MachineInstr::FrameDestroy) && MI.getNumOperands() >= 3 &&
         MI.getOperand(2).isImm())
       return -(int)MI.getOperand(2).getImm();

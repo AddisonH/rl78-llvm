@@ -102,7 +102,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
   // Return if not BRCC/BR/BTBF.
   if ((MI.getOpcode() != RL78::BRCC) && (MI.getOpcode() != RL78::BR) &&
       (MI.getOpcode() != RL78::BTBF) && (MI.getOpcode() != RL78::BTBF_mem) &&
-      (MI.getOpcode() != RL78::BTBF_sfr))
+      (MI.getOpcode() != RL78::BTBF_sfr) && (MI.getOpcode() != RL78::BTBF_saddr))
     return false;
   // MI.dump();
   MachineFunction::iterator MBBI = MBB.getIterator();
@@ -115,8 +115,8 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       !NextMBBI->SkipPHIsLabelsAndDebug(NextMBBI->begin())->isPseudo() &&
       (std::next(NextMBBI) == targetMBB.getIterator())) {
     // Insert a conditional skip instruction.
-    BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SK_cc))
-        .add(MI.getOperand(0))
+    BuildMI(MBB, MI, MI.getDebugLoc(),
+            TII->get(RL78InstrInfo::getSkipOpcode(MI.getOperand(1).getImm())))
         .add(MI.getOperand(1));
   } else {
     // First check if the jump is in range [-128 + size(instruction), +127]
@@ -152,28 +152,37 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       default:
         llvm_unreachable("Invalid branch instruction!");
       case RL78::BTBF:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTBF_A))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(1))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTF_A_b))
             .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
+            .add(MI.getOperand(3))
+            .add(MI.getOperand(0))
+            .add(MI.getOperand(1));
         break;
       case RL78::BTBF_mem:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTBF_memr))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(1))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTF_mHL_b))
             .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
+            .add(MI.getOperand(3))
+            .add(MI.getOperand(0))
+            .add(MI.getOperand(1));
         break;
       case RL78::BTBF_sfr:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTBF_sfri_addr))
-            .add(MI.getOperand(0))
-            .add(MI.getOperand(1))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTF_sfr_b))
             .add(MI.getOperand(2))
-            .add(MI.getOperand(3));
+            .add(MI.getOperand(3))
+            .add(MI.getOperand(0))
+            .add(MI.getOperand(1));
+        break;
+      case RL78::BTBF_saddr:
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BTF_saddr_b))
+            .add(MI.getOperand(2))
+            .add(MI.getOperand(3))
+            .add(MI.getOperand(0))
+            .add(MI.getOperand(1));
         break;
       case RL78::BRCC:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::B_cc))
+        BuildMI(MBB, MI, MI.getDebugLoc(),
+                TII->get(
+                    RL78InstrInfo::getBranchOpcode(MI.getOperand(1).getImm())))
             .add(MI.getOperand(0))
             .add(MI.getOperand(1));
         break;
@@ -196,8 +205,13 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
         llvm_unreachable("Invalid branch instruction!");
       case RL78::BTBF_mem:
       case RL78::BTBF_sfr:
+      case RL78::BTBF_saddr:
       case RL78::BTBF: {
-        if (MI.getOpcode() == RL78::BTBF_sfr)
+        if (MI.getOpcode() == RL78::BTBF_saddr)
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_CY_saddr_b))
+              .add(MI.getOperand(2))
+              .add(MI.getOperand(3));
+        else if (MI.getOpcode() == RL78::BTBF_sfr)
         BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_CY_sfr_b))
               .add(MI.getOperand(2))
               .add(MI.getOperand(3));
@@ -216,8 +230,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
                                              ? RL78CC::CondCodes::RL78CC_NC
                                              : RL78CC::CondCodes::RL78CC_C;
 
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SK_cc))
-            .add(MI.getOperand(0))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SKcc))
             .addImm(ReversedInCy);
 
         if (isInt<16>(jumpSize))
@@ -229,8 +242,8 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
         break;
       }
       case RL78::BRCC:
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SK_cc))
-            .add(MI.getOperand(0))
+        BuildMI(MBB, MI, MI.getDebugLoc(),
+                TII->get(RL78InstrInfo::getSkipOpcode(Cond[0].getImm())))
             .addImm(Cond[0].getImm());
         LLVM_FALLTHROUGH;
       case RL78::BR:

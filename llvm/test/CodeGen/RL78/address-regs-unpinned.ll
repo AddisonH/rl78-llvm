@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
-; RUN: llc -mtriple=rl78 -O2 -rl78-pin-address-regs=true < %s \
+; RUN: llc -mtriple=rl78 -O2 < %s \
 ; RUN:   | FileCheck %s --check-prefix=PINNED
 
 ; A list walk: the node pointer is loaded (p = p->next), carried around the

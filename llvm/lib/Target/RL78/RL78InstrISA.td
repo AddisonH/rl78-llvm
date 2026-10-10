@@ -712,7 +712,7 @@ def ONEW_rp : RL78Inst<1, (outs RL78AXBCRP:$rp), (ins), "onew $rp"> {
 
 // CMPS X, [HL+byte]      61 DE adr
 // CMPS X, ES:[HL+byte]   11 61 DE adr
-// Z is set when the operands are equal or either is zero.
+// Z is set when the operands are equal; CY when they differ or A or X is 0.
 let Defs = [CCreg], mayLoad = 1 in {
 def CMPS_X_mHLi : RL78Inst<3, (outs), (ins RL78XReg:$x, (memHLi $hl, $disp):$addr),
                            "cmps $x, $addr"> {

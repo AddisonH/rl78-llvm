@@ -37,7 +37,6 @@ add_llvm_target(RL78CodeGen
   RL78TargetTransformInfo.cpp
   RL78InsertNOPWithLabel.cpp
   RL78GenSet1Clr1Intrin.cpp
-  RL78AdjustMemRefsPass.cpp
   RL78ESOptPass.cpp
   RL78InsertInstsForDelayCycles.cpp
   RL78NarrowDemandedOps.cpp

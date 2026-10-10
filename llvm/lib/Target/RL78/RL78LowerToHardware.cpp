@@ -171,15 +171,6 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
   case RL78::MACHU_CG:
     Out.push_back(MCInstBuilder(RL78::MACHU));
     return true;
-  case RL78::MULU_r:
-    Out.push_back(Mulu);
-    return true;
-  case RL78::PUSH_cc:
-    Out.push_back(MCInstBuilder(RL78::PUSH_PSW).addReg(RL78::PSW));
-    return true;
-  case RL78::POP_cc:
-    Out.push_back(MCInstBuilder(RL78::POP_PSW).addReg(RL78::PSW));
-    return true;
   // The registers that are sfrs, as their sfr addresses.
   case RL78::MUL16_rp_rp:
   case RL78::MUL32_zext_r_r:
@@ -201,12 +192,6 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
                                     : RL78::DIVWU));
     Out.push_back(MCInstBuilder(RL78::NOP));
     return true;
-  case RL78::SK_cc: {
-    int64_t CC = In.getOperand(1).getImm();
-    Out.push_back(MCInstBuilder(condFits(CondCZ, CC) ? RL78::SKcc : RL78::SKHcc)
-                      .addImm(CC));
-    return true;
-  }
   case RL78::MOV_A_PSW_cg:
     Out.push_back(
         MCInstBuilder(RL78::MOV_A_PSW).addReg(RL78::R1).addReg(RL78::PSW));

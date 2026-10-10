@@ -141,24 +141,24 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
 
   unsigned JumpSize = OpSize * RdOpAmount;
   if (RdOpAmount == 1) {
-    FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::CMP0_r_cg))
+    FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::CMP0_r))
                            .addReg(RL78::R3, RegState::Kill);
     if (OpInstrCount > 1)
-      BuildMI(*BB, MI, DL, II->get(RL78::B_cc))
+      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_rel8))
           .addImm(JumpSize)
           .addImm(RL78CC::RL78CC_Z);
     else
-      BuildMI(*BB, MI, DL, II->get(RL78::SK_cc_nodst)).addImm(RL78CC::RL78CC_Z);
+      BuildMI(*BB, MI, DL, II->get(RL78::SKcc)).addImm(RL78CC::RL78CC_Z);
   } else {
     FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::SHL_r_n), RL78::R3)
                            .addReg(RL78::R3, RegState::Kill)
                            .addImm(CounterShiftAmount);
     if (OpInstrCount > 1 || JumpSize > 0)
-      BuildMI(*BB, MI, DL, II->get(RL78::B_cc))
+      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_rel8))
           .addImm(JumpSize)
           .addImm(RL78CC::RL78CC_NC);
     else
-      BuildMI(*BB, MI, DL, II->get(RL78::SK_cc_nodst))
+      BuildMI(*BB, MI, DL, II->get(RL78::SKcc))
           .addImm(RL78CC::RL78CC_NC);
   }
 
@@ -177,7 +177,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
       BuildMI(*BB, MI, DL, II->get(RL78::SHRW_AX_n), RL78::RP0)
           .addReg(RL78::RP0, RegState::Kill)
           .addImm(1);
-      LastInstruction = BuildMI(*BB, MI, DL, II->get(RL78::MOV1_r_cy), RL78::R1)
+      LastInstruction = BuildMI(*BB, MI, DL, II->get(RL78::MOV1_A_b), RL78::R1)
                             .addReg(RL78::R1)
                             .addImm(7);
     }
@@ -221,7 +221,7 @@ static bool BuildADDE_SUBBE_rp_rp(const RL78InstrInfo *II,
       !MI.getOperand(2).isReg())
     return false;
 
-  FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::SK_cc_nodst))
+  FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::SKcc))
                          .addImm(RL78CC::RL78CC_NC);
   BuildMI(*BB, MI, DL, II->get(carryOpcode), RL78::RP0)
       .addReg(RL78::RP0, RegState::Kill);
@@ -255,7 +255,10 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
     MachineInstrBuilder FirstInstruction, LastInstruction;
 
   // PSW register contents are saved to the stack.
-  FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::PUSH_cc));
+  FirstInstruction =
+      BuildMI(*BB, MI, DL, II->get(RL78::PUSH_PSW))
+          .addReg(RL78::PSW)
+          .addReg(RL78::CCreg, RegState::Implicit);
 
   // Maskable interrupt acknowledgment by vectored interrupt is disabled (with
   // the interrupt enable flag (IE) cleared (0)).
@@ -286,7 +289,8 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   BuildMI(*BB, MI, DL, II->get(RL78::MOVW_AX_sfrp), RL78::RP0).addImm(MDBL);
 
   // Each flag is replaced with stack data.
-  LastInstruction = BuildMI(*BB, MI, DL, II->get(RL78::POP_cc));
+  LastInstruction = BuildMI(*BB, MI, DL, II->get(RL78::POP_PSW), RL78::PSW)
+                        .addReg(RL78::CCreg, RegState::ImplicitDefine);
 
   finalizeBundle(*BB, FirstInstruction->getIterator(),
                  std::next(LastInstruction->getIterator()));
@@ -801,7 +805,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         //
         BuildMI(MBB, I, DL, get(RL78::POP_rp), RL78::RP0);
       } else {
-        BuildMI(MBB, I, DL, get(RL78::XCH_A_r_cg), RL78::R1)
+        BuildMI(MBB, I, DL, get(getXCHOpcode(DestReg)), RL78::R1)
             .addReg(DestReg, RegState::Define)
             .addReg(RL78::R1, RegState::Kill)
             .addReg(DestReg, RegState::Kill);
@@ -809,7 +813,7 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         BuildMI(MBB, I, DL, get(RL78::MOV_A_r), RL78::R1)
             .addReg(SrcReg, getKillRegState(KillSrc));
         //
-        BuildMI(MBB, I, DL, get(RL78::XCH_A_r_cg), RL78::R1)
+        BuildMI(MBB, I, DL, get(getXCHOpcode(DestReg)), RL78::R1)
             .addReg(DestReg, RegState::Define)
             .addReg(RL78::R1, RegState::Kill)
             .addReg(DestReg, RegState::Kill);
@@ -866,7 +870,9 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   }
   else if (RL78::RL78RPRegsRegClass.contains(DestReg) &&
            RL78::RL78SPRegRegClass.contains(SrcReg)) {
-    BuildMI(MBB, I, DL, get(RL78::MOVW_rp_sp), DestReg)
+    BuildMI(MBB, I, DL,
+            get(DestReg == RL78::RP0 ? RL78::MOVW_AX_SP : RL78::MOVW_rp_SP),
+            DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc));
   }
   // 8 bit reg to CS
@@ -875,13 +881,13 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, get(RL78::MOV_CS_A), RL78::CS)
           .addReg(RL78::R1, RegState::Kill);
     } else {
-      BuildMI(MBB, I, DL, get(RL78::XCH_A_r_cg), RL78::R1)
+      BuildMI(MBB, I, DL, get(getXCHOpcode(SrcReg)), RL78::R1)
           .addReg(SrcReg, RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
           .addReg(SrcReg, RegState::Kill);
       BuildMI(MBB, I, DL, get(RL78::MOV_CS_A), RL78::CS)
           .addReg(RL78::R1, RegState::Kill);
-      BuildMI(MBB, I, DL, get(RL78::XCH_A_r_cg), RL78::R1)
+      BuildMI(MBB, I, DL, get(getXCHOpcode(SrcReg)), RL78::R1)
           .addReg(SrcReg, RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
           .addReg(SrcReg, RegState::Kill);
@@ -953,6 +959,7 @@ unsigned RL78InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   case RL78::BTBF:
   case RL78::BTBF_mem:
   case RL78::BTBF_sfr:
+  case RL78::BTBF_saddr:
     return 8;
   case RL78::BR:
     return 4;
@@ -1161,8 +1168,12 @@ RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   // as "ei; reti" are deliberately outlined for size.)
   case RL78::NOP:
     return outliner::InstrType::Illegal;
+  // A skip belongs with the instruction after it.
+  case RL78::SKcc:
+  case RL78::SKHcc:
+    return outliner::InstrType::Illegal;
   case RL78::MOVW_SP_AX:
-  case RL78::MOVW_rp_sp:
+  case RL78::MOVW_rp_SP:
   case RL78::MOVW_AX_SP:
   case RL78::MOVW_SP_i16:
   case RL78::ADDW_SP_i8:
@@ -1343,7 +1354,7 @@ MachineInstr *RL78InstrInfo::foldMemoryOperandImpl(
   int64_t Imm = MI.getOperand(1).getImm();
 
   return BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
-                 get(RL78::STORE8_stack_slot_imm))
+                 get(RL78::MOV_mSPi_i8))
       .addFrameIndex(FrameIndex)
       .addImm(subReg)
       .addImm(Imm);
@@ -1451,9 +1462,9 @@ public:
         return Hazard;
       return NoHazard;
     }
-    case RL78::PUSH_cc:
+    case RL78::PUSH_PSW:
     case RL78::PUSH_rp:
-    case RL78::POP_cc:
+    case RL78::POP_PSW:
     case RL78::POP_rp:
     case RL78::BRK:
     case RL78::LOAD8_r_stack_slot:

@@ -215,7 +215,6 @@ void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
     case RL78::AND1_CY_mHL_b:
     case RL78::OR1_CY_mHL_b:
     case RL78::XOR1_CY_mHL_b:
-    case RL78::BTBF_memr:
       break;
     // [HL+byte] only, [HL] not available in this case.
     case RL78::INC_mHLi:
@@ -553,17 +552,6 @@ void RL78InstPrinter::printCCOperand(const MCInst *MI, int opNum,
   switch (MI->getOpcode()) {
   default:
     break;
-  case RL78::BTBF:
-  case RL78::BTBF_mem:
-  case RL78::BTBF_A:
-  case RL78::BTBF_memr:
-  case RL78::BTCLR_A:
-  case RL78::BTBF_sfrRegi_addr:
-  case RL78::BTCLR_sfrRegi_addr:
-  case RL78::BTBF_sfri_addr:
-  case RL78::BTBF_PSWi_addr:
-  case RL78::BTBF_esmemr:
-  case RL78::BTBF_saddr:
     switch (CC) {
     default:
       llvm_unreachable("Invalid condition code!");
