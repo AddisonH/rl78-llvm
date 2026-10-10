@@ -290,7 +290,6 @@ void RL78PassConfig::addPreEmitPass() {
   // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
   addPass(createMachineCopyPropagationPass(true));
   addPass(createRL78CMPWithZeroElimPass());
-  addPass(createRL78InstructionSpecializationPass());
   addPass(createRL78ExpandPseudoInstsPass());
   addPass(createRL78SelectBTCLRPass());
   if (!InsertNOPWithLabel.empty()) {

@@ -860,6 +860,10 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     llvm_unreachable("Don't know how to copy from 8 to 16 bit reg!");
   }
   // SP reg to 16 bit reg
+  else if (DestReg == RL78::SPreg && SrcReg == RL78::RP0) {
+    BuildMI(MBB, I, DL, get(RL78::MOVW_SP_AX), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  }
   else if (RL78::RL78RPRegsRegClass.contains(DestReg) &&
            RL78::RL78SPRegRegClass.contains(SrcReg)) {
     BuildMI(MBB, I, DL, get(RL78::MOVW_rp_sp), DestReg)

@@ -32,7 +32,6 @@ add_llvm_target(RL78CodeGen
   RL78InsertExchangeInstructions.cpp
   RL78ExpandInlineAsm.cpp
   RL78ExpandPseudoInsts.cpp
-  RL78InstructionSpecialization.cpp
   RL78ConstPropAndOpSwap.cpp
   RL78SelectionDAGTargetInfo.cpp
   RL78TargetTransformInfo.cpp

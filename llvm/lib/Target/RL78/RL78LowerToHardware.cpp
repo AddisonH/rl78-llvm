@@ -174,12 +174,6 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
   case RL78::MULU_r:
     Out.push_back(Mulu);
     return true;
-  case RL78::SET1_cy:
-    Out.push_back(MCInstBuilder(RL78::SET1_CY));
-    return true;
-  case RL78::CLR1_cy:
-    Out.push_back(MCInstBuilder(RL78::CLR1_CY));
-    return true;
   case RL78::PUSH_cc:
     Out.push_back(MCInstBuilder(RL78::PUSH_PSW).addReg(RL78::PSW));
     return true;
@@ -187,16 +181,6 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
     Out.push_back(MCInstBuilder(RL78::POP_PSW).addReg(RL78::PSW));
     return true;
   // The registers that are sfrs, as their sfr addresses.
-  case RL78::MOV1_cy_sfrReg:
-    Out.push_back(MCInstBuilder(RL78::MOV1_CY_sfr_b)
-                      .addImm(sfrAddress(Reg(1)))
-                      .addOperand(In.getOperand(2)));
-    return true;
-  case RL78::MOV1_sfrReg_cy:
-    Out.push_back(MCInstBuilder(RL78::MOV1_sfr_b)
-                      .addImm(sfrAddress(Reg(0)))
-                      .addOperand(In.getOperand(1)));
-    return true;
   case RL78::MUL16_rp_rp:
   case RL78::MUL32_zext_r_r:
     Out.push_back(MCInstBuilder(RL78::MULHU));

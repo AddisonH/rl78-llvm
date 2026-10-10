@@ -182,15 +182,14 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
     checkSpillPseudo(MI, TII);
     // Pure use and AX dead: copying in is enough, and MOVW leaves Reg intact.
     if ((!isAXLive) && !IsDef) {
-      BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-          .addReg(Reg, getKillRegState(MI.getOperand(opIndex).isKill()));
+      TII->copyPhysReg(MBB, MI, DL, RL78::RP0, Reg,
+                       MI.getOperand(opIndex).isKill());
     }
     // Pure def and AX dead: copy out only. A tied operand is also read, so it
     // falls through to the exchange below.
     else if ((!isAXLive) && IsDef && !IsTied) {
-      BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::MOVW_rp_AX),
-              Reg)
-          .addReg(RL78::RP0, RegState::Kill);
+      TII->copyPhysReg(MBB, std::next(MI.getIterator()), DL, Reg, RL78::RP0,
+                       true);
     } else {
       // Ordered so each exchange is attributed to exactly one cause.
       if (isAXLive && IsTied)
@@ -217,17 +216,16 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
       } else {
         BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp))
             .addReg(RL78::RP0, RegState::Kill);
-        BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp), RL78::RP0)
-            .addReg(Reg, RegState::Kill);
+        // Any 16-bit register: SP and MACRL/MACRH have their own moves.
+        TII->copyPhysReg(MBB, MI, DL, RL78::RP0, Reg, true);
         // OBS. the order of the next 2 instruction is not wrong, they will be
         // inserted in the right order
         BuildMI(MBB, std::next(MI.getIterator()), DL, TII->get(RL78::POP_rp),
                 RL78::RP0);
         // Only if the operand is def we need to copy it back from AX.
         if (MI.getOperand(opIndex).isDef())
-          BuildMI(MBB, std::next(MI.getIterator()), DL,
-                  TII->get(RL78::MOVW_rp_AX), Reg)
-              .addReg(RL78::RP0, RegState::Kill);
+          TII->copyPhysReg(MBB, std::next(MI.getIterator()), DL, Reg,
+                           RL78::RP0, true);
 
         // In case of stack operations we need to compensate for the stack
         // pointer change caused by PUSH(SP -= 2).
