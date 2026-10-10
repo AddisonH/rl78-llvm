@@ -4155,7 +4155,19 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV_CS_i8), RL78::CS)
         .add(MI.getOperand(1));
   }
-  MI.getOperand(1).ChangeToRegister(RL78::CS, false);
+  // With CS loaded the call is CALL rp.
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
+  MachineInstrBuilder Call =
+      BuildMI(*BB, MI, DL, TII->get(RL78::CALL_rp_cg)).add(MI.getOperand(0));
+  for (const MachineOperand &MO : llvm::drop_begin(MI.operands(), 2)) {
+    // CALL rp already has some of the implicit operands.
+    if (MO.isReg() && MO.isImplicit() &&
+        (MO.isDef() ? Call->definesRegister(MO.getReg(), TRI)
+                    : Call->readsRegister(MO.getReg(), TRI)))
+      continue;
+    Call.add(MO);
+  }
+  MI.eraseFromParent();
   return BB;
 }
 

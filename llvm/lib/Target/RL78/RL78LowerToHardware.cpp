@@ -60,7 +60,6 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
     return true;
   // The calls and jumps of code generation say what a call clobbers and
   // which jump is a tail call.
-  case RL78::CALL_cs_rp:
   case RL78::CALL_rp_cg:
     return As(RL78::CALL_rp);
   case RL78::CALL_addr16:

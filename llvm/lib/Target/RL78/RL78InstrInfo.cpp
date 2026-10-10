@@ -1588,8 +1588,7 @@ public:
         return Hazard;
       return NoHazard;
     }
-    case RL78::CALL_rp_cg:
-    case RL78::CALL_cs_rp: {
+    case RL78::CALL_rp_cg: {
       BitVector Bank0(8, true);
       if (SelI || RegMask.anyCommon(Bank0) || RegMask.test(CS) ||
           RegMask.test(SP))
