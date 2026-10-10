@@ -134,9 +134,6 @@ static cl::opt<uint32_t> MaxNumUsesTraversed(
     cl::desc("Max num uses visited for identifying load "
              "invariance in loop using invariant start (default = 8)"));
 
-static cl::opt<bool> DisableLICM("disable-licm", cl::init(false), cl::Hidden,
-                                 cl::desc("Disable loop invariant code motion"));
-
 static cl::opt<unsigned> FPAssociationUpperLimit(
     "licm-max-num-fp-reassociations", cl::init(5U), cl::Hidden,
     cl::desc(
@@ -428,7 +425,7 @@ bool LoopInvariantCodeMotion::runOnLoop(Loop *L, AAResults *AA, LoopInfo *LI,
 
   // If this loop has metadata indicating that LICM is not to be performed then
   // just exit.
-  if (hasDisableLICMTransformsHint(L) || DisableLICM) {
+  if (hasDisableLICMTransformsHint(L)) {
     return false;
   }
 

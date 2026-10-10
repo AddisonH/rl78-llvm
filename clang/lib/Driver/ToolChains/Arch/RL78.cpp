@@ -236,9 +236,6 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-inline-threshold=5");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-licm");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-split-spill-mode=size");
 
   CmdArgs.push_back("-mllvm");
