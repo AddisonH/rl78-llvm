@@ -365,11 +365,6 @@ bool InstCombinerImpl::shouldChangeType(Type *From, Type *To) const {
 
   unsigned FromWidth = From->getPrimitiveSizeInBits();
   unsigned ToWidth = To->getPrimitiveSizeInBits();
-
-  // RL78 keeps i8 values in i8 rather than widening them to i16.
-  if (FromWidth == 8 && ToWidth == 16 && F.getParent()->getTargetTriple().isRL78())
-    return false;
-
   return shouldChangeType(FromWidth, ToWidth);
 }
 

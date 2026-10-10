@@ -184,10 +184,7 @@ void ReassociatePass::BuildRankMap(Function &F,
 
   // Assign distinct ranks to function arguments.
   for (auto &Arg : F.args()) {
-    // RL78 gives all arguments the same rank.
-    // TODO: benchmark and analyze this further.
-    ValueRankMap[&Arg] =
-        F.getParent()->getTargetTriple().isRL78() ? Rank : ++Rank;
+    ValueRankMap[&Arg] = ++Rank;
     LLVM_DEBUG(dbgs() << "Calculated Rank[" << Arg.getName() << "] = " << Rank
                       << "\n");
   }

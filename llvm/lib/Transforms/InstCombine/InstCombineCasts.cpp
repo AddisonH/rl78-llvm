@@ -1700,9 +1700,7 @@ Instruction *InstCombinerImpl::visitZExt(ZExtInst &Zext) {
   // intermediate values have extra uses. This could be generalized further for
   // a non-constant mask operand.
   // zext (and (trunc X), C) --> and X, (zext C)
-  // Not done for RL78.
-  if (!Zext.getModule()->getTargetTriple().isRL78() &&
-      match(Src, m_And(m_Trunc(m_Value(X)), m_Constant(C))) &&
+  if (match(Src, m_And(m_Trunc(m_Value(X)), m_Constant(C))) &&
       X->getType() == DestTy) {
     Value *ZextC = Builder.CreateZExt(C, DestTy);
     return BinaryOperator::CreateAnd(X, ZextC);
