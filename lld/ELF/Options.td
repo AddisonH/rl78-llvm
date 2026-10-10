@@ -509,6 +509,10 @@ defm toc_optimize : BB<"toc-optimize",
     "(PowerPC64) Enable TOC related optimizations (default)",
     "(PowerPC64) Disable TOC related optimizations">;
 
+defm relax_callt : BB<"relax-callt",
+    "(RL78) Call the most called functions through the CALLT table",
+    "(RL78) Do not turn calls into CALLT (default)">;
+
 defm stride_dsp_memory_area : B<"stride-dsp-memory-area",
     "(RL78) Enable Stride DSP Memory Area",
     "(RL78) Disable Stride DSP Memory Area (default)">;

@@ -53,6 +53,53 @@ bool RL78PltSection::updateAllocSize(Ctx &ctx) {
   return true;
 }
 
+RL78CalltSection::RL78CalltSection(Ctx &ctx)
+    : SyntheticSection(ctx, ".callt0", SHT_PROGBITS, SHF_ALLOC, 2) {}
+
+const MapVector<RL78CalltSection::Target, unsigned> &
+RL78CalltSection::getEntries() const {
+  if (selected)
+    return entries;
+  selected = true;
+
+  // The table has 32 entries; the input files' own entries come first.
+  size_t used = 0;
+  for (InputSectionBase *sec : ctx.inputSections)
+    if (sec != this && sec->isLive() && sec->name == ".callt0")
+      used += sec->getSize();
+  size_t numFree = used < 64 ? (64 - used) / 2 : 0;
+
+  // An entry pays for itself from the third call on.
+  SmallVector<std::pair<Target, unsigned>, 0> candidates;
+  for (const auto &[target, count] : calls) {
+    auto *d = dyn_cast<Defined>(target.first);
+    if (count < 3 || !d || !d->section || !(d->section->flags & SHF_EXECINSTR))
+      continue;
+    candidates.push_back({target, count});
+  }
+  llvm::stable_sort(candidates, [](const auto &a, const auto &b) {
+    return a.second > b.second;
+  });
+  if (candidates.size() > numFree)
+    candidates.resize(numFree);
+  for (const auto &c : candidates)
+    entries.insert({c.first, entries.size()});
+  return entries;
+}
+
+uint64_t RL78CalltSection::getEntryVA(const Symbol &sym, int64_t addend) const {
+  auto it = getEntries().find({&sym, addend});
+  if (it == entries.end() || !getParent())
+    return 0;
+  uint64_t va = getVA() + it->second * 2;
+  return va >= 0x80 && va <= 0xBE && va % 2 == 0 ? va : 0;
+}
+
+void RL78CalltSection::writeTo(uint8_t *buf) {
+  for (const auto &[target, index] : getEntries())
+    write16le(buf + index * 2, target.first->getVA(ctx, target.second));
+}
+
 namespace {
 class RL78 final : public TargetInfo {
 public:
@@ -219,7 +266,17 @@ void RL78::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels,
       sym.allocateAux(ctx);
       ctx.in.plt->addEntry(sym);
     }
-    rs.scan<ELFT, RelTy>(it, type, rs.getAddend<ELFT>(*it, type));
+    int64_t addend = rs.getAddend<ELFT>(*it, type);
+    // A relaxable call !!addr20 or call !addr16 is a candidate for CALLT.
+    if (ctx.in.rl78Callt && (sec.flags & SHF_EXECINSTR) && it->r_offset &&
+        std::next(it) != rels.end() &&
+        std::next(it)->getType(false) == R_RL78_RELAX) {
+      uint8_t opc = sec.content()[it->r_offset - 1];
+      if ((type == R_RL78_DIR20U && opc == 0xFC) ||
+          (type == R_RL78_DIR16U && opc == 0xFD))
+        ctx.in.rl78Callt->addCall(sym, addend);
+    }
+    rs.scan<ELFT, RelTy>(it, type, addend);
   }
 }
 
@@ -240,6 +297,13 @@ static void write8le(void *p, uint8_t v) {
 
 static void write24le(void *p, uint64_t v) {
   write32le(p, (read32le(p) & 0xff00'0000) | (v & ~0xff00'0000));
+}
+
+// True if the call at r can be a CALLT: its target has a table entry and is
+// in the low 64 KiB, which is all a table entry can hold.
+static bool relaxToCallt(Ctx &ctx, const Relocation &r, uint64_t tgtVA) {
+  return ctx.in.rl78Callt && isUInt<16>(tgtVA) &&
+         ctx.in.rl78Callt->getEntryVA(*r.sym, r.addend);
 }
 
 // The relocation's target address, ignoring any PLT entry.
@@ -280,6 +344,13 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
     return;
   }
 
+  // Then, try callt [addr5].
+  if (opc == 0xFC && relaxToCallt(ctx, r, tgtVA)) {
+    sec.relaxAux->relocTypes[i] = R_RL78_DIR_CALLT;
+    remove = 2;
+    return;
+  }
+
   // Then, try br/call !addr16.
   if (isUInt<16>(tgtVA)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR16U;
@@ -304,8 +375,16 @@ static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
   // Handle only the branches:
   //   br !addr16   (PCRel = false)
   //   br $!addr20  (PCRel = true)
-  // as the calls (call !addr16, resp. call $!addr20) cannot be relaxed further.
+  // and call !addr16, which can become callt [addr5]; call $!addr20 cannot be
+  // relaxed further.
   const auto opc = sec.content().data()[r.offset - 1];
+  if (!PCRel && opc == 0xFD) {
+    if (relaxToCallt(ctx, r, getTargetVA(ctx, sec, r, loc))) {
+      sec.relaxAux->relocTypes[i] = R_RL78_DIR_CALLT;
+      remove = 1;
+    }
+    return;
+  }
   if (opc != (PCRel ? 0xEE : 0xED))
     return;
 
@@ -465,6 +544,11 @@ void RL78::finalizeRelax(int passes) const {
             break;
           case R_RL78_DIR8S_PCREL:
             write16le(p - 1, aux.writes[writesIdx++]);
+            skip = 1;
+            break;
+          case R_RL78_DIR_CALLT:
+            // callt [addr5]; relocateAlloc fills in the table entry.
+            write16le(p - 1, 0x8461);
             skip = 1;
             break;
           default:
@@ -829,6 +913,13 @@ void RL78::relocateAlloc(InputSection &sec, uint8_t *buf) const {
       relocate(loc, rel, rel.sym->getPltVA(ctx));
       continue;
     }
+
+    // A call relaxed to CALLT names the function, not its table entry.
+    if (rel.type == R_RL78_DIR_CALLT && ctx.in.rl78Callt)
+      if (uint64_t entryVA = ctx.in.rl78Callt->getEntryVA(*rel.sym, r.addend)) {
+        relocate(loc, rel, entryVA);
+        continue;
+      }
 
     switch (rel.type) {
     case R_RL78_ABS8S_PCREL:

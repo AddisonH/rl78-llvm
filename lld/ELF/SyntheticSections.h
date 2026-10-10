@@ -801,6 +801,33 @@ public:
   bool updateAllocSize(Ctx &) override;
 };
 
+// RL78 --relax-callt: the CALLT table entries the linker adds for the most
+// called functions. A CALLT is one byte shorter than CALL !addr16; an entry
+// costs two bytes. It joins the .callt0 input sections, which the linker
+// script places in the table area at 0x80-0xBF.
+class RL78CalltSection final : public SyntheticSection {
+public:
+  RL78CalltSection(Ctx &);
+  // Records a relaxable call to sym + addend.
+  void addCall(Symbol &sym, int64_t addend) { ++calls[{&sym, addend}]; }
+  bool isNeeded() const override { return !getEntries().empty(); }
+  size_t getSize() const override { return getEntries().size() * 2; }
+  void writeTo(uint8_t *buf) override;
+  // The address of the table entry for sym + addend, or 0 if it has none or
+  // the table is not where CALLT can reach it.
+  uint64_t getEntryVA(const Symbol &sym, int64_t addend) const;
+
+private:
+  using Target = std::pair<const Symbol *, int64_t>;
+  const llvm::MapVector<Target, unsigned> &getEntries() const;
+
+  llvm::MapVector<Target, unsigned> calls;
+  // Chosen targets and their table index, set on first use (after relocation
+  // scanning and garbage collection).
+  mutable llvm::MapVector<Target, unsigned> entries;
+  mutable bool selected = false;
+};
+
 // This is x86-only.
 class IBTPltSection : public SyntheticSection {
 public:

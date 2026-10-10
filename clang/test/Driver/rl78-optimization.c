@@ -14,3 +14,12 @@
 // SPEED-NOT: "-inline-threshold=5"
 
 // NOJT: "-fno-jump-tables"
+
+// When optimizing for size the linker also turns calls to the most called
+// functions into CALLT.
+// RUN: %clang --target=rl78 -Os -### %s 2>&1 | FileCheck %s --check-prefix=LINK-SIZE
+// RUN: %clang --target=rl78 -Oz -### %s 2>&1 | FileCheck %s --check-prefix=LINK-SIZE
+// RUN: %clang --target=rl78 -O2 -### %s 2>&1 | FileCheck %s --check-prefix=LINK-SPEED
+// RUN: %clang --target=rl78 -Os -mno-relax -### %s 2>&1 | FileCheck %s --check-prefix=LINK-SPEED
+// LINK-SIZE: "--relax" "--relax-callt"
+// LINK-SPEED-NOT: "--relax-callt"

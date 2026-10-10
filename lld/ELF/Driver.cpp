@@ -1556,6 +1556,8 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
   ctx.arg.rpath = getRpath(args);
   ctx.arg.relocatable = args.hasArg(OPT_relocatable);
   ctx.arg.rl78FarCode = args.hasArg(OPT_mfar_code);
+  ctx.arg.rl78RelaxCallt =
+      args.hasFlag(OPT_relax_callt, OPT_no_relax_callt, false);
   ctx.arg.resolveGroups =
       !args.hasArg(OPT_relocatable) || args.hasArg(OPT_force_group_allocation);
 

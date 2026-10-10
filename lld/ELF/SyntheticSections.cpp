@@ -4547,6 +4547,10 @@ template <class ELFT> void elf::createSyntheticSections(Ctx &ctx) {
   else
     ctx.in.plt = std::make_unique<PltSection>(ctx);
   add(*ctx.in.plt);
+  if (ctx.arg.emachine == EM_RL78 && ctx.arg.relax && ctx.arg.rl78RelaxCallt) {
+    ctx.in.rl78Callt = std::make_unique<RL78CalltSection>(ctx);
+    add(*ctx.in.rl78Callt);
+  }
   ctx.in.iplt = std::make_unique<IpltSection>(ctx);
   add(*ctx.in.iplt);
 

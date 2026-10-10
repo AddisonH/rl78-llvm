@@ -74,6 +74,7 @@ class MipsGotSection;
 class PPC64LongBranchTargetSection;
 class PackageMetadataNote;
 class PltSection;
+class RL78CalltSection;
 class RelocationBaseSection;
 class RelrBaseSection;
 class RelroPaddingSection;
@@ -404,6 +405,7 @@ struct Config {
   bool relrGlibc = false;
   bool relrPackDynRelocs = false;
   bool rl78FarCode = false;
+  bool rl78RelaxCallt = false;
   llvm::DenseSet<llvm::StringRef> saveTempsArgs;
   llvm::SmallVector<std::pair<llvm::GlobPattern, uint32_t>, 0> shuffleSections;
   bool singleRoRx;
@@ -615,6 +617,7 @@ struct InStruct {
   std::unique_ptr<MemtagGlobalDescriptors> memtagGlobalDescriptors;
   std::unique_ptr<PackageMetadataNote> packageMetadataNote;
   std::unique_ptr<PltSection> plt;
+  std::unique_ptr<RL78CalltSection> rl78Callt;
   std::unique_ptr<RelocationBaseSection> relaDyn;
   std::unique_ptr<RelocationBaseSection> relaPlt;
   std::unique_ptr<RelrBaseSection> relrAuthDyn;
