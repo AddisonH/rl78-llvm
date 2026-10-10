@@ -32,7 +32,7 @@ RL78RegisterInfo::RL78RegisterInfo() : RL78GenRegisterInfo(RL78::PCreg) {}
 // Transitional: only for the classes that hardware definitions alone use.
 // The older definitions give some operands a wider class than the
 // instruction encodes, and code generation protects those values with
-// RL78BCDEHL, RL78Low, RL78AXBCRP: a piece split from such a value must keep
+// RL78BCDEHL (RL78AdjustMemRefs): a piece split from such a value must keep
 // the class.
 const TargetRegisterClass *
 RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
@@ -43,6 +43,7 @@ RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   case RL78::RL78BCRPRegClassID:
   case RL78::RL78DERPRegClassID:
   case RL78::RL78DEHLRegClassID:
+  case RL78::RL78AXBCRPRegClassID:
     return &RL78::RL78RPRegsRegClass;
   case RL78::RL78ARegRegClassID:
   case RL78::RL78XRegRegClassID:
@@ -50,6 +51,8 @@ RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   case RL78::RL78BReg8RegClassID:
   case RL78::RL78CReg8RegClassID:
   case RL78::RL78XBCEDHLRegRegClassID:
+  case RL78::RL78LowRegClassID:
+  case RL78::RL78ABCRegRegClassID:
     return &RL78::RL78RegRegClass;
   }
   return RC;

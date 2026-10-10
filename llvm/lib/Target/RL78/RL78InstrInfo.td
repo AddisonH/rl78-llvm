@@ -27,20 +27,8 @@ def : Pat<(i8 (trunc i16:$src)),
           (EXTRACT_SUBREG i16:$src, sub_lo)>;
 
 let usesCustomInserter = 1 in {
-def ZEXT_8_16 : Pseudo<
-                    (outs RL78RPRegs:$dest), (ins RL78Reg:$src),
-                    ";zext $dest, $src",
-                    [(set i16:$dest, (zext i8:$src))]>;
 
-def SEXT_8_16 : Pseudo<
-                    (outs RL78RPRegs:$dest), (ins RL78Reg:$rsrc),
-                    ";sext $dest, $rsrc",
-                    [(set i16:$dest, (sext i8:$rsrc))]>;
 
-def AEXT_8_16 : Pseudo<
-                    (outs RL78RPRegs:$dest), (ins RL78Reg:$rsrc),
-                    ";aext $dest, $rsrc",
-                    [(set i16:$dest, (anyext i8:$rsrc))]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1089,8 +1077,9 @@ def XCH_A_esmemRpi : InstRL78_32bit<0x1161AD00,
 // this didn't generate the optimal code not even in simple cases,
 // we had extra mov/xch instructions which we avoided by doing this:
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, isCodeGenOnly = 1 in {
-  def BSWAP_rp : InstRL78_8bit<0x08,
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
+  let usesCustomInserter = 0 in
+def BSWAP_rp : InstRL78_8bit<0x08,
+        (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc),
         "xch a, x ;bswap $rd",
         [(set i16:$rd, (bswap i16:$rsrc))]>;
 }
@@ -1636,8 +1625,9 @@ def XCHW_AX_rp_cg  : InstRL78_8bit<0x33,
         []>;
 
   let usesCustomInserter = 1, isCodeGenOnly = 1 in {
-    def BSWAP32_rp  : InstRL78_24bit<0x083308,
-        (outs RL78RPRegs:$rd, RL78RPRegs:$rd2), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+    let usesCustomInserter = 0 in
+def BSWAP32_rp  : InstRL78_24bit<0x083308,
+        (outs RL78AXRP:$rd, RL78BCDEHL:$rd2), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
         "xch a, x\n\txchw $rd, $rsrc2\n\txch a, x",
         [(set i16:$rd, i16:$rd2, (xchw i16:$rsrc, i16:$rsrc2))]>;
   }
@@ -3562,10 +3552,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //Instruction       Opcode
 //SHR A, X          31 XA (X -> 1..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SHR_r_i  : InstRL78_16bit<0x310A,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "shr $rd, $imm",
-        [(set i8:$rd, (srl i8:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3601,10 +3592,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHRW AX, 14       31 EE
 //SHRW AX, 15       31 FE
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SHRW_rp_i  : InstRL78_16bit<0x311E,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "shrw $rd, $imm",
-        [(set i16:$rd, (srl i16:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3625,10 +3617,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHL B, X          31 X8 (X -> 1..7)
 //SHL C, X          31 X7 (X -> 1..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SHL_r_imm  : InstRL78_16bit<0x3119,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "shl $rd, $imm",
-        [(set i8:$rd, (shl i8:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3650,10 +3643,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHLW AX, X        31 XD (X -> 1..15)
 //SHLW BC, X        31 XC (X -> 1..15)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SHLW_rp_imm  : InstRL78_16bit<0x311D,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "shlw $rd, $imm",
-        [(set i16:$rd, (shl i16:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3672,10 +3666,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //Instruction       Opcode
 //SAR A, X          31 XB (X -> 1..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SAR_r_i  : InstRL78_16bit<0x310B,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, shift8imm:$imm),
         "sar $rd, $imm",
-        [(set i8:$rd, (sra i8:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3710,10 +3705,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SARW AX, 14       31 EF
 //SARW AX, 15       31 FF
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SARW_rp_i  : InstRL78_16bit<0x311F,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, shift16imm:$imm),
         "sarw $rd, $imm",
-        [(set i16:$rd, (sra i16:$rsrc, (i8 imm:$imm)))]>;
+        []>;
 }
 
 let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
@@ -3784,10 +3780,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1  in
 //Instruction       Opcode
 //ROR A, 1          61 DB
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def ROR_r_1 : InstRL78_16bit<0x61DB,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "ror $rd, 1",
-        [(set i8:$rd, (int_rl78_ror1 i8:$rsrc))]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3798,10 +3795,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //Instruction       Opcode
 //ROL A, 1          61 EB
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def ROL_r_1  : InstRL78_16bit<0x61EB,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "rol $rd, 1",
-        [(set i8:$rd, (int_rl78_rol1 i8:$rsrc))]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//

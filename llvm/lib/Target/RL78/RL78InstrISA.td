@@ -2250,3 +2250,27 @@ def : Pat<(adde i16:$rsrc, (i16 immCarryOnly:$imm)),
 // ~x is -1 - x: MOVW AX, #FFFFH and SUBW AX, rp are shorter than two XORs.
 let AddedComplexity = 10 in
 def : Pat<(not i16:$x), (SUBW_AX_rp (MOVW_rp_i16 -1), $x)>;
+
+//===----------------------------------------------------------------------===//
+// Shifts by a constant, rotates by one, extensions
+//===----------------------------------------------------------------------===//
+
+def : Pat<(shl i8:$r, (i8 imm:$n)), (SHL_r_n $r, imm:$n)>;
+def : Pat<(srl i8:$a, (i8 imm:$n)), (SHR_A_n $a, imm:$n)>;
+def : Pat<(sra i8:$a, (i8 imm:$n)), (SAR_A_n $a, imm:$n)>;
+def : Pat<(shl i16:$rp, (i8 imm:$n)), (SHLW_rp_n $rp, imm:$n)>;
+def : Pat<(srl i16:$ax, (i8 imm:$n)), (SHRW_AX_n $ax, imm:$n)>;
+def : Pat<(sra i16:$ax, (i8 imm:$n)), (SARW_AX_n $ax, imm:$n)>;
+def : Pat<(int_rl78_rol1 i8:$a), (ROL_A_1 $a)>;
+def : Pat<(int_rl78_ror1 i8:$a), (ROR_A_1 $a)>;
+
+// A byte extended to a word: the byte in the low half and 0 in the high
+// half, or the byte in A and SARW AX, 8.
+def : Pat<(i16 (zext i8:$r)),
+          (INSERT_SUBREG (INSERT_SUBREG (i16 (IMPLICIT_DEF)), $r, sub_lo),
+                         (MOV_r_i8 0), sub_hi)>;
+def : Pat<(i16 (anyext i8:$r)),
+          (INSERT_SUBREG (INSERT_SUBREG (i16 (IMPLICIT_DEF)), $r, sub_lo),
+                         (MOV_r_i8 0), sub_hi)>;
+def : Pat<(i16 (sext i8:$r)),
+          (SARW_AX_n (INSERT_SUBREG (i16 (IMPLICIT_DEF)), $r, sub_hi), 8)>;

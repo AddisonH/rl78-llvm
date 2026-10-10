@@ -4403,51 +4403,6 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int, MachineInstr &MI,
 
 
 
-// Lower SIGN_EXTEND/ZERO_EXTEND
-MachineBasicBlock *
-RL78TargetLowering::LowerEXTEND(bool sext, MachineInstr &MI,
-                                MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
-  //
-  // MI.dump();
-  unsigned Rs1 = MRI.createVirtualRegister(&RL78::RL78OddRegRegClass);
-  unsigned RPd = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
-  unsigned RPd1 = MRI.createVirtualRegister(&RL78::RL78RPRegsRegClass);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::IMPLICIT_DEF), RPd);
-  BuildMI(*BB, MI, DL, TII->get(RL78::INSERT_SUBREG), RPd1)
-      .addReg(RPd, RegState::Kill)
-      .add(MI.getOperand(1))
-      .addImm(sext ? RL78::sub_hi : RL78::sub_lo);
-
-  if (sext) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-        .addReg(RPd1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::SARW_rp_i), RL78::RP0)
-        .addReg(RL78::RP0, RegState::Kill)
-        .addImm(8);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::COPY))
-        .add(MI.getOperand(0))
-        .addReg(RL78::RP0, RegState::Kill);
-  } else {
-    BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r_cg), RL78::R1);
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rs1)
-        .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::INSERT_SUBREG))
-        .add(MI.getOperand(0))
-        .addReg(RPd1, RegState::Kill)
-        .addReg(Rs1, RegState::Kill)
-        .addImm(RL78::sub_hi);
-  }
-  // The pseudo instruction is gone now.
-  MI.eraseFromParent();
-  // BB->dump();
-  return BB;
-}
 
 MachineBasicBlock *
 RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
@@ -5375,25 +5330,6 @@ MachineBasicBlock *RL78TargetLowering::LowerDIVWU(MachineInstr &MI,
   return BB;
 }
 
-MachineBasicBlock *
-RL78TargetLowering::LowerBSWAP32(MachineInstr &MI,
-                                 MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(2));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  MI.getOperand(2).ChangeToRegister(RL78::RP0, false);
-  //
-  return BB;
-}
 
 MachineBasicBlock *
 RL78TargetLowering::LowerToHLByteOrWordBC(unsigned RegPos, unsigned ImmPos,
@@ -5418,13 +5354,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     llvm_unreachable("Unknown instruction!");
   case RL78::MOVW_rp_stack_slot:
     return Lower16bitAXDst(MI, BB);
-  case RL78::BSWAP32_rp:
-    return LowerBSWAP32(MI, BB);
-  case RL78::AEXT_8_16:
-  case RL78::ZEXT_8_16:
-    return LowerEXTEND(false, MI, BB);
-  case RL78::SEXT_8_16:
-    return LowerEXTEND(true, MI, BB);
   case RL78::ADDE_AX_i16:
   case RL78::SUBE_AX_i16:
     return LowerADDE_SUBE_rp_imm(0, MI, BB);
@@ -5675,7 +5604,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::SUBW_rp_imm:
   case RL78::SUBW_rp_rp:
   case RL78::SUBW_rp_abs16:
-  case RL78::BSWAP_rp:
   case RL78::ADDW_rp_saddr:
   case RL78::SUBW_rp_saddr:
     return Lower16BitOpAXAX(MI, BB);
