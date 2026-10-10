@@ -13,9 +13,9 @@ target triple = "rl78-unknown-unknown-elf"
 ; The running sum and the pointers are added in AX; each value is in AX only
 ; from the copy in to the copy out.
 ; MIR-LABEL: name: dot
-; MIR: :rl78axrp = ADDW_rp_memri
+; MIR: :rl78axrp = ADDW_AX_mHLi
 ; MIR: :rl78axrp = ADDW_rp_imm
-; MIR: :rl78axrp = ADDW_rp_memri
+; MIR: :rl78axrp = ADDW_AX_mHLi
 define dso_local i16 @dot(ptr nofree noundef readonly captures(none) %a, ptr nofree noundef readonly captures(none) %b, i16 noundef %n) local_unnamed_addr {
 entry:
   %cmp7 = icmp sgt i16 %n, 0

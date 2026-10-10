@@ -178,7 +178,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     }
     if (mask & (1 << 6)) {
       for (unsigned Addr : {0xFFF0u, 0xFFF2u}) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_abs16), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_abs16), RL78::RP0)
             .addImm(Addr)
             .setMIFlags(MachineInstr::FrameSetup);
         BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
@@ -322,7 +322,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     // Align to the requested boundary.
     const unsigned alignment = (~(MFI.getMaxAlign().value() - 1)) & 0xffff;
     if (MFI.getMaxAlign().value() & 0xFF00)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_r_imm), RL78::R1)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_A_i8), RL78::R1)
           .addReg(RL78::R1)
           .addImm(alignment >> 8)
           .setMIFlags(MachineInstr::FrameSetup);
@@ -332,7 +332,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         .addReg(RL78::R1, RegState::Kill)
         .addReg(RL78::R0, RegState::Kill)
         .setMIFlags(MachineInstr::FrameSetup);
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_r_imm), RL78::R1)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::AND_A_i8), RL78::R1)
         .addReg(RL78::R1)
         .addImm(alignment & 0xff)
         .setMIFlags(MachineInstr::FrameSetup);
@@ -648,7 +648,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       for (unsigned Addr : {0xFFF2u, 0xFFF0u}) {
         BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::STORE16_abs16_rp))
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_abs16_AX))
             .addImm(Addr)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);

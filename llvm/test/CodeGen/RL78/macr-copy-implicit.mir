@@ -5,11 +5,11 @@
 # the MACR write that the load reads (CoreMark matrix_test at -O3).
 
 # CHECK-LABEL: name: macr_copies
-# CHECK: STORE16_abs16_rp 65522, $rp0, implicit-def $macrh
-# CHECK: STORE16_abs16_rp 65520, $rp0, implicit-def $macrl
+# CHECK: MOVW_abs16_AX 65522, $rp0, implicit-def $macrh
+# CHECK: MOVW_abs16_AX 65520, $rp0, implicit-def $macrl
 # CHECK: MACH_CG
-# CHECK: $rp0 = LOAD16_rp_abs16 65520, implicit killed $macrl
-# CHECK: $rp0 = LOAD16_rp_abs16 65522, implicit killed $macrh
+# CHECK: $rp0 = MOVW_rp_abs16 65520, implicit killed $macrl
+# CHECK: $rp0 = MOVW_rp_abs16 65522, implicit killed $macrh
 ---
 name: macr_copies
 tracksRegLiveness: true
@@ -20,7 +20,7 @@ body: |
     $macrl = COPY $rp0
     $macrl, $macrh = MACH_CG killed $macrl, killed $macrh, $rp0, $rp2, implicit-def dead $ccreg
     $rp0 = COPY killed $macrl
-    STORE16_abs16_rp 0, killed $rp0
+    MOVW_abs16_AX 0, killed $rp0
     $rp0 = COPY killed $macrh
     RET implicit-def $spreg, implicit $spreg, implicit $rp0
 ...

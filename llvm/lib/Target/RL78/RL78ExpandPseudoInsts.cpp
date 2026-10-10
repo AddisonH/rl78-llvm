@@ -198,15 +198,15 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       case RL78::BTBF_sfr:
       case RL78::BTBF: {
         if (MI.getOpcode() == RL78::BTBF_sfr)
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_cy_sfr))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_CY_sfr_b))
               .add(MI.getOperand(2))
               .add(MI.getOperand(3));
         else if (MI.getOpcode() == RL78::BTBF_mem)
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_cy_memr))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_CY_mHL_b))
               .add(MI.getOperand(2))
               .add(MI.getOperand(3));
         else
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_cy_r))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::MOV1_CY_A_b))
               .add(MI.getOperand(2))
               .add(MI.getOperand(3));
 

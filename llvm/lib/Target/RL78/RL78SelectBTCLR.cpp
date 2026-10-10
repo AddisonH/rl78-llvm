@@ -60,7 +60,7 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
 
       MachineInstr &firstMI = *TBB->getFirstNonDebugInstr();
       //
-      if ((firstMI.getOpcode() == RL78::AND_r_imm ||
+      if ((firstMI.getOpcode() == RL78::AND_A_i8 ||
            firstMI.getOpcode() == RL78::AND_A_i8) &&
           (firstMI.getOperand(0).getReg() == MI.getOperand(2).getReg())) {
         int bitPos = MI.getOperand(3).getImm();
@@ -77,7 +77,7 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
           firstMI.eraseFromParent();
           Changed = true;
         }
-      } else if ((firstMI.getOpcode() == RL78::CLR1_memr) &&
+      } else if ((firstMI.getOpcode() == RL78::CLR1_mHL_b) &&
                  (firstMI.getOperand(0).getReg() ==
                   MI.getOperand(2).getReg()) &&
                  (firstMI.getOperand(1).getImm() ==
@@ -91,7 +91,7 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
         MI.eraseFromParent();
         firstMI.eraseFromParent();
         Changed = true;
-      } else if ((firstMI.getOpcode() == RL78::CLR1_saddr) &&
+      } else if ((firstMI.getOpcode() == RL78::CLR1_saddr_b) &&
                  (firstMI.getOperand(1).getImm() ==
                   MI.getOperand(3).getImm())) {
         // Replace the BT saddr.bit + CLR1 saddr.bit with a BTCLR.
@@ -103,7 +103,7 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
         MI.eraseFromParent();
         firstMI.eraseFromParent();
         Changed = true;
-      } else if ((firstMI.getOpcode() == RL78::CLR1_sfr) &&
+      } else if ((firstMI.getOpcode() == RL78::CLR1_sfr_b) &&
                  (firstMI.getOperand(0).getImm() ==
                   MI.getOperand(2).getImm()) &&
                  (firstMI.getOperand(1).getImm() ==

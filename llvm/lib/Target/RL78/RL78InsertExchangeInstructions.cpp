@@ -703,7 +703,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               (MI2.getOperand(0).getReg() == RL78::R0)) {
             assert(MI2.getOperand(1).getReg() == RL78::R1);
             // Build the SHRW instruction.
-            BuildMI(MBB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+            BuildMI(MBB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
                 .addReg(RL78::RP0, RegState::Kill)
                 .addImm(8);
             // Remove MOV instructions.
@@ -786,7 +786,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         break;
-      case RL78::SHL_r_imm:
+      case RL78::SHL_r_n:
         // Replace MOV R1, (R2/R3) + SHL R2/R3, #imm + MOV (R2/R3), R1 with SHL R2/R3, #imm.
         if (MI.getOperand(0).getReg() == RL78::R1 &&
             prevNonDebug(MBB, MI.getIterator()) != MBB.end() &&
@@ -814,10 +814,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         break;
-      case RL78::SHLW_rp_imm:
+      case RL78::SHLW_rp_n:
         RemoveMOVWs(MI, MBB, Next, RL78::RP2);
         break;
-      case RL78::SUBW_rp_rp: {
+      case RL78::SUBW_AX_rp: {
         // SUBW ax, ax is not permitted.
         if (MI.getOperand(2).getReg() == RL78::RP0 &&
             MI.getOperand(1).getReg() == MI.getOperand(2).getReg()) {
@@ -827,17 +827,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         }
         break;
       }
-      case RL78::AND_r_r: // Generated during lowering of AND16_rp_rp.
-      case RL78::OR_r_r:  // Generated during lowering of OR16_rp_rp.
-      case RL78::XOR_r_r: // Generated during lowering of XOR16_rp_rp.
-        if (MI.getOperand(0).getReg() != RL78::R1)
-          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
-        break;
-      case RL78::XCH_A_r_cg:
-      case RL78::MOV_A_PSW_cg:
-      case RL78::MOV_PSW_A_cg:
-        insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
-        break;
       case RL78::CLRB_r:
         // Replace MOV X, A + CLRB A with SHRW AX.
         if (prevNonDebug(MBB, MI.getIterator()) != MBB.end()) {
@@ -847,7 +836,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               (MI2.getOperand(0).getReg() == RL78::R0)) {
             assert(MI2.getOperand(1).getReg() == RL78::R1);
             // Build the SHRW instruction.
-            BuildMI(MBB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+            BuildMI(MBB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
                 .addReg(RL78::RP0, RegState::Kill).addImm(8);
             // Remove the MOV and CLRB instructions.
             MI.eraseFromParent();
@@ -891,7 +880,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                   ((I->getOperand(1).getImm() == RL78CC::RL78CC_Z) ||
                    (I->getOperand(1).getImm() == RL78CC::RL78CC_NZ))) {
                 // Build the CMPS instruction.
-                BuildMI(MBB, MI, DL, TII->get(RL78::CMPS_r_memri))
+                BuildMI(MBB, MI, DL, TII->get(RL78::CMPS_X_mHLi))
                     .add(MI2.getOperand(1))
                     .add(MI.getOperand(1))
                     .add(MI.getOperand(2))
@@ -940,7 +929,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         }
         break;
       case RL78::LOAD16_rp_stack_slot:
-      case RL78::BSWAP_rp:
         insert16BitExchange(MI, 0, DL, MBB, TII, isALive || isXLive);
         break;
       case RL78::LOAD8_r_stack_slot:
@@ -953,18 +941,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         break;
       case RL78::STORE8_stack_slot_r:
         insert8BitExchange(MI, 2, DL, MBB, TII, isALive);
-        break;
-      case RL78::LOAD8_r_abs16:
-        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
-          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
-        break;
-      case RL78::LOAD8_rlo_saddr:
-        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
-          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
-        break;
-      case RL78::MOV_r_esaddr16:
-        if (!RL78::RL78LowRegClass.contains(MI.getOperand(0).getReg()))
-          insert8BitExchange(MI, 0, DL, MBB, TII, isALive);
         break;
       case RL78::HI16_rp_rp: {
         Register dst = MI.getOperand(0).getReg();
@@ -1001,12 +977,12 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           auto LB2 = LiveBeforeMI.find(&MI2);
           bool AXDeadAfter = LB2 != LiveBeforeMI.end() && !LB2->second.first &&
                              !LB2->second.second;
-          if ((MI1.getOpcode() == RL78::XOR1_cy_r) && AXDeadAfter &&
+          if ((MI1.getOpcode() == RL78::XOR1_CY_A_b) && AXDeadAfter &&
               (MI2.getOpcode() == RL78::BRCC) &&
               ((MI2.getOperand(1).getImm() == RL78CC::RL78CC_H) ||
                 (MI2.getOperand(1).getImm() == RL78CC::RL78CC_NH))) {
             Next = std::next(It2);
-            BuildMI(MBB, MI, DL, TII->get(RL78::ADDW_rp_rp))
+            BuildMI(MBB, MI, DL, TII->get(RL78::ADDW_AX_rp))
                 .addReg(RL78::RP0, RegState::DefineNoRead)
                 .addReg(RL78::RP0, RegState::Kill)
                 .addReg(RL78::RP0, RegState::Kill);
@@ -1114,8 +1090,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         break;
-      case RL78::XOR1_cy_r:
-      case RL78::XOR1_cy_A:
+      case RL78::XOR1_CY_A_b:
         // Undo RP0 liveness hack
         if (MI.getOperand(0).getReg() == RL78::RP0) {
           BuildMI(MBB, MI, DL, TII->get(MI.getOpcode()))
@@ -1123,68 +1098,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
               .add(MI.getOperand(1));
           MI.eraseFromParent();
         }
-      }
-    }
-  }
-
-  // steps to handle [hl] only instructions where [de] was used
-  LLVM_DEBUG(MF.dump());
-  for (MachineBasicBlock &MBB : MF) {
-    if (MBB.empty())
-      continue;
-
-    for (MachineBasicBlock::iterator Next = MBB.begin(), E = MBB.end();
-         Next != E;) {
-      MachineInstr &MI = *Next;
-      DebugLoc DL = MI.getDebugLoc();
-      ++Next;
-      switch (MI.getOpcode()) {
-      default:
-        continue;
-      case RL78::STORE8_memrr_r:
-      case RL78::INC_memri:
-      case RL78::DEC_memri:
-      case RL78::INCW_memri:
-      case RL78::DECW_memri:
-        insertHLExchange(MI, 0, DL, MBB, TII);
-        break;
-      case RL78::STORE8_ri_imm:
-      case RL78::STORE8_ri_r:
-      case RL78::STORE16_rpi_rp:
-        if (MI.getOperand(0).getReg() != RL78::RP2 &&
-            MI.getOperand(0).getReg() != RL78::RP4)
-          insertHLExchange(MI, 0, DL, MBB, TII);
-        break;
-      case RL78::CMP_r_memri:
-      case RL78::CMP_r_memrr:
-      case RL78::CMPW_rp_memri:
-      case RL78::LowCMPW_rp_memri:
-      case RL78::LOAD8_r_memrr:
-        insertHLExchange(MI, 1, DL, MBB, TII);
-        break;
-        case RL78::LOAD16_rp_rpi:
-        case RL78::LOAD8_r_ri:
-        if (MI.getOperand(1).getReg() != RL78::RP2 &&
-            MI.getOperand(1).getReg() != RL78::RP4)
-          insertHLExchange(MI, 1, DL, MBB, TII);
-        break;
-      case RL78::ADD_r_memrr:
-      case RL78::SUB_r_memrr:
-      case RL78::ADDC_r_memri:
-      case RL78::SUBC_r_memri:
-      case RL78::AND_r_memrr:
-      case RL78::OR_r_memrr:
-      case RL78::XOR_r_memrr:
-      case RL78::ADD_r_memri:
-      case RL78::SUB_r_memri:
-      case RL78::AND_r_memri:
-      case RL78::OR_r_memri:
-      case RL78::XOR_r_memri:
-      case RL78::CMPW_rp_esmemHLi:
-      case RL78::ADDW_rp_memri:
-      case RL78::SUBW_rp_memri:
-        insertHLExchange(MI, 2, DL, MBB, TII);
-        break;
       }
     }
   }

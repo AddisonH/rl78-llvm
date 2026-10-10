@@ -2472,7 +2472,7 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
             1ULL << Op.getConstantOperandVal(3), DL, MVT::i8);
 
         return SDValue(DAG.getMachineNode(
-                           RL78::XOR_saddr_imm, DL, MVT::Other,
+                           RL78::XOR_saddr_i8, DL, MVT::Other,
                            DAG.getTargetGlobalAddress(GV, DL, MVT::i16, Offset),
                            Mask, Op.getOperand(0)),
                        0);
@@ -3672,27 +3672,27 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate_r_imm(MachineInstr &MI,
       rotl ? MI.getOperand(2).getImm() : 8 - MI.getOperand(2).getImm();
   switch (rotAmmount) {
   case 1:
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 2:
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 3:
     // Build 3 x rol a, 1.
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROL_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 4:
     BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r), RL78::R0);
-    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addImm(4);
     BuildMI(*BB, MI, DL, TII->get(RL78::OR_r_r), RL78::R1)
@@ -3700,21 +3700,21 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate_r_imm(MachineInstr &MI,
         .addReg(RL78::R0, RegState::Kill);
     break;
   case 5:
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 6:
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 7:
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_r_1), RL78::R1)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROR_A_1), RL78::R1)
         .addReg(RL78::R1, RegState::Kill);
     break;
   default:
@@ -3745,13 +3745,13 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
 
   switch (rotAmmount) {
   case 1: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     break;
   }
   case 2: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
@@ -3759,7 +3759,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
     break;
   }
   case 3: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
@@ -3778,19 +3778,19 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
   case 14: {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP2)
         .addReg(RL78::RP0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::SHLW_rp_imm), RL78::RP2)
+    BuildMI(*BB, MI, DL, TII->get(RL78::SHLW_rp_n), RL78::RP2)
         .addReg(RL78::RP2, RegState::Kill)
         .addImm(rotAmmount); // 4, 5, 6, 10, 11, 12, 13, 14
-    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addImm(16 - rotAmmount); // 12, 11, 10, 6, 5, 4, 3, 2
-    BuildMI(*BB, MI, DL, TII->get(RL78::ADDW_rp_rp), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ADDW_AX_rp), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP2, RegState::Kill);
     break;
   }
   case 7: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addImm(0x01);
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_r_cy), RL78::R1)
@@ -3809,7 +3809,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
         .addReg(RL78::R0, RegState::Kill);
     break;
   case 9: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
     BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
@@ -3821,7 +3821,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
   case 15: {
     // Do right shift with 1 first, this will take care of the lower 15 bits,
     // CY will contain the value which needs to go at the top.
-    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addImm(1);
     // Copy the value of CY into bit 7 of high part.
@@ -4435,25 +4435,25 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
       .addReg(RV1, RegState::Kill);
 
   switch (opcode) {
-  case RL78::SHLW_rp_imm:
-  case RL78::SHRW_rp_i:
-  case RL78::SARW_rp_i:
-  case RL78::SHL_r_imm:
-  case RL78::SHR_r_i:
-  case RL78::SAR_r_i:
+  case RL78::SHLW_rp_n:
+  case RL78::SHRW_AX_n:
+  case RL78::SARW_AX_n:
+  case RL78::SHL_r_n:
+  case RL78::SHR_A_n:
+  case RL78::SAR_A_n:
     // RP0 = Op RP0, 1.
     BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(opcode), RP0)
         .addReg(RP0, RegState::Kill)
         .addImm(1);
     break;
-  case RL78::ROL_r_1:
-  case RL78::ROR_r_1:
+  case RL78::ROL_A_1:
+  case RL78::ROR_A_1:
       BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(opcode), RP0)
         .addReg(RP0, RegState::Kill);
     break;
   case RL78::ROTL16_rp_rp:
     // MOV1 CY, a.7.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::MOV1_cy_r))
+    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::MOV1_CY_A_b))
         .addReg(RL78::R1)
         .addImm(7);
     // RP0 = ROLWC RP0, 1.
@@ -4463,7 +4463,7 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
 
   case RL78::ROTR16_rp_rp:
     // RP0 = SHRW RP0, 1.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::SHRW_rp_i), RP0)
+    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::SHRW_AX_n), RP0)
         .addReg(RP0, RegState::Kill)
         .addImm(1);
     // MOV1 a.7, CY.
@@ -4585,35 +4585,35 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::SHLW_rp_rp:
     return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
                        : LowerShift_Or_LowerRotate_rp_rp(
-                             MI, BB, RL78::SHLW_rp_imm, false);
+                             MI, BB, RL78::SHLW_rp_n, false);
   case RL78::SHRW_rp_rp:
     return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
                        : LowerShift_Or_LowerRotate_rp_rp(
-                             MI, BB, RL78::SHRW_rp_i, false);
+                             MI, BB, RL78::SHRW_AX_n, false);
   case RL78::SARW_rp_rp:
     return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
                        : LowerShift_Or_LowerRotate_rp_rp(
-                             MI, BB, RL78::SARW_rp_i, false);
+                             MI, BB, RL78::SARW_AX_n, false);
   case RL78::SHL_r_r:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHL_r_imm, true);
+               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHL_r_n, true);
   case RL78::SHR_r_r:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHR_r_i, true);
+               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHR_A_n, true);
   case RL78::SAR_r_r:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SAR_r_i, true);
+               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SAR_A_n, true);
   case RL78::ROTL_rp_rp:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROL_r_1, true);
+               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROL_A_1, true);
   case RL78::ROTR_rp_rp:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROR_r_1, true);
+               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROR_A_1, true);
   case RL78::ROTL16_rp_rp:
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)

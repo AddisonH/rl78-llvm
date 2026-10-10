@@ -1,5 +1,5 @@
 ; Test the Lower16bitAXSrc, LowerESSrc functions.
-; Ensure INC_memri, INC_esaddr16 instructions are lowered correctly.
+; Ensure INC_mHLi, INC_esaddr16 instructions are lowered correctly.
 
 ; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
 

@@ -208,21 +208,21 @@ void RL78InstPrinter::printMemOperand(const MCInst *MI, int opNum,
   if (MO1.isImm()) {
     switch (MI->getOpcode()) {
     // [HL] only, [HL+byte] not available in this case.
-    case RL78::SET1_memr:
-    case RL78::CLR1_memr:
-    case RL78::MOV1_cy_memr:
-    case RL78::MOV1_memr_cy:
-    case RL78::AND1_cy_memr:
-    case RL78::OR1_cy_memr:
-    case RL78::XOR1_cy_memr:
+    case RL78::SET1_mHL_b:
+    case RL78::CLR1_mHL_b:
+    case RL78::MOV1_CY_mHL_b:
+    case RL78::MOV1_mHL_b:
+    case RL78::AND1_CY_mHL_b:
+    case RL78::OR1_CY_mHL_b:
+    case RL78::XOR1_CY_mHL_b:
     case RL78::BTBF_memr:
       break;
     // [HL+byte] only, [HL] not available in this case.
-    case RL78::INC_memri:
-    case RL78::INCW_memri:
-    case RL78::DEC_memri:
-    case RL78::DECW_memri:
-    case RL78::MOVS_memri_r:
+    case RL78::INC_mHLi:
+    case RL78::INCW_mHLi:
+    case RL78::DEC_mHLi:
+    case RL78::DECW_mHLi:
+    case RL78::MOVS_mHLi_X:
       O << "+";
       O << (int)MO1.getImm();
       break;

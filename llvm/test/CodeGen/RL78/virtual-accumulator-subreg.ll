@@ -7,7 +7,7 @@
 
 ; CHECK-LABEL: name: f
 ; CHECK: CMPW_rp_imm [[V:%[0-9]+]], 6, 1
-; CHECK-NEXT: XOR1_cy_r killed [[V]].sub_hi, 7
+; CHECK-NEXT: XOR1_CY_A_b killed [[V]].sub_hi, 7
 define void @f(ptr %p) {
   %v = load i16, ptr %p
   %c = icmp sgt i16 %v, 5
