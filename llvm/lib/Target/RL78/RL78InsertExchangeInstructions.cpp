@@ -73,6 +73,25 @@ void initializeRL78InsertExchangeInstructionsPassPass(PassRegistry &);
 // if operand(opIndex) is NOT A register (and it needs to be) we need to
 // exchange the value to A and back in other words generate the following
 // sequence: xch A, Rx op A, <...> xch A, Rx
+// The instructions selected or built with a register operand have it in a
+// register the instruction encodes. Only the pseudos of the allocator's
+// spill code (TargetInstrInfo::storeRegToStackSlot/loadRegFromStackSlot)
+// take any register: they are MOV/MOVW with [SP+byte] through A/AX, with the
+// register exchanged in and out here.
+static void checkSpillPseudo(const MachineInstr &MI,
+                             const TargetInstrInfo *TII) {
+  switch (MI.getOpcode()) {
+  case RL78::LOAD8_r_stack_slot:
+  case RL78::LOAD16_rp_stack_slot:
+  case RL78::STORE8_stack_slot_r:
+  case RL78::STORE16_stack_slot_rp:
+    return;
+  }
+  reportFatalInternalError(Twine("RL78: operand of ") +
+                           TII->getName(MI.getOpcode()) +
+                           " is not in a register the instruction encodes");
+}
+
 static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
                                MachineBasicBlock &MBB,
                                const TargetInstrInfo *TII, bool isALive,
@@ -90,6 +109,7 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
 
   // if dest is NOT A register we need to exchange the value to A and back
   if (!RL78::RL78ARegRegClass.contains(MI.getOperand(opIndex).getReg())) {
+    checkSpillPseudo(MI, TII);
     // Pure use and A dead: MOV leaves the source intact, so no kill needed.
     if ((!isALive) && !MI.getOperand(opIndex).isDef()) {
       BuildMI(MBB, MI, DL, TII->get(RL78::MOV_A_r_cg), RL78::R1)
@@ -159,6 +179,7 @@ static void insert16BitExchange(MachineInstr &MI, unsigned opIndex,
   bool IsTied = MI.getOperand(opIndex).isTied();
   // if dest is NOT A register we need to exchange the value to A and back
   if (Reg != RL78::RP0) {
+    checkSpillPseudo(MI, TII);
     // Pure use and AX dead: copying in is enough, and MOVW leaves Reg intact.
     if ((!isAXLive) && !IsDef) {
       BuildMI(MBB, MI, DL, TII->get(RL78::MOVW_AX_rp_cg), RL78::RP0)
@@ -261,6 +282,7 @@ static void insertHLExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
                              const TargetInstrInfo *TII) {
   assert(MI.getOperand(opIndex).isReg());
   if (MI.getOperand(opIndex).getReg() != RL78::RP6) {
+    checkSpillPseudo(MI, TII);
     unsigned badReg = MI.getOperand(opIndex).getReg();
     BuildMI(MBB, MI, DL, TII->get(RL78::PUSH_rp_cg))
         .addReg(RL78::RP6, RegState::Kill);
