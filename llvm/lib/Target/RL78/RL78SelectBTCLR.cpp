@@ -60,7 +60,8 @@ bool RL78SelectBTCLRPass::runOnMachineFunction(MachineFunction &MF) {
 
       MachineInstr &firstMI = *TBB->getFirstNonDebugInstr();
       //
-      if ((firstMI.getOpcode() == RL78::AND_r_imm) &&
+      if ((firstMI.getOpcode() == RL78::AND_r_imm ||
+           firstMI.getOpcode() == RL78::AND_A_i8) &&
           (firstMI.getOperand(0).getReg() == MI.getOperand(2).getReg())) {
         int bitPos = MI.getOperand(3).getImm();
         int andMask = firstMI.getOperand(2).getImm();

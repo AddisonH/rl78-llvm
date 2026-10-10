@@ -230,24 +230,32 @@ def esmemBCw : MemOperand<"printESMemWord", ESMemBCwAsmOperand,
 // 8-bit operations (manual 6.3): ADD, ADDC, SUB, SUBC, AND, OR, XOR, CMP
 //===----------------------------------------------------------------------===//
 
+// [HL] and [HL+byte] (1 to 255): a load or store through a pointer is one or
+// the other.
+def MemHL : ComplexPattern<iPTR, 1, "SelectMemHL", [], []>;
+def MemHLi : ComplexPattern<iPTR, 2, "SelectMemHLi", [], []>;
+
 // Op is the operation's row in the opcode map (ADD 0 ... XOR 7, CMP 4): its
 // opcodes are Op<<4 | form. CMP writes only the flags; the others write A (or
 // r, or saddr) and the flags. ADDC and SUBC also read CY.
-multiclass RL78Alu8<string Mn, bits<4> Op, bit IsCmp> {
+multiclass RL78Alu8<string Mn, bits<4> Op, bit IsCmp,
+                    SDPatternOperator Node = null_frag> {
   defvar A = !if(IsCmp, (outs), (outs RL78AReg:$rd));
   defvar Dst = !if(IsCmp, "$rs", "$rd");
 
   let Constraints = !if(IsCmp, "", "$rs = $rd") in {
   // Mn A, #byte          Op C data
   def _A_i8 : RL78Inst<2, A, (ins RL78AReg:$rs, imm8:$imm),
-                       Mn # " " # Dst # ", $imm">, RL78FixedRdRs {
+                       Mn # " " # Dst # ", $imm",
+      [(set i8:$rd, (Node i8:$rs, (i8 imm:$imm)))]>, RL78FixedRdRs {
     bits<8> imm;
     let Inst{7-0} = {Op, 1, 1, 0, 0};
     let Inst{15-8} = imm;
   }
   // Mn A, r              61 Op8+r     (r: X, C, B, E, D, L, H)
   def _A_r : RL78Inst<2, A, (ins RL78AReg:$rs, RL78XBCEDHLReg:$r),
-                      Mn # " " # Dst # ", $r">, RL78FixedRdRs {
+                      Mn # " " # Dst # ", $r",
+      [(set i8:$rd, (Node i8:$rs, i8:$r))]>, RL78FixedRdRs {
     bits<3> r;
     let Inst{7-0} = 0x61;
     let Inst{15-8} = {Op, 1, r};
@@ -255,33 +263,38 @@ multiclass RL78Alu8<string Mn, bits<4> Op, bit IsCmp> {
   let mayLoad = 1 in {
   // Mn A, saddr          Op B saddr
   def _A_saddr : RL78Inst<2, A, (ins RL78AReg:$rs, saddr8:$addr),
-                          Mn # " " # Dst # ", $addr">, RL78FixedRdRs {
+                          Mn # " " # Dst # ", $addr",
+      [(set i8:$rd, (Node i8:$rs, (load SADDR:$addr)))]>, RL78FixedRdRs {
     bits<8> addr;
     let Inst{7-0} = {Op, 1, 0, 1, 1};
     let Inst{15-8} = addr;
   }
   // Mn A, !addr16        Op F adrl adrh
   def _A_abs16 : RL78Inst<3, A, (ins RL78AReg:$rs, addr16:$addr),
-                          Mn # " " # Dst # ", $addr">, RL78FixedRdRs {
+                          Mn # " " # Dst # ", $addr",
+      [(set i8:$rd, (Node i8:$rs, (load ADDRABS16:$addr)))]>, RL78FixedRdRs {
     bits<16> addr;
     let Inst{7-0} = {Op, 1, 1, 1, 1};
     let Inst{23-8} = addr;
   }
   // Mn A, [HL]           Op D
   def _A_mHL : RL78Inst<1, A, (ins RL78AReg:$rs, (memHL $hl):$addr),
-                        Mn # " " # Dst # ", $addr">, RL78FixedRdRs {
+                        Mn # " " # Dst # ", $addr",
+      [(set i8:$rd, (Node i8:$rs, (load MemHL:$addr)))]>, RL78FixedRdRs {
     let Inst{7-0} = {Op, 1, 1, 0, 1};
   }
   // Mn A, [HL+byte]      Op E adr
   def _A_mHLi : RL78Inst<2, A, (ins RL78AReg:$rs, (memHLi $hl, $disp):$addr),
-                         Mn # " " # Dst # ", $addr">, RL78FixedRdRs {
+                         Mn # " " # Dst # ", $addr",
+      [(set i8:$rd, (Node i8:$rs, (load MemHLi:$addr)))]>, RL78FixedRdRs {
     bits<8> disp;
     let Inst{7-0} = {Op, 1, 1, 1, 0};
     let Inst{15-8} = disp;
   }
   // Mn A, [HL+B]/[HL+C]  61 8+Op 0/2
   def _A_mHLr : RL78Inst<2, A, (ins RL78AReg:$rs, (memHLr $hl, $idx):$addr),
-                         Mn # " " # Dst # ", $addr">, RL78FixedRdRs {
+                         Mn # " " # Dst # ", $addr",
+      [(set i8:$rd, (Node i8:$rs, (load ADDRrr:$addr)))]>, RL78FixedRdRs {
     bits<1> idx;
     let Inst{7-0} = 0x61;
     let Inst{15-8} = {1, Op{2-0}, 0, 0, idx, 0};
@@ -345,11 +358,11 @@ multiclass RL78Alu8<string Mn, bits<4> Op, bit IsCmp> {
 }
 
 let Defs = [CCreg] in {
-defm ADD : RL78Alu8<"add", 0, 0>;
-defm SUB : RL78Alu8<"sub", 2, 0>;
-defm AND : RL78Alu8<"and", 5, 0>;
-defm OR  : RL78Alu8<"or", 6, 0>;
-defm XOR : RL78Alu8<"xor", 7, 0>;
+defm ADD : RL78Alu8<"add", 0, 0, add>;
+defm SUB : RL78Alu8<"sub", 2, 0, sub>;
+defm AND : RL78Alu8<"and", 5, 0, and>;
+defm OR  : RL78Alu8<"or", 6, 0, or>;
+defm XOR : RL78Alu8<"xor", 7, 0, xor>;
 defm CMP : RL78Alu8<"cmp", 4, 1>;
 let Uses = [CCreg] in {
 defm ADDC : RL78Alu8<"addc", 1, 0>;

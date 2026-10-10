@@ -1685,27 +1685,30 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 //Instruction       Opcode
 //ADD A, #byte      0C data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def ADD_r_imm : InstRL78_16bit<0x0C00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm8),
         "add $rd, $imm8",
-        [(set i8:$rd, (add i8:$rsrc, (i8 imm:$imm8)))]>;
+        []>;
 
 
 //Instruction       Opcode
 //ADD A, !addr16    0F adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def ADD_r_abs16 : InstRL78_24bit<0x0F0000,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS16:$addr),
         "add $rd, $addr",
-        [(set i8:$rd, (add i8:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //ADD A, [HL+byte]  0E adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def ADD_r_memri : InstRL78_16bit<0x0E00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
         "add $rd, $addr",
-        [(set i8:$rd, (add i8:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 
 //ADD A, [HL]       0D
 let mayLoad = 1, mayStore = 0 in
@@ -1719,10 +1722,11 @@ def ADD_r_memHL : InstRL78_8bit<0x0D,
 //ADD A, [HL+B]     61 80
 //ADD A, [HL+C]     61 82
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def ADD_r_memrr : InstRL78_16bit<0x6180,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegRegAddr:$addr),
         "add $rd, $addr",
-        [(set i8:$rd, (add i8:$rsrc, (load ADDRrr:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //ADD A, X          61 08
@@ -1741,17 +1745,19 @@ def ADD_r_memrr : InstRL78_16bit<0x6180,
 //ADD L, A          61 06
 //ADD H, A          61 07
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def ADD_r_r  : InstRL78_16bit<0x6108,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
         "add $rd, $rsrc2",
-        [(set i8:$rd, (add i8:$rsrc, i8:$rsrc2))]>;
+        []>;
 
 //ADD A, saddr      0B saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def ADD_r_saddr  : InstRL78_16bit<0x0B00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS8:$addr),
         "add $rd, $addr",
-        [(set i8:$rd, (add i8:$rsrc, (load SADDR:$addr)))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -1929,26 +1935,29 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 //Instruction       Opcode
 //SUB A, #byte      2C data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def SUB_r_imm : InstRL78_16bit<0x2C00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm8),
         "sub $rd, $imm8",
-        [(set i8:$rd, (sub i8:$rsrc, (i8 imm:$imm8)))]>;
+        []>;
 
 //Instruction       Opcode
 //SUB A, !addr16    2F adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def SUB_r_abs16  : InstRL78_24bit<0x2F0000,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS16:$addr),
         "sub $rd, $addr",
-        [(set i8:$rd, (sub i8:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //SUB A, [HL+byte]  2E adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def SUB_r_memri : InstRL78_16bit<0x2E00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
         "sub $rd, $addr",
-        [(set i8:$rd, (sub i8:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 
 //SUB A, [HL]       2D
 let mayLoad = 1, mayStore = 0 in
@@ -1962,10 +1971,11 @@ def SUB_r_memHL : InstRL78_8bit<0x2D,
 //SUB A, [HL+B]     61 A0
 //SUB A, [HL+C]     61 A2
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def SUB_r_memrr : InstRL78_16bit<0x61A0,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegRegAddr:$addr),
         "sub $rd, $addr",
-        [(set i8:$rd, (sub i8:$rsrc, (load ADDRrr:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //SUB A, X          61 28
@@ -1984,17 +1994,19 @@ def SUB_r_memrr : InstRL78_16bit<0x61A0,
 //SUB L, A          61 26
 //SUB H, A          61 27
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def SUB_r_r  : InstRL78_16bit<0x6128,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
         "sub $rd, $rsrc2",
-        [(set i8:$rd, (sub i8:$rsrc, i8:$rsrc2))]>;
+        []>;
 
 //SUB A, saddr      2B saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def SUB_r_saddr  : InstRL78_16bit<0x2B00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS8:$addr),
         "sub $rd, $addr",
-        [(set i8:$rd, (sub i8:$rsrc, (load SADDR:$addr)))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -2171,26 +2183,29 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag]  
 //Instruction       Opcode
 //AND A, #byte      5C data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def AND_r_imm : InstRL78_16bit<0x5C00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm8),
         "and $rd, $imm8",
-        [(set i8:$rd, (and i8:$rsrc, (i8 imm:$imm8)))]>;
+        []>;
 
 //Instruction       Opcode
 //AND A, !addr16    5F adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def AND_r_abs16 : InstRL78_24bit<0x5F0000,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS16:$addr),
         "and $rd, $addr",
-        [(set i8:$rd, (and i8:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //AND A, [HL+byte]  5E adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def AND_r_memri : InstRL78_16bit<0x5E00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
         "and $rd, $addr",
-        [(set i8:$rd, (and i8:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 
 //AND A, [HL]       5D
 let mayLoad = 1, mayStore = 0 in
@@ -2204,10 +2219,11 @@ def AND_r_memHL : InstRL78_8bit<0x5D,
 //AND A, [HL+B]     61 D0
 //AND A, [HL+C]     61 D2
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def AND_r_memrr : InstRL78_16bit<0x61D0,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegRegAddr:$addr),
         "and $rd, $addr",
-        [(set i8:$rd, (and i8:$rsrc, (load ADDRrr:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //AND A, X          61 58
@@ -2226,17 +2242,19 @@ def AND_r_memrr : InstRL78_16bit<0x61D0,
 //AND L, A          61 56
 //AND H, A          61 57
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def AND_r_r : InstRL78_16bit<0x6158,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
         "and $rd, $rsrc2",
-        [(set i8:$rd, (and i8:$rsrc, i8:$rsrc2))]>;
+        []>;
 
 //AND A, saddr      5B saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def AND_r_saddr : InstRL78_16bit<0x5B00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS8:$addr),
         "and $rd, $addr",
-        [(set i8:$rd, (and i8:$rsrc, (load SADDR:$addr)))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -2330,26 +2348,29 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 //Instruction       Opcode
 //OR A, #byte       6C data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def OR_r_imm : InstRL78_16bit<0x6C00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm8),
         "or $rd, $imm8",
-        [(set i8:$rd, (or i8:$rsrc, (i8 imm:$imm8)))]>;
+        []>;
 
 //Instruction       Opcode
 //OR A, !addr16     6F adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def OR_r_abs16 : InstRL78_24bit<0x6F0000,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS16:$addr),
         "or $rd, $addr",
-        [(set i8:$rd, (or i8:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //OR A, [HL+byte]   6E adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def OR_r_memri : InstRL78_16bit<0x6E00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
         "or $rd, $addr",
-        [(set i8:$rd, (or i8:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 
 //OR A, [HL]        6D
 let mayLoad = 1, mayStore = 0 in
@@ -2363,10 +2384,11 @@ def OR_r_memHL : InstRL78_8bit<0x6D,
 //OR A, [HL+B]      61 E0
 //OR A, [HL+C]      61 E2
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def OR_r_memrr : InstRL78_16bit<0x61E0,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegRegAddr:$addr),
         "or $rd, $addr",
-        [(set i8:$rd, (or i8:$rsrc, (load ADDRrr:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //OR A, X           61 68
@@ -2385,19 +2407,21 @@ def OR_r_memrr : InstRL78_16bit<0x61E0,
 //OR L, A           61 66
 //OR H, A           61 67
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def OR_r_r : InstRL78_16bit<0x6168,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
         "or $rd, $rsrc2",
-        [(set i8:$rd, (or i8:$rsrc, i8:$rsrc2))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
 //OR A, saddr       6B saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def OR_r_saddr : InstRL78_16bit<0x6B00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS8:$addr),
         "or $rd, $addr",
-        [(set i8:$rd, (or i8:$rsrc, (load SADDR:$addr)))]>;
+        []>;
 
 //OR A, ES:!addr16 ;11 6F adrl adrh
   let isCodeGenOnly = 1 in
@@ -2489,26 +2513,29 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 //Instruction       Opcode
 //XOR A, #byte      7C data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def XOR_r_imm : InstRL78_16bit<0x7C00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm8),
         "xor $rd, $imm8",
-        [(set i8:$rd, (xor i8:$rsrc, (i8 imm:$imm8)))]>;
+        []>;
 
 //Instruction       Opcode
 //XOR A, !addr16    7F adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def XOR_r_abs16 : InstRL78_24bit<0x7F0000,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS16:$addr),
         "xor $rd, $addr",
-        [(set i8:$rd, (xor i8:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //XOR A, [HL+byte]  7E adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def XOR_r_memri : InstRL78_16bit<0x7E00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
         "xor $rd, $addr",
-        [(set i8:$rd, (xor i8:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 
 //XOR A, [HL]       7D
 let mayLoad = 1, mayStore = 0 in
@@ -2522,10 +2549,11 @@ def XOR_r_memHL : InstRL78_8bit<0x7D,
 //XOR A, [HL+B]     61 F0
 //XOR A, [HL+C]     61 F2
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def XOR_r_memrr : InstRL78_16bit<0x61F0,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegRegAddr:$addr),
         "xor $rd, $addr",
-        [(set i8:$rd, (xor i8:$rsrc, (load ADDRrr:$addr)))]>;
+        []>;
 
 //Instruction       Opcode
 //XOR A, X          61 78
@@ -2544,17 +2572,19 @@ def XOR_r_memrr : InstRL78_16bit<0x61F0,
 //XOR L, A          61 76
 //XOR H, A          61 77
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def XOR_r_r  : InstRL78_16bit<0x6178,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
         "xor $rd, $rsrc2",
-        [(set i8:$rd, (xor i8:$rsrc, i8:$rsrc2))]>;
+        []>;
 
 //XOR A, saddr      7B saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def XOR_r_saddr  : InstRL78_16bit<0x7B00,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, ABS8:$addr),
         "xor $rd, $addr",
-        [(set i8:$rd, (xor i8:$rsrc, (load SADDR:$addr)))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 

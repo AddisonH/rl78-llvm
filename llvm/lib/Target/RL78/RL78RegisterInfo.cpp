@@ -26,15 +26,32 @@ using namespace llvm;
 // 2. we emit a DW_CFA_offset: r37 at cfa-4 in the CIE.
 RL78RegisterInfo::RL78RegisterInfo() : RL78GenRegisterInfo(RL78::PCreg) {}
 
-// A value split away from the instruction that needs it in AX (A) may live in
-// any register pair (register).
+// A value split away from the instruction that needs it in a particular
+// register (A, AX, HL, B or C, ...) may live in any register (pair).
+//
+// Transitional: only for the classes that hardware definitions alone use.
+// The older definitions give some operands a wider class than the
+// instruction encodes, and code generation protects those values with
+// RL78BCDEHL, RL78Low, RL78AXBCRP: a piece split from such a value must keep
+// the class.
 const TargetRegisterClass *
 RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
                                             const MachineFunction &MF) const {
-  if (RC == &RL78::RL78AXRPRegClass)
+  switch (RC->getID()) {
+  case RL78::RL78AXRPRegClassID:
+  case RL78::RL78HLRegClassID:
+  case RL78::RL78BCRPRegClassID:
+  case RL78::RL78DERPRegClassID:
+  case RL78::RL78DEHLRegClassID:
     return &RL78::RL78RPRegsRegClass;
-  if (RC == &RL78::RL78ARegRegClass)
+  case RL78::RL78ARegRegClassID:
+  case RL78::RL78XRegRegClassID:
+  case RL78::RL78BCRegRegClassID:
+  case RL78::RL78BReg8RegClassID:
+  case RL78::RL78CReg8RegClassID:
+  case RL78::RL78XBCEDHLRegRegClassID:
     return &RL78::RL78RegRegClass;
+  }
   return RC;
 }
 

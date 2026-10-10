@@ -67,6 +67,10 @@ public:
   bool SelectADDRr8i16(SDValue Addr, SDValue &Base,
                     SDValue &Offset);
 
+  // [HL] and [HL+byte], byte 1 to 255.
+  bool SelectMemHL(SDValue Addr, SDValue &Base);
+  bool SelectMemHLi(SDValue Addr, SDValue &Base, SDValue &Disp);
+
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
   bool SelectSaddr(SDValue Addr, SDValue &Base);
   bool SelectSFR(SDValue Addr, SDValue &Base);
@@ -379,6 +383,16 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
   Base = Addr;
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
+}
+
+bool RL78DAGToDAGISel::SelectMemHL(SDValue Addr, SDValue &Base) {
+  SDValue Disp;
+  return SelectADDRri(Addr, 255, false, Base, Disp) && isNullConstant(Disp);
+}
+
+bool RL78DAGToDAGISel::SelectMemHLi(SDValue Addr, SDValue &Base,
+                                    SDValue &Disp) {
+  return SelectADDRri(Addr, 255, false, Base, Disp) && !isNullConstant(Disp);
 }
 
 bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
