@@ -458,21 +458,10 @@ def STORE8_ri_imm : InstRL78_32bit<0x39000000,
         []>;
 
 //MOV [DE+byte], #byte	CA adr data
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 1 in
-def STORE8_memDEi_imm : InstRL78_24bit<0xCA0000,
-        (outs), (ins RegOffsetAddr:$addr, i8imm:$imm),
-        "mov $addr, $imm",
-        []>;
 
 let mayLoad = 0, mayStore = 1 in {
 
 //MOV [HL+byte], #byte	CC adr data
-let isCodeGenOnly = 1 in
-def STORE8_memHLi_imm : InstRL78_24bit<0xCC0000,
-        (outs), (ins RegOffsetAddr:$addr, i8imm:$imm),
-        "mov $addr, $imm",
-        []>;
 
 } // mayLoad = 0, mayStore = 1
 
@@ -510,35 +499,14 @@ def LOAD8_r_ri : InstRL78_24bit<0x490000,
         []>;
 
 //MOV A, [DE]       89
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def LOAD8_r_memDE : InstRL78_8bit<0x89,
-        (outs RL78Reg:$rd), (ins RegOffsetAddr:$addr),
-        "mov $rd, $addr",
-        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
 //MOV A, [HL]       8B
-let isCodeGenOnly = 1 in
-def LOAD8_r_memHL : InstRL78_8bit<0x8B,
-        (outs RL78Reg:$rd), (ins RegOffsetAddr:$addr),
-        "mov $rd, $addr",
-        []>;
 
 //MOV A, [DE+byte]  8A adr
-let isCodeGenOnly = 1 in
-def LOAD8_r_memDEi : InstRL78_16bit<0x8A00,
-        (outs RL78Reg:$rd), (ins RegOffsetAddr:$addr),
-        "mov $rd, $addr",
-        []>;
 
 //MOV A, [HL+byte]  8C adr
-let isCodeGenOnly = 1 in
-def LOAD8_r_memHLi : InstRL78_16bit<0x8C00,
-        (outs RL78Reg:$rd), (ins RegOffsetAddr:$addr),
-        "mov $rd, $addr",
-        []>;
 
 } // mayLoad = 1, mayStore = 0
 
@@ -555,35 +523,14 @@ def STORE8_ri_r : InstRL78_24bit<0x480000,
         []>;
 
 //MOV [DE], A       99
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 1 in
-def STORE8_memDE_r : InstRL78_8bit<0x99,
-        (outs), (ins RegOffsetAddr:$addr, RL78Reg:$rsrc),
-        "mov $addr, $rsrc",
-        []>;
 
 let mayLoad = 0, mayStore = 1 in {
 
 //MOV [HL], A       9B
-let isCodeGenOnly = 1 in
-def STORE8_memHL_r : InstRL78_8bit<0x9B,
-        (outs), (ins RegOffsetAddr:$addr, RL78Reg:$rsrc),
-        "mov $addr, $rsrc",
-        []>;
 
 //MOV [DE+byte], A  9A adr
-let isCodeGenOnly = 1 in
-def STORE8_memDEi_r : InstRL78_16bit<0x9A00,
-        (outs), (ins RegOffsetAddr:$addr, RL78Reg:$rsrc),
-        "mov $addr, $rsrc",
-        []>;
 
 //MOV [HL+byte], A  9C adr
-let isCodeGenOnly = 1 in
-def STORE8_memHLi_r : InstRL78_16bit<0x9C00,
-        (outs), (ins RegOffsetAddr:$addr, RL78Reg:$rsrc),
-        "mov $addr, $rsrc",
-        []>;
 
 } // mayLoad = 0, mayStore = 1
 
@@ -958,35 +905,14 @@ def LOAD16_rp_rpi : InstRL78_24bit<0x790000,
 //MOVW saddrp, AX    BD saddr
 
 //MOVW AX, [DE]       A9
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def LOAD16_rp_memDE : InstRL78_8bit<0xA9,
-        (outs RL78RPRegs:$rd), (ins RegOffsetAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
 //MOVW AX, [HL]       AB
-let isCodeGenOnly = 1 in
-def LOAD16_rp_memHL : InstRL78_8bit<0xAB,
-        (outs RL78RPRegs:$rd), (ins RegOffsetAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 //MOVW AX, [DE+byte]  AA adr
-let isCodeGenOnly = 1 in
-def LOAD16_rp_memDEi : InstRL78_16bit<0xAA00,
-        (outs RL78RPRegs:$rd), (ins RegOffsetAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 //MOVW AX, [HL+byte]  AC adr
-let isCodeGenOnly = 1 in
-def LOAD16_rp_memHLi : InstRL78_16bit<0xAC00,
-        (outs RL78RPRegs:$rd), (ins RegOffsetAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 } // mayLoad = 1, mayStore = 0
 
@@ -995,43 +921,16 @@ def LOAD16_rp_memHLi : InstRL78_16bit<0xAC00,
 
 //Instruction            Opcode
 //MOVW AX, es:word[BC]   11 79 adrl adrh
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def LOAD16_rp_esrpi : InstRL78_32bit<0x11790000,
-        (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
 //MOVW AX, es:[DE]       11 A9
-let isCodeGenOnly = 1 in
-def LOAD16_rp_esmemDE : InstRL78_16bit<0x11A9,
-        (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 //MOVW AX, es:[HL]       11 AB
-let isCodeGenOnly = 1 in
-def LOAD16_rp_esmemHL : InstRL78_16bit<0x11AB,
-        (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 //MOVW AX, es:[DE+byte]  11 AA adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def LOAD16_rp_esmemDEi : InstRL78_24bit<0x11AA00,
-        (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 //MOVW AX, es:[HL+byte]  11 AC adr
-let isCodeGenOnly = 1 in
-def LOAD16_rp_esmemHLi : InstRL78_24bit<0x11AC00,
-        (outs RL78RPRegs:$rd), (ins EsRegRegAddr:$addr),
-        "movw $rd, $addr",
-        []>;
 
 } // mayLoad = 1, mayStore = 0
 
@@ -1049,35 +948,14 @@ def STORE16_rpi_rp : InstRL78_24bit<0x780000,
 
 
 //MOVW [DE], AX         B9
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 1 in
-def STORE16_memDE_rp : InstRL78_8bit<0xB9,
-        (outs), (ins RegOffsetAddr:$addr, RL78RPRegs:$rsrc),
-        "movw $addr, $rsrc",
-        []>;
 
 let mayLoad = 0, mayStore = 1 in {
 
 //MOVW [HL], AX         BB
-let isCodeGenOnly = 1 in
-def STORE16_memHL_rp : InstRL78_8bit<0xBB,
-        (outs), (ins RegOffsetAddr:$addr, RL78RPRegs:$rsrc),
-        "movw $addr, $rsrc",
-        []>;
 
 //MOVW [DE+byte], AX    BA adr
-let isCodeGenOnly = 1 in
-def STORE16_memDEi_rp : InstRL78_16bit<0xBA00,
-        (outs), (ins RegOffsetAddr:$addr, RL78RPRegs:$rsrc),
-        "movw $addr, $rsrc",
-        []>;
 
 //MOVW [HL+byte], AX    BC adr
-let isCodeGenOnly = 1 in
-def STORE16_memHLi_rp : InstRL78_16bit<0xBC00,
-        (outs), (ins RegOffsetAddr:$addr, RL78RPRegs:$rsrc),
-        "movw $addr, $rsrc",
-        []>;
 
 } // mayLoad = 0, mayStore = 1
 
@@ -1087,42 +965,15 @@ let mayLoad = 0, mayStore = 1 in {
 // MOVW es:word[C], AX     11 68 adrl adrh
 
 // MOVW es:word[BC], AX     11 78 adrl adrh
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 1 in
-def STORE16_esrpi_rp : InstRL78_32bit<0x11780000,
-       (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
-       "movw $addr, $rsrc",
-       []>;
 
 // MOVW es:[DE], AX         11 B9
-let isCodeGenOnly = 1 in
-def STORE16_esmemDE_rp : InstRL78_16bit<0x11B9,
-       (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
-       "movw $addr, $rsrc",
-       []>;
 
 // MOVW es:[HL], AX         11 BB
-let isCodeGenOnly = 1 in
-def STORE16_esmemHL_rp : InstRL78_16bit<0x11BB,
-       (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
-       "movw $addr, $rsrc",
-       []>;
 
 // MOVW es:[DE+byte], AX    11 BA adr
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 1 in
-def STORE16_esmemDEi_rp : InstRL78_24bit<0x11BA00,
-       (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
-       "movw $addr, $rsrc",
-       []>;
 
 
 // MOVW es:[HL+byte], AX    11 BC adr
-let isCodeGenOnly = 1 in
-def STORE16_esmemHLi_rp : InstRL78_24bit<0x11BC00,
-       (outs), (ins EsRegRegAddr:$addr, RL78RPRegs:$rsrc),
-       "movw $addr, $rsrc",
-       []>;
 
 } // mayLoad = 0, mayStore = 1
 
@@ -1251,12 +1102,6 @@ def ADD_r_memri : InstRL78_16bit<0x0E00,
         []>;
 
 //ADD A, [HL]       0D
-let mayLoad = 1, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def ADD_r_memHL : InstRL78_8bit<0x0D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "add $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //ADD A, [HL+B]     61 80
@@ -1359,11 +1204,6 @@ def ADDC_r_memri : InstRL78_16bit<0x1E00,
         []>;
 
 //ADDC A, [HL]       1D
-let isCodeGenOnly = 1 in
-def ADDC_r_memHL : InstRL78_8bit<0x1D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "addc $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //ADDC A, [HL+B]     61 90
@@ -1410,12 +1250,6 @@ def SUB_r_memri : InstRL78_16bit<0x2E00,
         []>;
 
 //SUB A, [HL]       2D
-let mayLoad = 1, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def SUB_r_memHL : InstRL78_8bit<0x2D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "sub $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //SUB A, [HL+B]     61 A0
@@ -1509,11 +1343,6 @@ def SUBC_r_memri : InstRL78_16bit<0x3E00,
         []>;
 
 //SUBC A, [HL]       3D
-let isCodeGenOnly = 1 in
-def SUBC_r_memHL : InstRL78_8bit<0x3D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "subc $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //SUBC A, [HL+B]     61 b0
@@ -1564,12 +1393,6 @@ def AND_r_memri : InstRL78_16bit<0x5E00,
         []>;
 
 //AND A, [HL]       5D
-let mayLoad = 1, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def AND_r_memHL : InstRL78_8bit<0x5D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "and $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //AND A, [HL+B]     61 D0
@@ -1663,12 +1486,6 @@ def OR_r_memri : InstRL78_16bit<0x6E00,
         []>;
 
 //OR A, [HL]        6D
-let mayLoad = 1, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def OR_r_memHL : InstRL78_8bit<0x6D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "or $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //OR A, [HL+B]      61 E0
@@ -1762,12 +1579,6 @@ def XOR_r_memri : InstRL78_16bit<0x7E00,
         []>;
 
 //XOR A, [HL]       7D
-let mayLoad = 1, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def XOR_r_memHL : InstRL78_8bit<0x7D,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "xor $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //XOR A, [HL+B]     61 F0
@@ -1883,12 +1694,6 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
         []>;
 
 //CMP A, [HL]           4D
-let mayLoad = 1, mayStore = 0 in
-  let isCodeGenOnly = 1 in
-  def CMP_r_memHL : InstRL78_8bit<0x4D,
-        (outs), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr, i8imm:$sign),
-        "cmp $rsrc, $addr",
-        []>;
 
 //Instruction           Opcode
 //CMP A, [HL+B]         61 C0
@@ -2930,22 +2735,11 @@ let Uses = [CCreg], Defs = [CCreg] in {
 
 //Instruction           Opcode
 //AND1 CY, saddr.X      71 X5 saddr (X -> 0..7)
-let mayLoad = 0, mayStore = 0, isCodeGenOnly = 1 in
-  def AND1_cy_r : InstRL78_24bit<0x710500,
-        (outs), (ins RL78Reg:$rsrc, bitimm:$imm),
-        "and1 cy, $rsrc$imm",
-        []>;
 
 //Instruction           Opcode
 //AND1 CY, saddr.X      71 X5 saddr (X -> 0..7)
 
 //AND1 CY, A.X          71 XD (X -> 0..7 -> 8..F)
-let mayLoad = 0, mayStore = 0 in
-  let isCodeGenOnly = 1 in
-  def AND1_cy_A : InstRL78_16bit<0x718D,
-        (outs), (ins RL78AReg:$rsrc, bitimm:$imm),
-        "and1 cy, $rsrc$imm",
-        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
@@ -2990,22 +2784,11 @@ let Uses = [CCreg], Defs = [CCreg] in {
 
 //Instruction           Opcode
 //OR1  CY, saddr.X      71 X6 saddr (X -> 0..7)
-let mayLoad = 0, mayStore = 0, isCodeGenOnly = 1 in
-  def OR1_cy_r : InstRL78_24bit<0x710600,
-        (outs), (ins RL78Reg:$rsrc, bitimm:$imm),
-        "or1 cy, $rsrc$imm",
-        []>;
 
 //Instruction           Opcode
 //OR1 CY, saddr.X      71 X6 saddr (X -> 0..7)
 
 //OR1 CY, A.X           71 XE (X -> 0..7 -> 8..F)
-let mayLoad = 0, mayStore = 0 in
-  let isCodeGenOnly = 1 in
-  def OR1_cy_A : InstRL78_16bit<0x718E,
-        (outs), (ins RL78AReg:$rsrc, bitimm:$imm),
-        "or1 cy, $rsrc$imm",
-        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -3649,18 +3432,8 @@ let isBranch = 1, isTerminator = 1, Uses = [CCreg], mayLoad = 0, mayStore = 0 in
             "b$cond $target",
             []>;
 //BNH $addr20       61 D3 adr
-let isCodeGenOnly = 1 in
-def B_BNH : InstRL78_24bit<0x61D300,
-            (outs), (ins brtargetRel8:$target, CCOp:$cond),
-            "b$cond $target",
-            []>;
 
 //BC $addr20        DC adr
- let isCodeGenOnly = 1 in
- def B_BC : InstRL78_16bit<0xDC00,
-            (outs), (ins brtargetRel8:$target, CCOp:$cond),
-            "b$cond $target",
-            []>;
 
 //BNC $addr20       DE adr
 let isCodeGenOnly = 1 in
@@ -3670,11 +3443,6 @@ def B_BNC : InstRL78_16bit<0xDE00,
             []>;
 
 //BZ $addr20        DD adr
-let isCodeGenOnly = 1 in
-def B_BZ : InstRL78_16bit<0xDD00,
-            (outs), (ins brtargetRel8:$target, CCOp:$cond),
-            "b$cond $target",
-            []>;
 
 //BNZ $addr20       DF adr
 let isCodeGenOnly = 1 in
