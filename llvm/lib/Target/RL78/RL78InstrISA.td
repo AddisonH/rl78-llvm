@@ -1876,6 +1876,7 @@ let hasSideEffects = 1 in {
 // A NOP is only ever asked for (delays, the instruction after a divide).
 def NOP : RL78Inst<1, (outs), (ins), "nop"> { let Inst{7-0} = 0x00; }
 // SEL RBn                61 CF/DF/EF/FF
+let Predicates = [isNotS1Core] in
 def SEL_RBn : RL78Inst<2, (outs), (ins SELRBx:$rb), "sel $rb"> {
   bits<2> rb;
   let Inst{7-0} = 0x61;
@@ -1903,6 +1904,7 @@ class RL78MulDiv<string Mn, bits<8> Op> : RL78Inst<3, (outs), (ins), Mn> {
   let Inst{15-0} = 0xFBCE;
   let Inst{23-16} = Op;
 }
+let Predicates = [isS3Core] in {
 // MULHU 01, MULH 02: BCAX = AX * BC
 let Uses = [RP0, RP2], Defs = [RP0, RP2, CCreg] in {
 def MULHU : RL78MulDiv<"mulhu", 0x01>;
@@ -1919,6 +1921,7 @@ let Uses = [RP0, RP2, MACRL, MACRH], Defs = [MACRL, MACRH, CCreg] in {
 def MACHU : RL78MulDiv<"machu", 0x05>;
 def MACH : RL78MulDiv<"mach", 0x06>;
 }
+} // Predicates = [isS3Core]
 
 //===----------------------------------------------------------------------===//
 // Per-register forms for the assembler and disassembler
@@ -2343,4 +2346,4 @@ def : Pat<(clr1 (i8 imm:$b), ESAbs16:$m), (CLR1_eabs16_b ESAbs16:$m, imm:$b)>;
 def : Pat<(clr1 (i8 imm:$b), ESHL:$m), (CLR1_emHL_b ESHL:$m, imm:$b)>;
 
 // SEL RBn.
-def : Pat<(sel_rb i8:$rb), (SEL_RBn i8:$rb)>, Requires<[isNotS1Core]>;
+def : Pat<(sel_rb i8:$rb), (SEL_RBn i8:$rb)>;

@@ -1,0 +1,17 @@
+# SEL RBn does not decode for a core without register banks. The S3 core's
+# multiply/divide instructions are writes to an sfr (MOV sfr, #byte with sfr
+# FFFFBH) for the other cores.
+# RUN: llvm-mc -triple=rl78 -mcpu=RL78_S3 --disassemble %s | FileCheck %s
+# RUN: llvm-mc -triple=rl78 -mcpu=RL78_S2 --disassemble %s 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=S2
+# RUN: llvm-mc -triple=rl78 -mcpu=RL78_S1 --disassemble %s 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=S1
+
+# CHECK: sel rb1
+# S2: sel rb1
+# S1: warning: invalid instruction encoding
+0x61 0xdf
+
+# CHECK: mulhu
+# S2: mov 0xffffb, #1
+0xce 0xfb 0x01

@@ -41,16 +41,17 @@ void RL78TargetAsmStreamer::emitRL78RegisterName(unsigned reg) {
   OS << StringRef(RL78InstPrinter::getRegisterName(MCRegister(reg))).lower() << " ";
 }
 
-bool isS1CoreType(const MCSubtargetInfo &STI) {
-  return STI.getCPU() == "RL78_S1";
+static bool isS1CoreType(const MCSubtargetInfo &STI) {
+  return !STI.hasFeature(RL78::FeatureRegBanks);
 }
 
-bool isS2CoreType(const MCSubtargetInfo &STI) {
-  return STI.getCPU() == "RL78_S2";
+static bool isS2CoreType(const MCSubtargetInfo &STI) {
+  return STI.hasFeature(RL78::FeatureRegBanks) &&
+         !STI.hasFeature(RL78::FeatureMulDiv);
 }
 
-bool isS3CoreType(const MCSubtargetInfo &STI) {
-  return STI.getCPU() == "RL78_S3";
+static bool isS3CoreType(const MCSubtargetInfo &STI) {
+  return STI.hasFeature(RL78::FeatureMulDiv);
 }
 
 RL78TargetELFStreamer::RL78TargetELFStreamer(MCStreamer &S,

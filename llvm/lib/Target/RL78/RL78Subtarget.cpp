@@ -26,7 +26,8 @@ RL78Subtarget &
 RL78Subtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,
                                                 StringRef TuneCPU, StringRef FS,
                                                 StringRef ABIName) {
-  coreType = RL78_S3;
+  HasRegBanks = false;
+  HasMulDiv = false;
   has64BitDoubles = false;
   mirrorSource = (unsigned char)RL78MirrorSource::Zero;
   hasFarCodeModel = false;
@@ -38,10 +39,6 @@ RL78Subtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,
   // Determine default and user specified characteristics.
   if (CPU.empty())
     CPU = "RL78_S3";
-  else if (CPU == "RL78_S1")
-    coreType = RL78_S1;
-  else if (CPU == "RL78_S2")
-    coreType = RL78_S2;
 
   if (TuneCPU.empty())
     TuneCPU = CPU;

@@ -20,9 +20,12 @@ include "RL78RegisterInfo.td"
 // Predicates
 //===----------------------------------------------------------------------===//
 
-def isS3Core : Predicate<"Subtarget->isRL78S3CoreType()">;
+def isS3Core : Predicate<"Subtarget->isRL78S3CoreType()">,
+               AssemblerPredicate<(all_of FeatureMulDiv), "the S3 core">;
 def isNotS3Core : Predicate<"!Subtarget->isRL78S3CoreType()">;
-def isNotS1Core : Predicate<"!Subtarget->isRL78S1CoreType()">;
+def isNotS1Core : Predicate<"!Subtarget->isRL78S1CoreType()">,
+                  AssemblerPredicate<(all_of FeatureRegBanks),
+                                     "the S2 or S3 core">;
 def isOptForSize : Predicate<"shouldOptForSize(MF)">;
 def isOptForSpeed : Predicate<"!shouldOptForSize(MF)">;
 

@@ -1381,6 +1381,9 @@ static std::map<std::string, int> ccTono{
     {"h", RL78CC::RL78CC_H},  {"nh", RL78CC::RL78CC_NH},
     {"f", RL78CC::RL78CC_NZ}, {"t", RL78CC::RL78CC_Z}};
 
+// Defined in the generated matcher.
+static const char *getSubtargetFeatureName(uint64_t Val);
+
 RL78AsmParser::~RL78AsmParser() = default;
 
 bool RL78AsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
@@ -1391,8 +1394,10 @@ bool RL78AsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
   MCInst Inst;
   SmallVector<MCInst, 8> Instructions;
-  unsigned MatchResult =
-      MatchInstructionImpl(Operands, Inst, ErrorInfo, MatchingInlineAsm);
+  FeatureBitset MissingFeatures;
+  unsigned MatchResult = MatchInstructionImpl(Operands, Inst, ErrorInfo,
+                                              MissingFeatures,
+                                              MatchingInlineAsm);
   switch (MatchResult) {
   case Match_Success: {
     Inst.setLoc(IDLoc);
@@ -1404,9 +1409,13 @@ bool RL78AsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     return false;
   }
 
-  case Match_MissingFeature:
-    return Error(IDLoc,
-                 "instruction requires a CPU feature not currently enabled");
+  case Match_MissingFeature: {
+    std::string Msg = "instruction requires:";
+    for (unsigned I = 0, E = MissingFeatures.size(); I != E; ++I)
+      if (MissingFeatures[I])
+        Msg += std::string(" ") + getSubtargetFeatureName(I);
+    return Error(IDLoc, Msg);
+  }
 
   case Match_InvalidOperand: {
     SMLoc ErrorLoc = IDLoc;
@@ -2599,19 +2608,6 @@ bool RL78AsmParser::parseInstruction(ParseInstructionInfo &Info, StringRef Name,
 
   // First verify if b_cc or s_cc.
   // If not, single mnemonic - push operand.
-  if (Name.compare("sel") == 0 && getSTI().getCPU() == "RL78_S1") {
-
-    SMLoc Loc = getLexer().getLoc();
-    return Error(Loc, "Instruction not defined for S1 core type");
-  }
-  if ((Name.compare("mulhu") == 0 || Name.compare("mulh") == 0 ||
-       Name.compare("divhu") == 0 || Name.compare("divwu") == 0 ||
-       Name.compare("machu") == 0 || Name.compare("mach") == 0) &&
-      (getSTI().getCPU() == "RL78_S1" || getSTI().getCPU() == "RL78_S2")) {
-
-    SMLoc Loc = getLexer().getLoc();
-    return Error(Loc, "Instruction defined only for S3 core type.");
-  }
   if (!tryParseBCCorSCC(Operands, Name, NameLoc)) {
     // First operand in MCInst is instruction mnemonic.
     Operands.push_back(RL78Operand::CreateToken(Name, NameLoc));
@@ -3675,6 +3671,7 @@ extern "C" void LLVMInitializeRL78AsmParser() {
 }
 
 #define GET_REGISTER_MATCHER
+#define GET_SUBTARGET_FEATURE_NAME
 #define GET_MATCHER_IMPLEMENTATION
 #include "RL78GenAsmMatcher.inc"
 

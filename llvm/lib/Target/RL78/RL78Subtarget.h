@@ -26,11 +26,6 @@ class StringRef;
 
 class RL78Subtarget : public RL78GenSubtargetInfo {
 public:
-  enum RL78Core {
-    RL78_S1,
-    RL78_S2,
-    RL78_S3,
-  };
   enum RL78MemoryModel {
     NEAR,
     FAR,
@@ -42,7 +37,9 @@ public:
 private:
   Triple TargetTriple;
   virtual void anchor();
-  RL78Core coreType;
+  // The cores: S1 has neither, S2 the register banks, S3 both.
+  bool HasRegBanks;
+  bool HasMulDiv;
   bool has64BitDoubles;
   unsigned char mirrorSource;
   bool hasFarCodeModel;
@@ -89,9 +86,10 @@ public:
   bool Has64BitDoubles() const { return has64BitDoubles; }
   bool HasFarCodeModel() const { return hasFarCodeModel; }
   bool HasFarDataModel() const { return hasFarDataModel; }
-  bool isRL78S1CoreType() const { return coreType == RL78_S1; }
-  bool isRL78S3CoreType() const { return coreType == RL78_S3; }
-  bool isUseMDA() const { return (coreType == RL78_S2) && (!disableMDA); }
+  bool isRL78S1CoreType() const { return !HasRegBanks; }
+  bool isRL78S3CoreType() const { return HasMulDiv; }
+  /// The multiplier/divider/accumulator peripheral of S2 devices.
+  bool isUseMDA() const { return HasRegBanks && !HasMulDiv && !disableMDA; }
 
   /// Enable tracking of subregister liveness in register allocator.
   bool enableSubRegLiveness() const override { return true; }

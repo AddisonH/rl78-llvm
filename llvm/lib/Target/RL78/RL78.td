@@ -17,26 +17,6 @@ include "llvm/Target/Target.td"
 
 
 //===----------------------------------------------------------------------===//
-// Register File, Calling Conv, Instruction Descriptions
-//===----------------------------------------------------------------------===//
-
-include "RL78Schedule.td"
-include "RL78InstrInfo.td"
-
-// Generic pseudos with pointer operands (LOAD_STACK_GUARD, ...) use 16-bit
-// register pairs.
-defm : RemapAllTargetPseudoPointerOperands<RL78RPRegs>;
-
-def RL78InstrInfo : InstrInfo {
-  // this will be the default behavior in the future, so better to be prepared
-  let guessInstructionProperties = 0;
-}
-
-def RL78AsmParser : AsmParser {
-  bit ShouldEmitMatchRegisterName = 0;
-}
-
-//===----------------------------------------------------------------------===//
 // RL78 Subtarget features.
 //===----------------------------------------------------------------------===//
 
@@ -65,11 +45,40 @@ def FeatureFarRom : SubtargetFeature<"far-rom", "romModel", "1",
 def FeatureCommonRom : SubtargetFeature<"common-rom", "romModel", "2",
                                       "Common constant mode.">;
 
+// What the cores differ in. S1 has one register bank and no SEL RBn; only S3
+// has the multiply, divide and multiply-accumulate instructions.
+def FeatureRegBanks
+    : SubtargetFeature<"reg-banks", "HasRegBanks", "true",
+                       "Four register banks (SEL RBn)">;
+def FeatureMulDiv
+    : SubtargetFeature<"muldiv", "HasMulDiv", "true",
+                       "MULHU, MULH, DIVHU, DIVWU, MACHU and MACH">;
+
 def FeatureDisableMDA : SubtargetFeature<"disable-mda", "disableMDA", "true",
                                       "Disable usage of Mul/Div/Mac accelerator (S2 only).">;
 
 def FeatureRelax : SubtargetFeature<"relax", "linkerRelax", "true",
                                     "Enable linker relaxation.">;
+
+//===----------------------------------------------------------------------===//
+// Register File, Calling Conv, Instruction Descriptions
+//===----------------------------------------------------------------------===//
+
+include "RL78Schedule.td"
+include "RL78InstrInfo.td"
+
+// Generic pseudos with pointer operands (LOAD_STACK_GUARD, ...) use 16-bit
+// register pairs.
+defm : RemapAllTargetPseudoPointerOperands<RL78RPRegs>;
+
+def RL78InstrInfo : InstrInfo {
+  // this will be the default behavior in the future, so better to be prepared
+  let guessInstructionProperties = 0;
+}
+
+def RL78AsmParser : AsmParser {
+  bit ShouldEmitMatchRegisterName = 0;
+}
 
 //===----------------------------------------------------------------------===//
 // RL78 processors supported.
@@ -79,8 +88,9 @@ class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
 def : ProcessorModel<"RL78_S1", NoSchedModel, []>;
-def : ProcessorModel<"RL78_S2", NoSchedModel, []>;
-def : ProcessorModel<"RL78_S3", NoSchedModel, []>;
+def : ProcessorModel<"RL78_S2", NoSchedModel, [FeatureRegBanks]>;
+def : ProcessorModel<"RL78_S3", NoSchedModel,
+                     [FeatureRegBanks, FeatureMulDiv]>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing
