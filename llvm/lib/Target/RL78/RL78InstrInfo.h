@@ -60,6 +60,29 @@ public:
                                                              : RL78::SKcc;
   }
 
+  /// The number of places to the left that ROTL16_r_imm or ROTR16_r_imm
+  /// \p MI rotates.
+  static unsigned getRotate16Left(const MachineInstr &MI) {
+    unsigned Count = MI.getOperand(2).getImm() & 15;
+    return MI.getOpcode() == RL78::ROTL16_r_imm ? Count : (16 - Count) & 15;
+  }
+
+  /// True if the expansion of the 16-bit rotate \p MI shifts a copy in BC.
+  /// The others are one or two steps on AX, with XCH A, X for the eight
+  /// places in between.
+  static bool rotate16UsesBC(const MachineInstr &MI) {
+    switch (getRotate16Left(MI)) {
+    case 0:
+    case 1:
+    case 7:
+    case 8:
+    case 9:
+    case 15:
+      return false;
+    }
+    return true;
+  }
+
   /// Expands the 16-bit pseudos that are two 8-bit operations on AX.
   bool expandWideOnAX(MachineInstr &MI) const;
 

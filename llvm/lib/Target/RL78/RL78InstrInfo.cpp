@@ -299,6 +299,118 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   return true;
 }
 
+// 16 x 16 -> 16 with three MULU, on AX and BC with DE as well:
+//  xch a, c; movw de, ax; xch a, b; mulu x; xchw ax, bc; mulu x;
+//  xchw ax, de; mulu x; add a, e; add a, c
+static bool Build_MUL16_rp_rp_S1(const RL78InstrInfo *II,
+                                 llvm::MachineBasicBlock *BB,
+                                 llvm::MachineInstr &MI, llvm::DebugLoc &DL) {
+  auto XchA = [&](MCRegister Reg) {
+    BuildMI(*BB, MI, DL, II->get(RL78::XCH_A_r), RL78::R1)
+        .addReg(Reg, RegState::Define)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(Reg, RegState::Kill);
+  };
+  auto XchwAX = [&](MCRegister Reg) {
+    BuildMI(*BB, MI, DL, II->get(RL78::XCHW_AX_rp), RL78::RP0)
+        .addReg(Reg, RegState::Define)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addReg(Reg, RegState::Kill);
+  };
+  auto Mulu = [&] {
+    BuildMI(*BB, MI, DL, II->get(RL78::MULU_X), RL78::RP0)
+        .addReg(RL78::R1)
+        .addReg(RL78::R0);
+  };
+  auto AddA = [&](MCRegister Reg) {
+    BuildMI(*BB, MI, DL, II->get(RL78::ADD_A_r), RL78::R1)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(Reg, RegState::Kill);
+  };
+  XchA(RL78::R2);
+  BuildMI(*BB, MI, DL, II->get(RL78::MOVW_rp_AX), RL78::RP4)
+      .addReg(RL78::RP0, RegState::Kill);
+  XchA(RL78::R3);
+  Mulu();
+  XchwAX(RL78::RP2);
+  Mulu();
+  XchwAX(RL78::RP4);
+  Mulu();
+  AddA(RL78::R4);
+  AddA(RL78::R2);
+  MI.eraseFromParent();
+  return true;
+}
+
+// ROL/ROR of A by a constant.
+static bool BuildRotate8(const RL78InstrInfo *II, llvm::MachineBasicBlock *BB,
+                         llvm::MachineInstr &MI, llvm::DebugLoc &DL) {
+  unsigned Left = MI.getOperand(2).getImm() & 7;
+  if (MI.getOpcode() == RL78::ROTR_r_imm)
+    Left = (8 - Left) & 7;
+  if (Left == 4) {
+    // The nibbles change places: clrb x; shrw ax, 4; or a, x.
+    BuildMI(*BB, MI, DL, II->get(RL78::CLRB_r), RL78::R0);
+    BuildMI(*BB, MI, DL, II->get(RL78::SHRW_AX_n), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addImm(4);
+    BuildMI(*BB, MI, DL, II->get(RL78::OR_A_r), RL78::R1)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(RL78::R0, RegState::Kill);
+  } else {
+    // Up to three places, in the shorter direction.
+    unsigned Opcode = Left < 4 ? RL78::ROL_A_1 : RL78::ROR_A_1;
+    for (unsigned I = 0, E = Left < 4 ? Left : 8 - Left; I != E; ++I)
+      BuildMI(*BB, MI, DL, II->get(Opcode), RL78::R1)
+          .addReg(RL78::R1, RegState::Kill);
+  }
+  MI.eraseFromParent();
+  return true;
+}
+
+// Rotate of AX by a constant.
+static bool BuildRotate16(const RL78InstrInfo *II, llvm::MachineBasicBlock *BB,
+                          llvm::MachineInstr &MI, llvm::DebugLoc &DL) {
+  unsigned Left = RL78InstrInfo::getRotate16Left(MI);
+  if (RL78InstrInfo::rotate16UsesBC(MI)) {
+    // movw bc, ax; shlw bc, n; shrw ax, 16 - n; addw ax, bc
+    BuildMI(*BB, MI, DL, II->get(RL78::MOVW_rp_AX), RL78::RP2)
+        .addReg(RL78::RP0);
+    BuildMI(*BB, MI, DL, II->get(RL78::SHLW_rp_n), RL78::RP2)
+        .addReg(RL78::RP2, RegState::Kill)
+        .addImm(Left);
+    BuildMI(*BB, MI, DL, II->get(RL78::SHRW_AX_n), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addImm(16 - Left);
+    BuildMI(*BB, MI, DL, II->get(RL78::ADDW_AX_rp), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addReg(RL78::RP2, RegState::Kill);
+    MI.eraseFromParent();
+    return true;
+  }
+  // One place to the left or to the right, and the bytes exchanged for
+  // eight.
+  if (Left == 1 || Left == 9) {
+    BuildMI(*BB, MI, DL, II->get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, II->get(RL78::ROLWC_rp_1), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill);
+  } else if (Left == 7 || Left == 15) {
+    BuildMI(*BB, MI, DL, II->get(RL78::SHRW_AX_n), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addImm(1);
+    BuildMI(*BB, MI, DL, II->get(RL78::MOV1_A_b), RL78::R1)
+        .addReg(RL78::R1, RegState::Kill)
+        .addImm(7);
+  }
+  if (Left >= 7 && Left <= 9)
+    BuildMI(*BB, MI, DL, II->get(RL78::XCH_A_X), RL78::R1)
+        .addReg(RL78::R0, RegState::Define)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(RL78::R0, RegState::Kill);
+  MI.eraseFromParent();
+  return true;
+}
+
 namespace {
 // The 8-bit instructions a 16-bit operation on AX is made of.
 struct WideOp {
@@ -496,7 +608,14 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     OpSize = 2;
     break;
   case RL78::MUL16_rp_rp_S1_S2:
-    return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
+    return Subtarget.isUseMDA() ? Build_MUL16_rp_rp_S2(this, BB, MI, DL)
+                                : Build_MUL16_rp_rp_S1(this, BB, MI, DL);
+  case RL78::ROTL_r_imm:
+  case RL78::ROTR_r_imm:
+    return BuildRotate8(this, BB, MI, DL);
+  case RL78::ROTL16_r_imm:
+  case RL78::ROTR16_r_imm:
+    return BuildRotate16(this, BB, MI, DL);
   case RL78::ROLW_AX_1:
     BuildMI(*BB, MI, DL, get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
     BuildMI(*BB, MI, DL, get(RL78::ROLWC_rp_1), RL78::RP0)

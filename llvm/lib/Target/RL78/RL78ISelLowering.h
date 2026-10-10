@@ -318,18 +318,11 @@ private:
   MachineBasicBlock *LowerSignedCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerCMPWMemOps(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
-
-  MachineBasicBlock *LowerRotate_r_imm(MachineInstr &MI, MachineBasicBlock *BB,
-                                       bool rotl) const;
-  MachineBasicBlock *LowerRotate16_rp_imm(MachineInstr &MI,
-                                          MachineBasicBlock *BB,
-                                          bool rotl) const;
   MachineBasicBlock *LowerSELECTCC(bool isI8, MachineInstr &MI,
                                    MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerLOAD_SELECTCC(MachineInstr &MI,
                                         MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL8(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerMUL16(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerShift_Or_LowerRotate_rp_rp(MachineInstr &MI,
                                                      MachineBasicBlock *BB,
                                                      unsigned int opcode,

@@ -1712,10 +1712,14 @@ let Predicates = [isS3Core], usesCustomInserter = 1, mayLoad = 0, mayStore = 0 i
 
 }
 
-let Predicates = [isNotS3Core], usesCustomInserter = 1 in {
+// The 16-bit multiply without MULHU: with the multiplier/divider unit, or
+// three MULU that also use BC and DE (the custom inserter adds those
+// definitions). Expanded after register allocation.
+let Predicates = [isNotS3Core], usesCustomInserter = 1,
+    Constraints = "$rsrc = $rd" in {
 
  def MUL16_rp_rp_S1_S2 : Pseudo<
-       (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+       (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BCRP:$rsrc2),
        ";mulu $rd, $rsrc, $rsrc2",
        [(set i16:$rd, (mul i16:$rsrc, i16:$rsrc2))]>;
 
@@ -2117,24 +2121,26 @@ def SARW_rp_rp : Pseudo<
 // ROTL/ROTR pseudos
 //===----------------------------------------------------------------------===//
 
-let usesCustomInserter = 1, Defs = [R3] in {
+// Rotates by a constant, on A or AX and expanded after register allocation.
+// Some counts also use X or BC: the custom inserter adds that definition.
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [CCreg] in {
   def ROTL_r_imm : Pseudo<
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm),
+        (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, i8imm:$imm),
         ";rotl $rd, $rsrc, $imm",
         [(set i8:$rd, (rotl i8:$rsrc, (i8 imm:$imm)))]>;
 
   def ROTR_r_imm : Pseudo<
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, i8imm:$imm),
+        (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, i8imm:$imm),
         ";rotr $rd, $rsrc, $imm",
         [(set i8:$rd, (rotr i8:$rsrc, (i8 imm:$imm)))]>;
 
   def ROTL16_r_imm : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i8imm:$imm),
+        (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, i8imm:$imm),
         ";rotl $rd, $rsrc, $imm",
         [(set i16:$rd, (rotl i16:$rsrc, (i8 imm:$imm)))]>;
 
   def ROTR16_r_imm : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i8imm:$imm),
+        (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, i8imm:$imm),
         ";rotr $rd, $rsrc, $imm",
         [(set i16:$rd, (rotr i16:$rsrc, (i8 imm:$imm)))]>;
 
