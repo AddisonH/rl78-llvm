@@ -191,6 +191,7 @@ public:
   void addMachineSSAOptimization() override;
   bool addRegAssignAndRewriteOptimized() override;
   void addPreEmitPass() override;
+  void addPreEmitPass2() override;
   void addFastRegAlloc() override;
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
@@ -290,12 +291,18 @@ void RL78PassConfig::addPreEmitPass() {
   // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
   addPass(createMachineCopyPropagationPass(true));
   addPass(createRL78CMPWithZeroElimPass());
-  addPass(createRL78ExpandPseudoInstsPass());
-  addPass(createRL78SelectBTCLRPass());
   if (!InsertNOPWithLabel.empty()) {
     addPass(createRL78InsertNOPWithLabelPass());
   }
   addPass(createRL78InsertInstsForDelayCyclesPass());
+}
+
+// The branch pseudos get their short or long form here, after the
+// MachineOutliner: outlining shortens the distances, and a branch over what
+// became a single call can be a skip.
+void RL78PassConfig::addPreEmitPass2() {
+  addPass(createRL78ExpandPseudoInstsPass());
+  addPass(createRL78SelectBTCLRPass());
 }
 
 // Use the optimized reg also on -O0
