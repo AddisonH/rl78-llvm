@@ -1304,6 +1304,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::TRAP);
   setTargetDAGCombine(ISD::SELECT);
   setTargetDAGCombine({ISD::SETCC, ISD::SELECT_CC});
+  setTargetDAGCombine({ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX});
   // To eliminate casts between far_code and far_data
   //setTargetDAGCombine(ISD::ADDRSPACECAST);
 
@@ -3348,10 +3349,17 @@ static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
   SDValue TVal = N->getOperand(1);
   SDValue FVal = N->getOperand(2);
   EVT VT = N->getValueType(0);
+  SDLoc dl(N);
+  // An i32 chosen by a comparison. Type legalization would make the
+  // comparison a value and test that once for each half.
+  if (VT == MVT::i32 && Cond.getOpcode() == ISD::SETCC &&
+      Cond.getOperand(0).getValueType().isScalarInteger())
+    return DAG.getSelectCC(dl, Cond.getOperand(0), Cond.getOperand(1), TVal,
+                           FVal,
+                           cast<CondCodeSDNode>(Cond.getOperand(2))->get());
   if ((VT != MVT::i8 && VT != MVT::i16) || Cond.getOpcode() == ISD::SETCC ||
       TVal.getOpcode() != ISD::LOAD || FVal.getOpcode() != ISD::LOAD)
     return SDValue();
-  SDLoc dl(N);
   return DAG.getSelectCC(dl, Cond, DAG.getConstant(0, dl, Cond.getValueType()),
                          TVal, FVal, ISD::SETNE);
 }
@@ -3399,7 +3407,7 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
   } else {
     TVal = N->getOperand(2);
     FVal = N->getOperand(3);
-    if ((VT != MVT::i8 && VT != MVT::i16) ||
+    if ((VT != MVT::i8 && VT != MVT::i16 && VT != MVT::i32) ||
         TVal.getOpcode() == RL78ISD::HI16 || FVal.getOpcode() == RL78ISD::HI16)
       return SDValue();
     SelVT = VT;
@@ -3410,19 +3418,63 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
   auto Half = [&](SDValue V, SDValue Idx) {
     return DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, V, Idx);
   };
-  SDValue Cmp = getCMP(DAG, dl, Half(LHS, Hi), Half(RHS, Hi),
-                       IntCondCCodeSign(CC) != 0);
-  SDValue LowCmp = DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, Half(LHS, Lo),
-                               Half(RHS, Lo), Cmp);
   SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
-  SDValue Sel =
-      DAG.getNode(RL78ISD::SELECTCC, dl, SelVT, TVal, FVal, TargetCC, LowCmp);
+  auto Select = [&](EVT SelVT, SDValue TVal, SDValue FVal) {
+    SDValue Cmp = getCMP(DAG, dl, Half(LHS, Hi), Half(RHS, Hi),
+                         IntCondCCodeSign(CC) != 0);
+    SDValue LowCmp = DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, Half(LHS, Lo),
+                                 Half(RHS, Lo), Cmp);
+    return DAG.getNode(RL78ISD::SELECTCC, dl, SelVT, TVal, FVal, TargetCC,
+                       LowCmp);
+  };
+  // An i32 is chosen half by half. Each select has the comparison in front
+  // of it (the flags cannot be shared in the DAG); the custom inserter of the
+  // select pseudos gives the two one branch (LowerSELECTCC).
+  if (SelVT == MVT::i32)
+    return DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32,
+                       Select(MVT::i16, Half(TVal, Lo), Half(FVal, Lo)),
+                       Select(MVT::i16, Half(TVal, Hi), Half(FVal, Hi)));
+  SDValue Sel = Select(SelVT, TVal, FVal);
   return IsSetCC ? DAG.getZExtOrTrunc(Sel, dl, VT) : Sel;
+}
+
+// A 32-bit minimum or maximum. Type legalization would compare the high
+// halves twice and the low halves once and pick the result with three
+// selects; as a select it is one comparison and one choice.
+static SDValue PerformMinMaxCombine(SDNode *N,
+                                    TargetLowering::DAGCombinerInfo &DCI) {
+  if (!DCI.isBeforeLegalize() || N->getValueType(0) != MVT::i32)
+    return SDValue();
+  ISD::CondCode CC;
+  switch (N->getOpcode()) {
+  default:
+    llvm_unreachable("not a minimum or maximum");
+  case ISD::SMIN:
+    CC = ISD::SETLT;
+    break;
+  case ISD::SMAX:
+    CC = ISD::SETGT;
+    break;
+  case ISD::UMIN:
+    CC = ISD::SETULT;
+    break;
+  case ISD::UMAX:
+    CC = ISD::SETUGT;
+    break;
+  }
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  return DCI.DAG.getSelectCC(SDLoc(N), LHS, RHS, LHS, RHS, CC);
 }
 
 SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
                                               DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
+  case ISD::SMIN:
+  case ISD::SMAX:
+  case ISD::UMIN:
+  case ISD::UMAX:
+    return PerformMinMaxCombine(N, DCI);
   case ISD::SETCC:
   case ISD::SELECT_CC:
     return PerformI32CompareCombine(N, DCI.DAG);
@@ -3726,6 +3778,234 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int, MachineInstr &MI,
 
 
 
+// The instructions that put the true and the false value of a select pseudo
+// into a register.
+static void selectCopyOpcodes(unsigned Opcode, unsigned &Op1, unsigned &Op2) {
+  switch (Opcode) {
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCCBTBF16_rp_imm:
+    Op1 = RL78::COPY;
+    break;
+  case RL78::SELECTCC8_imm_r:
+    Op1 = RL78::MOV_r_i8;
+    break;
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_imm:
+    Op1 = RL78::MOVW_rp_i16;
+    break;
+  case RL78::SELECTCC8_esaddr_r:
+  case RL78::SELECTCC8_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
+    Op1 = RL78::MOV_r_eabs16;
+    break;
+  case RL78::SELECTCC16_esaddr_rp:
+  case RL78::SELECTCC16_esaddr_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+    Op1 = RL78::MOVW_rp_eabs16;
+    break;
+  default:
+    llvm_unreachable("Unexpected opcode!");
+    break;
+  }
+
+  switch (Opcode) {
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCC8_imm_r:
+  case RL78::SELECTCC8_esaddr_r:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCC16_esaddr_rp:
+    Op2 = RL78::COPY;
+    break;
+  case RL78::SELECTCC8_esaddr_imm:
+  case RL78::SELECTCBTBFC8_esaddr_imm:
+    Op2 = RL78::MOV_r_i8;
+    break;
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF16_imm_imm:
+  case RL78::SELECTCC16_esaddr_imm:
+  case RL78::SELECTCCBTBF116_esaddr_imm:
+    Op2 = RL78::MOVW_rp_i16;
+    break;
+  default:
+    llvm_unreachable("Unexpected opcode!");
+    break;
+  }
+}
+
+// The selects between registers and constants, on the flags or on a bit.
+static bool isRegImmSelect(unsigned Opcode) {
+  switch (Opcode) {
+  case RL78::SELECTCC8_r_r:
+  case RL78::SELECTCC8_imm_r:
+  case RL78::SELECTCC16_rp_rp:
+  case RL78::SELECTCC16_rp_imm:
+  case RL78::SELECTCC16_imm_rp:
+  case RL78::SELECTCC16_imm_imm:
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_imm:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool isBitSelect(unsigned Opcode) {
+  switch (Opcode) {
+  case RL78::SELECTCCBTBF8_r_r:
+  case RL78::SELECTCCBTBF16_rp_rp:
+  case RL78::SELECTCCBTBF16_rp_imm:
+  case RL78::SELECTCCBTBF16_imm_rp:
+  case RL78::SELECTCCBTBF16_imm_imm:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool isByteSelect(unsigned Opcode) {
+  return Opcode == RL78::SELECTCC8_r_r || Opcode == RL78::SELECTCC8_imm_r ||
+         Opcode == RL78::SELECTCCBTBF8_r_r;
+}
+
+// The register that R is a copy of, and the index if it is a copy of a
+// sub-register.
+static std::pair<Register, unsigned>
+copySource(Register R, const MachineRegisterInfo &MRI) {
+  while (R.isVirtual()) {
+    const MachineInstr *Def = MRI.getUniqueVRegDef(R);
+    if (!Def || !Def->isCopy() || Def->getOperand(0).getSubReg())
+      break;
+    const MachineOperand &Src = Def->getOperand(1);
+    if (!Src.getReg().isVirtual())
+      break;
+    R = Src.getReg();
+    if (Src.getSubReg())
+      return {R, Src.getSubReg()};
+  }
+  return {R, 0};
+}
+
+// The instructions before MI that compute the flags it reads, last first.
+static bool flagChain(MachineInstr &MI,
+                      SmallVectorImpl<MachineInstr *> &Chain) {
+  MachineBasicBlock &MBB = *MI.getParent();
+  for (MachineBasicBlock::iterator I(MI); I != MBB.begin();) {
+    --I;
+    if (I->isDebugInstr())
+      continue;
+    if (I->isCall() || I->isPHI() || I->isInlineAsm())
+      return false;
+    if (!I->modifiesRegister(RL78::CCreg, nullptr))
+      continue;
+    Chain.push_back(&*I);
+    if (!I->readsRegister(RL78::CCreg, nullptr))
+      return true;
+  }
+  return false;
+}
+
+// Whether the two chains compute the same flags: the same instructions on
+// the same values.
+static bool sameFlags(ArrayRef<MachineInstr *> A, ArrayRef<MachineInstr *> B,
+                      const MachineRegisterInfo &MRI) {
+  if (A.size() != B.size())
+    return false;
+  for (unsigned I = 0, E = A.size(); I != E; ++I) {
+    const MachineInstr &X = *A[I], &Y = *B[I];
+    if (X.getOpcode() != Y.getOpcode() ||
+        X.getNumOperands() != Y.getNumOperands() || X.mayLoadOrStore() ||
+        X.hasUnmodeledSideEffects())
+      return false;
+    for (unsigned J = 0, N = X.getNumOperands(); J != N; ++J) {
+      const MachineOperand &P = X.getOperand(J), &Q = Y.getOperand(J);
+      if (!P.isReg() || !Q.isReg()) {
+        if (!P.isIdenticalTo(Q))
+          return false;
+        continue;
+      }
+      if (P.isDef() != Q.isDef())
+        return false;
+      if (P.getReg().isPhysical() || Q.getReg().isPhysical()) {
+        if (P.getReg() != RL78::CCreg || Q.getReg() != RL78::CCreg)
+          return false;
+        continue;
+      }
+      // A result other than the flags would have to be kept as well.
+      if (P.isDef() || P.getSubReg() != Q.getSubReg() ||
+          copySource(P.getReg(), MRI) != copySource(Q.getReg(), MRI))
+        return false;
+    }
+  }
+  return true;
+}
+
+// The next select pseudo after those of Group that chooses on the same
+// condition as they do, if the group can move down to it: the halves of a
+// wider select, or several values chosen by one comparison. Each has its own
+// copy of the comparison; FirstChain is the one of the first select.
+static MachineInstr *
+nextSelectOnSameCondition(ArrayRef<MachineInstr *> Group,
+                          ArrayRef<MachineInstr *> FirstChain,
+                          const MachineRegisterInfo &MRI) {
+  MachineInstr &First = *Group.front();
+  MachineBasicBlock &MBB = *First.getParent();
+  auto ReadsGroup = [&](const MachineInstr &MI) {
+    return llvm::any_of(Group, [&](MachineInstr *G) {
+      return MI.readsRegister(G->getOperand(0).getReg(), nullptr);
+    });
+  };
+  bool FlagsChange = false;
+  unsigned Count = 0;
+  MachineBasicBlock::iterator I = std::next(Group.back()->getIterator());
+  for (;; ++I) {
+    if (I == MBB.end())
+      return nullptr;
+    if (I->isDebugInstr())
+      continue;
+    if (ReadsGroup(*I))
+      return nullptr;
+    if (isRegImmSelect(I->getOpcode()))
+      break;
+    if (I->usesCustomInsertionHook() || I->isCall() || I->isTerminator() ||
+        I->isPHI() || I->isInlineAsm() || ++Count > 24)
+      return nullptr;
+    FlagsChange |= I->modifiesRegister(RL78::CCreg, nullptr);
+  }
+  MachineInstr &Next = *I;
+  bool Bit = isBitSelect(First.getOpcode());
+  if (Bit != isBitSelect(Next.getOpcode()) ||
+      First.getOperand(3).getImm() != Next.getOperand(3).getImm())
+    return nullptr;
+  if (Bit)
+    return First.getOperand(5).getImm() == Next.getOperand(5).getImm() &&
+                   copySource(First.getOperand(4).getReg(), MRI) ==
+                       copySource(Next.getOperand(4).getReg(), MRI)
+               ? &Next
+               : nullptr;
+  if (!FlagsChange)
+    return &Next;
+  SmallVector<MachineInstr *, 8> Chain;
+  if (FirstChain.empty() || !flagChain(Next, Chain) ||
+      !sameFlags(FirstChain, Chain, MRI))
+    return nullptr;
+  return &Next;
+}
+
 MachineBasicBlock *
 RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
                                   MachineBasicBlock *BB) const {
@@ -3741,67 +4021,24 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
                                                  : &RL78::RL78RPRegsRegClass);
 
   unsigned selectCopyOp1, selectCopyOp2;
-  switch (MI.getOpcode()) {
-  case RL78::SELECTCC8_r_r:
-  case RL78::SELECTCCBTBF8_r_r:
-  case RL78::SELECTCCBTBF16_rp_rp:
-  case RL78::SELECTCC16_rp_rp:
-  case RL78::SELECTCC16_rp_imm:
-  case RL78::SELECTCCBTBF16_rp_imm:
-    selectCopyOp1 = RL78::COPY;
-    break;
-  case RL78::SELECTCC8_imm_r:
-    selectCopyOp1 = RL78::MOV_r_i8;
-    break;
-  case RL78::SELECTCC16_imm_rp:
-  case RL78::SELECTCCBTBF16_imm_rp:
-  case RL78::SELECTCC16_imm_imm:
-  case RL78::SELECTCCBTBF16_imm_imm:
-    selectCopyOp1 = RL78::MOVW_rp_i16;
-    break;
-  case RL78::SELECTCC8_esaddr_r:
-  case RL78::SELECTCC8_esaddr_imm:
-  case RL78::SELECTCBTBFC8_esaddr_imm:
-    selectCopyOp1 = RL78::MOV_r_eabs16;
-    break;
-  case RL78::SELECTCC16_esaddr_rp:
-  case RL78::SELECTCC16_esaddr_imm:
-  case RL78::SELECTCCBTBF116_esaddr_imm:
-    selectCopyOp1 = RL78::MOVW_rp_eabs16;
-    break;
-  default:
-    llvm_unreachable("Unexpected opcode!");
-    break;
-  }
+  selectCopyOpcodes(MI.getOpcode(), selectCopyOp1, selectCopyOp2);
 
-  switch (MI.getOpcode()) {
-  case RL78::SELECTCC8_r_r:
-  case RL78::SELECTCCBTBF8_r_r:
-  case RL78::SELECTCCBTBF16_rp_rp:
-  case RL78::SELECTCC8_imm_r:
-  case RL78::SELECTCC8_esaddr_r:
-  case RL78::SELECTCC16_rp_rp:
-  case RL78::SELECTCC16_imm_rp:
-  case RL78::SELECTCCBTBF16_imm_rp:
-  case RL78::SELECTCC16_esaddr_rp:
-    selectCopyOp2 = RL78::COPY;
-    break;
-  case RL78::SELECTCC8_esaddr_imm:
-  case RL78::SELECTCBTBFC8_esaddr_imm:
-    selectCopyOp2 = RL78::MOV_r_i8;
-    break;
-  case RL78::SELECTCC16_rp_imm:
-  case RL78::SELECTCCBTBF16_rp_imm:
-  case RL78::SELECTCC16_imm_imm:
-  case RL78::SELECTCCBTBF16_imm_imm:
-  case RL78::SELECTCC16_esaddr_imm:
-  case RL78::SELECTCCBTBF116_esaddr_imm:
-    selectCopyOp2 = RL78::MOVW_rp_i16;
-    break;
-  default:
-    llvm_unreachable("Unexpected opcode!");
-    break;
+  // The selects after this one that choose on the same condition share its
+  // branch. They come down to the last of them, whose comparison is the one
+  // the branch then reads; the earlier copies of the comparison are dead.
+  SmallVector<MachineInstr *, 4> Group{&MI};
+  if (isRegImmSelect(MI.getOpcode())) {
+    SmallVector<MachineInstr *, 8> FirstChain;
+    if (!isBitSelect(MI.getOpcode()) && !flagChain(MI, FirstChain))
+      FirstChain.clear();
+    while (MachineInstr *Next =
+               nextSelectOnSameCondition(Group, FirstChain, MRI)) {
+      for (MachineInstr *G : Group)
+        BB->splice(Next->getIterator(), BB, G->getIterator());
+      Group.push_back(Next);
+    }
   }
+  MachineInstr &LastSelect = *Group.back();
 
   unsigned TrueOpIndex = 1;
   unsigned FalseOpIndex = 2;
@@ -3828,7 +4065,8 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   F->insert(It, sinkMBB);
   // Transfer the remainder of BB and its successor edges to sinkMBB.
   sinkMBB->splice(sinkMBB->begin(), BB,
-                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
+                  std::next(MachineBasicBlock::iterator(LastSelect)),
+                  BB->end());
   sinkMBB->transferSuccessorsAndUpdatePHIs(BB);
   // Add the true and fallthrough blocks as its successors.
   BB->addSuccessor(copy0MBB);
@@ -3851,6 +4089,28 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   // Although it's only 1 COPY instruction it can be expanded to several
   // mov/movw or xch/xchw, the branch expand pass will insert a skip instruction
   // if possible.
+
+  // The other selects of the group: true value here, false value in
+  // copy0MBB, PHI in sinkMBB.
+  for (MachineInstr *Sel : ArrayRef(Group).drop_front()) {
+    unsigned CopyOp1, CopyOp2;
+    selectCopyOpcodes(Sel->getOpcode(), CopyOp1, CopyOp2);
+    const TargetRegisterClass *RC = isByteSelect(Sel->getOpcode())
+                                        ? &RL78::RL78RegRegClass
+                                        : &RL78::RL78RPRegsRegClass;
+    Register True = MRI.createVirtualRegister(RC);
+    Register False = MRI.createVirtualRegister(RC);
+    BuildMI(*BB, MI, DL, TII->get(CopyOp1), True).add(Sel->getOperand(1));
+    BuildMI(*copy0MBB, copy0MBB->end(), DL, TII->get(CopyOp2), False)
+        .add(Sel->getOperand(2));
+    BuildMI(*sinkMBB, sinkMBB->begin(), DL, TII->get(RL78::PHI),
+            Sel->getOperand(0).getReg())
+        .addReg(False)
+        .addMBB(copy0MBB)
+        .addReg(True)
+        .addMBB(thisMBB);
+    Sel->eraseFromParent();
+  }
 
   switch (MI.getOpcode()) {
   case RL78::SELECTCCBTBF8_r_r:
