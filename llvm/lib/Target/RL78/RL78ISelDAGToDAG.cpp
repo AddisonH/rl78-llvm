@@ -81,6 +81,58 @@ public:
   bool SelectMemBCw(SDValue Addr, SDValue &Base, SDValue &Word);
   bool SelectMemHLr(SDValue Addr, SDValue &Base, SDValue &Index);
 
+  // The same behind ES:. A far address is (HI16 segment, near address); the
+  // segment becomes a MOV ES, #byte or MOV ES, A whose result is the
+  // instruction's ES operand (RL78AssignES puts it in ES itself).
+  bool SelectingFar = false;
+  SDValue getES(SDValue Segment);
+  template <typename Fn> bool selectFar(SDValue Addr, SDValue &ES, Fn Near) {
+    if (Addr.getOpcode() != RL78ISD::HI16)
+      return false;
+    SelectingFar = true;
+    bool Matched = Near(Addr.getOperand(1));
+    SelectingFar = false;
+    if (Matched)
+      ES = getES(Addr.getOperand(0));
+    return Matched;
+  }
+#define RL78_FAR1(NAME)                                                        \
+  bool SelectES##NAME(SDValue Addr, SDValue &ES, SDValue &A) {                 \
+    return selectFar(Addr, ES, [&](SDValue N) { return Select##NAME(N, A); }); \
+  }
+#define RL78_FAR2(NAME)                                                        \
+  bool SelectES##NAME(SDValue Addr, SDValue &ES, SDValue &A, SDValue &B) {     \
+    return selectFar(Addr, ES,                                                 \
+                     [&](SDValue N) { return Select##NAME(N, A, B); });        \
+  }
+  RL78_FAR1(MemHL)
+  RL78_FAR2(MemHLi)
+  RL78_FAR2(MemHLw)
+  RL78_FAR1(MemRP)
+  RL78_FAR2(MemRPi)
+  RL78_FAR2(MemRPi0)
+  RL78_FAR2(MemBCw)
+  RL78_FAR2(MemHLr)
+#undef RL78_FAR1
+#undef RL78_FAR2
+  bool SelectESMemHLi0(SDValue Addr, SDValue &ES, SDValue &Base,
+                       SDValue &Disp) {
+    return selectFar(Addr, ES, [&](SDValue N) {
+      return SelectADDRri(N, 255, false, Base, Disp);
+    });
+  }
+  bool SelectESHL(SDValue Addr, SDValue &ES, SDValue &Base) {
+    return selectFar(Addr, ES,
+                     [&](SDValue N) { return SelectADDRr(N, Base); });
+  }
+  bool SelectESMemBw(SDValue Addr, SDValue &ES, SDValue &Index,
+                     SDValue &Word) {
+    return selectFar(Addr, ES, [&](SDValue N) {
+      return SelectADDRr8i16(N, Index, Word);
+    });
+  }
+  bool SelectESAbs16(SDValue Addr, SDValue &ES, SDValue &Abs);
+
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
   bool SelectSaddr(SDValue Addr, SDValue &Base);
   bool SelectSFR(SDValue Addr, SDValue &Base);
@@ -362,7 +414,7 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
     return false;
   if (Addr.getOpcode() == RL78ISD::LOW8)
     return false;
-  if (!PermitFrameIndex && Addr.getOpcode() == ISD::FrameIndex)
+  if (!(PermitFrameIndex || SelectingFar) && Addr.getOpcode() == ISD::FrameIndex)
     return false;
   if (Addr.getOpcode() == ISD::Constant)
     return false;
@@ -373,7 +425,7 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
 
   if (Addr.getOpcode() == ISD::ADD || Addr.getOpcode() == ISD::OR) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
-      if (!PermitFrameIndex &&
+      if (!(PermitFrameIndex || SelectingFar) &&
           dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)) != nullptr) {
         return false;
       }
@@ -536,6 +588,35 @@ static bool selectADDRABS16(SDValue Addr, SDValue &Base, SelectionDAG *CurDAG,
   }
 
   return false;
+}
+
+bool RL78DAGToDAGISel::SelectESAbs16(SDValue Addr, SDValue &ES,
+                                     SDValue &Abs) {
+  return selectFar(Addr, ES, [&](SDValue N) {
+    return selectADDRABS16(N, Abs, CurDAG, false);
+  });
+}
+
+SDValue RL78DAGToDAGISel::getES(SDValue Segment) {
+  SDLoc DL(Segment);
+  switch (Segment.getOpcode()) {
+  case ISD::Constant:
+  case ISD::TargetConstant:
+    Segment = CurDAG->getTargetConstant(
+        cast<ConstantSDNode>(Segment)->getZExtValue() & 0xFF, DL, MVT::i8);
+    [[fallthrough]];
+  case ISD::TargetGlobalAddress:
+  case ISD::TargetExternalSymbol:
+  case ISD::TargetBlockAddress:
+  case ISD::TargetConstantPool:
+  case ISD::TargetJumpTable:
+    return SDValue(
+        CurDAG->getMachineNode(RL78::MOV_ES_i8, DL, MVT::i8, Segment), 0);
+  }
+  // The segment is the low byte of the upper word.
+  SDValue Byte =
+      CurDAG->getTargetExtractSubreg(RL78::sub_lo, DL, MVT::i8, Segment);
+  return SDValue(CurDAG->getMachineNode(RL78::MOV_ES_A, DL, MVT::i8, Byte), 0);
 }
 
 bool RL78DAGToDAGISel::SelectADDRABS16(SDValue Addr, SDValue &Base) {

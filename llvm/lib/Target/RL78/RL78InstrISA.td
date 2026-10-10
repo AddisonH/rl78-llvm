@@ -2274,3 +2274,101 @@ def : Pat<(i16 (anyext i8:$r)),
                          (MOV_r_i8 0), sub_hi)>;
 def : Pat<(i16 (sext i8:$r)),
           (SARW_AX_n (INSERT_SUBREG (i16 (IMPLICIT_DEF)), $r, sub_hi), 8)>;
+
+//===----------------------------------------------------------------------===//
+// The ES: forms
+//===----------------------------------------------------------------------===//
+
+// A far address is (RL78Hi16 segment, near address). Each of these matches
+// one and yields the ES operand (the result of a MOV ES, ...; see
+// RL78AssignES) followed by the operands of the near form.
+def ESAbs16 : ComplexPattern<iPTR, 2, "SelectESAbs16", [], []>;
+def ESMemHL : ComplexPattern<iPTR, 2, "SelectESMemHL", [], []>;
+def ESMemHLi : ComplexPattern<iPTR, 3, "SelectESMemHLi", [], []>;
+def ESMemHLi0 : ComplexPattern<iPTR, 3, "SelectESMemHLi0", [], []>;
+def ESMemHLr : ComplexPattern<iPTR, 3, "SelectESMemHLr", [], []>;
+def ESMemRP : ComplexPattern<iPTR, 2, "SelectESMemRP", [], []>;
+def ESMemRPi : ComplexPattern<iPTR, 3, "SelectESMemRPi", [], []>;
+def ESMemRPi0 : ComplexPattern<iPTR, 3, "SelectESMemRPi0", [], []>;
+def ESMemBCw : ComplexPattern<iPTR, 3, "SelectESMemBCw", [], []>;
+def ESMemBw : ComplexPattern<iPTR, 3, "SelectESMemBw", [], []>;
+def ESHL : ComplexPattern<iPTR, 2, "SelectESHL", [], []>;
+
+multiclass RL78Alu8ESSel<string I, SDPatternOperator Node> {
+  def : Pat<(Node i8:$a, (load ESAbs16:$m)),
+            (!cast<Instruction>(I # "_A_eabs16") $a, ESAbs16:$m)>;
+  def : Pat<(Node i8:$a, (load ESMemHL:$m)),
+            (!cast<Instruction>(I # "_A_emHL") $a, ESMemHL:$m)>;
+  def : Pat<(Node i8:$a, (load ESMemHLi:$m)),
+            (!cast<Instruction>(I # "_A_emHLi") $a, ESMemHLi:$m)>;
+  def : Pat<(Node i8:$a, (load ESMemHLr:$m)),
+            (!cast<Instruction>(I # "_A_emHLr") $a, ESMemHLr:$m)>;
+}
+defm : RL78Alu8ESSel<"ADD", add>;
+defm : RL78Alu8ESSel<"SUB", sub>;
+defm : RL78Alu8ESSel<"AND", and>;
+defm : RL78Alu8ESSel<"OR", or>;
+defm : RL78Alu8ESSel<"XOR", xor>;
+defm : RL78Alu8ESSel<"CMP", RL78ucmp>;
+def : Pat<(RL78ucmp (load ESAbs16:$m), (i8 imm:$i)),
+          (CMP_eabs16_i8 ESAbs16:$m, imm:$i)>;
+def : Pat<(RL78ucmp (i8 (load ESAbs16:$m)), 0), (CMP0_eabs16 ESAbs16:$m)>;
+
+multiclass RL78Alu16ESSel<string I, SDPatternOperator Node> {
+  def : Pat<(Node i16:$a, (load ESAbs16:$m)),
+            (!cast<Instruction>(I # "_AX_eabs16") $a, ESAbs16:$m)>;
+  def : Pat<(Node i16:$a, (load ESMemHLi0:$m)),
+            (!cast<Instruction>(I # "_AX_emHLi") $a, ESMemHLi0:$m)>;
+}
+defm : RL78Alu16ESSel<"ADDW", add>;
+defm : RL78Alu16ESSel<"SUBW", sub>;
+defm : RL78Alu16ESSel<"ADDW", addc>;
+defm : RL78Alu16ESSel<"SUBW", subc>;
+defm : RL78Alu16ESSel<"CMPW", RL78ucmp>;
+
+multiclass RL78IncDecESSel<string I, ValueType VT, int By> {
+  def : Pat<(store (add (VT (load ESAbs16:$m)), By), ESAbs16:$m),
+            (!cast<Instruction>(I # "_eabs16") ESAbs16:$m)>;
+  def : Pat<(store (add (VT (load ESMemHLi0:$m)), By), ESMemHLi0:$m),
+            (!cast<Instruction>(I # "_emHLi") ESMemHLi0:$m)>;
+}
+defm : RL78IncDecESSel<"INC", i8, 1>;
+defm : RL78IncDecESSel<"DEC", i8, -1>;
+defm : RL78IncDecESSel<"INCW", i16, 1>;
+defm : RL78IncDecESSel<"DECW", i16, -1>;
+
+def : Pat<(i8 (load ESAbs16:$m)), (MOV_r_eabs16 ESAbs16:$m)>;
+def : Pat<(i8 (load ESMemRP:$m)), (MOV_A_emRP ESMemRP:$m)>;
+def : Pat<(i8 (load ESMemRPi:$m)), (MOV_A_emRPi ESMemRPi:$m)>;
+def : Pat<(i8 (load ESMemHLr:$m)), (MOV_A_emHLr ESMemHLr:$m)>;
+def : Pat<(i8 (load ESMemBCw:$m)), (MOV_A_emBCw ESMemBCw:$m)>;
+def : Pat<(i8 (load ESMemBw:$m)), (MOV_A_emBw ESMemBw:$m)>;
+def : Pat<(store i8:$v, ESAbs16:$m), (MOV_eabs16_A ESAbs16:$m, $v)>;
+def : Pat<(store i8:$v, ESMemRP:$m), (MOV_emRP_A ESMemRP:$m, $v)>;
+def : Pat<(store i8:$v, ESMemRPi:$m), (MOV_emRPi_A ESMemRPi:$m, $v)>;
+def : Pat<(store i8:$v, ESMemHLr:$m), (MOV_emHLr_A ESMemHLr:$m, $v)>;
+def : Pat<(store i8:$v, ESMemBCw:$m), (MOV_emBCw_A ESMemBCw:$m, $v)>;
+def : Pat<(store i8:$v, ESMemBw:$m), (MOV_emBw_A ESMemBw:$m, $v)>;
+def : Pat<(store (i8 imm:$i), ESAbs16:$m), (MOV_eabs16_i8 ESAbs16:$m, imm:$i)>;
+def : Pat<(store (i8 imm:$i), ESMemRPi0:$m),
+          (MOV_emRPi_i8 ESMemRPi0:$m, imm:$i)>;
+def : Pat<(store (i8 imm:$i), ESMemBCw:$m), (MOV_emBCw_i8 ESMemBCw:$m, imm:$i)>;
+def : Pat<(store (i8 imm:$i), ESMemBw:$m), (MOV_emBw_i8 ESMemBw:$m, imm:$i)>;
+def : Pat<(store (i8 0), ESAbs16:$m), (CLRB_eabs16 ESAbs16:$m)>;
+def : Pat<(store (i8 1), ESAbs16:$m), (ONEB_eabs16 ESAbs16:$m)>;
+
+def : Pat<(i16 (load ESAbs16:$m)), (MOVW_rp_eabs16 ESAbs16:$m)>;
+def : Pat<(i16 (load ESMemRP:$m)), (MOVW_AX_emRP ESMemRP:$m)>;
+def : Pat<(i16 (load ESMemRPi:$m)), (MOVW_AX_emRPi ESMemRPi:$m)>;
+def : Pat<(i16 (load ESMemBCw:$m)), (MOVW_AX_emBCw ESMemBCw:$m)>;
+def : Pat<(i16 (load ESMemBw:$m)), (MOVW_AX_emBw ESMemBw:$m)>;
+def : Pat<(store i16:$v, ESAbs16:$m), (MOVW_eabs16_AX ESAbs16:$m, $v)>;
+def : Pat<(store i16:$v, ESMemRP:$m), (MOVW_emRP_AX ESMemRP:$m, $v)>;
+def : Pat<(store i16:$v, ESMemRPi:$m), (MOVW_emRPi_AX ESMemRPi:$m, $v)>;
+def : Pat<(store i16:$v, ESMemBCw:$m), (MOVW_emBCw_AX ESMemBCw:$m, $v)>;
+def : Pat<(store i16:$v, ESMemBw:$m), (MOVW_emBw_AX ESMemBw:$m, $v)>;
+
+def : Pat<(set1 (i8 imm:$b), ESAbs16:$m), (SET1_eabs16_b ESAbs16:$m, imm:$b)>;
+def : Pat<(set1 (i8 imm:$b), ESHL:$m), (SET1_emHL_b ESHL:$m, imm:$b)>;
+def : Pat<(clr1 (i8 imm:$b), ESAbs16:$m), (CLR1_eabs16_b ESAbs16:$m, imm:$b)>;
+def : Pat<(clr1 (i8 imm:$b), ESHL:$m), (CLR1_emHL_b ESHL:$m, imm:$b)>;

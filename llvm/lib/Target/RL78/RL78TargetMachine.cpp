@@ -281,6 +281,7 @@ void RL78PassConfig::addIRPasses() {
 
 bool RL78PassConfig::addInstSelector() {
   addPass(createRL78ISelDag(getRL78TargetMachine(), getOptLevel()));
+  addPass(createRL78AssignESPass());
   return false;
 }
 
