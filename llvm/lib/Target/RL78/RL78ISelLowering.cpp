@@ -1722,6 +1722,48 @@ static SDValue getCMP(SelectionDAG &DAG, const SDLoc &DL, SDValue LHS,
   return Cmp;
 }
 
+// The 16-bit words of an integer of 16, 32 or 64 bits, lowest first.
+static void getWords(SelectionDAG &DAG, const SDLoc &DL, SDValue V,
+                     SmallVectorImpl<SDValue> &Words) {
+  EVT VT = V.getValueType();
+  if (VT == MVT::i16) {
+    Words.push_back(V);
+    return;
+  }
+  EVT HalfVT = VT.getHalfSizedIntegerVT(*DAG.getContext());
+  for (unsigned I : {0, 1})
+    getWords(DAG, DL,
+             DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, V,
+                         DAG.getConstant(I, DL, MVT::i16)),
+             Words);
+}
+
+// The integer of the 16-bit words in Words, lowest first.
+static SDValue getFromWords(SelectionDAG &DAG, const SDLoc &DL,
+                            ArrayRef<SDValue> Words) {
+  if (Words.size() == 1)
+    return Words[0];
+  unsigned Half = Words.size() / 2;
+  SDValue Lo = getFromWords(DAG, DL, Words.take_front(Half));
+  SDValue Hi = getFromWords(DAG, DL, Words.drop_front(Half));
+  EVT VT = EVT::getIntegerVT(*DAG.getContext(), 16 * Words.size());
+  return DAG.getNode(ISD::BUILD_PAIR, DL, VT, Lo, Hi);
+}
+
+// The flags of a comparison of two integers of 32 or 64 bits: the highest
+// words are compared, and while the words are equal the next lower ones
+// (LOWCMP is SKNZ and CMPW).
+static SDValue getWideCMP(SelectionDAG &DAG, const SDLoc &DL, SDValue LHS,
+                          SDValue RHS, bool Signed) {
+  SmallVector<SDValue, 4> L, R;
+  getWords(DAG, DL, LHS, L);
+  getWords(DAG, DL, RHS, R);
+  SDValue Cmp = getCMP(DAG, DL, L.back(), R.back(), Signed);
+  for (unsigned I = L.size() - 1; I-- != 0;)
+    Cmp = DAG.getNode(RL78ISD::LOWCMP, DL, MVT::Glue, L[I], R[I], Cmp);
+  return Cmp;
+}
+
 static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
                                  SDValue &LHS, SDValue &RHS, SelectionDAG &DAG,
                                  SDValue &TargetCC) {
@@ -2792,61 +2834,32 @@ SDValue RL78TargetLowering::PerformBRCCCombine(SDNode *N,
   return SDValue();
 }
 
-SDValue RL78TargetLowering::PerformBRCONDCombine(SDNode *N, DAGCombinerInfo &DCI) const {
-  if (N->getOpcode() == ISD::BRCOND &&
-      N->getOperand(1)->getOpcode() == ISD::SETCC &&
-      N->getOperand(1)->getOperand(0).getValueType() == MVT::i32) {
-    // Combine:
-    // i1 = setcc t5, Imm, CC
-    // ch = brcond t0, t8,
-    // to:
-    // CMP HIGHW(t5), HIGW(Imm)
-    // SKNZ
-    // CMP LOWW(t5), LOWW(Imm)
-    // ch = brcond t0, t8,
-
-    SDLoc dl(N);
-    SDValue SetCC = N->getOperand(1);
-    SDValue Chain = N->getOperand(0);
-    SDValue Dest = N->getOperand(2);
-
-    SDValue LoIndex = DCI.DAG.getConstant(0, dl, MVT::i16);
-    SDValue HiIndex = DCI.DAG.getConstant(1, dl, MVT::i16);
-
-    SDValue LowLHS = DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
-                                     SetCC->getOperand(0), LoIndex);
-    SDValue HighLHS = DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
-                                      SetCC->getOperand(0), HiIndex);
-    SDValue LowRHS = DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
-                                     SetCC->getOperand(1), LoIndex);
-    SDValue HighRHS = DCI.DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16,
-                                      SetCC->getOperand(1), HiIndex);
-    ISD::CondCode CC =
-        cast<CondCodeSDNode>(N->getOperand(1)->getOperand(2))->get();
-
-    // defer <0 and >=0 to LowerBR_CC
-    if (SetCC->getOperand(1).getOpcode() == ISD::Constant &&
-        ((cast<ConstantSDNode>(SetCC->getOperand(1))->getZExtValue() == 0 &&
-          CC == ISD::SETLT) ||
-         (cast<ConstantSDNode>(SetCC->getOperand(1))->getSExtValue() == 0 &&
-          CC == ISD::SETGE) ||
-         (cast<ConstantSDNode>(SetCC->getOperand(1))->getSExtValue() == -1 &&
-          CC == ISD::SETGT))) {
+SDValue RL78TargetLowering::PerformBRCONDCombine(SDNode *N,
+                                                 DAGCombinerInfo &DCI) const {
+  // A branch on a comparison of two integers of 32 or 64 bits: compare the
+  // highest words, then the lower ones while those are equal, and branch on
+  // the flags.
+  //   CMPW; [SKNZ; CMPW]...; Bcc
+  SDValue SetCC = N->getOperand(1);
+  if (SetCC.getOpcode() != ISD::SETCC)
+    return SDValue();
+  SDValue LHS = SetCC.getOperand(0);
+  SDValue RHS = SetCC.getOperand(1);
+  if (LHS.getValueType() != MVT::i32 && LHS.getValueType() != MVT::i64)
+    return SDValue();
+  ISD::CondCode CC = cast<CondCodeSDNode>(SetCC.getOperand(2))->get();
+  // A test of the sign reads one bit (LowerBR_CC).
+  if (auto *C = dyn_cast<ConstantSDNode>(RHS))
+    if ((C->isZero() && (CC == ISD::SETLT || CC == ISD::SETGE)) ||
+        (C->isAllOnes() && CC == ISD::SETGT))
       return SDValue();
-    }
 
-
-    SDValue Cmp =
-        getCMP(DCI.DAG, dl, HighLHS, HighRHS, IntCondCCodeSign(CC) != 0);
-    SDValue LowCmp = DCI.DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, LowLHS,
-                                     LowRHS, Cmp);
-
-    SDValue TargetCC = DCI.DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
-    return DCI.DAG.getNode(RL78ISD::BRCC, dl, MVT::Other, Chain, Dest, TargetCC,
-                           LowCmp);
-  }
-
-  return SDValue();
+  SDLoc dl(N);
+  SelectionDAG &DAG = DCI.DAG;
+  SDValue Cmp = getWideCMP(DAG, dl, LHS, RHS, IntCondCCodeSign(CC) != 0);
+  SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
+  return DAG.getNode(RL78ISD::BRCC, dl, MVT::Other, N->getOperand(0),
+                     N->getOperand(2), TargetCC, Cmp);
 }
 
 static SDValue AsMULHCandidate(SDValue op, ISD::NodeType opcode,
@@ -3352,9 +3365,9 @@ static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
   SDValue FVal = N->getOperand(2);
   EVT VT = N->getValueType(0);
   SDLoc dl(N);
-  // An i32 chosen by a comparison. Type legalization would make the
-  // comparison a value and test that once for each half.
-  if (VT == MVT::i32 && Cond.getOpcode() == ISD::SETCC &&
+  // An i32 or i64 chosen by a comparison. Type legalization would make the
+  // comparison a value and test that once for each word.
+  if ((VT == MVT::i32 || VT == MVT::i64) && Cond.getOpcode() == ISD::SETCC &&
       Cond.getOperand(0).getValueType().isScalarInteger())
     return DAG.getSelectCC(dl, Cond.getOperand(0), Cond.getOperand(1), TVal,
                            FVal,
@@ -3366,16 +3379,18 @@ static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
                          TVal, FVal, ISD::SETNE);
 }
 
-// An ordered i32 setcc or select_cc producing an i8/i16 value. Type
-// legalization would compare the high halves twice (signed or unsigned and for
-// equality) and the low halves once, then pick a result with a select, which
-// becomes three compares and two branches. As PerformBRCONDCombine does, compare
-// the high halves, then (on equality) the low halves into the same flags:
-//   CMPW hi; [XOR1 CY fixup]; SKNZ; CMPW lo; select on the flags
+// A setcc or select_cc on a comparison of two integers of 32 or 64 bits.
+// Type legalization would compare the high halves twice (for the order and
+// for equality) and the low halves once, then pick a result with a select,
+// which becomes three compares and two branches for 32 bits and three times
+// that for 64. As PerformBRCONDCombine does, compare the highest words, then
+// the lower ones while those are equal, into the same flags:
+//   CMPW; [XOR1 CY fixup]; [SKNZ; CMPW]...; select on the flags
+// Equality of 32-bit values is left alone: its expansion is recognized later.
 static cl::opt<bool> RL78CombineI32Compare(
     "rl78-combine-i32-compare", cl::Hidden, cl::init(true),
-    cl::desc("Lower ordered i32 setcc/select_cc as one CMP/LOWCMP chain"));
-static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
+    cl::desc("Lower i32/i64 setcc/select_cc as one CMP/LOWCMP chain"));
+static SDValue PerformWideCompareCombine(SDNode *N, SelectionDAG &DAG) {
   if (!RL78CombineI32Compare)
     return SDValue();
   bool IsSetCC = N->getOpcode() == ISD::SETCC;
@@ -3384,7 +3399,10 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
   ISD::CondCode CC =
       cast<CondCodeSDNode>(N->getOperand(IsSetCC ? 2 : 4))->get();
   EVT VT = N->getValueType(0);
-  if (LHS.getValueType() != MVT::i32 || CC == ISD::SETEQ || CC == ISD::SETNE)
+  EVT CmpVT = LHS.getValueType();
+  if (CmpVT != MVT::i32 && CmpVT != MVT::i64)
+    return SDValue();
+  if (CmpVT == MVT::i32 && (CC == ISD::SETEQ || CC == ISD::SETNE))
     return SDValue();
   // Sign tests read one bit (see LowerBR_CC / LowerSELECT_CC).
   if (auto *C = dyn_cast<ConstantSDNode>(RHS))
@@ -3393,8 +3411,12 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
       return SDValue();
 
   SDLoc dl(N);
-  SDValue TVal, FVal;
-  EVT SelVT;
+  SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
+  auto Select = [&](EVT SelVT, SDValue TVal, SDValue FVal) {
+    SDValue Cmp = getWideCMP(DAG, dl, LHS, RHS, IntCondCCodeSign(CC) != 0);
+    return DAG.getNode(RL78ISD::SELECTCC, dl, SelVT, TVal, FVal, TargetCC,
+                       Cmp);
+  };
   if (IsSetCC) {
     // A setcc that feeds a branch or a select is combined by its user.
     for (SDNode *U : N->users())
@@ -3403,49 +3425,38 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
         return SDValue();
     if (!VT.isScalarInteger() || VT.bitsGT(MVT::i16))
       return SDValue();
-    SelVT = MVT::i16;
-    TVal = DAG.getConstant(1, dl, SelVT);
-    FVal = DAG.getConstant(0, dl, SelVT);
-  } else {
-    TVal = N->getOperand(2);
-    FVal = N->getOperand(3);
-    if ((VT != MVT::i8 && VT != MVT::i16 && VT != MVT::i32) ||
-        TVal.getOpcode() == RL78ISD::HI16 || FVal.getOpcode() == RL78ISD::HI16)
-      return SDValue();
-    SelVT = VT;
+    SDValue Sel = Select(MVT::i16, DAG.getConstant(1, dl, MVT::i16),
+                         DAG.getConstant(0, dl, MVT::i16));
+    return DAG.getZExtOrTrunc(Sel, dl, VT);
   }
 
-  SDValue Lo = DAG.getConstant(0, dl, MVT::i16);
-  SDValue Hi = DAG.getConstant(1, dl, MVT::i16);
-  auto Half = [&](SDValue V, SDValue Idx) {
-    return DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, V, Idx);
-  };
-  SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
-  auto Select = [&](EVT SelVT, SDValue TVal, SDValue FVal) {
-    SDValue Cmp = getCMP(DAG, dl, Half(LHS, Hi), Half(RHS, Hi),
-                         IntCondCCodeSign(CC) != 0);
-    SDValue LowCmp = DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, Half(LHS, Lo),
-                                 Half(RHS, Lo), Cmp);
-    return DAG.getNode(RL78ISD::SELECTCC, dl, SelVT, TVal, FVal, TargetCC,
-                       LowCmp);
-  };
-  // An i32 is chosen half by half. Each select has the comparison in front
-  // of it (the flags cannot be shared in the DAG); the custom inserter of the
-  // select pseudos gives the two one branch (LowerSELECTCC).
-  if (SelVT == MVT::i32)
-    return DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32,
-                       Select(MVT::i16, Half(TVal, Lo), Half(FVal, Lo)),
-                       Select(MVT::i16, Half(TVal, Hi), Half(FVal, Hi)));
-  SDValue Sel = Select(SelVT, TVal, FVal);
-  return IsSetCC ? DAG.getZExtOrTrunc(Sel, dl, VT) : Sel;
+  SDValue TVal = N->getOperand(2);
+  SDValue FVal = N->getOperand(3);
+  if (TVal.getOpcode() == RL78ISD::HI16 || FVal.getOpcode() == RL78ISD::HI16)
+    return SDValue();
+  if (VT == MVT::i8 || VT == MVT::i16)
+    return Select(VT, TVal, FVal);
+  if (VT != MVT::i32 && VT != MVT::i64)
+    return SDValue();
+  // A wider value is chosen word by word. Each select has the comparison in
+  // front of it (the flags cannot be shared in the DAG); the custom inserter
+  // of the select pseudos gives them one branch (LowerSELECTCC).
+  SmallVector<SDValue, 4> T, F, Words;
+  getWords(DAG, dl, TVal, T);
+  getWords(DAG, dl, FVal, F);
+  for (unsigned I = 0, E = T.size(); I != E; ++I)
+    Words.push_back(Select(MVT::i16, T[I], F[I]));
+  return getFromWords(DAG, dl, Words);
 }
 
-// A 32-bit minimum or maximum. Type legalization would compare the high
-// halves twice and the low halves once and pick the result with three
-// selects; as a select it is one comparison and one choice.
+// A minimum or maximum of 32 or 64 bits. Type legalization would compare the
+// high halves twice and the low halves once and pick the result with three
+// selects (and again for each half of 64 bits); as a select it is one
+// comparison and one choice.
 static SDValue PerformMinMaxCombine(SDNode *N,
                                     TargetLowering::DAGCombinerInfo &DCI) {
-  if (!DCI.isBeforeLegalize() || N->getValueType(0) != MVT::i32)
+  EVT VT = N->getValueType(0);
+  if (!DCI.isBeforeLegalize() || (VT != MVT::i32 && VT != MVT::i64))
     return SDValue();
   ISD::CondCode CC;
   switch (N->getOpcode()) {
@@ -3479,7 +3490,7 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
     return PerformMinMaxCombine(N, DCI);
   case ISD::SETCC:
   case ISD::SELECT_CC:
-    return PerformI32CompareCombine(N, DCI.DAG);
+    return PerformWideCompareCombine(N, DCI.DAG);
   case ISD::SELECT:
     return PerformSELECTCombine(N, DCI.DAG);
   case ISD::BR_CC:

@@ -17,7 +17,7 @@ define dso_local i16 @test_smulll(i64 noundef %0, i64 noundef %1, ptr nocapture 
 define dso_local i16 @main() local_unnamed_addr {
 ; CHECK-LABEL: main:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #24
+; CHECK-NEXT:    subw sp, #26
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, #2
 ; CHECK-NEXT:    movw [sp+8], ax
@@ -39,41 +39,32 @@ define dso_local i16 @main() local_unnamed_addr {
 ; CHECK-NEXT:    bnz $.LBB1_3
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, [sp+22]
-; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw [sp+24], ax
 ; CHECK-NEXT:    movw ax, [sp+20]
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [sp+18]
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    xor a, #254
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    xor a, #127
-; CHECK-NEXT:    or a, b
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    or a, c
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    or a, h
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    or a, l
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    or a, h
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    or a, l
-; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    movw ax, [sp+24]
 ; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, #32766
 ; CHECK-NEXT:    bnz $.LBB1_3
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    onew ax
-; CHECK-NEXT:    addw sp, #24
+; CHECK-NEXT:    addw sp, #26
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB1_3:
 ; CHECK-NEXT:    clrw ax
-; CHECK-NEXT:    addw sp, #24
+; CHECK-NEXT:    addw sp, #26
 ; CHECK-NEXT:    ret
   %1 = alloca i64, align 2, addrspace(1)
   %2 = addrspacecast ptr addrspace(1) %1 to ptr
