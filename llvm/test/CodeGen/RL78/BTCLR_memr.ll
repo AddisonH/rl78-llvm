@@ -16,14 +16,12 @@ define void @foo() {
 define void @test() {
 ; CHECK-LABEL: test:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw ax, !LOWW(_a)
-; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw hl, !LOWW(_a)
 ; CHECK-NEXT:    bt [hl].2, $.LBB1_2
 ; CHECK-NEXT:  ; %bb.1: ; %if.then
 ; CHECK-NEXT:    call !_foo
-; CHECK-NEXT:    movw ax, !LOWW(_a)
+; CHECK-NEXT:    movw hl, !LOWW(_a)
 ; CHECK-NEXT:  .LBB1_2: ; %if.end
-; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    clr1 [hl].2
 ; CHECK-NEXT:    ret
 entry:

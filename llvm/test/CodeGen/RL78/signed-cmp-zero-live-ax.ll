@@ -17,11 +17,10 @@ define void @f() {
 ; CHECK-NEXT:    addw ax, ax
 ; CHECK-NEXT:    bnh $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %then
-; CHECK-NEXT:    movw de, #8
+; CHECK-NEXT:    movw ax, #8
 ; CHECK-NEXT:    xch a, b
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    xch a, b
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    shl b, 5
 ; CHECK-NEXT:    sknc
 ; CHECK-NEXT:    shrw ax, 8
@@ -54,8 +53,7 @@ end:
 define void @g() {
 ; CHECK-LABEL: g:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw bc, !LOWW(_shift)
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw ax, !LOWW(_shift)
 ; CHECK-NEXT:    addw ax, ax
 ; CHECK-NEXT:    bnh $.LBB1_2
 ; CHECK-NEXT:  ; %bb.1: ; %then

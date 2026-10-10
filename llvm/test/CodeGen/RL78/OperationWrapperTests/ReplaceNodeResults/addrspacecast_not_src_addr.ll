@@ -8,20 +8,19 @@
 define dso_local void @func() local_unnamed_addr #1 {
 ; CHECK-LABEL: func:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw hl, !_func
 ; CHECK-NEXT:    clrw bc
-; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw ax, !_func
 ; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw bc, #15
 ; CHECK-NEXT:  .LBB0_2:
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    clrw ax
-; CHECK-NEXT:    movw es:[de+2], ax
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw es:[hl+2], ax
 ; CHECK-NEXT:    movw es:[hl], ax
 ; CHECK-NEXT:    ret
   %1 = load ptr addrspace(1), ptr @func, align 2

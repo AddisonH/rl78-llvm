@@ -14,12 +14,10 @@ declare void @padding_function(i64, i64, i64, i64)
 define void @bz_rel8_backward_jump(i16 %flag) {
 ; CHECK-LABEL: bz_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:  .LBB0_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    nop
-; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    nop
 ; CHECK-NEXT:    bz $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
 ; CHECK-NEXT:    ret
@@ -281,15 +279,16 @@ define void @bnz_rel8_backward_jump(i16 %counter) {
 ; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    bnh $.LBB4_2
-; CHECK-NEXT:  .LBB4_1: ; %for.body
-; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    decw bc
-; CHECK-NEXT:    nop
+; CHECK-NEXT:    bnh $.LBB4_3
+; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:  .LBB4_2: ; %for.body
+; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    nop
+; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    cmpw ax, #0
-; CHECK-NEXT:    bnz $.LBB4_1
-; CHECK-NEXT:  .LBB4_2: ; %for.cond.cleanup
+; CHECK-NEXT:    bnz $.LBB4_2
+; CHECK-NEXT:  .LBB4_3: ; %for.cond.cleanup
 ; CHECK-NEXT:    ret
 entry:
   %cmp2 = icmp sgt i16 %counter, 0

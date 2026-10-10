@@ -8,11 +8,9 @@ target triple = "rl78-unknown-unknown-elf"
 define dso_local void @test_SelectADDRr(ptr noundef %0, i8 noundef %1, i8 noundef %2) local_unnamed_addr  {
 ; CHECK-LABEL: test_SelectADDRr:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov1 cy, a.2
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    and1 cy, [hl].1
 ; CHECK-NEXT:    mov1 [hl].1, cy
 ; CHECK-NEXT:    ret

@@ -45,12 +45,11 @@ define void @test_DAGCombine_ADD_HI16(i16 %idx) {
 ; HI16-NEXT:    mov es, #HIGHW(_u)
 ; HI16-NEXT:    movw ax, #LOWW(_u)
 ; HI16-NEXT:    addw ax, bc
+; HI16-NEXT:    clrw bc
 ; HI16-NEXT:    movw hl, ax
-; HI16-NEXT:    clrw ax
-; HI16-NEXT:    push hl
-; HI16-NEXT:    pop de
-; HI16-NEXT:    mov es:[de+1], a
-; HI16-NEXT:    mov a, x
+; HI16-NEXT:    mov a, b
+; HI16-NEXT:    mov es:[hl+1], a
+; HI16-NEXT:    mov a, c
 ; HI16-NEXT:    mov es:[hl], a
 ; HI16-NEXT:    ret
   %p = getelementptr inbounds i8, ptr @u, i16 %idx

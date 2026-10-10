@@ -10,17 +10,15 @@ define i32 @test_load_add_logic() {
 ; CHECK-LABEL: test_load_add_logic:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    movw ax, #LOWW(_buf)
-; CHECK-NEXT:    movw de, #HIGHW(_buf)
+; CHECK-NEXT:    movw bc, #HIGHW(_buf)
 ; CHECK-NEXT:    addw ax, #64
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    sknc
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    incw de
+; CHECK-NEXT:    incw bc
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    mov a, e
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw ax, es:[hl+2]
 ; CHECK-NEXT:    mov es, #HIGHW(_buf)
 ; CHECK-NEXT:    movw bc, ax

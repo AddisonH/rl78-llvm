@@ -9,11 +9,9 @@
 define dso_local void @aa(ptr noalias nocapture writeonly sret(i64) align 2 %0, i64 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: aa:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw [hl+6], ax
 ; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    xch a, x
@@ -24,7 +22,7 @@ define dso_local void @aa(ptr noalias nocapture writeonly sret(i64) align 2 %0, 
 ; CHECK-NEXT:    movw ax, [sp+10]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    ret
   %3 = tail call i64 @llvm.bswap.i64(i64 %1)
   store i64 %3, ptr %0, align 2

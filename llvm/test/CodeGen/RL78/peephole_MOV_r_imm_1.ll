@@ -5,9 +5,7 @@
 define i8 @foo(i8 %0) {
 ; CHECK-LABEL: foo:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    clrb c
-; CHECK-NEXT:    mov x, a
-; CHECK-NEXT:    mov a, c
+; CHECK-NEXT:    shrw ax, 8
 ; CHECK-NEXT:    sub a, x
 ; CHECK-NEXT:    ret
   %2 = zext i8 %0 to i16

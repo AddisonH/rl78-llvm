@@ -74,10 +74,10 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    xor a, d
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, e
-; NOSCHED-NEXT:    shlw bc, 3
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    movw ax, bc
+; NOSCHED-NEXT:    shlw ax, 3
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
@@ -359,10 +359,10 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xor a, d
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, e
-; SCHED-NEXT:    shlw bc, 3
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    movw ax, bc
+; SCHED-NEXT:    shlw ax, 3
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l

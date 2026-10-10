@@ -7,20 +7,19 @@
 define dso_local void @test_trunc_store(i32 %val, ptr %ptr) {
 ; CHECK-LABEL: test_trunc_store:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    xch a, b
+; CHECK-NEXT:    mov a, x
+; CHECK-NEXT:    xch a, b
+; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    mov a, e
+; CHECK-NEXT:    mov a, b
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
 ; CHECK-NEXT:    mov a, c
-; CHECK-NEXT:    mov es:[de+2], a
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    mov es:[hl+2], a
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw es:[hl], ax
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %trunc = trunc i32 %val to i24
   store i24 %trunc, ptr %ptr, align 4

@@ -9,24 +9,20 @@
 define ptr @negofs(ptr %p) {
 ; CHECK-LABEL: negofs:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    mov l, a
+; CHECK-NEXT:    mov c, a
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    decw ax
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    mov a, l
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw ax, es:[de]
+; CHECK-NEXT:    movw ax, es:[hl]
 ; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    bz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %clear
 ; CHECK-NEXT:    movw de, #0
-; CHECK-NEXT:    mov a, l
+; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw es:[hl], ax
 ; CHECK-NEXT:  .LBB0_2: ; %ret

@@ -13,10 +13,22 @@
 #include "RL78Subtarget.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/VirtRegMap.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "rl78-reginfo"
+
+static cl::opt<bool> RL78CopyHints(
+    "rl78-copy-hints", cl::Hidden, cl::init(true),
+    cl::desc("Hint the register of a single-register class that a value is "
+             "copied to or from"));
+
+static cl::opt<bool> RL78JoinFree(
+    "rl78-join-free", cl::Hidden, cl::init(true),
+    cl::desc("Join a copy into a single-register class when nothing else "
+             "needs that register meanwhile"));
 
 #define GET_REGINFO_TARGET_DESC
 #include "RL78GenRegisterInfo.inc"
@@ -32,16 +44,11 @@ bool RL78RegisterInfo::isSmallClass(const TargetRegisterClass *RC) const {
   case RL78::RL78HLRegClassID:
   case RL78::RL78BCRPRegClassID:
   case RL78::RL78DERPRegClassID:
-  case RL78::RL78DEHLRegClassID:
   case RL78::RL78AXBCRPRegClassID:
   case RL78::RL78ARegRegClassID:
   case RL78::RL78XRegRegClassID:
-  case RL78::RL78BCRegRegClassID:
   case RL78::RL78BReg8RegClassID:
   case RL78::RL78CReg8RegClassID:
-  case RL78::RL78XBCEDHLRegRegClassID:
-  case RL78::RL78LowRegClassID:
-  case RL78::RL78ABCRegRegClassID:
     return true;
   }
   return false;
@@ -80,18 +87,119 @@ float RL78RegisterInfo::getSpillWeightScaleFactor(
 // constrained value as short as RL78SplitConstrainedValues made it; the copy
 // stays, with the allocator's hints to make it a no-op where the register is
 // free. (Joining where it is provably free is a later optimisation.)
+bool RL78RegisterInfo::getRegAllocationHints(
+    Register VirtReg, ArrayRef<MCPhysReg> Order,
+    SmallVectorImpl<MCPhysReg> &Hints, const MachineFunction &MF,
+    const VirtRegMap *VRM, const LiveRegMatrix *Matrix) const {
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  // The generic hints know the physical registers this value is copied to or
+  // from, and virtual ones once they are assigned. A value that is copied
+  // into the operand of an instruction that takes one register only (or
+  // comes out of one) will meet that register for certain: say so before it
+  // is assigned. There is no move between two of BC, DE and HL, nor between
+  // two of X, C, B ..., so those go first; anything moves to and from AX
+  // and A in one byte, and they are the registers everything else wants.
+  SmallVector<MCPhysReg, 4> Fixed, Accumulator;
+  if (RL78CopyHints && VirtReg.isVirtual()) {
+    const TargetRegisterClass *RC = MRI.getRegClass(VirtReg);
+    auto Add = [&](MCPhysReg Reg) {
+      if (!Reg || !is_contained(Order, Reg) || MRI.isReserved(Reg))
+        return;
+      bool IsAcc = Reg == RL78::RP0 || Reg == RL78::R1;
+      SmallVectorImpl<MCPhysReg> &List = IsAcc ? Accumulator : Fixed;
+      if (!is_contained(List, Reg))
+        List.push_back(Reg);
+    };
+    for (const MachineInstr &MI : MRI.reg_nodbg_instructions(VirtReg)) {
+      if (!MI.isCopy())
+        continue;
+      const MachineOperand &Dst = MI.getOperand(0);
+      const MachineOperand &Src = MI.getOperand(1);
+      bool IsDef = Dst.getReg() == VirtReg;
+      const MachineOperand &Mine = IsDef ? Dst : Src;
+      const MachineOperand &Other = IsDef ? Src : Dst;
+      if (!Other.getReg().isVirtual() || Other.getReg() == VirtReg)
+        continue;
+      if (VRM && VRM->hasPhys(Other.getReg()))
+        continue;
+      const TargetRegisterClass *OtherRC = MRI.getRegClass(Other.getReg());
+      if (OtherRC->getNumRegs() != 1)
+        continue;
+      MCPhysReg Reg = *OtherRC->begin();
+      // The register of this value that holds the other one.
+      if (Other.getSubReg())
+        Reg = getSubReg(Reg, Other.getSubReg());
+      if (Reg && Mine.getSubReg())
+        Reg = getMatchingSuperReg(Reg, Mine.getSubReg(), RC);
+      Add(Reg);
+    }
+  }
+  Hints.append(Fixed.begin(), Fixed.end());
+  bool Hard = TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints,
+                                                        MF, VRM, Matrix);
+  for (MCPhysReg Reg : Accumulator)
+    if (!is_contained(Hints, Reg))
+      Hints.push_back(Reg);
+  return Hard;
+}
+
+// Whether nothing else needs \p Reg while \p A or \p B is live: no use or
+// definition of the physical register, no call that clobbers it, and no
+// other value of a small class that includes it.
+static bool isFreeAcross(MCRegister Reg, const LiveInterval &A,
+                         const LiveInterval &B, LiveIntervals &LIS,
+                         const MachineRegisterInfo &MRI,
+                         const RL78RegisterInfo &TRI) {
+  auto Overlaps = [&](const LiveRange &LR) {
+    return A.overlaps(LR) || B.overlaps(LR);
+  };
+  for (MCRegUnit Unit : TRI.regunits(Reg))
+    if (Overlaps(LIS.getRegUnit(Unit)))
+      return false;
+  for (const LiveInterval *LI : {&A, &B}) {
+    BitVector Usable;
+    if (LIS.checkRegMaskInterference(*LI, Usable) && !Usable.test(Reg))
+      return false;
+  }
+  for (unsigned I = 0, E = MRI.getNumVirtRegs(); I != E; ++I) {
+    Register VReg = Register::index2VirtReg(I);
+    if (VReg == A.reg() || VReg == B.reg() || !LIS.hasInterval(VReg))
+      continue;
+    const TargetRegisterClass *RC = MRI.getRegClass(VReg);
+    if (!TRI.isSmallClass(RC) ||
+        none_of(*RC, [&](MCPhysReg R) { return TRI.regsOverlap(R, Reg); }))
+      continue;
+    if (Overlaps(LIS.getInterval(VReg)))
+      return false;
+  }
+  return true;
+}
+
 bool RL78RegisterInfo::shouldCoalesce(
     MachineInstr *MI, const TargetRegisterClass *SrcRC, unsigned SubReg,
     const TargetRegisterClass *DstRC, unsigned DstSubReg,
     const TargetRegisterClass *NewRC, LiveIntervals &LIS) const {
-  auto IsSmall = [&](const TargetRegisterClass *RC) {
-    return isSmallClass(RC);
-  };
-  if (!IsSmall(NewRC))
+  if (!isSmallClass(NewRC))
     return true;
+  if (SubReg || DstSubReg)
+    return false;
   // The copy two-address lowering makes for a tied operand joins two
   // constrained values next to one instruction.
-  return IsSmall(SrcRC) && IsSmall(DstRC) && !SubReg && !DstSubReg;
+  if (isSmallClass(SrcRC) && isSmallClass(DstRC))
+    return true;
+  // A value may stay in the one register an instruction needs it in for as
+  // long as nothing else needs that register: every other need shows as a
+  // value of a small class or as the physical register, so the joined value
+  // can always be assigned.
+  if (!RL78JoinFree || NewRC->getNumRegs() != 1)
+    return false;
+  Register Dst = MI->getOperand(0).getReg();
+  Register Src = MI->getOperand(1).getReg();
+  if (!Dst.isVirtual() || !Src.isVirtual())
+    return false;
+  return isFreeAcross(*NewRC->begin(), LIS.getInterval(Src),
+                      LIS.getInterval(Dst), LIS,
+                      MI->getMF()->getRegInfo(), *this);
 }
 
 const MCPhysReg *

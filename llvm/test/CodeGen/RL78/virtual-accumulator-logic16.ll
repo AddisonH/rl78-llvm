@@ -14,13 +14,11 @@ define void @and_eq0(i16 %x, i16 %y) {
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    and a, c
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:  ; %bb.2: ; %e
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB0_1: ; %t
-; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw !LOWW(_g), ax
 ; CHECK-NEXT:    ret
   %a = and i16 %x, %y

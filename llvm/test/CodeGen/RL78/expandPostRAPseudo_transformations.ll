@@ -60,10 +60,7 @@ define i8 @SHL_test(i8 %a, i8 %b){
 ;
 ; O2-LABEL: SHL_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    xch a, c
-; O2-NEXT:    mov a, x
-; O2-NEXT:    xch a, c
-; O2-NEXT:    cmp0 c
+; O2-NEXT:    cmp0 x
 ; O2-NEXT:    bz $.LBB1_2
 ; O2-NEXT:  .LBB1_1: ; =>This Inner Loop Header: Depth=1
 ; O2-NEXT:    shl a, 1
@@ -131,10 +128,7 @@ define i8 @SHR_test(i8 %a, i8 %b){
 ;
 ; O2-LABEL: SHR_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    xch a, c
-; O2-NEXT:    mov a, x
-; O2-NEXT:    xch a, c
-; O2-NEXT:    cmp0 c
+; O2-NEXT:    cmp0 x
 ; O2-NEXT:    bz $.LBB3_2
 ; O2-NEXT:  .LBB3_1: ; =>This Inner Loop Header: Depth=1
 ; O2-NEXT:    shr a, 1
@@ -202,10 +196,7 @@ define i8 @SAR_test(i8 %a, i8 %b){
 ;
 ; O2-LABEL: SAR_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    xch a, c
-; O2-NEXT:    mov a, x
-; O2-NEXT:    xch a, c
-; O2-NEXT:    cmp0 c
+; O2-NEXT:    cmp0 x
 ; O2-NEXT:    bz $.LBB5_2
 ; O2-NEXT:  .LBB5_1: ; =>This Inner Loop Header: Depth=1
 ; O2-NEXT:    sar a, 1
@@ -376,10 +367,7 @@ define i8 @ROTL_test(i8 %x, i8 %n){
 ;
 ; O2-LABEL: ROTL_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    xch a, c
-; O2-NEXT:    mov a, x
-; O2-NEXT:    xch a, c
-; O2-NEXT:    cmp0 c
+; O2-NEXT:    cmp0 x
 ; O2-NEXT:    bz $.LBB8_2
 ; O2-NEXT:  .LBB8_1: ; =>This Inner Loop Header: Depth=1
 ; O2-NEXT:    rol a, 1
@@ -418,10 +406,7 @@ define i8 @ROTR_test(i8 %x, i8 %n){
 ;
 ; O2-LABEL: ROTR_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    xch a, c
-; O2-NEXT:    mov a, x
-; O2-NEXT:    xch a, c
-; O2-NEXT:    cmp0 c
+; O2-NEXT:    cmp0 x
 ; O2-NEXT:    bz $.LBB9_2
 ; O2-NEXT:  .LBB9_1: ; =>This Inner Loop Header: Depth=1
 ; O2-NEXT:    ror a, 1

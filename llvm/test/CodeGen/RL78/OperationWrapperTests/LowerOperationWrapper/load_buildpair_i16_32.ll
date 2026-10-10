@@ -12,9 +12,7 @@ define dso_local i32 @test_load() #0 {
 ; CHECK-NEXT:    movw ax, es:!LOWW(_global_ptr+2)
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw ax, es:[de+8]
+; CHECK-NEXT:    movw ax, es:[hl+8]
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, es:[hl+10]
 ; CHECK-NEXT:    movw bc, ax

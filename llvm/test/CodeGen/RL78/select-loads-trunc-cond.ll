@@ -10,13 +10,7 @@ target datalayout = "e-m:o-p0:32:16:16-A1-p1:16:16:16-p2:32:16:16:16-p3:32:16:16
 define i16 @value_or(ptr nonnull align 2 dereferenceable(3) %e, ptr nonnull align 2 dereferenceable(2) %d) {
 ; CHECK-LABEL: value_or:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    mov l, a
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop bc
 ; CHECK-NEXT:    clrb a
 ; CHECK-NEXT:    mov a, l
 ; CHECK-NEXT:    mov es, a
@@ -24,17 +18,13 @@ define i16 @value_or(ptr nonnull align 2 dereferenceable(3) %e, ptr nonnull alig
 ; CHECK-NEXT:    cmp0 a
 ; CHECK-NEXT:    bnz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    pop de
 ; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    mov a, l
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
 ; CHECK-NEXT:    movw ax, es:[de]
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %hp = getelementptr inbounds nuw i8, ptr %e, i32 2
   %h = load i8, ptr %hp, align 2, !range !0, !noundef !1

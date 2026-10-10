@@ -9,10 +9,8 @@ define dso_local i16 @test_pushPop_1(i16 noundef %x) {
 ; CHECK-LABEL: test_pushPop_1:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    incw bc
 ; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    incw ax
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %x.addr = alloca i16, align 2
@@ -26,10 +24,8 @@ define dso_local i16 @test_pushPop_2(i16 noundef %x) {
 ; CHECK-LABEL: test_pushPop_2:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    incw bc
 ; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    incw ax
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %x.addr = alloca i16, align 2

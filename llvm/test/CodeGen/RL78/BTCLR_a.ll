@@ -21,8 +21,8 @@ define void @test()  {
 ; CHECK-LABEL: test:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    mov a, !LOWW(_g_cmd_flag.0)
-; CHECK-NEXT:    mov x, a
+; CHECK-NEXT:    mov x, !LOWW(_g_cmd_flag.0)
+; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    bt a.1, $.LBB1_2
 ; CHECK-NEXT:  ; %bb.1: ; %if.then
 ; CHECK-NEXT:    mov a, x

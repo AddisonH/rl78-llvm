@@ -7,16 +7,14 @@
 define i32 @test_load(i32 %0) {
 ; CHECK-LABEL: test_load:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw ax, es:[hl]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, es:[de+2]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, es:[hl+2]
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
   %p = inttoptr i32 %0 to ptr
   %v = load i32, ptr %p, align 2

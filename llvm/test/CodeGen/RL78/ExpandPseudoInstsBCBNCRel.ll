@@ -14,12 +14,10 @@ declare void @padding_function(i64, i64, i64, i64)
 define void @bc_rel8_backward_jump(i16 %current, i16 %limit) {
 ; CHECK-LABEL: bc_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:  .LBB0_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    incw de
 ; CHECK-NEXT:    nop
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    incw ax
 ; CHECK-NEXT:    cmpw ax, bc
 ; CHECK-NEXT:    bc $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
@@ -287,12 +285,10 @@ if.end:
 define void @bnc_rel8_backward_jump(i16 %current, i16 %limit) {
 ; CHECK-LABEL: bnc_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:  .LBB4_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    nop
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    cmpw ax, bc
 ; CHECK-NEXT:    bnc $.LBB4_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end

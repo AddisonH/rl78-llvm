@@ -41,9 +41,9 @@ define dso_local i16 @aj(i8 noundef %0) local_unnamed_addr #0 {
 define dso_local i8 @an(ptr addrspace(2) nocapture noundef readonly %0) local_unnamed_addr #1 {
 ; CHECK-LABEL: an:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop bc
+; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    mov a, es:1000[bc]
 ; CHECK-NEXT:    ret
   %2 = getelementptr inbounds i8, ptr addrspace(2) %0, i16 1000

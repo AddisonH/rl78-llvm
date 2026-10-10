@@ -57,6 +57,14 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
   /// class is kept next to that instruction.
   bool isSmallClass(const TargetRegisterClass *RC) const;
 
+  /// Hints the register that a value is copied to or from when that copy's
+  /// other side can only be one register (the operand of an instruction
+  /// that takes HL, BC, B, ...).
+  bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
+                             SmallVectorImpl<MCPhysReg> &Hints,
+                             const MachineFunction &MF, const VirtRegMap *VRM,
+                             const LiveRegMatrix *Matrix) const override;
+
   bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
                       unsigned SubReg, const TargetRegisterClass *DstRC,
                       unsigned DstSubReg, const TargetRegisterClass *NewRC,

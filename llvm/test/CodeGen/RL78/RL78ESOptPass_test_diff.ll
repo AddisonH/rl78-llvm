@@ -15,10 +15,8 @@ define dso_local void @test_diff() local_unnamed_addr {
 ; CHECK-NEXT:    movw ax, !LOWW(_p+2)
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw es:[de+4], ax
+; CHECK-NEXT:    movw es:[hl+4], ax
 ; CHECK-NEXT:    movw ax, #12
 ; CHECK-NEXT:    movw es:[hl], ax
 ; CHECK-NEXT:    ret

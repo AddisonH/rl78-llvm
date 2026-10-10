@@ -17,51 +17,53 @@
 define ptr @find(ptr %n, i16 %key) {
 ; CHECK-LABEL: find:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:  .LBB0_1: ; %entry
-; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:    cmpw ax, #0
-; CHECK-NEXT:    bz $.LBB0_5
-; CHECK-NEXT:  ; %bb.2: ; %loop
-; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
+; CHECK-NEXT:    bz $.LBB0_4
+; CHECK-NEXT:  .LBB0_2: ; %loop
+; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    cmpw ax, [hl+2]
 ; CHECK-NEXT:    bz $.LBB0_3
-; CHECK-NEXT:  ; %bb.4: ; %cont
-; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    movw ax, [de]
-; CHECK-NEXT:    br $.LBB0_1
-; CHECK-NEXT:  .LBB0_5:
-; CHECK-NEXT:    clrw ax
+; CHECK-NEXT:  ; %bb.5: ; %cont
+; CHECK-NEXT:    ; in Loop: Header=BB0_2 Depth=1
+; CHECK-NEXT:    movw ax, [hl]
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    bnz $.LBB0_2
+; CHECK-NEXT:  .LBB0_4: ; %done
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB0_3:
+; CHECK-NEXT:    push hl
+; CHECK-NEXT:    pop de
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
 ;
 ; PINNED-LABEL: find:
 ; PINNED:       ; %bb.0: ; %entry
-; PINNED-NEXT:  .LBB0_1: ; %entry
-; PINNED-NEXT:    ; =>This Inner Loop Header: Depth=1
-; PINNED-NEXT:    movw de, ax
+; PINNED-NEXT:    movw hl, ax
+; PINNED-NEXT:    movw de, #0
 ; PINNED-NEXT:    cmpw ax, #0
-; PINNED-NEXT:    bz $.LBB0_5
-; PINNED-NEXT:  ; %bb.2: ; %loop
-; PINNED-NEXT:    ; in Loop: Header=BB0_1 Depth=1
+; PINNED-NEXT:    bz $.LBB0_4
+; PINNED-NEXT:  .LBB0_2: ; %loop
+; PINNED-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; PINNED-NEXT:    movw ax, bc
-; PINNED-NEXT:    push de
-; PINNED-NEXT:    pop hl
 ; PINNED-NEXT:    cmpw ax, [hl+2]
 ; PINNED-NEXT:    bz $.LBB0_3
-; PINNED-NEXT:  ; %bb.4: ; %cont
-; PINNED-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; PINNED-NEXT:    movw ax, [de]
-; PINNED-NEXT:    br $.LBB0_1
-; PINNED-NEXT:  .LBB0_5:
-; PINNED-NEXT:    clrw ax
+; PINNED-NEXT:  ; %bb.5: ; %cont
+; PINNED-NEXT:    ; in Loop: Header=BB0_2 Depth=1
+; PINNED-NEXT:    movw ax, [hl]
+; PINNED-NEXT:    movw hl, ax
+; PINNED-NEXT:    cmpw ax, #0
+; PINNED-NEXT:    bnz $.LBB0_2
+; PINNED-NEXT:  .LBB0_4: ; %done
+; PINNED-NEXT:    movw ax, de
 ; PINNED-NEXT:    ret
 ; PINNED-NEXT:  .LBB0_3:
+; PINNED-NEXT:    push hl
+; PINNED-NEXT:    pop de
 ; PINNED-NEXT:    movw ax, de
 ; PINNED-NEXT:    ret
 entry:

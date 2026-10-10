@@ -10,25 +10,17 @@ define void @inc(ptr %c, i16 %i) {
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    shlw bc, 2
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [hl+2]
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    onew ax
 ; CHECK-NEXT:    addw ax, [hl+0]
 ; CHECK-NEXT:    sknc
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    incw de
+; CHECK-NEXT:    incw bc
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw [de], ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw [hl], ax
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    ret
   %p = getelementptr inbounds i32, ptr %c, i16 %i
@@ -41,25 +33,17 @@ define void @inc(ptr %c, i16 %i) {
 define void @dec(ptr %c) {
 ; CHECK-LABEL: dec:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [hl+2]
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, #-3
 ; CHECK-NEXT:    addw ax, [hl+0]
 ; CHECK-NEXT:    skc
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    decw de
+; CHECK-NEXT:    decw bc
 ; CHECK-NEXT:  .LBB1_2:
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw [de], ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw [hl], ax
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    ret
   %v = load i32, ptr %c, align 2

@@ -7,12 +7,12 @@ target triple = "rl78-unknown-unknown-elf"
 define dso_local i8 @test_SelectESADDRrr(ptr addrspace(2) nocapture noundef readonly %0, i8 noundef %1) local_unnamed_addr {
 ; CHECK-LABEL: test_SelectESADDRrr:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    xch a, c
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    xch a, c
+; CHECK-NEXT:    push de
+; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    mov a, es:[hl+c]
 ; CHECK-NEXT:    ret
   %3 = zext i8 %1 to i16

@@ -7,24 +7,27 @@
 define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture noundef writeonly %2) local_unnamed_addr #0 {
 ; CHECK-LABEL: test_add:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    cmpw ax, de
+; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, d
+; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    movw de, #1
+; CHECK-NEXT:    movw hl, #1
 ; CHECK-NEXT:    skc
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    movw de, #0
+; CHECK-NEXT:    movw hl, #0
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw [hl], ax
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw [de], ax
 ; CHECK-NEXT:    mov a, b
 ; CHECK-NEXT:    onew bc
 ; CHECK-NEXT:    bt a.7, $.LBB0_4
@@ -32,9 +35,9 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:  .LBB0_4:
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    xor a, d
+; CHECK-NEXT:    xor a, h
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    xor a, e
+; CHECK-NEXT:    xor a, l
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret

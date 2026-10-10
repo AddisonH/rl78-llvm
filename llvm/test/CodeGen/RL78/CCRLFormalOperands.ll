@@ -83,10 +83,8 @@ define dso_local i8 @test_formal_struct5([5 x i8] %0) local_unnamed_addr {
 define dso_local void @test_formal_ll(ptr noalias nocapture writeonly sret(i64) align 2 %0, i64 noundef %1) local_unnamed_addr {
 ; CHECK-LABEL: test_formal_ll:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw [hl+6], ax
 ; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    movw [hl+4], ax
@@ -94,7 +92,7 @@ define dso_local void @test_formal_ll(ptr noalias nocapture writeonly sret(i64) 
 ; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    ret
   store i64 %1, ptr %0, align 2
   ret void
