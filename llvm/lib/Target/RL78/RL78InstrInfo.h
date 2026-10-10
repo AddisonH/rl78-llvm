@@ -39,19 +39,8 @@ public:
   bool findCommutedOpIndices(const MachineInstr &MI, unsigned &SrcOpIdx1,
                              unsigned &SrcOpIdx2) const override;
 
-  /// Accumulator operands carry their real class
-  /// (RL78AXRP or RL78AReg) instead of the general one.
-  const TargetRegisterClass *getRegClass(const MCInstrDesc &MCID,
-                                         unsigned OpNum) const override;
 
-  /// The class operand OpNum of Opcode is pinned to (RL78AXRP, RL78AReg), or
-  /// null if it is not an accumulator operand.
-  static const TargetRegisterClass *getAccumulatorClass(unsigned Opcode,
-                                                        unsigned OpNum);
 
-  /// Whether operand OpNum of Opcode may hold the accumulator: it is pinned
-  /// to it, or takes any register.
-  static bool acceptsAccumulator(unsigned Opcode, unsigned OpNum);
 
   /// Expands the 16-bit pseudos that are two 8-bit operations on AX.
   bool expandWideOnAX(MachineInstr &MI) const;

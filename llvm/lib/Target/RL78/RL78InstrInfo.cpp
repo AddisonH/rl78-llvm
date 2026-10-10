@@ -725,42 +725,6 @@ bool RL78InstrInfo::reverseBranchCondition(
   return false;
 }
 
-static uint32_t accKey(unsigned Opcode, unsigned OpNum) {
-  return Opcode << 8 | OpNum;
-}
-
-const TargetRegisterClass *
-RL78InstrInfo::getAccumulatorClass(unsigned Opcode, unsigned OpNum) {
-  static const DenseMap<uint32_t, const TargetRegisterClass *> Map = [] {
-    DenseMap<uint32_t, const TargetRegisterClass *> M;
-#define ACC_OPERAND(OPC, IDX, CLS)                                             \
-  M[accKey(RL78::OPC, IDX)] = CLASS_##CLS;
-#define CLASS_AX &RL78::RL78AXRPRegClass
-#define CLASS_A &RL78::RL78ARegRegClass
-#include "RL78AccumulatorOperands.def"
-#undef CLASS_AX
-#undef CLASS_A
-    return M;
-  }();
-  return Map.lookup(accKey(Opcode, OpNum));
-}
-
-bool RL78InstrInfo::acceptsAccumulator(unsigned Opcode, unsigned OpNum) {
-  static const DenseSet<uint32_t> Any = [] {
-    DenseSet<uint32_t> S;
-#define ANY_OPERAND(OPC, IDX) S.insert(accKey(RL78::OPC, IDX));
-#include "RL78AccumulatorOperands.def"
-    return S;
-  }();
-  return getAccumulatorClass(Opcode, OpNum) ||
-         Any.contains(accKey(Opcode, OpNum));
-}
-
-const TargetRegisterClass *RL78InstrInfo::getRegClass(const MCInstrDesc &MCID,
-                                                      unsigned OpNum) const {
-  return TargetInstrInfo::getRegClass(MCID, OpNum);
-}
-
 // Commuting `AX = ADDW AX, rp` would move the value pinned to AX (a virtual
 // register of the single-register class RL78AXRP) into the other operand.
 bool RL78InstrInfo::findCommutedOpIndices(const MachineInstr &MI,
