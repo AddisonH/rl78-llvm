@@ -44,6 +44,8 @@ Register RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
   // MI.dump();
   if ((MI.getOpcode() == RL78::LOAD8_r_stack_slot) ||
       (MI.getOpcode() == RL78::LOAD16_rp_stack_slot) ||
+      (MI.getOpcode() == RL78::LOAD8_r_arg_slot) ||
+      (MI.getOpcode() == RL78::LOAD16_rp_arg_slot) ||
       (MI.getOpcode() == RL78::MOV_A_mSPi) ||
       (MI.getOpcode() == RL78::MOVW_AX_mSPi)) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&

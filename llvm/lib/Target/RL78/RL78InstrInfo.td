@@ -191,6 +191,8 @@ def ADDRri8 : ComplexPattern<iPTR, 2, "SelectADDRri<255>", [], []>;
 def ADDRr8i16 : ComplexPattern<iPTR, 2, "SelectADDRr8i16", [], []>;
 // i16 instead of iPTR for far data.
 def ADDRSPi : ComplexPattern<i16, 2, "SelectADDRSPi", [frameindex], []>;
+// The slot of an argument passed on the stack (never written).
+def ADDRArgSP : ComplexPattern<i16, 2, "SelectADDRArgSP", [frameindex], []>;
 def ADDRABS16 : ComplexPattern<iPTR, 1, "SelectADDRABS16", [], []>;
 def SADDR : ComplexPattern<iPTR, 1, "SelectSaddr", [], []>;
 def SFR : ComplexPattern<iPTR, 1, "SelectSFR", [], []>;

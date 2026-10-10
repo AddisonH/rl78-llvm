@@ -22,7 +22,6 @@
 // MOV/MOVW with [SP+byte] exist for A and AX only. Spill code needs any
 // register: RL78InsertExchangeInstructions exchanges it with A or AX around
 // the access.
-let usesCustomInserter = 1 in {
 let mayLoad = 1 in {
 def LOAD8_r_stack_slot
     : RL78Pseudo<2, (outs RL78Reg:$rd), (ins STACKSlot:$addr)>;
@@ -35,6 +34,19 @@ def STORE8_stack_slot_r
 def STORE16_stack_slot_rp
     : RL78Pseudo<2, (outs), (ins STACKSlot:$addr, RL78RPRegs:$rsrc)>;
 }
+
+// An argument passed on the stack is loaded into any register too. Its slot
+// is never written, so the allocator can load it again where it is used
+// (rematerialization) instead of keeping a copy in a slot of its own. These
+// become LOAD8_r_stack_slot and LOAD16_rp_stack_slot when the frame index is
+// eliminated.
+let mayLoad = 1, isReMaterializable = 1, AddedComplexity = 10 in {
+def LOAD8_r_arg_slot
+    : RL78Pseudo<2, (outs RL78Reg:$rd), (ins STACKSlot:$addr),
+                 [(set i8:$rd, (load ADDRArgSP:$addr))]>;
+def LOAD16_rp_arg_slot
+    : RL78Pseudo<2, (outs RL78RPRegs:$rd), (ins STACKSlot:$addr),
+                 [(set i16:$rd, (load ADDRArgSP:$addr))]>;
 }
 
 // The address of a stack slot: MOVW AX, SP and ADDW AX, #word.

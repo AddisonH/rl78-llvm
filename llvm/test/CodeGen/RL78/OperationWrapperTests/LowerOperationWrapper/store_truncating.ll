@@ -8,13 +8,10 @@ define dso_local void @test_trunc_store(i32 %val, ptr %ptr) {
 ; CHECK-LABEL: test_trunc_store:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xch a, b
-; CHECK-NEXT:    mov a, x
-; CHECK-NEXT:    xch a, b
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    mov a, b
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es:[hl+2], a

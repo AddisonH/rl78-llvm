@@ -7,33 +7,29 @@
 define i32 @smin(i32 %a, i32 %b) optsize {
 ; CHECK-LABEL: smin:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+8]
+; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
+; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    movw ax, [sp+2]
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, de
-; CHECK-NEXT:    bc $.LBB0_1
-; CHECK-NEXT:  ; %bb.2:
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop bc
-; CHECK-NEXT:    br $.LBB0_3
-; CHECK-NEXT:  .LBB0_1:
-; CHECK-NEXT:    movw ax, [sp+2]
-; CHECK-NEXT:  .LBB0_3:
-; CHECK-NEXT:    addw sp, #4
+; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    bc $.LBB0_2
+; CHECK-NEXT:  ; %bb.1:
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:  .LBB0_2:
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
   %r = call i32 @llvm.smin.i32(i32 %a, i32 %b)
   ret i32 %r
@@ -42,30 +38,15 @@ define i32 @smin(i32 %a, i32 %b) optsize {
 define i32 @umax(i32 %a, i32 %b) optsize {
 ; CHECK-LABEL: umax:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #4
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    movw [sp+2], ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, hl
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    bh $.LBB1_2
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw ax, [sp+2]
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    addw sp, #4
 ; CHECK-NEXT:    ret
   %r = call i32 @llvm.umax.i32(i32 %a, i32 %b)
   ret i32 %r
@@ -130,28 +111,17 @@ define i32 @sel16(i16 %c, i32 %a, i32 %b) optsize {
 define i32 @seleq(i32 %c, i32 %d, i32 %a, i32 %b) optsize {
 ; CHECK-LABEL: seleq:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, de
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    bnz $.LBB4_2
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    movw ax, [sp+12]
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    br $.LBB4_3
-; CHECK-NEXT:  .LBB4_2: ; %select.false
-; CHECK-NEXT:    movw ax, [sp+16]
 ; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, [sp+8]
+; CHECK-NEXT:    ret
+; CHECK-NEXT:  .LBB4_2: ; %select.false
 ; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:  .LBB4_3: ; %select.end
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, [sp+12]
 ; CHECK-NEXT:    ret
   %z = icmp eq i32 %c, %d
   %r = select i1 %z, i32 %a, i32 %b
@@ -162,31 +132,23 @@ define i32 @seleq(i32 %c, i32 %d, i32 %a, i32 %b) optsize {
 define i16 @two(i16 %c, i16 %a, i16 %b, ptr %p) optsize {
 ; CHECK-LABEL: two:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    cmpw ax, #7
 ; CHECK-NEXT:    bnc $.LBB5_2
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    push hl
+; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop bc
 ; CHECK-NEXT:    br $.LBB5_3
 ; CHECK-NEXT:  .LBB5_2: ; %select.false
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:  .LBB5_3: ; %select.end
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop hl
+; CHECK-NEXT:  .LBB5_3: ; %select.end
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw [de], ax
+; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    ret
   %z = icmp ult i16 %c, 7
   %x = select i1 %z, i16 %a, i16 %b

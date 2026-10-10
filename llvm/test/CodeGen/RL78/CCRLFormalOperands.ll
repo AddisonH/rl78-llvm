@@ -21,16 +21,14 @@ define dso_local i16 @test_formal_stack(i16 noundef %0, i16 noundef %1, i16 noun
 ; CHECK-LABEL: test_formal_stack:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    addw ax, de
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    addw ax, bc
 ; CHECK-NEXT:    ret
   %6 = add i16 %0, %1

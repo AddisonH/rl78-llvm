@@ -425,43 +425,39 @@ define i8 @ROTR_test(i8 %x, i8 %n){
 define i32 @ADDE_Test(i32 %a, i32 %b){
 ; O3-LABEL: ADDE_Test:
 ; O3:       ; %bb.0:
-; O3-NEXT:    push bc
-; O3-NEXT:    movw bc, ax
+; O3-NEXT:    xchw ax, de
+; O3-NEXT:    movw ax, [sp+4]
+; O3-NEXT:    xchw ax, de
+; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    movw ax, [sp+6]
-; O3-NEXT:    movw de, ax
-; O3-NEXT:    movw ax, [sp+8]
-; O3-NEXT:    movw hl, ax
-; O3-NEXT:    movw ax, bc
+; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    addw ax, de
 ; O3-NEXT:    movw de, ax
-; O3-NEXT:    movw ax, [sp+0]
+; O3-NEXT:    movw ax, bc
 ; O3-NEXT:    sknc
 ; O3-NEXT:    incw ax
 ; O3-NEXT:    addw ax, hl
 ; O3-NEXT:    movw bc, ax
 ; O3-NEXT:    movw ax, de
-; O3-NEXT:    pop hl
 ; O3-NEXT:    ret
 ;
 ; O2-LABEL: ADDE_Test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    push bc
-; O2-NEXT:    movw bc, ax
+; O2-NEXT:    xchw ax, de
+; O2-NEXT:    movw ax, [sp+4]
+; O2-NEXT:    xchw ax, de
+; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    movw ax, [sp+6]
-; O2-NEXT:    movw de, ax
-; O2-NEXT:    movw ax, [sp+8]
-; O2-NEXT:    movw hl, ax
-; O2-NEXT:    movw ax, bc
+; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    addw ax, de
 ; O2-NEXT:    movw de, ax
-; O2-NEXT:    movw ax, [sp+0]
+; O2-NEXT:    movw ax, bc
 ; O2-NEXT:    xch a, x
 ; O2-NEXT:    addc a, l
 ; O2-NEXT:    xch a, x
 ; O2-NEXT:    addc a, h
 ; O2-NEXT:    movw bc, ax
 ; O2-NEXT:    movw ax, de
-; O2-NEXT:    pop hl
 ; O2-NEXT:    ret
     %sum = add i32 %a, %b
     ret i32 %sum
@@ -470,43 +466,39 @@ define i32 @ADDE_Test(i32 %a, i32 %b){
 define i32 @SUBE_test(i32 %a, i32 %b){
 ; O3-LABEL: SUBE_test:
 ; O3:       ; %bb.0:
-; O3-NEXT:    push bc
-; O3-NEXT:    movw bc, ax
+; O3-NEXT:    xchw ax, de
+; O3-NEXT:    movw ax, [sp+4]
+; O3-NEXT:    xchw ax, de
+; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    movw ax, [sp+6]
-; O3-NEXT:    movw de, ax
-; O3-NEXT:    movw ax, [sp+8]
-; O3-NEXT:    movw hl, ax
-; O3-NEXT:    movw ax, bc
+; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    subw ax, de
 ; O3-NEXT:    movw de, ax
-; O3-NEXT:    movw ax, [sp+0]
+; O3-NEXT:    movw ax, bc
 ; O3-NEXT:    sknc
 ; O3-NEXT:    decw ax
 ; O3-NEXT:    subw ax, hl
 ; O3-NEXT:    movw bc, ax
 ; O3-NEXT:    movw ax, de
-; O3-NEXT:    pop hl
 ; O3-NEXT:    ret
 ;
 ; O2-LABEL: SUBE_test:
 ; O2:       ; %bb.0:
-; O2-NEXT:    push bc
-; O2-NEXT:    movw bc, ax
+; O2-NEXT:    xchw ax, de
+; O2-NEXT:    movw ax, [sp+4]
+; O2-NEXT:    xchw ax, de
+; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    movw ax, [sp+6]
-; O2-NEXT:    movw de, ax
-; O2-NEXT:    movw ax, [sp+8]
-; O2-NEXT:    movw hl, ax
-; O2-NEXT:    movw ax, bc
+; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    subw ax, de
 ; O2-NEXT:    movw de, ax
-; O2-NEXT:    movw ax, [sp+0]
+; O2-NEXT:    movw ax, bc
 ; O2-NEXT:    xch a, x
 ; O2-NEXT:    subc a, l
 ; O2-NEXT:    xch a, x
 ; O2-NEXT:    subc a, h
 ; O2-NEXT:    movw bc, ax
 ; O2-NEXT:    movw ax, de
-; O2-NEXT:    pop hl
 ; O2-NEXT:    ret
     %dif = sub i32 %a, %b
     ret i32 %dif

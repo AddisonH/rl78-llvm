@@ -438,6 +438,12 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   DebugLoc DL = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
+  // The loads of arguments are spill-slot loads from here on.
+  if (MI.getOpcode() == RL78::LOAD8_r_arg_slot)
+    MI.setDesc(TII->get(RL78::LOAD8_r_stack_slot));
+  else if (MI.getOpcode() == RL78::LOAD16_rp_arg_slot)
+    MI.setDesc(TII->get(RL78::LOAD16_rp_stack_slot));
+
   Register FrameReg;
   int64_t Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg).getFixed();
   Offset += MI.getOperand(FIOperandNum + 1).getImm();

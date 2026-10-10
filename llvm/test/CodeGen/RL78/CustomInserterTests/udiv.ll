@@ -8,15 +8,14 @@
 define dso_local i32 @aa(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: aa:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    divwu
 ; CHECK-NEXT:    nop
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %3 = udiv i32 %0, %1
   ret i32 %3

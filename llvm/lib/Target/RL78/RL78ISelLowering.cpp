@@ -481,6 +481,8 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
     } else if (VA.isMemLoc()) {
       isMemLoc = true;
+      // The slot is written for every call that passes an argument in it:
+      // not an immutable object.
       unsigned int MaxStores = DAG.shouldOptForSize()
                                    ? MaxStoresPerMemcpyOptSize
                                    : MaxStoresPerMemcpy;
@@ -492,7 +494,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
         unsigned PartNum = Arg->getNumValues();
         int Offset = VA.getLocMemOffset();
         unsigned Size = Arg.getValueSizeInBits() * PartNum / 8;
-        int FI = MF.getFrameInfo().CreateFixedObject(Size, Offset, true);
+        int FI = MF.getFrameInfo().CreateFixedObject(Size, Offset, false);
         SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
         SDValue SizeNode = DAG.getConstant(Size, dl, MVT::i16);
         SDValue MemCpyChain =
@@ -507,7 +509,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       } else {
         int Offset = VA.getLocMemOffset();
         int FI = MF.getFrameInfo().CreateFixedObject(
-            Arg.getValueSizeInBits() / 8, Offset, true);
+            Arg.getValueSizeInBits() / 8, Offset, false);
 
         SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
         MemOpChains.push_back(

@@ -38,12 +38,10 @@ define ptr @ra0_frame(i16 %i) {
 define ptr addrspace(3) @ra0_far() {
 ; CHECK-LABEL: ra0_far:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mov a, [sp+2]
-; CHECK-NEXT:    and a, #15
-; CHECK-NEXT:    mov c, a
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    mov a, c
+; CHECK-NEXT:    mov a, [sp+2]
+; CHECK-NEXT:    and a, #15
 ; CHECK-NEXT:    ret
   %r = call ptr addrspace(3) @llvm.returnaddress.p3(i32 0)
   ret ptr addrspace(3) %r
