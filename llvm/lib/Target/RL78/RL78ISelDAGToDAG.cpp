@@ -325,7 +325,8 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
         break;
       }
 
-      llvm::SmallVector<SDValue, 4> Ops = { AddrHi, AddrLo };
+      // The load that is left, with ES loaded from the segment operand.
+      SDValue Ops[] = {getES(AddrHi), AddrLo};
       unsigned LdOpcode;
       SDLoc dl(N);
 
@@ -333,18 +334,16 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
       default:
         llvm_unreachable("Unknown opcode.");
       case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:
-        LdOpcode = RL78::MOV_r_esaddr16;
+        LdOpcode = RL78::MOV_r_eabs16;
         break;
       case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
-        LdOpcode = RL78::LOAD16_rp_esaddr16;
+        LdOpcode = RL78::MOVW_rp_eabs16;
         break;
       case RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr:
-        LdOpcode = RL78::LOAD8_r_esrpi;
-        Ops.push_back(CurDAG->getTargetConstant(0, dl, MVT::i16)); // +0 offset (imm).
+        LdOpcode = RL78::MOV_A_emRP;
         break;
       case RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr:
-        LdOpcode = RL78::LOAD16_rp_esrpi;
-        Ops.push_back(CurDAG->getTargetConstant(0, dl, MVT::i16)); // +0 offset (imm).
+        LdOpcode = RL78::MOVW_AX_emRP;
         break;
       }
 
@@ -882,7 +881,7 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
         N->getConstantOperandVal(1) == 1 && N->getValueType(0) == MVT::i16) {
       SDLoc DL(N);
       EVT VT = MVT::i16;
-      unsigned Opc = RL78::ADDW_rp_rp;
+      unsigned Opc = RL78::ADDW_AX_rp;
       SDNode *MN = CurDAG->getMachineNode(Opc, DL, VT, N->getOperand(0),
                                           N->getOperand(0));
       ReplaceNode(N, MN);

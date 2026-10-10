@@ -3846,493 +3846,18 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
 
 
 
-MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMP0(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
-  switch (MI.getOpcode()) {
-  case RL78::CMP0_r_cg: {
-    bool isKill = MI.getOperand(0).isKill();
-    MI.getOperand(0).setIsKill(false);
-    unsigned Rs0 = MI.getOperand(0).getReg();
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(Rs0, isKill ? RegState::Kill : RegState::NoFlags)
-        .addImm(7);
-  } break;
-  case RL78::CMP0_abs16_cg: {
-    // Change instruction: CMP0_abs16_cg -> CMP0_r_cg.
-    BuildMI(*BB, MI, DL, TII->get(RL78::LOAD8_r_abs16), RL78::R1)
-        .add(MI.getOperand(0));
-    BuildMI(*BB, MI, DL, TII->get(RL78::CMP0_r_cg)).addReg(RL78::R1);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    MI.eraseFromParent();
-  } break;
-  case RL78::CMP0_saddr_cg: {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_saddrx))
-        .add(MI.getOperand(0))
-        .addImm(7);
-  } break;
-  case RL78::CMP0_esaddr16: {
-    // Change instruction: CMP0_esaddr16 -> CMP0_r_cg.
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_esaddr16), RL78::R1)
-        .add(MI.getOperand(0))
-        .add(MI.getOperand(1));
-    BuildMI(*BB, MI, DL, TII->get(RL78::CMP0_r_cg)).addReg(RL78::R1);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    MI.eraseFromParent();
-  } break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  }
-  return BB;
-}
 
-MachineBasicBlock *
-RL78TargetLowering::LowerCMP0(MachineInstr &MI, MachineBasicBlock *BB) const {
-  // The sign operand is the last explicit operand.
-  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
-      BB : LowerSignedCMP0(MI, BB);
-}
 
-static void CopyChangeOpToReg(unsigned opPosition, Register R, MachineBasicBlock *BB,
-                              MachineInstr &MI, DebugLoc &DL,
-                              const TargetInstrInfo *TII) {
-  assert(MI.getOperand(opPosition).isReg() && "Expected register operand");
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), R).add(MI.getOperand(opPosition));
-  MI.getOperand(opPosition).ChangeToRegister(R, false);
-}
 
-// Signed comparison: Insert 2 xor1 instructions to
-// handle the sign bit as follows: xor1 CY, <op0> + xor1 CY, <op1> for example
-// if we compare 1 and 0xFF and let's consider the condition is LT, then CY
-// flag needs to be 1: CMP operation is dst - src => 1 - 0xFF => 2 and borrow
-// out of bit 7 so CY is set to 1. If the comparison is unsigned (1 - 255) the
-// result is correct for LT (1 < 255). If the comparison is signed (1 - (-1))
-// the result is incorrect for LT (because 1 > -1), this is why we need take
-// the sign bits into consideration: xor1 CY, 0 (sign bit of 1) => CY = 1 xor1
-// CY, 1 (sign bit of 0xFF) => CY = 0 which is the correct result for LT (1 >
-// -1) Another solution would be to insert xor <op0>, #0x80 + xor <op1>, #0x80
-// before the CMP; however that solution requires writing those registers so the
-// unchanged values need to be backed up if they are used later on (decreased
-// reg pressure) LE: Actually tried the XOR variant and decided is not worth it.
-static void
-MakeComparisonSigned(Register R1orRP0, unsigned int opcode, MachineBasicBlock *BB,
-                     MachineInstr &MI, DebugLoc &DL,
-                     const TargetInstrInfo *TII,
-                     llvm::ArrayRef<int> OpPositions) {
-  // Next: xor1_cy_a.
-  // Next: mov_A_op1.
-  // Next: xor1_cy_a.
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL, TII->get(RL78::XOR1_cy_r))
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(7);
 
-  auto MIB = BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-                     TII->get(opcode), R1orRP0);
-  for (int pos : OpPositions)
-    MIB.add(MI.getOperand(pos));
 
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL, TII->get(RL78::XOR1_cy_r))
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(7);
-}
 
-// Ensure correct register usage for LowerCMP.
-MachineBasicBlock *
-RL78TargetLowering::LowerCMPOps(MachineInstr &MI,
-                                MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
-  switch (MI.getOpcode()) {
-  case RL78::CMP_saddr_imm:
-    break;
-  case RL78::CMP_abs16_imm:
-    break;
-  case RL78::CMP_esaddr16_imm:
-    LowerESSrc(MI, BB, 0);
-    break;
-  case RL78::CMP_r_imm:
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_r:
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_abs16:
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_saddr:
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_esaddr16:
-    LowerESSrc(MI, BB, 1);
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_memri:
-    CopyChangeOpToReg(1, RL78::RP6, BB, MI, DL, TII);
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_memrr:
-    CopyChangeOpToReg(1, RL78::RP6, BB, MI, DL, TII);
-    CopyChangeOpToReg(2, RL78::R2, BB, MI, DL, TII);
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_esmemHLi:
-    LowerESSrc(MI, BB, 1);
-    CopyChangeOpToReg(2, RL78::RP6, BB, MI, DL, TII);
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  case RL78::CMP_r_esmemRpr:
-    LowerESSrc(MI, BB, 1);
-    CopyChangeOpToReg(2, RL78::RP6, BB, MI, DL, TII);
-    CopyChangeOpToReg(3, RL78::R2, BB, MI, DL, TII);
-    CopyChangeOpToReg(0, RL78::R1, BB, MI, DL, TII);
-    break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  }
 
-  return BB;
-}
 
-MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
-  switch (MI.getOpcode()) {
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  case RL78::CMP_saddr_imm:
-    // Change instruction: CMP_saddr_imm ->
-    // mov a, 0x80
-    // xor a, saddr
-    // cmp a, ((imm ^ 0x80)+1)
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
-    BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_saddr), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .add(MI.getOperand(0));
-    BuildMI(*BB, MI, DL, TII->get(RL78::CMP_r_imm))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(((MI.getOperand(1).getImm() & 0xFF) ^ 0x80));
-    MI.eraseFromParent();
-    break;
-  case RL78::CMP_abs16_imm:
-    if (MI.getOperand(1).getImm() & 0x80) {
-      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
-      BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_abs16), RL78::R1)
-          .addReg(RL78::R1, RegState::Kill)
-          .add(MI.getOperand(0));
-      BuildMI(*BB, MI, DL, TII->get(RL78::CMP_r_imm))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(((MI.getOperand(1).getImm() & 0xFF) ^ 0x80));
-    } else {
-      BuildMI(*BB, MI, DL, TII->get(RL78::LOAD8_r_abs16), RL78::R1)
-          .add(MI.getOperand(0));
-      BuildMI(*BB, MI, DL, TII->get(RL78::CMP_r_imm))
-          .addReg(RL78::R1)
-          .add(MI.getOperand(1));
-      BuildMI(*BB, MI, DL, TII->get(RL78::XOR1_cy_r))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(7);
-      if (MI.getOperand(1).getImm() & 0x80)
-        BuildMI(*BB, MI, DL, TII->get(RL78::NOT1_cy));
-    }
-    MI.eraseFromParent();
-    break;
-  case RL78::CMP_esaddr16_imm:
-    if (MI.getOperand(2).getImm() & 0x80) {
-      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
-      BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_esaddr16), RL78::R1)
-          .addReg(RL78::R1, RegState::Kill)
-          .add(MI.getOperand(0))
-          .add(MI.getOperand(1));
-      BuildMI(*BB, MI, DL, TII->get(RL78::CMP_r_imm))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(((MI.getOperand(2).getImm() & 0xFF) ^ 0x80));
-    } else {
-      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_esaddr16), RL78::R1)
-          .add(MI.getOperand(0))
-          .add(MI.getOperand(1));
-      BuildMI(*BB, MI, DL, TII->get(RL78::CMP_r_imm))
-          .addReg(RL78::R1)
-          .add(MI.getOperand(2));
-      BuildMI(*BB, MI, DL, TII->get(RL78::XOR1_cy_r))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(7);
-      if (MI.getOperand(2).getImm() & 0x80)
-        BuildMI(*BB, MI, DL, TII->get(RL78::NOT1_cy));
-    }
-    MI.eraseFromParent();
-    break;
-  case RL78::CMP_r_imm:
-      // xor1_cy_A.
-      // if imm negative, NOT1_cy.
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::XOR1_cy_r))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(7);
-      if (MI.getOperand(1).getImm() & 0x80)
-        BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-                TII->get(RL78::NOT1_cy));
-    break;
-  case RL78::CMP_r_r:
-    // Next: xor1_cy_a.
-    // Next: mov_A_op1.
-    // Next: xor1_cy_a.
-    MakeComparisonSigned(RL78::R1, RL78::MOV_A_r_cg, BB, MI, DL, TII, 1);
-    break;
-  case RL78::CMP_r_abs16:
-    // Next: xor1_cy_A.
-    // Next: mov_A_op1.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_abs16, BB, MI, DL, TII, 1);
-    break;
-  case RL78::CMP_r_esaddr16:
-    MakeComparisonSigned(RL78::R1, RL78::MOV_r_esaddr16, BB, MI, DL, TII, {1, 2});
-    break;
-  case RL78::CMP_r_saddr:
-    // Next: xor1_cy_A.
-    // Next: xor1_cy_op1.
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_saddrx))
-        .add(MI.getOperand(1))
-        .addImm(7);
-    break;
-  case RL78::CMP_r_memri:
-    // Next: xor1_cy_A.
-    // Next: mov_A_op1.
-    // Next: xor1_cy_A.
-    if (MI.getOperand(2).getImm() == 0) {
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::XOR1_cy_memr))
-          .add(MI.getOperand(1))
-          .addImm(7);
-    } else {
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::XOR1_cy_r))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(7);
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::LOAD8_r_memHLi), RL78::R1)
-          .add(MI.getOperand(1))
-          .add(MI.getOperand(2));
-    }
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    break;
-  case RL78::CMP_r_esmemHLi:
-    if (MI.getOperand(3).getImm() == 0) {
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::XOR1_esmemr))
-          .add(MI.getOperand(1))
-          .add(MI.getOperand(2))
-          .addImm(7);
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::XOR1_cy_r))
-          .addReg(RL78::R1, RegState::Kill)
-          .addImm(7);
-    } else {
-      MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_esrpi, BB, MI, DL, TII, {1, 2, 3});
-    }
-    break;
-  case RL78::CMP_r_memrr:
-    // Next: xor1_cy_A.
-    // Next: MOV_A_op1.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::R1, RL78::LOAD8_r_memrr, BB, MI, DL, TII, {1, 2});
-    break;
-  case RL78::CMP_r_esmemRpr:
-    MakeComparisonSigned(RL78::R1, RL78::LOAD8_a_esmemRpr, BB, MI, DL, TII, {1, 2, 3});
-    break;
-  }
 
-  return BB;
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerCMP(MachineInstr &MI, MachineBasicBlock *BB) const {
-  // The sign operand is the last explicit operand.
-  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
-      BB : LowerSignedCMP(MI, BB);
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerCMPWOps(MachineInstr &MI,
-                                 MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  // Ensure correct register usage.
-  switch (MI.getOpcode()) {
-  case RL78::CMPW_rp_esaddr16:
-      LowerESSrc(MI, BB, 1);
-      [[fallthrough]];
-  case RL78::CMPW_rp_imm:
-  case RL78::CMPW_rp_rp:
-  case RL78::CMPW_rp_abs16:
-  case RL78::CMPW_rp_saddr:
-      CopyChangeOpToReg(0, RL78::RP0, BB, MI, DL, TII);
-      break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  }
-
-  return BB;
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMPW(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  switch (MI.getOpcode()) {
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-  case RL78::CMPW_rp_imm:
-    // xor1_cy_A.
-    // if imm negative, NOT1_cy.
-    // XOR1 CY, A.7 reads the high byte of the compared AX value.
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1)
-        .addImm(7);
-    if (MI.getOperand(1).getImm() & 0x8000)
-      BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-              TII->get(RL78::NOT1_cy));
-    break;
-  case RL78::CMPW_rp_rp:
-    // Next: xor1_cy_AX.hi.
-    // Next: MOV_A_op1.hi.
-    // Next: xor1_cy_a.
-    MI.getOperand(1).setIsKill(false);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::COPY))
-        .addReg(RL78::R1, RegState::Define)
-        .addReg(MI.getOperand(1).getReg(), RegState::NoFlags, RL78::sub_hi);
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::XOR1_cy_r))
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    break;
-  case RL78::CMPW_rp_abs16:
-    // Next: xor1_cy_A.
-    // Next: load ax, abs16.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_abs16, BB, MI, DL, TII, 1);
-    break;
-  case RL78::CMPW_rp_saddr:
-    // Next: xor1_cy_A.
-    // Next: load AX, saddr.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_saddrp, BB, MI, DL, TII, 1);
-    break;
-  case RL78::CMPW_rp_esaddr16:
-    // Next: xor1_cy_A.
-    // Next: load AX, esaddr16.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esaddr16, BB, MI, DL, TII, {1, 2});
-    break;
-  }
-  return BB;
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerCMPW(MachineInstr &MI, MachineBasicBlock *BB) const {
-  // The sign operand is the last explicit operand.
-  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
-      BB : LowerSignedCMPW(MI, BB);
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerCMPWMemOps(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const {
-  // Insert the copies into AX and HL:
-  // AX = COPY %0.
-  // HL = COPY %1.
-  // CMPW AX, [HL+byte].
-  switch (MI.getOpcode()) {
-  case RL78::CMPW_rp_esmemHLi:
-    LowerESSrc(MI, BB, 1);
-    BB = Lower16bitAXSrc(MI, BB, 2, RL78::RP6);
-    BB = Lower16bitAXSrc(MI, BB);
-    break;
-  case RL78::CMPW_rp_memri:
-    BB = Lower16bitAXSrc(MI, BB, 1, RL78::RP6);
-    BB = Lower16bitAXSrc(MI, BB);
-    break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-    break;
-  }
-
-  return BB;
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerSignedCMPWMem(MachineInstr &MI,
-                                       MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  
-  // Second we insert XOR1 instructions (see LowerSignedCMP for a detailed
-  // explanation) The final sequence will look like this: AX = COPY %0 HL = COPY
-  // %1 CMPW AX, [HL+byte] XOR1 Cy, A.7 MOV A, [HL+byte+1] XOR1 Cy, A.7.
-  switch (MI.getOpcode()) {
-  case RL78::CMPW_rp_esmemHLi:
-    // Next: xor1_cy_A.
-    // Next: load AX, esaddr16.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_esmemHLi, BB, MI, DL, TII, {1, 2, 3});
-    break;
-  case RL78::CMPW_rp_memri:
-    // Next: xor1_cy_A.
-    // Next: load AX, memHLi.
-    // Next: xor1_cy_A.
-    MakeComparisonSigned(RL78::RP0, RL78::LOAD16_rp_memHLi, BB, MI, DL, TII, {1, 2});
-    break;
-  default:
-    llvm_unreachable("Cannot lower this instruction!");
-    break;
-  }
-
-  return BB;
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const {
-  // The sign operand is the last explicit operand.
-  return !MI.getOperand(MI.getNumExplicitOperands() - 1).getImm() ?
-      BB : LowerSignedCMPWMem(MI, BB);
-}
 
 static bool IsCarryDead(MachineInstr &MI) {
   for (unsigned i = 0; i < MI.getNumOperands(); i++)
@@ -4440,12 +3965,12 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   case RL78::SELECTCC8_esaddr_r:
   case RL78::SELECTCC8_esaddr_imm:
   case RL78::SELECTCBTBFC8_esaddr_imm:
-    selectCopyOp1 = RL78::MOV_r_esaddr16;
+    selectCopyOp1 = RL78::MOV_r_eabs16;
     break;
   case RL78::SELECTCC16_esaddr_rp:
   case RL78::SELECTCC16_esaddr_imm:
   case RL78::SELECTCCBTBF116_esaddr_imm:
-    selectCopyOp1 = RL78::LOAD16_rp_esaddr16;
+    selectCopyOp1 = RL78::MOVW_rp_eabs16;
     break;
   default:
     llvm_unreachable("Unexpected opcode!");
@@ -4485,8 +4010,8 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   unsigned FalseOpIndex = 2;
   unsigned CondOpIndex = 3;
 
-  if (selectCopyOp1 == RL78::LOAD16_rp_esaddr16 || 
-      selectCopyOp1 == RL78::MOV_r_esaddr16) {
+  if (selectCopyOp1 == RL78::MOVW_rp_eabs16 || 
+      selectCopyOp1 == RL78::MOV_r_eabs16) {
     FalseOpIndex++;
     CondOpIndex++;
   }
@@ -4512,22 +4037,16 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   BB->addSuccessor(copy0MBB);
   BB->addSuccessor(sinkMBB);
 
-  if (selectCopyOp1 == RL78::LOAD16_rp_esaddr16) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_imm), RL78::ES)
+  if (selectCopyOp1 == RL78::MOVW_rp_eabs16 ||
+      selectCopyOp1 == RL78::MOV_r_eabs16) {
+    // The true value is loaded from ES:!addr16: MOV ES, #segment first.
+    if (isI8)
+      MRI.setRegClass(RPd, &RL78::RL78LowRegClass);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_ES_i8), RL78::ES)
         .add(MI.getOperand(TrueOpIndex));
-    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RL78::RP0)
-        .addReg(RL78::ES, RegState::Kill)
+    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RPd)
+        .addReg(RL78::ES)
         .add(MI.getOperand(TrueOpIndex + 1));
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RPd)
-        .addReg(RL78::RP0, RegState::Kill);
-  } else if (selectCopyOp1 == RL78::MOV_r_esaddr16) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_imm), RL78::ES)
-        .add(MI.getOperand(TrueOpIndex));
-    BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RL78::R1)
-        .addReg(RL78::ES, RegState::Kill)
-        .add(MI.getOperand(TrueOpIndex + 1));
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RPd)
-        .addReg(RL78::R1, RegState::Kill);
   } else {
     BuildMI(*BB, MI, DL, TII->get(selectCopyOp1), RPd)
         .add(MI.getOperand(TrueOpIndex));
@@ -4544,13 +4063,17 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   case RL78::SELECTCCBTBF16_rp_imm:
   case RL78::SELECTCCBTBF116_esaddr_imm:
   case RL78::SELECTCBTBFC8_esaddr_imm:
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1)
+  {
+    // BT/BF A.bit
+    Register A = MRI.createVirtualRegister(&RL78::RL78ARegRegClass);
+    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), A)
         .add(MI.getOperand(CondOpIndex + 1));
     BuildMI(*BB, MI, DL, TII->get(RL78::BTBF))
         .addMBB(sinkMBB)
         .add(MI.getOperand(CondOpIndex))
-        .addReg(RL78::R1, RegState::Kill)
+        .addReg(A, RegState::Kill)
         .add(MI.getOperand(CondOpIndex + 2));
+  }
     break;
   default:
     BuildMI(*BB, MI, DL, TII->get(RL78::BRCC))
@@ -4657,17 +4180,24 @@ RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
       .addMBB(BB);
 
   // Finally emit the 8/16 bit load.
+  // The load through the selected pointer: MOV ES, A with the segment (the
+  // low byte of its word), then MOV A / MOVW AX, ES:[DE] or ES:[HL].
+  bool IsByte = MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
+                MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16;
+  Register Seg = MRI.createVirtualRegister(&RL78::RL78ARegRegClass);
+  Register Ptr = MRI.createVirtualRegister(&RL78::RL78DEHLRegClass);
+  Register Val = MRI.createVirtualRegister(IsByte ? &RL78::RL78ARegRegClass
+                                                  : &RL78::RL78AXRPRegClass);
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::COPY), Seg)
+      .addReg(R_seg, {}, RL78::sub_lo);
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::COPY), Ptr).addReg(R_ofs);
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::MOV_ES_A), RL78::ES).addReg(Seg);
   BuildMI(*sinkMBB, IT, DL,
-          TII->get(MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
-                   MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16
-                       ? RL78::LOAD8_r_esrpi
-                       : RL78::LOAD16_rp_esrpi),
-          MI.getOperand(0).getReg())
-      .addReg(R_seg, RegState::Kill)
-      .addReg(R_ofs, RegState::Kill)
-      .addImm(0);
-
-  // The pseudo instruction is gone now.
+          TII->get(IsByte ? RL78::MOV_A_emRP : RL78::MOVW_AX_emRP), Val)
+      .addReg(RL78::ES)
+      .addReg(Ptr);
+  BuildMI(*sinkMBB, IT, DL, TII->get(RL78::COPY), MI.getOperand(0).getReg())
+      .addReg(Val);
   MI.eraseFromParent();
 
   return sinkMBB;
@@ -4982,153 +4512,12 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
 
 
 
-// Lower all 8 bit operations of the form: A <- A op <...>.
-MachineBasicBlock *
-RL78TargetLowering::Lower8BitOpAA(MachineInstr &MI,
-                                  MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1).add(MI.getOperand(1));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::R1, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::R1, true);
-  MI.getOperand(1).ChangeToRegister(RL78::R1, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
-// Lower all 16 bit operations of the form: AX <- AX op <...>.
-MachineBasicBlock *
-RL78TargetLowering::Lower16BitOpAXAX(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  MI.getOperand(1).ChangeToRegister(RL78::RP0, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
-// Lower all 8 bit operations of the form: A <- op <...>.
-MachineBasicBlock *
-RL78TargetLowering::Lower8bitADst(MachineInstr &MI,
-                                  MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::R1, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::R1, true);
-  //
-  // BB->dump();
-  return BB;
-}
 
-// Lower all 16 bit operations of the form: AX <- op <...>.
-MachineBasicBlock *
-RL78TargetLowering::Lower16bitAXDst(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  //
-  // BB->dump();
-  return BB;
-}
 
-// Lower all 8 bit operations of the form: <...> <- A op <...>.
-MachineBasicBlock *RL78TargetLowering::Lower8bitASrc(MachineInstr &MI,
-                                                     MachineBasicBlock *BB,
-                                                     unsigned OpNum,
-                                                     unsigned Reg) const {
 
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Reg).add(MI.getOperand(OpNum));
-  //
-  MI.getOperand(OpNum).ChangeToRegister(Reg, false);
-  MI.getOperand(OpNum).setIsKill();
-  //
-  // BB->dump();
-  return BB;
-}
 
-// Lower all 16 bit operations of the form: <...> <- AX op <...>.
-MachineBasicBlock *RL78TargetLowering::Lower16bitAXSrc(MachineInstr &MI,
-                                                       MachineBasicBlock *BB,
-                                                       unsigned OpNum,
-                                                       unsigned Reg) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Reg).add(MI.getOperand(OpNum));
-  //
-  MI.getOperand(OpNum).ChangeToRegister(Reg, false);
-  //
-  // BB->dump();
-  return BB;
-}
-
-MachineBasicBlock *RL78TargetLowering::LowerESSrc(MachineInstr &MI,
-                                                  MachineBasicBlock *BB,
-                                                  unsigned OpNum) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  if (MI.getOperand(OpNum).isReg()) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1)
-        .addReg(MI.getOperand(OpNum).getReg(),
-                MI.getOperand(OpNum).isKill() ? RegState::Kill : RegState::NoFlags,
-                RL78::sub_lo);
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_A), RL78::ES)
-        .addReg(RL78::R1, RegState::Kill);
-  } else
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_es_imm), RL78::ES)
-        .add(MI.getOperand(OpNum));
-  //
-  MI.getOperand(OpNum).ChangeToRegister(RL78::ES, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
 MachineBasicBlock *
 RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
@@ -5141,7 +4530,7 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
         .addReg(MI.getOperand(1).getReg(),
                 MI.getOperand(1).isKill() ? RegState::Kill : RegState::NoFlags, RL78::sub_lo);
   } else {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_cs_imm), RL78::CS)
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_CS_i8), RL78::CS)
         .add(MI.getOperand(1));
   }
   MI.getOperand(1).ChangeToRegister(RL78::CS, false);
@@ -5151,17 +4540,6 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
 
 
 
-MachineBasicBlock *
-RL78TargetLowering::LowerToHLByteOrWordBC(unsigned RegPos, unsigned ImmPos,
-                                          MachineInstr &MI,
-                                          MachineBasicBlock *BB) const {
-
-  const MachineOperand &MO = MI.getOperand(ImmPos);
-  if ((MO.isImm() && MO.getImm() > 255) || MO.isGlobal() || MO.isSymbol())
-    return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP2);
-  else
-    return Lower16bitAXSrc(MI, BB, RegPos, RL78::RP6);
-}
 
 MachineBasicBlock *
 RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
@@ -5172,51 +4550,9 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Unknown instruction!");
-  case RL78::MOVW_rp_stack_slot:
-    return Lower16bitAXDst(MI, BB);
   case RL78::ADDE_AX_i16:
   case RL78::SUBE_AX_i16:
     return LowerADDE_SUBE_rp_imm(0, MI, BB);
-  case RL78::CMPW_rp_imm:
-  case RL78::CMPW_rp_rp:
-  case RL78::CMPW_rp_abs16:
-  case RL78::CMPW_rp_saddr:
-  case RL78::CMPW_rp_esaddr16:
-    return LowerCMPW(MI, LowerCMPWOps(MI, BB));
-  case RL78::CMPW_rp_memri:
-  case RL78::CMPW_rp_esmemHLi:
-    return LowerCMPWMem(MI, LowerCMPWMemOps(MI, BB));
-  case RL78::CMP_abs16_imm:
-  case RL78::CMP_r_memri:
-  case RL78::CMP_r_memrr:
-  case RL78::CMP_r_imm:
-  case RL78::CMP_r_abs16:
-  case RL78::CMP_r_r:
-  case RL78::CMP_r_saddr:
-  case RL78::CMP_saddr_imm:
-  case RL78::CMP_r_esaddr16:
-  case RL78::CMP_esaddr16_imm:
-  case RL78::CMP_r_esmemHLi:
-  case RL78::CMP_r_esmemRpr:
-    return LowerCMP(MI, LowerCMPOps(MI, BB));
-  case RL78::CMP0_r_cg:
-    return LowerCMP0(MI, Lower8bitASrc(MI, BB));
-  case RL78::CMP0_abs16_cg:
-  case RL78::CMP0_saddr_cg:
-    return LowerCMP0(MI, BB);
-  case RL78::CMP0_esaddr16:
-    return LowerCMP0(MI, LowerESSrc(MI, BB, 0));
-  case RL78::SHR_r_i:
-    return Lower8BitOpAA(MI, BB);
-  case RL78::SHLW_rp_imm:
-  case RL78::SHRW_rp_i:
-    return Lower16BitOpAXAX(MI, BB);
-  case RL78::SAR_r_i:
-  case RL78::ROL_r_1:
-  case RL78::ROR_r_1:
-    return Lower8BitOpAA(MI, BB);
-  case RL78::SARW_rp_i:
-    return Lower16BitOpAXAX(MI, BB);
   case RL78::ROTL_r_imm:
     return LowerRotate_r_imm(MI, BB, true);
   case RL78::ROTR_r_imm:
@@ -5286,117 +4622,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
                : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
-  case RL78::ADD_r_memrr:
-  case RL78::SUB_r_memrr:
-  case RL78::AND_r_memrr:
-  case RL78::OR_r_memrr:
-  case RL78::XOR_r_memrr:
-    return Lower8BitOpAA(
-        MI,
-        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 3, RL78::R2), 2, RL78::RP6));
-  case RL78::ADD_r_memri:
-  case RL78::SUB_r_memri:
-  case RL78::AND_r_memri:
-  case RL78::OR_r_memri:
-  case RL78::XOR_r_memri:
-    return Lower8BitOpAA(MI, Lower16bitAXSrc(MI, BB, 2, RL78::RP6));
-  case RL78::AND_r_imm:
-  case RL78::ADD_r_r:
-  case RL78::AND_r_r:
-  case RL78::OR_r_r:
-  case RL78::XOR_r_abs16:
-  case RL78::XOR_r_r:
-  case RL78::XOR_r_saddr:
-  case RL78::SHL_r_imm:
-    return Lower8BitOpAA(MI, BB);
-  case RL78::XOR_r_esaddr16:
-      return Lower8bitADst(MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 2), 1));
-  case RL78::LOAD8_r_stack_slot:
-    return Lower8bitADst(MI, BB);
-  case RL78::STORE8_ri_imm:
-    // STORE [HL+byte] or STORE word[BC].
-    return BB;
-  case RL78::LOAD8_r_ri:
-    // A = LOAD [HL+byte] or A = LOAD word[BC].
-    return Lower8bitADst(MI, BB);
-  case RL78::LOAD8_r_memrr:
-    return Lower8bitADst(
-        MI,
-        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 2, RL78::R3), 1, RL78::RP6));
-  case RL78::LOAD8_a_esmemRpr:
-    return Lower8bitADst(
-        MI, Lower16bitAXSrc(
-                MI, Lower8bitASrc(MI, LowerESSrc(MI, BB, 1), 3, RL78::R3), 2,
-                RL78::RP6));
-  case RL78::STORE8_ri_r:
-    // STORE [HL+byte] or STORE word[BC].
-    return Lower8bitASrc(MI, BB, 2);
-  case RL78::STORE8_memrr_r:
-    return Lower8bitASrc(
-        MI,
-        Lower16bitAXSrc(MI, Lower8bitASrc(MI, BB, 1, RL78::R3), 0, RL78::RP6),
-        2);
-  case RL78::LOAD16_rp_rpi:
-    // AX = LOAD [HL+byte] or AX = LOAD word[BC].
-    return Lower16bitAXDst(MI, BB);
-  case RL78::LOAD16_rp_stack_slot:
-  case RL78::LOAD16_rp_sfrp:
-    return Lower16bitAXDst(MI, BB);
-  case RL78::ADDW_rp_imm:
-    return Lower16BitOpAXAX(MI, BB);
-  case RL78::ADDW_rp_memri:
-  case RL78::SUBW_rp_memri:
-    return Lower16BitOpAXAX(MI, Lower16bitAXSrc(MI, BB, 2, RL78::RP6));
-  case RL78::ADDW_rp_rp:
-    if (MI.getOperand(1).getReg() == MI.getOperand(2).getReg())
-      MI.getOperand(2).ChangeToRegister(RL78::RP0, false);
-    return Lower16BitOpAXAX(MI, BB);
-  case RL78::SUBW_rp_imm:
-  case RL78::SUBW_rp_rp:
-    return Lower16BitOpAXAX(MI, BB);
-  case RL78::STORE16_rpi_rp:
-    // STORE [HL+byte] or STORE word[BC].
-    return Lower16bitAXSrc(MI, BB, 2);
-  case RL78::STORE16_stack_slot_rp:
-    return Lower16bitAXSrc(MI, BB, 2);
-  case RL78::STORE16_abs16_rp:
-  case RL78::STORE16_sfrp_rp:
-    return Lower16bitAXSrc(MI, BB, 1);
-  case RL78::INC_memri:
-  case RL78::DEC_memri:
-  case RL78::INCW_memri:
-  case RL78::DECW_memri:
-    return Lower16bitAXSrc(MI, BB, 0, RL78::RP6);
-  case RL78::STORE8_stack_slot_r:
-    return Lower8bitASrc(MI, BB, 2);
-  case RL78::LOAD16_rp_esrpi:
-    return Lower16bitAXDst(
-        MI, LowerToHLByteOrWordBC(2, 3, MI, LowerESSrc(MI, BB, 1)));
-  case RL78::LOAD8_r_esrpi:
-    return Lower8bitADst(
-        MI, LowerToHLByteOrWordBC(2, 3, MI, LowerESSrc(MI, BB, 1)));
-  case RL78::LOAD16_rp_esaddr16:
-      return Lower16bitAXDst(MI, LowerESSrc(MI, BB, 1));
-  case RL78::STORE16_esrpi_rp:
-    return Lower16bitAXSrc(
-        MI, LowerToHLByteOrWordBC(1, 2, MI, LowerESSrc(MI, BB, 0)), 3);
-  case RL78::MOV_r_esaddr16:
-      return LowerESSrc(MI, BB, 1);
-  case RL78::CLR1_memr:
-  case RL78::SET1_memr:
-  case RL78::MOV1_cy_memr:
-  case RL78::MOV1_memr_cy:
-  case RL78::AND1_cy_memr:
-  case RL78::OR1_cy_memr:
-  case RL78::XOR1_cy_memr:
-    return Lower16bitAXSrc(MI, BB, 0, RL78::RP6);
-  case RL78::ONEB_r_cg:
-  case RL78::CLRB_r_cg:
-    return Lower8bitADst(MI, BB);
-  case RL78::MOV1_r_cy:
-    return Lower8BitOpAA(MI, BB);
-  case RL78::MOV1_cy_r:
-    return Lower8bitASrc(MI, BB);
   case RL78::CALL_cs_rp:
     return LowerCallCSRP(MI, BB);
   case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:
