@@ -2037,3 +2037,71 @@ def : Pat<(RL78ucmp i8:$r, 0), (CMP0_r $r)>;
 def : Pat<(RL78ucmp (i8 (load SADDR:$addr)), 0), (CMP0_saddr SADDR:$addr)>;
 def : Pat<(RL78ucmp (i8 (load ADDRABS16:$addr)), 0),
           (CMP0_abs16 ADDRABS16:$addr)>;
+
+//===----------------------------------------------------------------------===//
+// Loads, stores and immediates
+//===----------------------------------------------------------------------===//
+
+def MemRP : ComplexPattern<iPTR, 1, "SelectMemRP", [], []>;
+def MemRPi : ComplexPattern<iPTR, 2, "SelectMemRPi", [], []>;
+def MemRPi0 : ComplexPattern<iPTR, 2, "SelectMemRPi0", [], []>;
+def MemBCw : ComplexPattern<iPTR, 2, "SelectMemBCw", [], []>;
+def MemHLr : ComplexPattern<iPTR, 2, "SelectMemHLr", [], []>;
+
+def : Pat<(i8 imm:$i), (MOV_r_i8 imm:$i)>;
+def : Pat<(i16 imm:$i), (MOVW_rp_i16 imm:$i)>;
+foreach Addr = [tglobaladdr, tblockaddress, tjumptable, tconstpool] in {
+  def : Pat<(RL78Low16 Addr:$a), (MOVW_rp_i16 Addr:$a)>;
+  def : Pat<(RL78Low8 Addr:$a), (MOVW_rp_i16 Addr:$a)>;
+}
+
+// Bytes: memory to A (saddr and !addr16 also to X, C, B), A or #byte to
+// memory.
+def : Pat<(i8 (load SADDR:$a)), (MOV_r_saddr SADDR:$a)>;
+def : Pat<(i8 (load ADDRABS16:$a)), (MOV_r_abs16 ADDRABS16:$a)>;
+def : Pat<(i8 (atomic_load ADDRABS16:$a)), (MOV_r_abs16 ADDRABS16:$a)>;
+def : Pat<(i8 (load SFR:$a)), (MOV_A_sfr SFR:$a)>;
+def : Pat<(i8 (load MemRP:$a)), (MOV_A_mRP MemRP:$a)>;
+def : Pat<(i8 (load MemRPi:$a)), (MOV_A_mRPi MemRPi:$a)>;
+def : Pat<(i8 (load MemHLr:$a)), (MOV_A_mHLr MemHLr:$a)>;
+def : Pat<(i8 (load MemBCw:$a)), (MOV_A_mBCw MemBCw:$a)>;
+def : Pat<(i8 (load ADDRr8i16:$a)), (MOV_A_mBw ADDRr8i16:$a)>;
+
+def : Pat<(store i8:$v, SADDR:$a), (MOV_saddr_A SADDR:$a, $v)>;
+def : Pat<(store i8:$v, ADDRABS16:$a), (MOV_abs16_A ADDRABS16:$a, $v)>;
+def : Pat<(store i8:$v, SFR:$a), (MOV_sfr_A SFR:$a, $v)>;
+def : Pat<(store i8:$v, MemRP:$a), (MOV_mRP_A MemRP:$a, $v)>;
+def : Pat<(store i8:$v, MemRPi:$a), (MOV_mRPi_A MemRPi:$a, $v)>;
+def : Pat<(store i8:$v, MemHLr:$a), (MOV_mHLr_A MemHLr:$a, $v)>;
+def : Pat<(store i8:$v, MemBCw:$a), (MOV_mBCw_A MemBCw:$a, $v)>;
+def : Pat<(store i8:$v, ADDRr8i16:$a), (MOV_mBw_A ADDRr8i16:$a, $v)>;
+
+def : Pat<(store (i8 imm:$i), SADDR:$a), (MOV_saddr_i8 SADDR:$a, imm:$i)>;
+def : Pat<(store (i8 imm:$i), ADDRABS16:$a), (MOV_abs16_i8 ADDRABS16:$a, imm:$i)>;
+def : Pat<(store (i8 imm:$i), SFR:$a), (MOV_sfr_i8 SFR:$a, imm:$i)>;
+def : Pat<(store (i8 imm:$i), MemRPi0:$a), (MOV_mRPi_i8 MemRPi0:$a, imm:$i)>;
+def : Pat<(store (i8 imm:$i), MemBCw:$a), (MOV_mBCw_i8 MemBCw:$a, imm:$i)>;
+def : Pat<(store (i8 imm:$i), ADDRr8i16:$a), (MOV_mBw_i8 ADDRr8i16:$a, imm:$i)>;
+def : Pat<(store (i8 0), SADDR:$a), (CLRB_saddr SADDR:$a)>;
+def : Pat<(store (i8 0), ADDRABS16:$a), (CLRB_abs16 ADDRABS16:$a)>;
+def : Pat<(store (i8 1), SADDR:$a), (ONEB_saddr SADDR:$a)>;
+def : Pat<(store (i8 1), ADDRABS16:$a), (ONEB_abs16 ADDRABS16:$a)>;
+
+// Words: memory to AX (saddrp and !addr16 to any pair), AX to memory.
+def : Pat<(i16 (load SADDR:$a)), (MOVW_rp_saddrp SADDR:$a)>;
+def : Pat<(i16 (load ADDRABS16:$a)), (MOVW_rp_abs16 ADDRABS16:$a)>;
+def : Pat<(i16 (load SFR:$a)), (MOVW_AX_sfrp SFR:$a)>;
+def : Pat<(i16 (load MemRP:$a)), (MOVW_AX_mRP MemRP:$a)>;
+def : Pat<(i16 (load MemRPi:$a)), (MOVW_AX_mRPi MemRPi:$a)>;
+def : Pat<(i16 (load MemBCw:$a)), (MOVW_AX_mBCw MemBCw:$a)>;
+def : Pat<(i16 (load ADDRr8i16:$a)), (MOVW_AX_mBw ADDRr8i16:$a)>;
+
+def : Pat<(store i16:$v, SADDR:$a), (MOVW_saddrp_AX SADDR:$a, $v)>;
+def : Pat<(store i16:$v, ADDRABS16:$a), (MOVW_abs16_AX ADDRABS16:$a, $v)>;
+def : Pat<(store i16:$v, SFR:$a), (MOVW_sfrp_AX SFR:$a, $v)>;
+def : Pat<(store i16:$v, MemRP:$a), (MOVW_mRP_AX MemRP:$a, $v)>;
+def : Pat<(store i16:$v, MemRPi:$a), (MOVW_mRPi_AX MemRPi:$a, $v)>;
+def : Pat<(store i16:$v, MemBCw:$a), (MOVW_mBCw_AX MemBCw:$a, $v)>;
+def : Pat<(store i16:$v, ADDRr8i16:$a), (MOVW_mBw_AX ADDRr8i16:$a, $v)>;
+def : Pat<(store (i16 imm:$i), SADDR:$a), (MOVW_saddrp_i16 SADDR:$a, imm:$i)>;
+def : Pat<(store (i16 imm:$i), SFR:$a), (MOVW_sfrp_i16 SFR:$a, imm:$i)>;

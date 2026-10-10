@@ -344,7 +344,7 @@ void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
         .addImm(ImmLo);
     Xch();
   } else if (Op8 == RL78::OR_r_imm && ImmLo == 0xff) {
-    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_imm), RL78::R0).addImm(ImmLo);
+    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_i8), RL78::R0).addImm(ImmLo);
   }
   if (ImmHi == 0x00 && Op8 == RL78::AND_r_imm) {
     BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r_cg), RL78::R1);
@@ -355,7 +355,7 @@ void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
         .addReg(RL78::R1, RegState::Kill)
         .addImm(ImmHi);
   } else if (ImmHi == 0xff && Op8 == RL78::OR_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_imm), RL78::R1).addImm(ImmHi);
+    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_i8), RL78::R1).addImm(ImmHi);
   }
 }
 
@@ -1329,7 +1329,7 @@ MachineInstr *RL78InstrInfo::foldMemoryOperandImpl(
     int FrameIndex, MachineInstr *&CopyMI, LiveIntervals *LIS,
     VirtRegMap *VRM) const {
   CopyMI = nullptr;
-  if ((MI.getOpcode() != RL78::MOV_r_imm))
+  if ((MI.getOpcode() != RL78::MOV_r_i8))
     return nullptr;
 
   //In cases like: undef %39.sub_hi:rl78rpregs = MOV_r_imm 0

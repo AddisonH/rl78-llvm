@@ -203,7 +203,13 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
         std::pair<std::optional<MachineOperand>, unsigned int> crspCpyAndInstr =
             getCoresspondingCpyOrConst(MI.getOperand(1), ACPM);
 
-        if (crspCpyAndInstr.second == RL78::MOVW_rp_imm && MI.isCopy() &&
+        // Only into the registers MOV r, #byte / MOVW rp, #word write.
+        auto InClass = [&](Register R, const TargetRegisterClass &RC) {
+          return R.isVirtual() ? RC.hasSubClassEq(MRI->getRegClass(R))
+                               : RC.contains(R);
+        };
+        if (crspCpyAndInstr.second == RL78::MOVW_rp_i16 && MI.isCopy() &&
+            InClass(MI.getOperand(0).getReg(), RL78::RL78RPRegsRegClass) &&
             TRI->getRegSizeInBits(MI.getOperand(0).getReg(), *MRI) == 16 &&
             !IsMACReg(MI.getOperand(0).getReg(), MRI) &&
             crspCpyAndInstr.first.has_value()) {
@@ -211,12 +217,13 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
               MF.getSubtarget().getInstrInfo());
 
           BuildMI(MBB, MI.getIterator(), MI.getDebugLoc(),
-                  TII.get(RL78::MOVW_rp_imm), MI.getOperand(0).getReg())
+                  TII.get(RL78::MOVW_rp_i16), MI.getOperand(0).getReg())
               .add(crspCpyAndInstr.first.value());
 
           removeFlag = true;
 
-        } else if (crspCpyAndInstr.second == RL78::MOV_r_imm && MI.isCopy() &&
+        } else if (crspCpyAndInstr.second == RL78::MOV_r_i8 && MI.isCopy() &&
+                   InClass(MI.getOperand(0).getReg(), RL78::RL78RegRegClass) &&
                    TRI->getRegSizeInBits(MI.getOperand(0).getReg(), *MRI) ==
                        8 &&
                   crspCpyAndInstr.first.has_value()) {
@@ -225,7 +232,7 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
               MF.getSubtarget().getInstrInfo());
 
           BuildMI(MBB, MI.getIterator(), MI.getDebugLoc(),
-                  TII.get(RL78::MOV_r_imm), MI.getOperand(0).getReg())
+                  TII.get(RL78::MOV_r_i8), MI.getOperand(0).getReg())
               .add(crspCpyAndInstr.first.value());
 
           removeFlag = true;
@@ -250,8 +257,8 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
 
       // MOV_R_IMM
       // we add the register to ACPM
-      if (MI.getOpcode() == RL78::MOVW_rp_imm ||
-          MI.getOpcode() == RL78::MOV_r_imm)
+      if (MI.getOpcode() == RL78::MOVW_rp_i16 ||
+          MI.getOpcode() == RL78::MOV_r_i8)
         ACPM.push_back(std::make_tuple(MI.getOperand(0), MI.getOperand(1),
                                        MI.getOpcode()));
 

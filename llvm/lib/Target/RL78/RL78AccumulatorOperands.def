@@ -266,9 +266,7 @@ ACC_OPERAND(XOR_r_r, 1, A)
 
 #ifdef ANY_OPERAND
 ANY_OPERAND(ADDW_rp_rp, 2)
-ANY_OPERAND(MOVW_rp_imm, 0)
 ANY_OPERAND(MOV_r_esaddr16, 0)
-ANY_OPERAND(MOV_r_imm, 0)
 #endif
 
 #undef ACC_OPERAND

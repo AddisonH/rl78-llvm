@@ -71,6 +71,15 @@ public:
   bool SelectMemHL(SDValue Addr, SDValue &Base);
   bool SelectMemHLi(SDValue Addr, SDValue &Base, SDValue &Disp);
 
+  // [DE]/[HL], [DE+byte]/[HL+byte] (byte 1 to 255, or 0 to 255 for the
+  // instructions without a [DE]/[HL] form), word[BC], [HL+B]/[HL+C].
+  bool isIndexedAddr(SDValue Addr);
+  bool SelectMemRP(SDValue Addr, SDValue &Base);
+  bool SelectMemRPi(SDValue Addr, SDValue &Base, SDValue &Disp);
+  bool SelectMemRPi0(SDValue Addr, SDValue &Base, SDValue &Disp);
+  bool SelectMemBCw(SDValue Addr, SDValue &Base, SDValue &Word);
+  bool SelectMemHLr(SDValue Addr, SDValue &Base, SDValue &Index);
+
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
   bool SelectSaddr(SDValue Addr, SDValue &Base);
   bool SelectSFR(SDValue Addr, SDValue &Base);
@@ -107,8 +116,8 @@ public:
 
 static SDValue TraversePossibleMOV(SDValue Value) {
   if (Value.isMachineOpcode() &&
-      (Value.getMachineOpcode() == RL78::MOV_r_imm ||
-       Value.getMachineOpcode() == RL78::MOVW_rp_imm))
+      (Value.getMachineOpcode() == RL78::MOV_r_i8 ||
+       Value.getMachineOpcode() == RL78::MOVW_rp_i16))
     return Value.getOperand(0);
   return Value;
 }
@@ -197,8 +206,8 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
       if (isa<ConstantSDNode>(SelectionResult)) {
         EVT VT = N->getValueType(0);
         SelectionResult = SDValue(
-            CurDAG->getMachineNode(VT == MVT::i8 ? RL78::MOV_r_imm
-                                                 : RL78::MOVW_rp_imm,
+            CurDAG->getMachineNode(VT == MVT::i8 ? RL78::MOV_r_i8
+                                                 : RL78::MOVW_rp_i16,
                                    SDLoc(N), VT, SelectionResult),
             0);
       }
@@ -394,6 +403,46 @@ bool RL78DAGToDAGISel::SelectMemHL(SDValue Addr, SDValue &Base) {
 bool RL78DAGToDAGISel::SelectMemHLi(SDValue Addr, SDValue &Base,
                                     SDValue &Disp) {
   return SelectADDRri(Addr, 255, false, Base, Disp) && !isNullConstant(Disp);
+}
+
+// base + zero-extended 8-bit index: word[B] when the base is an address
+// (!addr16), [HL+B]/[HL+C] otherwise.
+bool RL78DAGToDAGISel::isIndexedAddr(SDValue Addr) {
+  SDValue A, B;
+  return SelectADDRr8i16(Addr, A, B) || SelectADDRrr(Addr, A, B);
+}
+
+bool RL78DAGToDAGISel::SelectMemHLr(SDValue Addr, SDValue &Base,
+                                    SDValue &Index) {
+  SDValue A, B;
+  return !SelectADDRr8i16(Addr, A, B) && SelectADDRrr(Addr, Base, Index);
+}
+
+bool RL78DAGToDAGISel::SelectMemRPi0(SDValue Addr, SDValue &Base,
+                                     SDValue &Disp) {
+  return !isIndexedAddr(Addr) && SelectADDRri(Addr, 255, false, Base, Disp);
+}
+
+bool RL78DAGToDAGISel::SelectMemRP(SDValue Addr, SDValue &Base) {
+  SDValue Disp, Word;
+  return !SelectMemBCw(Addr, Base, Word) && SelectMemRPi0(Addr, Base, Disp) &&
+         isNullConstant(Disp);
+}
+
+bool RL78DAGToDAGISel::SelectMemRPi(SDValue Addr, SDValue &Base,
+                                    SDValue &Disp) {
+  return SelectMemRPi0(Addr, Base, Disp) && !isNullConstant(Disp);
+}
+
+// word[BC]: a register plus a constant above 255 or plus an address.
+bool RL78DAGToDAGISel::SelectMemBCw(SDValue Addr, SDValue &Base,
+                                    SDValue &Word) {
+  if (isIndexedAddr(Addr) ||
+      !SelectADDRri(Addr, 65535, true, Base, Word))
+    return false;
+  if (auto *C = dyn_cast<ConstantSDNode>(Word))
+    return C->getZExtValue() > 255;
+  return true;
 }
 
 bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {

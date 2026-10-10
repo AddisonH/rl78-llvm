@@ -2340,7 +2340,7 @@ static SDValue LowerIntrinsicAddrOp(SDValue addrOp, SDLoc &DL,
         !dyn_cast<GlobalVariable>(GV)->hasAttribute("saddr")) {
       int64_t Offset = G->getOffset();
       MN = DAG.getMachineNode(
-          RL78::MOVW_rp_imm, DL, addrOp.getValueType(),
+          RL78::MOVW_rp_i16, DL, addrOp.getValueType(),
           DAG.getTargetGlobalAddress(GV, DL, MVT::i16, Offset));
       addrOp = SDValue(MN, 0);
     }
@@ -2479,7 +2479,7 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
       }
 
       SDNode *MN = DAG.getMachineNode(
-          RL78::MOVW_rp_imm, DL, Op.getOperand(2).getValueType(),
+          RL78::MOVW_rp_i16, DL, Op.getOperand(2).getValueType(),
           DAG.getTargetGlobalAddress(GV, DL, MVT::i16, Offset));
       addrOp = SDValue(MN, 0);
     } else if (FrameIndexSDNode *FIN =
@@ -2496,7 +2496,7 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
       uint64_t imm = CN->getZExtValue() & 0xFFFF;
       if (imm < 0xFF00) {
         SDNode *MN = DAG.getMachineNode(
-            RL78::MOVW_rp_imm, DL, Op.getOperand(2).getValueType(),
+            RL78::MOVW_rp_i16, DL, Op.getOperand(2).getValueType(),
                                         DAG.getTargetConstant(imm, DL, MVT::i16));
         addrOp = SDValue(MN, 0);
       }
@@ -4138,7 +4138,7 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     // mov a, 0x80
     // xor a, saddr
     // cmp a, ((imm ^ 0x80)+1)
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_imm), RL78::R1).addImm(0x80);
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
     BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_saddr), RL78::R1)
         .addReg(RL78::R1, RegState::Kill)
         .add(MI.getOperand(0));
@@ -4149,7 +4149,7 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     break;
   case RL78::CMP_abs16_imm:
     if (MI.getOperand(1).getImm() & 0x80) {
-      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_imm), RL78::R1).addImm(0x80);
+      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
       BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_abs16), RL78::R1)
           .addReg(RL78::R1, RegState::Kill)
           .add(MI.getOperand(0));
@@ -4172,7 +4172,7 @@ RL78TargetLowering::LowerSignedCMP(MachineInstr &MI,
     break;
   case RL78::CMP_esaddr16_imm:
     if (MI.getOperand(2).getImm() & 0x80) {
-      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_imm), RL78::R1).addImm(0x80);
+      BuildMI(*BB, MI, DL, TII->get(RL78::MOV_r_i8), RL78::R1).addImm(0x80);
       BuildMI(*BB, MI, DL, TII->get(RL78::XOR_r_esaddr16), RL78::R1)
           .addReg(RL78::R1, RegState::Kill)
           .add(MI.getOperand(0))
@@ -4460,7 +4460,7 @@ static bool LowerXorSpecialCases(unsigned int opcode, MachineInstr &MI, MachineB
 
     //~X <=> X ^ 0xFFFF <=> -1 - X.
     if ((MI.getOperand(2).getImm() & 0xFFFF) == 0xFFFF) {
-        BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_imm), RL78::RP0).addImm(0xFFFF);
+        BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_i16), RL78::RP0).addImm(0xFFFF);
         BuildMI(*BB, MI, DL, TII->get(RL78::SUBW_rp_rp), RL78::RP0)
             .addReg(RL78::RP0)
             .add(MI.getOperand(1));
@@ -4769,13 +4769,13 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
     selectCopyOp1 = RL78::COPY;
     break;
   case RL78::SELECTCC8_imm_r:
-    selectCopyOp1 = RL78::MOV_r_imm;
+    selectCopyOp1 = RL78::MOV_r_i8;
     break;
   case RL78::SELECTCC16_imm_rp:
   case RL78::SELECTCCBTBF16_imm_rp:
   case RL78::SELECTCC16_imm_imm:
   case RL78::SELECTCCBTBF16_imm_imm:
-    selectCopyOp1 = RL78::MOVW_rp_imm;
+    selectCopyOp1 = RL78::MOVW_rp_i16;
     break;
   case RL78::SELECTCC8_esaddr_r:
   case RL78::SELECTCC8_esaddr_imm:
@@ -4806,7 +4806,7 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
     break;
   case RL78::SELECTCC8_esaddr_imm:
   case RL78::SELECTCBTBFC8_esaddr_imm:
-    selectCopyOp2 = RL78::MOV_r_imm;
+    selectCopyOp2 = RL78::MOV_r_i8;
     break;
   case RL78::SELECTCC16_rp_imm:
   case RL78::SELECTCCBTBF16_rp_imm:
@@ -4814,7 +4814,7 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   case RL78::SELECTCCBTBF16_imm_imm:
   case RL78::SELECTCC16_esaddr_imm:
   case RL78::SELECTCCBTBF116_esaddr_imm:
-    selectCopyOp2 = RL78::MOVW_rp_imm;
+    selectCopyOp2 = RL78::MOVW_rp_i16;
     break;
   default:
     llvm_unreachable("Unexpected opcode!");
@@ -4959,7 +4959,7 @@ RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
       MI.getOpcode() == RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr ||
       MI.getOpcode() == RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr
           ? RL78::COPY
-          : RL78::MOVW_rp_imm;
+          : RL78::MOVW_rp_i16;
 
   // The 'true' branch regs are set in the current BB + a BRCC added to sinkMBB.
   BuildMI(*BB, MI, DL, TII->get(CopyOp), RtSeg)

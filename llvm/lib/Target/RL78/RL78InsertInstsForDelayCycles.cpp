@@ -125,7 +125,7 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_6_1279(
       .addReg(RL78::R1);
   MachineBasicBlock *LoopBB = MBB.splitAt(MI);
   LoopBB->addSuccessor(LoopBB);
-  BuildMI(MBB, MI, DL, TII.get(RL78::MOV_r_imm)).addReg(RL78::R1).addImm(AInit);
+  BuildMI(MBB, MI, DL, TII.get(RL78::MOV_r_i8)).addReg(RL78::R1).addImm(AInit);
   BuildMI(*LoopBB, LoopBB->end(), DL, TII.get(RL78::B_BNZ))
       .addMBB(LoopBB)
       .addImm(RL78CC::RL78CC_NZ);

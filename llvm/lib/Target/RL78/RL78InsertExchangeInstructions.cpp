@@ -672,7 +672,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       }
       // MI.dump();
       switch (MI.getOpcode()) {
-      case RL78::MOV_r_imm:
+      case RL78::MOV_r_i8:
         assert(MI.getOperand(1).isImm());
         // Replace mov X, A + mov A, #0 with shrw AX, 8.
         if ((MI.getOperand(0).getReg() == RL78::R1) &&
@@ -711,7 +711,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           }
         }
         break;
-      case RL78::MOVW_rp_imm:
+      case RL78::MOVW_rp_i16:
         // If dest is AX/BC we might be able to use CLRW/ONEW.
         if (RL78::RL78AXBCRPRegClass.contains(MI.getOperand(0).getReg())) {
           if (MI.getOperand(1).isImm()) {
