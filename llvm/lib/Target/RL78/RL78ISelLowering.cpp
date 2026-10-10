@@ -2361,15 +2361,14 @@ static SDValue LowerBitOpIntrinsic(unsigned int Opcode, SDValue Op,
   SDValue addrOp = Op.getOperand(2);
   addrOp = LowerIntrinsicAddrOp(addrOp, DL, DAG);
 
-  SDValue movToCY =
-      DAG.getNode(RL78ISD::MOV1TOCY, DL, MVT::Other, Op.getOperand(0),
-                  Op.getOperand(4), Op.getOperand(5));
-  SDValue opCY =
-      DAG.getNode(Opcode, DL, MVT::Other, movToCY, Op.getOperand(3), addrOp);
-
-  SDValue movFromCY = DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other, opCY,
-                                  Op.getOperand(3), addrOp);
-  return movFromCY;
+  // CY lives from each node to the next: glue keeps them together.
+  SDVTList VTs = DAG.getVTList(MVT::Other, MVT::Glue);
+  SDValue movToCY = DAG.getNode(RL78ISD::MOV1TOCY, DL, VTs, Op.getOperand(0),
+                                Op.getOperand(4), Op.getOperand(5));
+  SDValue opCY = DAG.getNode(Opcode, DL, VTs, movToCY, Op.getOperand(3),
+                             addrOp, movToCY.getValue(1));
+  return DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other, opCY,
+                     Op.getOperand(3), addrOp, opCY.getValue(1));
 }
 
 SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
@@ -2416,12 +2415,12 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
   case Intrinsic::rl78_mov1: {
     SDValue addrOp = Op.getOperand(2);
     addrOp = LowerIntrinsicAddrOp(addrOp, DL, DAG);
-    SDValue movToCY =
-        DAG.getNode(RL78ISD::MOV1TOCY, DL, MVT::Other, Op.getOperand(0),
-                    Op.getOperand(4), Op.getOperand(5));
-    SDValue store1FromCY = DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other,
-                                       movToCY, Op.getOperand(3), addrOp);
-    return store1FromCY;
+    SDValue movToCY = DAG.getNode(RL78ISD::MOV1TOCY, DL,
+                                  DAG.getVTList(MVT::Other, MVT::Glue),
+                                  Op.getOperand(0), Op.getOperand(4),
+                                  Op.getOperand(5));
+    return DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other, movToCY,
+                       Op.getOperand(3), addrOp, movToCY.getValue(1));
   }
   case Intrinsic::rl78_and1:
     return LowerBitOpIntrinsic(RL78ISD::AND1CY, Op, DAG);
@@ -2501,12 +2500,13 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
         addrOp = SDValue(MN, 0);
       }
     }
-    SDValue loadToCY = DAG.getNode(RL78ISD::LOAD1TOCY, DL, MVT::Other,
+    SDVTList VTs = DAG.getVTList(MVT::Other, MVT::Glue);
+    SDValue loadToCY = DAG.getNode(RL78ISD::LOAD1TOCY, DL, VTs,
                                    Op.getOperand(0), Op.getOperand(3), addrOp);
-    SDValue notCY = DAG.getNode(RL78ISD::NOT1CY, DL, MVT::Other, loadToCY);
-    SDValue store1FromCY = DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other,
-                                       notCY, Op.getOperand(3), addrOp);
-    return store1FromCY;
+    SDValue notCY = DAG.getNode(RL78ISD::NOT1CY, DL, VTs, loadToCY,
+                                loadToCY.getValue(1));
+    return DAG.getNode(RL78ISD::STORE1FROMCY, DL, MVT::Other, notCY,
+                       Op.getOperand(3), addrOp, notCY.getValue(1));
   }
   }
   return SDValue();

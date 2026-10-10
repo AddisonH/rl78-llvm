@@ -78,28 +78,35 @@ def SDTMACHU : SDTypeProfile<2, 4, [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
 def machu : SDNode<"RL78ISD::MACHU", SDTMACHU, []>;
 def mach : SDNode<"RL78ISD::MACH", SDTMACHU, []>;
 
-// Bit operations through CY.
+// Bit operations through CY. The nodes of one sequence are glued, so that
+// nothing that changes the flags (an address computation, say) comes between
+// them.
 def SDTMOV1TOCY : SDTypeProfile<0, 2, [SDTCisSameAs<0, 1>, SDTCisInt<0>]>;
 def mov1tocy : SDNode<"RL78ISD::MOV1TOCY", SDTMOV1TOCY,
-                      [SDNPHasChain, SDNPOptInGlue]>;
+                      [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 def SDTLOAD1TOCY : SDTypeProfile<0, 2, [SDTCisInt<0>, SDTCisPtrTy<1>]>;
 def load1tocy : SDNode<"RL78ISD::LOAD1TOCY", SDTLOAD1TOCY,
-                       [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+                       [SDNPHasChain, SDNPMayLoad, SDNPMemOperand,
+                        SDNPOutGlue]>;
 def SDTIntMov1FromCy : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>,
                                             SDTCisSameAs<0, 1>,
                                             SDTCisSameAs<0, 2>, SDTCisInt<0>]>;
 def mov1fromcy : SDNode<"RL78ISD::MOV1FROMCY", SDTIntMov1FromCy, []>;
 def store1fromcy : SDNode<"RL78ISD::STORE1FROMCY", SDTLOAD1TOCY,
-                          [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+                          [SDNPHasChain, SDNPMayStore, SDNPMemOperand,
+                           SDNPInGlue]>;
 def and1cy : SDNode<"RL78ISD::AND1CY", SDTLOAD1TOCY,
-                    [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+                    [SDNPHasChain, SDNPMayLoad, SDNPMemOperand, SDNPInGlue,
+                     SDNPOutGlue]>;
 def or1cy : SDNode<"RL78ISD::OR1CY", SDTLOAD1TOCY,
-                   [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+                   [SDNPHasChain, SDNPMayLoad, SDNPMemOperand, SDNPInGlue,
+                    SDNPOutGlue]>;
 def xor1cy : SDNode<"RL78ISD::XOR1CY", SDTLOAD1TOCY,
-                    [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+                    [SDNPHasChain, SDNPMayLoad, SDNPMemOperand, SDNPInGlue,
+                     SDNPOutGlue]>;
 def SDTNOT1CY : SDTypeProfile<0, 0, []>;
 def not1cy : SDNode<"RL78ISD::NOT1CY", SDTNOT1CY,
-                    [SDNPHasChain, SDNPOptInGlue]>;
+                    [SDNPHasChain, SDNPInGlue, SDNPOutGlue]>;
 def SDTSET1CLR1 : SDTypeProfile<0, 2, [SDTCisInt<0>, SDTCisPtrTy<1>]>;
 def set1 : SDNode<"RL78ISD::SET1", SDTSET1CLR1,
                   [SDNPHasChain, SDNPMayLoad, SDNPMayStore, SDNPMemOperand]>;
