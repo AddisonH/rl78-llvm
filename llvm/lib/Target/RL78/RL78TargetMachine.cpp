@@ -304,12 +304,10 @@ void RL78PassConfig::addFastRegAlloc() {
 }
 
 void RL78PassConfig::addMachineSSAOptimization() {
-  addPass(createRL78VirtualizeAccumulatorPass(/*WidenOnly=*/true));
   TargetPassConfig::addMachineSSAOptimization();
 }
 
 bool RL78PassConfig::addRegAssignAndRewriteOptimized() {
-  addPass(createRL78SeparateAccumulatorOperandsPass());
   return TargetPassConfig::addRegAssignAndRewriteOptimized();
 }
 
@@ -320,7 +318,6 @@ void RL78PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
     addPass(createRL78SinkToAccumulatorPass());
-    addPass(createRL78VirtualizeAccumulatorPass());
     addPass(&ProcessImplicitDefsID);
 
     // LiveVariables currently requires pure SSA form.
@@ -329,12 +326,12 @@ void RL78PassConfig::addPreRegAlloc() {
     addPass(&ProcessImplicitDefsID);
     addPass(&UnreachableMachineBlockElimID);
     addPass(&DeadMachineInstructionElimID);
-  } else {
-    // addMachineSSAOptimization does not run at -O0; the classes ISel gives
-    // copies of accumulator results still need widening.
-    addPass(createRL78VirtualizeAccumulatorPass(/*WidenOnly=*/true));
   }
   addPass(createRL78ESOptPass());
+  // Last before the allocator's own passes: the SSA optimisations (copy
+  // propagation in MachineCSE and the peephole optimiser) narrow a value's
+  // class to that of an operand whenever they can.
+  addPass(createRL78SplitConstrainedValuesPass());
 }
 
 void RL78PassConfig::addPostRegAlloc() {

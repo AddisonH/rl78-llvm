@@ -53,6 +53,7 @@ FunctionPass *createRL78NarrowLoopCountersPass();
 FunctionPass *createRL78ExpandInlineAsmPass();
 FunctionPass *createRL78MACRLoopPromotePass();
 FunctionPass *createRL78SinkToAccumulatorPass();
+FunctionPass *createRL78SplitConstrainedValuesPass();
 FunctionPass *createRL78VirtualizeAccumulatorPass(bool WidenOnly = false);
 FunctionPass *createRL78SeparateAccumulatorOperandsPass();
 

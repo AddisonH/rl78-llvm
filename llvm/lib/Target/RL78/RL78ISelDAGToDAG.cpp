@@ -116,10 +116,11 @@ static SDValue TraversePossibleMOV(SDValue Value) {
 static bool AreCmpOpsEqual(SDValue Cmp) {
   // Avoid matching cmp_r_memri  t41, t41, ...
   // see gcc.c_torture\pr33870.c -O1
-  if (Cmp.getMachineOpcode() != RL78::CMPW_rp_imm &&
-      Cmp.getMachineOpcode() != RL78::CMPW_rp_rp &&
-      Cmp.getMachineOpcode() != RL78::CMP_r_imm &&
-      Cmp.getMachineOpcode() != RL78::CMP_r_r)
+  if (!Cmp.isMachineOpcode() ||
+      (Cmp.getMachineOpcode() != RL78::CMPW_AX_i16 &&
+       Cmp.getMachineOpcode() != RL78::CMPW_AX_rp &&
+       Cmp.getMachineOpcode() != RL78::CMP_A_i8 &&
+       Cmp.getMachineOpcode() != RL78::CMP_A_r))
     return false;
 
   SDValue LHS = Cmp.getOperand(0);

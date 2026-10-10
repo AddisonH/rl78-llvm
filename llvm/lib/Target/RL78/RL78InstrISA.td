@@ -392,6 +392,31 @@ def CMP_eabs16_i8 : RL78Inst<5, (outs), (ins (esaddr16 $es, $adr):$addr, imm8:$i
 }
 } // Defs = [CCreg]
 
+// CMP, CMPW, CMP0 set CY when the first operand is below the second
+// (unsigned) and Z when they are equal.
+def RL78ucmp : PatFrag<(ops node:$l, node:$r), (cmp node:$l, node:$r, (i8 0))>;
+
+// After a compare, CY ^= the sign bit of each operand makes CY "less than"
+// for signed operands; a negative constant operand inverts CY instead.
+def RL78xorsigncy : SDNode<"RL78ISD::XORSIGNCY",
+                           SDTypeProfile<0, 1, [SDTCisInt<0>]>,
+                           [SDNPInGlue, SDNPOutGlue]>;
+def RL78notcy : SDNode<"RL78ISD::NOTCY", SDTypeProfile<0, 0, []>,
+                       [SDNPInGlue, SDNPOutGlue]>;
+
+def : Pat<(RL78ucmp i8:$a, (i8 imm:$i)), (CMP_A_i8 $a, imm:$i)>;
+def : Pat<(RL78ucmp i8:$a, i8:$r), (CMP_A_r $a, $r)>;
+def : Pat<(RL78ucmp i8:$a, (load SADDR:$addr)), (CMP_A_saddr $a, SADDR:$addr)>;
+def : Pat<(RL78ucmp i8:$a, (load ADDRABS16:$addr)),
+          (CMP_A_abs16 $a, ADDRABS16:$addr)>;
+def : Pat<(RL78ucmp i8:$a, (load MemHL:$addr)), (CMP_A_mHL $a, MemHL:$addr)>;
+def : Pat<(RL78ucmp i8:$a, (load MemHLi:$addr)), (CMP_A_mHLi $a, MemHLi:$addr)>;
+def : Pat<(RL78ucmp i8:$a, (load ADDRrr:$addr)), (CMP_A_mHLr $a, ADDRrr:$addr)>;
+def : Pat<(RL78ucmp (load SADDR:$addr), (i8 imm:$i)),
+          (CMP_saddr_i8 SADDR:$addr, imm:$i)>;
+def : Pat<(RL78ucmp (load ADDRABS16:$addr), (i8 imm:$i)),
+          (CMP_abs16_i8 ADDRABS16:$addr, imm:$i)>;
+
 //===----------------------------------------------------------------------===//
 // 16-bit operations (manual 6.4): ADDW, SUBW, CMPW
 //===----------------------------------------------------------------------===//
@@ -465,6 +490,67 @@ let Defs = [CCreg] in {
 defm ADDW : RL78Alu16<"addw", 0, 0, RL78RPRegs>;
 defm SUBW : RL78Alu16<"subw", 2, 0, RL78BCDEHL>;
 defm CMPW : RL78Alu16<"cmpw", 4, 1, RL78BCDEHL>;
+}
+
+multiclass RL78Alu16Sel<string I, SDPatternOperator Node> {
+  def : Pat<(Node i16:$a, (i16 imm:$i)),
+            (!cast<Instruction>(I # "_AX_i16") $a, imm:$i)>;
+  def : Pat<(Node i16:$a, i16:$rp), (!cast<Instruction>(I # "_AX_rp") $a, $rp)>;
+  def : Pat<(Node i16:$a, (load SADDR:$addr)),
+            (!cast<Instruction>(I # "_AX_saddrp") $a, SADDR:$addr)>;
+  def : Pat<(Node i16:$a, (load ADDRABS16:$addr)),
+            (!cast<Instruction>(I # "_AX_abs16") $a, ADDRABS16:$addr)>;
+  def : Pat<(Node i16:$a, (load ADDRri8:$addr)),
+            (!cast<Instruction>(I # "_AX_mHLi") $a, ADDRri8:$addr)>;
+}
+defm : RL78Alu16Sel<"ADDW", add>;
+defm : RL78Alu16Sel<"SUBW", sub>;
+// The carry out is in CY either way.
+defm : RL78Alu16Sel<"ADDW", addc>;
+defm : RL78Alu16Sel<"SUBW", subc>;
+defm : RL78Alu16Sel<"CMPW", RL78ucmp>;
+
+// SKNZ, then CMPW of the low words: one instruction for code generation, so
+// that nothing is placed between the two.
+let isCodeGenOnly = 1, Uses = [CCreg], Defs = [CCreg] in {
+  def LowCMPW_rp_imm : InstRL78_40bit<0x61F8440000,
+        (outs), (ins RL78AXRP:$rsrc, i16imm:$imm16),
+        "sknz\n\tcmpw $rsrc, $imm16",
+         [(RL78lowcmp i16:$rsrc, (i16 imm:$imm16))]>;
+
+//Instruction           Opcode
+//SKNZ
+//CMPW AX, BC           43
+//CMPW AX, DE           45
+//CMPW AX, HL           47
+  def LowCMPW_rp_rp : InstRL78_24bit<0x61F843,
+        (outs), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
+        "sknz\n\tcmpw $rsrc, $rsrc2",
+         [(RL78lowcmp i16:$rsrc, i16:$rsrc2)]>;
+
+//Instruction           Opcode
+//SKNZ
+//CMPW AX, saddrp       46 saddr
+  def LowCMPW_rp_saddr : InstRL78_32bit<0x61F84600,
+        (outs), (ins RL78AXRP:$rsrc, ABS8:$addr),
+        "sknz\n\tcmpw $rsrc, $addr",
+         [(RL78lowcmp i16:$rsrc, (load SADDR:$addr))]>;
+
+//Instruction           Opcode
+//SKNZ
+//CMPW AX, !addr16      42 adrl adrh
+  def LowCMPW_rp_abs16 : InstRL78_40bit<0x61F8420000,
+        (outs), (ins RL78AXRP:$rsrc, ABS16:$addr),
+        "sknz\n\tcmpw $rsrc, $addr",
+        [(RL78lowcmp i16:$rsrc, (load ADDRABS16:$addr))]>;
+
+//Instruction         Opcode
+//SKNZ
+//CMPW AX, [HL+byte]  61 49 adr
+  def LowCMPW_rp_memri : InstRL78_40bit<0x61F8614900,
+        (outs), (ins RL78AXRP:$rsrc, memHLi:$addr),
+        "sknz\n\tcmpw $rsrc, $addr",
+        [(RL78lowcmp i16:$rsrc, (load ADDRri8:$addr))]>;
 }
 
 // ADDW SP, #byte         10 data
@@ -551,6 +637,22 @@ defm INCW : RL78IncDec<"incw", 0, 0xA, 0x79, 1, RL78RPRegs, saddrp8, addr16w,
                        esaddr16w>;
 defm DECW : RL78IncDec<"decw", 0, 0xB, 0x89, 1, RL78RPRegs, saddrp8, addr16w,
                        esaddr16w>;
+
+multiclass RL78IncDecSel<string I, ValueType VT, int By, string R, string S> {
+  def : Pat<(add VT:$r, By), (!cast<Instruction>(I # R) $r)>;
+  def : Pat<(store (add (VT (load SADDR:$addr)), By), SADDR:$addr),
+            (!cast<Instruction>(I # S) SADDR:$addr)>;
+  def : Pat<(store (add (VT (load ADDRABS16:$addr)), By), ADDRABS16:$addr),
+            (!cast<Instruction>(I # "_abs16") ADDRABS16:$addr)>;
+  def : Pat<(store (add (VT (load ADDRri8:$addr)), By), ADDRri8:$addr),
+            (!cast<Instruction>(I # "_mHLi") ADDRri8:$addr)>;
+}
+defm : RL78IncDecSel<"INC", i8, 1, "_r", "_saddr">;
+// x | 1 with bit 0 of x known to be clear.
+def : Pat<(inc i8:$r), (INC_r $r)>;
+defm : RL78IncDecSel<"DEC", i8, -1, "_r", "_saddr">;
+defm : RL78IncDecSel<"INCW", i16, 1, "_rp", "_saddrp">;
+defm : RL78IncDecSel<"DECW", i16, -1, "_rp", "_saddrp">;
 
 //===----------------------------------------------------------------------===//
 // CMP0, CLRB, ONEB (manual 6.1, 6.3): X, A, C, B, saddr, !addr16
@@ -1920,3 +2022,18 @@ def SHL_C_n : RL78Shift<"shl", RegisterOperand<RL78CReg8>, shift8imm, 0x7>;
 def SHLW_AX_n : RL78Shift<"shlw", RegisterOperand<RL78AXRP>, shift16imm, 0xD>;
 def SHLW_BC_n : RL78Shift<"shlw", RegisterOperand<RL78BCRP>, shift16imm, 0xC>;
 }
+
+//===----------------------------------------------------------------------===//
+// Selection patterns that use instructions of several sections
+//===----------------------------------------------------------------------===//
+
+// Signed compares: the sign bit of a 16-bit value in AX is A.7.
+def : Pat<(RL78xorsigncy i8:$a), (XOR1_CY_A_b $a, 7)>;
+def : Pat<(RL78xorsigncy i16:$ax), (XOR1_CY_A_b (EXTRACT_SUBREG $ax, sub_hi), 7)>;
+def : Pat<(RL78notcy), (NOT1_CY)>;
+
+// Compares with 0.
+def : Pat<(RL78ucmp i8:$r, 0), (CMP0_r $r)>;
+def : Pat<(RL78ucmp (i8 (load SADDR:$addr)), 0), (CMP0_saddr SADDR:$addr)>;
+def : Pat<(RL78ucmp (i8 (load ADDRABS16:$addr)), 0),
+          (CMP0_abs16 ADDRABS16:$addr)>;

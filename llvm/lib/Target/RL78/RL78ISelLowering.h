@@ -46,6 +46,9 @@ enum NodeType : unsigned {
   SET1,
   CLR1,
   NOT1CY,
+  // After a compare: CY ^= sign bit of the operand; CY = !CY.
+  XORSIGNCY,
+  NOTCY,
   DIVWU,
   XCHW,
   LOW8,

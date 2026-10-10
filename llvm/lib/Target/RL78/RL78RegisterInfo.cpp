@@ -69,93 +69,26 @@ float RL78RegisterInfo::getSpillWeightScaleFactor(
   return 1.0;
 }
 
-static cl::opt<bool> RL78AccCoalesce(
-    "rl78-acc-coalesce", cl::Hidden, cl::init(false),
-    cl::desc("Let the coalescer narrow values to AX or A"));
-
-// Do not narrow a value that may live in any register to the one register an
-// accumulator operand (RL78AXRP, RL78AReg) allows: every other operand of
-// that value would have to be in AX too, and two of them at once cannot be.
-// Leave the copy for the allocator's hints to remove.
+// Joining a copy narrows the joined value to the class both ends allow. When
+// that is one of the small classes (A, AX, HL, B or C, ...) the whole value
+// would have to stay in those registers, and whatever else needs them while
+// it lives has nowhere to go: the allocator can run out of registers. Keep a
+// constrained value as short as RL78SplitConstrainedValues made it; the copy
+// stays, with the allocator's hints to make it a no-op where the register is
+// free. (Joining where it is provably free is a later optimisation.)
 bool RL78RegisterInfo::shouldCoalesce(
     MachineInstr *MI, const TargetRegisterClass *SrcRC, unsigned SubReg,
     const TargetRegisterClass *DstRC, unsigned DstSubReg,
     const TargetRegisterClass *NewRC, LiveIntervals &LIS) const {
-  if (NewRC->getNumRegs() != 1)
+  const MachineFunction &MF = *MI->getMF();
+  auto IsSmall = [&](const TargetRegisterClass *RC) {
+    return getLargestLegalSuperClass(RC, MF) != RC;
+  };
+  if (!IsSmall(NewRC))
     return true;
-  // With -rl78-acc-coalesce, a whole value copied into AX/A may be kept
-  // there; the allocator splits it out again where it cannot stay. Through a
-  // subregister the join would pin the whole pair to AX (`%p.sub_hi = CLRB`
-  // makes %p RL78AXRP).
-  if (SrcRC->getNumRegs() == 1 && DstRC->getNumRegs() == 1)
-    return true;
-  if (SubReg || DstSubReg)
-    return false;
-  // Joining is free when nothing else needs the accumulator while either
-  // value is live: no pinned use or clobber of AX/A overlaps them. The value
-  // can then simply stay in AX/A and the copies disappear.
-  if (!RL78AccCoalesce) {
-    MCRegister Acc = *NewRC->begin();
-    const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
-    Register Dst = MI->getOperand(0).getReg(), Src = MI->getOperand(1).getReg();
-    // A copy of the joined value (or the value it is a copy of) is the same
-    // value and will be joined as well: no competition for the accumulator.
-    auto SameValue = [&](Register R) {
-      for (const MachineInstr &DI_cg : MRI.def_instructions(R))
-        if (DI_cg.isCopy() && (DI_cg.getOperand(1).getReg() == Dst ||
-                            DI_cg.getOperand(1).getReg() == Src))
-          return true;
-      for (Register J : {Dst, Src})
-        for (const MachineInstr &DI_cg : MRI.def_instructions(J))
-          if (DI_cg.isCopy() && DI_cg.getOperand(1).getReg() == R)
-            return true;
-      return false;
-    };
-    for (Register R : {Dst, Src}) {
-      const LiveInterval &LI = LIS.getInterval(R);
-      for (MCRegUnit Unit : regunits(Acc))
-        if (LIS.getRegUnit(Unit).overlaps(LI)) {
-          LLVM_DEBUG(dbgs() << "RL78 no acc join: " << printReg(R, this)
-                            << " overlaps a use of " << printReg(Acc, this)
-                            << " in " << *MI);
-          return false;
-        }
-      // Nor may another value that has to be in the accumulator be read or
-      // written while this one is live.
-      for (const LiveRange::Segment &Seg : LI) {
-        for (SlotIndex I = Seg.start.getBaseIndex(); I < Seg.end;
-             I = I.getNextIndex()) {
-          const MachineInstr *UI = LIS.getInstructionFromIndex(I);
-          if (!UI)
-            continue;
-          for (const MachineOperand &MO : UI->operands()) {
-            if (!MO.isReg() || !MO.getReg().isVirtual() || MO.getReg() == Dst ||
-                MO.getReg() == Src)
-              continue;
-            const TargetRegisterClass *RC = MRI.getRegClass(MO.getReg());
-            if (RC->getNumRegs() == 1 && regsOverlap(*RC->begin(), Acc) &&
-                !SameValue(MO.getReg())) {
-              LLVM_DEBUG(dbgs() << "RL78 no acc join: " << printReg(R, this)
-                                << " overlaps " << printReg(MO.getReg(), this)
-                                << " at " << *UI);
-              return false;
-            }
-          }
-        }
-      }
-    }
-  }
-  // Nor when either value is read or written in part elsewhere: splitting
-  // the pinned value around such accesses does not always succeed.
-  const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
-  for (const MachineOperand &Op : MI->operands()) {
-    if (!Op.isReg() || !Op.getReg().isVirtual())
-      continue;
-    for (const MachineOperand &MO : MRI.reg_nodbg_operands(Op.getReg()))
-      if (MO.getSubReg())
-        return false;
-  }
-  return true;
+  // The copy two-address lowering makes for a tied operand joins two
+  // constrained values next to one instruction.
+  return IsSmall(SrcRC) && IsSmall(DstRC) && !SubReg && !DstSubReg;
 }
 
 const MCPhysReg *

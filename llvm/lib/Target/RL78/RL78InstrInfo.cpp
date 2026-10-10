@@ -723,9 +723,6 @@ bool RL78InstrInfo::acceptsAccumulator(unsigned Opcode, unsigned OpNum) {
 
 const TargetRegisterClass *RL78InstrInfo::getRegClass(const MCInstrDesc &MCID,
                                                       unsigned OpNum) const {
-  if (const TargetRegisterClass *RC =
-          getAccumulatorClass(MCID.getOpcode(), OpNum))
-    return RC;
   return TargetInstrInfo::getRegClass(MCID, OpNum);
 }
 

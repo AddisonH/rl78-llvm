@@ -2683,41 +2683,46 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 //Instruction           Opcode
 //CMP A, #byte          4C data
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def CMP_r_imm : InstRL78_16bit<0x4C00,
         (outs), (ins RL78Reg:$rsrc, i8imm:$imm, i8imm:$sign),
         "cmp $rsrc, $imm",
-         [(cmp i8:$rsrc, (i8 imm:$imm), (i8 imm:$sign))]>;
+         []>;
 
 //CMP saddr, #byte   4A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def CMP_saddr_imm : InstRL78_24bit<0x4A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8, i8imm:$sign),
         "cmp $addr, $imm8",
-        [(cmp (load SADDR:$addr), (i8 imm:$imm8), (i8 imm:$sign))]>;
+        []>;
 
 //Instruction           Opcode
 //CMP !addr16, #byte    40 adrl adrh data
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP_abs16_imm : InstRL78_32bit<0x40000000,
         (outs), (ins ABS16:$addr, i8imm:$imm, i8imm:$sign),
         "cmp $addr, $imm",
-         [(cmp (load ADDRABS16:$addr), (i8 imm:$imm), (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMP A, !addr16        4F adrl adrh
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP_r_abs16 : InstRL78_24bit<0x4F0000,
         (outs), (ins RL78Reg:$rsrc, ABS16:$addr, i8imm:$sign),
         "cmp $rsrc, $addr",
-         [(cmp i8:$rsrc, (load ADDRABS16:$addr), (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMP A, [HL+byte]      4E adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP_r_memri : InstRL78_16bit<0x4E00,
         (outs), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr, i8imm:$sign),
         "cmp $rsrc, $addr",
-        [(cmp i8:$rsrc, (load ADDRri8:$addr), (i8 imm:$sign))]>;
+        []>;
 
 //CMP A, [HL]           4D
 let mayLoad = 1, mayStore = 0 in
@@ -2731,27 +2736,30 @@ let mayLoad = 1, mayStore = 0 in
 //CMP A, [HL+B]         61 C0
 //CMP A, [HL+C]         61 C2
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP_r_memrr : InstRL78_16bit<0x61C0,
         (outs), (ins RL78Reg:$rsrc, RegRegAddr:$addr, i8imm:$sign),
         "cmp $rsrc, $addr",
-        [(cmp i8:$rsrc, (load ADDRrr:$addr), (i8 imm:$sign))]>;
+        []>;
 
 
 //Instruction           Opcode
 //CMP A, r              61 4r (X -> 8, C -> A ... H -> F)
 //CMP r, A              61 40 (X -> 0, A -> 1 ... H -> 7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def CMP_r_r : InstRL78_16bit<0x6148,
         (outs), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2, i8imm:$sign),
         "cmp $rsrc, $rsrc2",
-         [(cmp i8:$rsrc, i8:$rsrc2, (i8 imm:$sign))]>;
+         []>;
 
 //CMP A, saddr          4B saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP_r_saddr : InstRL78_16bit<0x4B00,
         (outs), (ins RL78Reg:$rsrc, ABS8:$addr, i8imm:$sign),
         "cmp $rsrc, $addr",
-         [(cmp i8:$rsrc, (load SADDR:$addr), (i8 imm:$sign))]>;
+         []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -2804,25 +2812,28 @@ let  usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 //Instruction           Opcode
 //CMP0 r                DX (X..B -> 0..3)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def CMP0_r_cg : InstRL78_8bit<0xD0,
         (outs), (ins RL78Reg:$rsrc, i8imm:$sign),
         "cmp0 $rsrc",
-         [(cmp i8:$rsrc, 0, (i8 imm:$sign))]>;
+         []>;
 
 //CMP0 saddr            D4 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP0_saddr_cg : InstRL78_16bit<0xD400,
         (outs), (ins ABS8:$src, i8imm:$sign),
         "cmp0 $src",
-         [(cmp (i8 (load SADDR:$src)), 0, (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMP0 !addr16          D5 adrl adrh
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMP0_abs16_cg : InstRL78_24bit<0xD50000,
         (outs), (ins ABS16:$addr, i8imm:$sign),
         "cmp0 $addr",
-         [(cmp (i8 (load ADDRABS16:$addr)), 0, (i8 imm:$sign))]>;
+         []>;
 
 //CMP0 ES:!addr16 ;11 D5 adrl adrh
 let mayLoad = 1, mayStore = 0 in
@@ -2865,10 +2876,11 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 //Instruction           Opcode
 //ADDW AX, #word        04 datal datah
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def ADDW_rp_imm : InstRL78_24bit<0x040000,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
         "addw $rd, $imm16",
-         [(set i16:$rd, (add i16:$rsrc, (i16 imm:$imm16)))]>;
+         []>;
 
 //Instruction           Opcode
 //ADDW  AX, AX          01
@@ -2879,50 +2891,39 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
   // already in the tied register.
   let isCommutable = 1 in
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def ADDW_rp_rp : InstRL78_8bit<0x01,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         "addw $rd, $rsrc2",
-         [(set i16:$rd, (add i16:$rsrc, i16:$rsrc2))]>;
+         []>;
 
 //Instruction           Opcode
 //ADDW  AX, saddrp      06 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def ADDW_rp_saddr : InstRL78_16bit<0x0600,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS8:$addr),
         "addw $rd, $addr",
-         [(set i16:$rd, (add i16:$rsrc, (load SADDR:$addr)))]>;
+         []>;
 
 //Instruction           Opcode
 //ADDW  AX, !addr16     02 adrl adrh
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def ADDW_rp_abs16 : InstRL78_24bit<0x020000,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
         "addw $rd, $addr",
-        [(set i16:$rd, (add i16:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction           Opcode
 //ADDW  AX, [HL+byte]   61 09 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def ADDW_rp_memri : InstRL78_24bit<0x610900,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
         "addw $rd, $addr",
-        [(set i16:$rd, (add i16:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 }
-
-def : Pat<(i16 (addc i16:$src, (i16 imm:$imm16))),
-          (ADDW_rp_imm i16:$src, imm:$imm16)>;
-
-def : Pat<(i16 (addc i16:$src, i16:$rsrc2)),
-          (ADDW_rp_rp i16:$src, i16:$rsrc2)>;
-
-def : Pat<(i16 (addc i16:$src, (load SADDR:$addr))),
-          (ADDW_rp_saddr i16:$src, ABS8:$addr)>;
-
-def : Pat<(i16 (addc i16:$src, (load ADDRABS16:$addr))),
-          (ADDW_rp_abs16 i16:$src, ABS16:$addr)>;
-
-def : Pat<(i16 (addc i16:$src, (load ADDRri8:$addr))),
-          (ADDW_rp_memri i16:$src, RegOffsetAddr:$addr)>;
 
 //ADDW SP, #byte    10 data
 let mayLoad = 0, mayStore = 0 in
@@ -3000,60 +3001,50 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 //Instruction           Opcode
 //SUBW AX, #word        24 datal datah
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SUBW_rp_imm : InstRL78_24bit<0x240000,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
         "subw $rd, $imm16",
-         [(set i16:$rd, (sub i16:$rsrc, (i16 imm:$imm16)))]>;
+         []>;
 
 //Instruction           Opcode
 //SUBW AX, BC           23
 //SUBW AX, DE           25
 //SUBW AX, HL           27
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def SUBW_rp_rp : InstRL78_8bit<0x23,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
         "subw $rd, $rsrc2",
-         [(set i16:$rd, (sub i16:$rsrc, i16:$rsrc2))]>;
+         []>;
 
 //Instruction           Opcode
 //SUBW AX, saddrp       26 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def SUBW_rp_saddr : InstRL78_16bit<0x2600,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS8:$addr),
         "subw $rd, $addr",
-         [(set i16:$rd, (sub i16:$rsrc, (load SADDR:$addr)))]>;
+         []>;
 
 //Instruction           Opcode
 //SUBW AX, !addr16      22 adrl adrh
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def SUBW_rp_abs16 : InstRL78_24bit<0x220000,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
         "subw $rd, $addr",
-        [(set i16:$rd, (sub i16:$rsrc, (load ADDRABS16:$addr)))]>;
+        []>;
 
 //Instruction           Opcode
 //SUBW AX, [HL+byte]    61 29 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def SUBW_rp_memri : InstRL78_24bit<0x612900,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
         "subw $rd, $addr",
-        [(set i16:$rd, (sub i16:$rsrc, (load ADDRri8:$addr)))]>;
+        []>;
 }
-
-def : Pat<(i16 (subc i16:$src, (i16 imm:$imm16))),
-          (SUBW_rp_imm i16:$src, imm:$imm16)>;
-
-def : Pat<(i16 (subc i16:$src, i16:$rsrc2)),
-          (SUBW_rp_rp i16:$src, i16:$rsrc2)>;
-
-def : Pat<(i16 (subc i16:$src, (load SADDR:$addr))),
-          (SUBW_rp_saddr i16:$src, ABS8:$addr)>;
-
-def : Pat<(i16 (subc i16:$src, (load ADDRABS16:$addr))),
-          (SUBW_rp_abs16 i16:$src, ABS16:$addr)>;
-
-def : Pat<(i16 (subc i16:$src, (load ADDRri8:$addr))),
-          (SUBW_rp_memri i16:$src, RegOffsetAddr:$addr)>;
 
 //SUBW SP, #byte    20 data
 let mayLoad = 0, mayStore = 0 in
@@ -3116,44 +3107,49 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in
 //Instruction        Opcode
 //CMPW AX, #word     44 datal datah
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def CMPW_rp_imm : InstRL78_24bit<0x440000,
         (outs), (ins RL78RPRegs:$rsrc, i16imm:$imm16, i8imm:$sign),
         "cmpw $rsrc, $imm16",
-         [(cmp i16:$rsrc, (i16 imm:$imm16), (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMPW AX, BC           43
 //CMPW AX, DE           45
 //CMPW AX, HL           47
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def CMPW_rp_rp : InstRL78_8bit<0x43,
         (outs), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2, i8imm:$sign),
         "cmpw $rsrc, $rsrc2",
-         [(cmp i16:$rsrc, i16:$rsrc2, (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMPW AX, saddrp       46 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMPW_rp_saddr : InstRL78_16bit<0x4600,
         (outs), (ins RL78RPRegs:$rsrc, ABS8:$addr, i8imm:$sign),
         "cmpw $rsrc, $addr",
-         [(cmp i16:$rsrc, (load SADDR:$addr), (i8 imm:$sign))]>;
+         []>;
 
 //Instruction           Opcode
 //CMPW AX, !addr16      42 adrl adrh
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMPW_rp_abs16 : InstRL78_24bit<0x420000,
         (outs), (ins RL78RPRegs:$rsrc, ABS16:$addr, i8imm:$sign),
         "cmpw $rsrc, $addr",
-        [(cmp i16:$rsrc, (load tglobaladdr:$addr), (i8 imm:$sign))]>;
+        []>;
 
 //Instruction         Opcode
 //CMPW AX, [HL+byte]  61 49 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def CMPW_rp_memri : InstRL78_24bit<0x614900,
         (outs), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr, i8imm:$sign),
         "cmpw $rsrc, $addr",
-        [(cmp i16:$rsrc, (load ADDRri8:$addr), (i8 imm:$sign))]>;
+        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
@@ -3397,28 +3393,31 @@ let Constraints = "$rsrc = $rd" in {
 //Instruction       Opcode
 //INC r             80 (X..H -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def INC_r_cg  : InstRL78_8bit<0x80,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "inc $rd",
-        [(set i8:$rd, (add i8:$rsrc, 1))]>;
+        []>;
 
 } // Constraints = "$rsrc = $rd"
 
 //Instruction       Opcode
 //INC saddr         A4 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def INC_saddr_cg  : InstRL78_16bit<0xA400,
         (outs), (ins ABS8:$addr),
         "inc $addr",
-        [(store (add (i8 (load SADDR:$addr)), 1), SADDR:$addr)]>;
+        []>;
 
 //Instruction       Opcode
 //INC !addr16       A0 adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def INC_abs16_cg : InstRL78_24bit<0xA00000,
         (outs), (ins ABS16:$addr),
         "inc $addr",
-        [(store (add (i8 (load ADDRABS16:$addr)), 1), ADDRABS16:$addr)]>;
+        []>;
 
 let mayLoad = 1, mayStore = 1, usesCustomInserter = 1 in {
 
@@ -3443,24 +3442,17 @@ let usesCustomInserter = 1 in {
 //Instruction       Opcode
 //INC [HL+byte]     61 59 adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def INC_memri : InstRL78_24bit<0x615900,
         (outs), (ins RegOffsetAddr:$addr),
         "inc $addr",
-        [(store (add (i8 (load ADDRri8:$addr)), 1), ADDRri8:$addr)]>;
+        []>;
 
 } // usesCustomInserter = 1
 
 } // Defs = [CCreg, Zflag]
 
 def inc : SDNode<"RL78ISD::INC", SDTUnaryOp, [SDNPMemOperand]>;
-def : Pat<(inc RL78Reg:$rsrc),
-          (INC_r_cg RL78Reg:$rsrc)>;
-def : Pat<(inc SADDR:$addr),
-          (INC_saddr_cg ABS8:$addr)>;
-def : Pat<(inc ADDRABS16:$addr),
-          (INC_abs16_cg ABS16:$addr)>;
-def : Pat<(inc ADDRri8:$addr),
-          (INC_memri RegOffsetAddr:$addr)>;
 
 //===----------------------------------------------------------------------===//
 // DEC instruction
@@ -3473,28 +3465,31 @@ let Constraints = "$rsrc = $rd" in {
 //Instruction       Opcode
 //DEC r             90 (X..H -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def DEC_r_cg  : InstRL78_8bit<0x90,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
         "dec $rd",
-        [(set i8:$rd, (add i8:$rsrc, -1))]>;
+        []>;
 
 } // Constraints = "$rsrc = $rd"
 
 //Instruction       Opcode
 //DEC saddr         B4 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def DEC_saddr_cg  : InstRL78_16bit<0xB400,
         (outs), (ins ABS8:$addr),
         "dec $addr",
-        [(store (add (i8 (load SADDR:$addr)), -1), SADDR:$addr)]>;
+        []>;
 
 //Instruction        Opcode
 //DEC !addr16       B0 adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def DEC_abs16_cg : InstRL78_24bit<0xB00000,
         (outs), (ins ABS16:$addr),
         "dec $addr",
-        [(store (add (i8 (load ADDRABS16:$addr)), -1), ADDRABS16:$addr)]>;
+        []>;
 
 let mayLoad = 1, mayStore = 1, usesCustomInserter = 1 in {
 
@@ -3519,10 +3514,11 @@ let usesCustomInserter = 1 in {
 //Instruction       Opcode
 //DEC [HL+byte]     61 69 adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def DEC_memri : InstRL78_24bit<0x616900,
         (outs), (ins RegOffsetAddr:$addr),
         "dec $addr",
-        [(store (add (i8 (load ADDRri8:$addr)), -1), ADDRri8:$addr)]>;
+        []>;
 
 } // usesCustomInserter = 1
 
@@ -3541,27 +3537,30 @@ let Constraints = "$rsrc = $rd" in {
 //INCW DE           A5
 //INCW HL           A7
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 0 in
 def INCW_rp_cg  : InstRL78_8bit<0xA1,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
         "incw $rd",
-        [(set i16:$rd, (add i16:$rsrc, 1))]>;
+        []>;
 }
 
 //Instruction       Opcode
 //INCW saddrp       A6 saddr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def INCW_saddr  : InstRL78_16bit<0xA600,
         (outs), (ins ABS8:$addr),
         "incw $addr",
-        [(store (add (i16 (load SADDR:$addr)), 1), SADDR:$addr)]>;
+        []>;
 
 //Instruction       Opcode
 //INCW addr16       A2 adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def INCW_abs16_cg : InstRL78_24bit<0xA20000,
         (outs), (ins ABS16:$addr),
         "incw $addr",
-        [(store (add (i16 (load ADDRABS16:$addr)), 1), ADDRABS16:$addr)]>;
+        []>;
 
 let mayLoad = 1, mayStore = 1, usesCustomInserter = 1 in {
 
@@ -3586,10 +3585,11 @@ let usesCustomInserter = 1 in {
 //Instruction       Opcode
 //INCW [HL+byte]    61 79 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def INCW_memri : InstRL78_24bit<0x617900,
         (outs), (ins RegOffsetAddr:$addr),
         "incw $addr",
-        [(store (add (i16 (load ADDRri8:$addr)), 1), ADDRri8:$addr)]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3604,27 +3604,30 @@ let Constraints = "$rsrc = $rd" in {
 //DECW DE           B5
 //DECW HL           B7
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def DECW_rp_cg  : InstRL78_8bit<0xB1,
         (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
         "decw $rd",
-        [(set i16:$rd, (add i16:$rsrc, -1))]>;
+        []>;
 }
 
 //Instruction       Opcode
 //DECW saddrp       B6 saddr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def DECW_saddr  : InstRL78_16bit<0xB600,
         (outs), (ins ABS8:$addr),
         "decw $addr",
-        [(store (add (i16 (load SADDR:$addr)), -1), SADDR:$addr)]>;
+        []>;
 
 //Instruction       Opcode
 //DECW addr16       B2 adrl adrh
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def DECW_abs16_cg : InstRL78_24bit<0xB20000,
         (outs), (ins ABS16:$addr),
         "decw $addr",
-        [(store (add (i16 (load ADDRABS16:$addr)), -1), ADDRABS16:$addr)]>;
+        []>;
 
 let mayLoad = 1, mayStore = 1, usesCustomInserter = 1 in {
 
@@ -3649,10 +3652,11 @@ let usesCustomInserter = 1 in {
 //Instruction       Opcode
 //DECW [HL+byte]    61 89 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def DECW_memri : InstRL78_24bit<0x618900,
         (outs), (ins RegOffsetAddr:$addr),
         "decw $addr",
-        [(store (add (i16 (load ADDRri8:$addr)), -1), ADDRri8:$addr)]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4966,47 +4970,6 @@ def LOAD_SELECTCC16_rp_esaddrr_esaddrr : Pseudo<
 
 def SDTRL78LowCmp : SDTypeProfile<0, 2, [SDTCisInt<0>, SDTCisVT<1, i16>]>;
 def RL78lowcmp: SDNode<"RL78ISD::LOWCMP", SDTRL78LowCmp, [SDNPOptInGlue, SDNPOutGlue]>;
-let usesCustomInserter = 1, isCodeGenOnly = 1, Uses = [CCreg], Defs = [CCreg] in {
-  def LowCMPW_rp_imm : InstRL78_40bit<0x61F8440000,
-        (outs), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        "sknz\n\tcmpw $rsrc, $imm16",
-         [(RL78lowcmp i16:$rsrc, (i16 imm:$imm16))]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, BC           43
-//CMPW AX, DE           45
-//CMPW AX, HL           47
-  def LowCMPW_rp_rp : InstRL78_24bit<0x61F843,
-        (outs), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        "sknz\n\tcmpw $rsrc, $rsrc2",
-         [(RL78lowcmp i16:$rsrc, i16:$rsrc2)]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, saddrp       46 saddr
-  def LowCMPW_rp_saddr : InstRL78_32bit<0x61F84600,
-        (outs), (ins RL78RPRegs:$rsrc, ABS8:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-         [(RL78lowcmp i16:$rsrc, (load SADDR:$addr))]>;
-
-//Instruction           Opcode
-//SKNZ
-//CMPW AX, !addr16      42 adrl adrh
-  def LowCMPW_rp_abs16 : InstRL78_40bit<0x61F8420000,
-        (outs), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-        [(RL78lowcmp i16:$rsrc, (load tglobaladdr:$addr))]>;
-
-//Instruction         Opcode
-//SKNZ
-//CMPW AX, [HL+byte]  61 49 adr
-  def LowCMPW_rp_memri : InstRL78_40bit<0x61F8614900,
-        (outs), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        "sknz\n\tcmpw $rsrc, $addr",
-        [(RL78lowcmp i16:$rsrc, (load ADDRri8:$addr))]>;
-}
-
 //===----------------------------------------------------------------------===//
 // BR
 //===----------------------------------------------------------------------===//

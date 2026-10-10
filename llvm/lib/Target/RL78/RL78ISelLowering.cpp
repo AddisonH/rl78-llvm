@@ -1450,6 +1450,8 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::OR1CY)
     MAKE_CASE(RL78ISD::XOR1CY)
     MAKE_CASE(RL78ISD::NOT1CY)
+    MAKE_CASE(RL78ISD::XORSIGNCY)
+    MAKE_CASE(RL78ISD::NOTCY)
     MAKE_CASE(RL78ISD::XCHW)
     MAKE_CASE(RL78ISD::ANDMEM)
     MAKE_CASE(RL78ISD::ORMEM)
@@ -1696,6 +1698,27 @@ SDValue RL78TargetLowering::LowerJumpTable(SDValue Op,
   return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
 }
 
+// CMP/CMPW LHS, RHS: CY = LHS < RHS for unsigned operands, Z = equal. For
+// signed operands CY is corrected afterwards: 1 < 0xFF leaves CY set, and
+// XOR1 CY with the sign bit of each operand (0, then 1) clears it, as 1 > -1
+// needs. A negative constant inverts CY instead.
+static SDValue getCMP(SelectionDAG &DAG, const SDLoc &DL, SDValue LHS,
+                      SDValue RHS, bool Signed) {
+  SDValue Cmp = DAG.getNode(RL78ISD::CMP, DL, MVT::Glue, LHS, RHS,
+                            DAG.getConstant(0, DL, MVT::i8));
+  if (!Signed)
+    return Cmp;
+  for (SDValue V : {LHS, RHS}) {
+    if (auto *C = dyn_cast<ConstantSDNode>(V)) {
+      if (C->getAPIntValue().isNegative())
+        Cmp = DAG.getNode(RL78ISD::NOTCY, DL, MVT::Glue, Cmp);
+    } else {
+      Cmp = DAG.getNode(RL78ISD::XORSIGNCY, DL, MVT::Glue, V, Cmp);
+    }
+  }
+  return Cmp;
+}
+
 static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
                                  SDValue &LHS, SDValue &RHS, SelectionDAG &DAG,
                                  SDValue &TargetCC) {
@@ -1705,9 +1728,9 @@ static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
   if (LHS.getOpcode() == ISD::LOAD && RHS.getOpcode() == ISD::CopyFromReg) {
     TargetCC = DAG.getConstant(AdjustICCForOperandSwitch((RL78CC::CondCodes)cc),
                                DL, MVT::i8);
-    Cmp = DAG.getNode(RL78ISD::CMP, DL, MVT::Glue, RHS, LHS, CCSign);
+    Cmp = getCMP(DAG, DL, RHS, LHS, !isNullConstant(CCSign));
   } else {
-    Cmp = DAG.getNode(RL78ISD::CMP, DL, MVT::Glue, LHS, RHS, CCSign);
+    Cmp = getCMP(DAG, DL, LHS, RHS, !isNullConstant(CCSign));
   }
   return Cmp;
 }
@@ -2810,9 +2833,8 @@ SDValue RL78TargetLowering::PerformBRCONDCombine(SDNode *N, DAGCombinerInfo &DCI
     }
 
 
-    SDValue HighCompare =  DCI.DAG.getConstant(IntCondCCodeSign(CC), dl, MVT::i8);
-    SDValue Cmp = DCI.DAG.getNode(RL78ISD::CMP, dl, MVT::Glue, HighLHS, HighRHS,
-                                  HighCompare);
+    SDValue Cmp =
+        getCMP(DCI.DAG, dl, HighLHS, HighRHS, IntCondCCodeSign(CC) != 0);
     SDValue LowCmp = DCI.DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, LowLHS,
                                      LowRHS, Cmp);
 
@@ -3388,9 +3410,8 @@ static SDValue PerformI32CompareCombine(SDNode *N, SelectionDAG &DAG) {
   auto Half = [&](SDValue V, SDValue Idx) {
     return DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::i16, V, Idx);
   };
-  SDValue Cmp =
-      DAG.getNode(RL78ISD::CMP, dl, MVT::Glue, Half(LHS, Hi), Half(RHS, Hi),
-                  DAG.getConstant(IntCondCCodeSign(CC), dl, MVT::i8));
+  SDValue Cmp = getCMP(DAG, dl, Half(LHS, Hi), Half(RHS, Hi),
+                       IntCondCCodeSign(CC) != 0);
   SDValue LowCmp = DAG.getNode(RL78ISD::LOWCMP, dl, MVT::Glue, Half(LHS, Lo),
                                Half(RHS, Lo), Cmp);
   SDValue TargetCC = DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i8);
@@ -6102,26 +6123,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower8bitASrc(MI, BB);
   case RL78::CALL_cs_rp:
     return LowerCallCSRP(MI, BB);
-  case RL78::LowCMPW_rp_rp: {
-      if(MI.getOperand(0).getReg() == MI.getOperand(1).getReg()) {
-          MI.removeFromParent();
-          return BB;
-      }
-      [[fallthrough]];
-  }
-  case RL78::LowCMPW_rp_imm:
-  case RL78::LowCMPW_rp_saddr:
-  case RL78::LowCMPW_rp_abs16:
-  case RL78::LowCMPW_rp_memri:{
-
-    MachineFunction *MF = BB->getParent();
-    DebugLoc DL = MI.getDebugLoc();
-    const TargetInstrInfo *TII =
-        MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(0));
-    MI.getOperand(0).ChangeToRegister(RL78::RP0, false);
-    return BB;
-  }
   case RL78::MACH_CG:
   case RL78::MACHU_CG: {
     MachineFunction *MF = BB->getParent();
