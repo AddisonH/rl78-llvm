@@ -5684,12 +5684,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                         Lower8bitASrc(MI, LowerESSrc(MI, BB, 0), 2, RL78::R3),
                         1, RL78::RP6),
         3);
-  case RL78::BTCLR_memr:
-  case RL78::BTBF_memr:
-  case RL78::BTBF_mem:
-    return Lower16bitAXSrc(MI, BB, 2, RL78::RP6);
-  case RL78::BTBF:
-    return Lower8bitASrc(MI, BB, 2);
   case RL78::CLR1_memr:
   case RL78::SET1_memr:
   case RL78::MOV1_cy_memr:
@@ -5727,9 +5721,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
   case RL78::LOAD_SELECTCC16_rp_esaddrr_esaddrr:
     return LowerLOAD_SELECTCC(MI, BB);
-  case RL78::BR_AX_cg: {
-    return Lower16bitAXSrc(MI, BB);
-  }
   }
 }
 

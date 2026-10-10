@@ -138,7 +138,7 @@ def RL78HLAddressOperand : AsmOperandClass {
 
 def HLAddr : Operand<iPTR> {
   let PrintMethod = "printHLMemOperand";
-  let MIOperandInfo = (ops RL78RPRegs);
+  let MIOperandInfo = (ops RL78HL);
   let ParserMatchClass = RL78HLAddressOperand;
 }
 //=============================================================================================================
@@ -4881,8 +4881,9 @@ let isTerminator = 1, isBranch = 1, isBarrier = 1 in {
   let isIndirectBranch = 1, usesCustomInserter = 1, Uses = [CS] in {
     //BR AX 61 CB
     let isCodeGenOnly = 1 in
+    let usesCustomInserter = 0 in
     def BR_AX_cg : InstRL78_16bit<0x61CB,
-        (outs), (ins RL78RPRegs:$rsrc),
+        (outs), (ins RL78AXRP:$rsrc),
         "br $rsrc",
          [(brind i16:$rsrc)]>;
   }
@@ -5028,11 +5029,13 @@ def SDTRL78btclr :
     SDTypeProfile<1, 4, [SDTCisVT<0, i8>, SDTCisVT<3, i8>, SDTCisVT<4, i8>, SDTCisVT<1, OtherVT>, SDTCisVT<2, i8>]>;
 
 let isTerminator = 1, isBranch = 1, usesCustomInserter = 1 in {
+  let usesCustomInserter = 0 in
   def BTBF : Pseudo<
-          (outs), (ins brtarget:$target, CCOp:$cond, RL78Reg:$rsrc, bitimm:$bit),
+          (outs), (ins brtarget:$target, CCOp:$cond, RL78AReg:$rsrc, bitimm:$bit),
           ";b$cond $rsrc$bit, $target",
           [(RL78btbf bb:$target, imm:$cond, i8:$rsrc, imm:$bit)]>;
 
+  let usesCustomInserter = 0 in
   def BTBF_mem : Pseudo<
           (outs), (ins brtarget:$target, CCOp:$cond, HLAddr:$addr, bitimm:$bit),
           ";b$cond $addr$bit, $target",
@@ -5057,8 +5060,9 @@ let isBranch = 1, isTerminator = 1 in {
 //BF A.X, $addr20           31 X5 adr (X -> 0..7)
 let mayLoad = 0, mayStore = 0 in
   let isCodeGenOnly = 1 in
+  let usesCustomInserter = 0 in
   def BTBF_A : InstRL78_24bit<0x310300,
-           (outs), (ins brtargetRel8:$target, CCOp:$cond, RL78Reg:$rsrc, bitimm:$bit),
+           (outs), (ins brtargetRel8:$target, CCOp:$cond, RL78AReg:$rsrc, bitimm:$bit),
            "b$cond $rsrc$bit, $target",
            []>;
 
@@ -5078,6 +5082,7 @@ let usesCustomInserter = 1 in {
 //BT [HL].X, $addr20        31 X3 adr (X -> 0..7 -> 8..F)
 //BF [HL].X, $addr20        31 X5 adr (X -> 0..7 -> 8..F)
 let isCodeGenOnly = 1 in
+let usesCustomInserter = 0 in
 def BTBF_memr : InstRL78_24bit<0x318300,
            (outs), (ins brtargetRel8:$target, CCOp:$cond, HLAddr:$addr, bitimm:$bit),
            "b$cond $addr$bit, $target",
@@ -5136,8 +5141,9 @@ let Constraints = "$rsrc = $rd", mayLoad = 0, mayStore = 0 in {
 //Instruction               Opcode
 //BTCLR A.X, $addr20        31 X1 adr (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let usesCustomInserter = 0 in
   def BTCLR_A : InstRL78_24bit<0x310100,
-           (outs RL78Reg:$rd), (ins brtargetRel8:$target, CCOp:$cond, RL78Reg:$rsrc, bitimm:$bit),
+           (outs RL78AReg:$rd), (ins brtargetRel8:$target, CCOp:$cond, RL78AReg:$rsrc, bitimm:$bit),
            "btclr $rd$bit, $target",
            []>;
 }
@@ -5155,6 +5161,7 @@ let usesCustomInserter = 1 in {
 //Instruction               Opcode
 //BTCLR [HL].X, $addr20     31 X1 adr (X -> 0..7 -> 8..F)
 let isCodeGenOnly = 1 in
+let usesCustomInserter = 0 in
 def BTCLR_memr : InstRL78_24bit<0x318100,
            (outs), (ins brtargetRel8:$target, CCOp:$cond, HLAddr:$addr, bitimm:$bit),
            "btclr $addr$bit, $target",
