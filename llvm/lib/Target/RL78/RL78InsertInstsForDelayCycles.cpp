@@ -54,13 +54,13 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_1_4(
   switch (DelayCycles) {
   case 1: {
     // One NOP_cg instruction.
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
     break;
   }
   case 2: {
     // Two NOP_cg instructions.
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
     break;
   }
   case 3: {
@@ -74,7 +74,7 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_1_4(
   case 4: {
     // Unconditional branch to next instruction + One NOP_cg instruction.
     MachineBasicBlock *NextMBB = MBB.splitAt(MI);
-    BuildMI(MBB, MI, DL, TII.get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
     BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8_cg)).addMBB(NextMBB);
     break;
   }

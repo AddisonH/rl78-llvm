@@ -111,7 +111,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     // Bit 10 representes nested interrupts.
 
     if (Specs & 0x8)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::EI_cg))
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::EI))
           .setMIFlags(MachineInstr::FrameSetup);
     // Bits 0, 1 and 2 represent the regiter bank:
     // 0 is a register bank was specified

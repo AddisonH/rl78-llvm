@@ -5,7 +5,7 @@ target triple = "rl78-unknown-unknown-elf"
 
 @a = internal constant [2 x i16] [i16 1, i16 2], align 2
 
-; Checks MOV_r_imm is folded into a memory store
+; Checks MOV_r_i8 is folded into a memory store
 ; CHECK-LABEL: test_MOV_r_imm
 ; CHECK-NOT: movw ax, #0
 ; CHECK: mov [sp+[[SLOT:[0-9]+]]], #0

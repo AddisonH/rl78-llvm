@@ -22,5 +22,5 @@ body: |
     $rp0 = COPY killed $macrl
     STORE16_abs16_rp 0, killed $rp0
     $rp0 = COPY killed $macrh
-    RET_cg implicit $spreg, implicit $rp0
+    RET implicit-def $spreg, implicit $spreg, implicit $rp0
 ...

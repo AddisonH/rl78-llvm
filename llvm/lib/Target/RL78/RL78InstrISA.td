@@ -1893,8 +1893,9 @@ def POP_PSW : RL78Inst<2, (outs RL78RegPSW:$psw), (ins), "pop $psw"> {
 // CPU control (manual 6.15)
 //===----------------------------------------------------------------------===//
 
-def NOP : RL78Inst<1, (outs), (ins), "nop"> { let Inst{7-0} = 0x00; }
 let hasSideEffects = 1 in {
+// A NOP is only ever asked for (delays, the instruction after a divide).
+def NOP : RL78Inst<1, (outs), (ins), "nop"> { let Inst{7-0} = 0x00; }
 // SEL RBn                61 CF/DF/EF/FF
 def SEL_RBn : RL78Inst<2, (outs), (ins SELRBx:$rb), "sel $rb"> {
   bits<2> rb;
@@ -2114,3 +2115,56 @@ def : Pat<(store i8:$v, ADDRSPi:$a), (MOV_mSPi_A ADDRSPi:$a, $v)>;
 def : Pat<(store (i8 imm:$i), ADDRSPi:$a), (MOV_mSPi_i8 ADDRSPi:$a, imm:$i)>;
 def : Pat<(i16 (load ADDRSPi:$a)), (MOVW_AX_mSPi ADDRSPi:$a)>;
 def : Pat<(store i16:$v, ADDRSPi:$a), (MOVW_mSPi_AX ADDRSPi:$a, $v)>;
+
+//===----------------------------------------------------------------------===//
+// 8-bit operations on saddr, bit operations, control
+//===----------------------------------------------------------------------===//
+
+multiclass RL78SaddrOpSel<string I, SDPatternOperator Node> {
+  def : Pat<(store (Node (load SADDR:$a), (i8 imm:$i)), SADDR:$a),
+            (!cast<Instruction>(I # "_saddr_i8") SADDR:$a, imm:$i)>;
+}
+defm : RL78SaddrOpSel<"ADD", add>;
+defm : RL78SaddrOpSel<"ADDC", addc>;
+defm : RL78SaddrOpSel<"SUB", sub>;
+defm : RL78SaddrOpSel<"SUBC", subc>;
+defm : RL78SaddrOpSel<"AND", and>;
+defm : RL78SaddrOpSel<"OR", or>;
+defm : RL78SaddrOpSel<"XOR", xor>;
+
+// SET1/CLR1 of a bit in memory; CY from, into, and combined with a bit.
+multiclass RL78BitMemSel<string I, SDPatternOperator Node, bit HasAbs,
+                         bit HasSfr> {
+  def : Pat<(Node (i8 imm:$b), SADDR:$a),
+            (!cast<Instruction>(I # "_saddr_b") SADDR:$a, imm:$b)>;
+  def : Pat<(Node (i8 imm:$b), ADDRr:$a),
+            (!cast<Instruction>(I # "_mHL_b") ADDRr:$a, imm:$b)>;
+  if HasAbs then
+  def : Pat<(Node (i8 imm:$b), ADDRABS16:$a),
+            (!cast<Instruction>(I # "_abs16_b") ADDRABS16:$a, imm:$b)>;
+  if HasSfr then
+  def : Pat<(Node (i8 imm:$b), SFR:$a),
+            (!cast<Instruction>(I # "_sfr_b") SFR:$a, imm:$b)>;
+}
+defm : RL78BitMemSel<"SET1", set1, 1, 1>;
+defm : RL78BitMemSel<"CLR1", clr1, 1, 1>;
+defm : RL78BitMemSel<"AND1_CY", and1cy, 0, 0>;
+defm : RL78BitMemSel<"OR1_CY", or1cy, 0, 0>;
+defm : RL78BitMemSel<"XOR1_CY", xor1cy, 0, 0>;
+defm : RL78BitMemSel<"MOV1_CY", load1tocy, 0, 1>;
+defm : RL78BitMemSel<"MOV1", store1fromcy, 0, 1>;
+def : Pat<(mov1tocy i8:$a, (i8 imm:$b)), (MOV1_CY_A_b $a, imm:$b)>;
+def : Pat<(mov1tocy (i8 (load SADDR:$a)), (i8 imm:$b)),
+          (MOV1_CY_saddr_b SADDR:$a, imm:$b)>;
+def : Pat<(mov1fromcy i8:$a, (i8 imm:$b), CCreg), (MOV1_A_b $a, imm:$b)>;
+def : Pat<(not1cy), (NOT1_CY)>;
+
+def : Pat<(int_rl78_nop), (NOP)>;
+def : Pat<(int_rl78_halt), (HALT)>;
+def : Pat<(int_rl78_stop), (STOP)>;
+def : Pat<(int_rl78_ei), (EI)>;
+def : Pat<(int_rl78_di), (DI)>;
+def : Pat<(int_rl78_brk), (BRK)>;
+def : Pat<(ret), (RET)>;
+def : Pat<(reti), (RETI)>;
+def : Pat<(retb), (RETB)>;

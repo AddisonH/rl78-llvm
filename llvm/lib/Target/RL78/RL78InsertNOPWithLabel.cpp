@@ -122,7 +122,7 @@ bool RL78InsertNOPWithLabelPass::runOnMachineFunction(MachineFunction &MF) {
 
     MCSymbol *LabelSymbol = Context.getOrCreateSymbol(localLabel);
     BuildMI(MBB, MI, DL, TII->get(RL78::ANNOTATION_LABEL)).addSym(LabelSymbol);
-    BuildMI(MBB, MI, DL, TII->get(RL78::NOP_cg));
+    BuildMI(MBB, MI, DL, TII->get(RL78::NOP));
 
     // Add to the set to prevent duplicate insertions for this line-label pair.
     InsertedLabel.insert({{file, line}, label});

@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=rl78 -enable-machine-outliner < %s | FileCheck %s
 
-; NOP_cg (__nop, asm("nop")) is never outlined, even when the same run repeats:
+; NOP (__nop, asm("nop")) is never outlined, even when the same run repeats:
 ; an outlined call/ret would change the cycle count of a timing delay.
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"

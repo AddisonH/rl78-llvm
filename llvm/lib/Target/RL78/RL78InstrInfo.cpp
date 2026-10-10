@@ -259,7 +259,7 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
 
   // Maskable interrupt acknowledgment by vectored interrupt is disabled (with
   // the interrupt enable flag (IE) cleared (0)).
-  BuildMI(*BB, MI, DL, II->get(RL78::DI_cg));
+  BuildMI(*BB, MI, DL, II->get(RL78::DI));
 
   // 0 is transferred to the MDUC address.
   BuildMI(*BB, MI, DL, II->get(RL78::CLRB_abs16_cg)).addImm(MDUC);
@@ -280,7 +280,7 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
       .addReg(RL78::RP0, RegState::Kill);
 
   // Only the time is consumed without processing.
-  BuildMI(*BB, MI, DL, II->get(RL78::NOP_cg));
+  BuildMI(*BB, MI, DL, II->get(RL78::NOP));
 
   // MDBL address contents is transferred to the AX register.
   BuildMI(*BB, MI, DL, II->get(RL78::LOAD16_rp_sfrp), RL78::RP0).addImm(MDBL);
@@ -1160,7 +1160,7 @@ RL78InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   // change the cycle count. (EI_cg/DI_cg/HALT_cg/... stay outlinable: a call/ret or
   // branch does not change the interrupt state, and interrupt epilogues such
   // as "ei; reti" are deliberately outlined for size.)
-  case RL78::NOP_cg:
+  case RL78::NOP:
     return outliner::InstrType::Illegal;
   case RL78::MOVW_sp_rp:
   case RL78::MOVW_rp_sp:
@@ -1269,7 +1269,7 @@ void RL78InstrInfo::buildOutlinedFrame(
 
   // We're a normal call, so our sequence doesn't have a return instruction.
   // Add it in.
-  MachineInstr *retq = BuildMI(MF, DebugLoc(), get(RL78::RET_cg));
+  MachineInstr *retq = BuildMI(MF, DebugLoc(), get(RL78::RET));
   MBB.insert(MBB.end(), retq);
 }
 
@@ -1456,7 +1456,7 @@ public:
     case RL78::PUSH_rp_cg:
     case RL78::POP_cc:
     case RL78::POP_rp_cg:
-    case RL78::BRK_cg:
+    case RL78::BRK:
     case RL78::LOAD8_r_stack_slot:
     case RL78::LOAD16_rp_stack_slot:
     case RL78::STORE8_stack_slot_r:

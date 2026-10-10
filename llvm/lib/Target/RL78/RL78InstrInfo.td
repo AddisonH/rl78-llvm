@@ -1797,10 +1797,11 @@ let mayLoad = 1, mayStore = 0 in {
 let Defs = [CCreg, Zflag] in {
 //ADD saddr, #byte  0A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def ADD_saddr_imm : InstRL78_24bit<0x0A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "add $addr, $imm8",
-        [(store (add (load SADDR:$addr), (i8 imm:$imm8)), SADDR:$addr)]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1917,10 +1918,11 @@ def ADDC_r_saddrabs  : InstRL78_16bit<0x1B00,
 //Instruction       Opcode
 //ADDC saddr, #byte  1A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def ADDC_saddrabs_imm : InstRL78_24bit<0x1A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "addc $addr, $imm8",
-        [(store (addc (load SADDR:$addr), (i8 imm:$imm8)), SADDR:$addr)]>;
+        []>;
 
 } // Defs = [CCreg, Zflag], Uses = [CCreg]
 
@@ -2045,10 +2047,11 @@ let mayLoad = 1, mayStore = 0 in {
 let Defs = [CCreg, Zflag] in {
 //SUB saddr, #byte  2A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SUB_saddr_imm : InstRL78_24bit<0x2A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "sub $addr, $imm8",
-        [(store (sub (load SADDR:$addr), (i8 imm:$imm8)), SADDR:$addr)]>;
+        []>;
         }
 
 //===----------------------------------------------------------------------===//
@@ -2166,10 +2169,11 @@ def SUBC_r_saddr  : InstRL78_16bit<0x3B00,
 
 //SUBC saddr, #byte  3A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SUBC_saddr_imm : InstRL78_24bit<0x3A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "subc $addr, $imm8",
-        [(store (subc (load SADDR:$addr), (i8 imm:$imm8)), SADDR:$addr)]>;
+        []>;
 
 } // Defs = [CCreg, Zflag], Uses = [CCreg]
 
@@ -2293,10 +2297,11 @@ let mayLoad = 1, mayStore = 0 in {
 let Defs = [CCreg, Zflag] in {
 //AND saddr, #byte  5A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def AND_saddr_imm : InstRL78_24bit<0x5A0000,
         (outs), (ins ABS8:$addr, i8imm:$imm8),
         "and $addr, $imm8",
-        [(store (and (load SADDR:$addr), (i8 imm:$imm8)), SADDR:$addr)]>;
+        []>;
 }
 
 def andmem : SDNode<"RL78ISD::ANDMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssociative]>;
@@ -2458,10 +2463,11 @@ def OR_r_saddr : InstRL78_16bit<0x6B00,
 let Defs = [CCreg, Zflag] in {
 //OR saddr, #byte   6A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def OR_saddr_imm : InstRL78_24bit<0x6A0000,
         (outs), (ins ABS8:$src, i8imm:$imm8),
         "or $src, $imm8",
-        [(store (or (load SADDR:$src), (i8 imm:$imm8)), SADDR:$src)]>;
+        []>;
 }
 
 def ormem : SDNode<"RL78ISD::ORMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssociative]>;
@@ -2622,10 +2628,11 @@ let mayLoad = 1, mayStore = 0 in {
 let Defs = [CCreg, Zflag] in {
 //XOR saddr, #byte   7A saddr data
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def XOR_saddr_imm : InstRL78_24bit<0x7A0000,
         (outs), (ins ABS8:$src, i8imm:$imm8),
         "xor $src, $imm8",
-        [(store (xor (load SADDR:$src), (i8 imm:$imm8)), SADDR:$src)]>;
+        []>;
 }
 
 def xormem : SDNode<"RL78ISD::XORMEM", SDTIntBinOp, [SDNPCommutative, SDNPAssociative]>;
@@ -3972,29 +3979,32 @@ let Defs = [CCreg] in {
 //Instruction       Opcode
 //MOV1 CY, saddr.X      71 X4 saddr (X -> 0..7)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def MOV1_cy_saddr : InstRL78_24bit<0x710400,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "mov1 cy, $addr$imm",
-        [(load1tocy (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //MOV1 CY, A.X          71 XC (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def MOV1_cy_r : InstRL78_16bit<0x718C,
         (outs), (ins RL78Reg:$rsrc, bitimm:$imm),
         "mov1 cy, $rsrc$imm",
-        [(mov1tocy i8:$rsrc, (i8 imm:$imm))]>;
+        []>;
 }
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //MOV1 CY, [HL].X       71 X4 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def MOV1_cy_memr : InstRL78_16bit<0x7184,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "mov1 cy, $addr$imm",
-        [(load1tocy (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 }
 
@@ -4035,20 +4045,22 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Uses = [CCreg] in {
 //Instruction           Opcode
 //MOV1 A.X, CY          71 X9 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def MOV1_r_cy : InstRL78_16bit<0x7189,
         (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, bitimm:$imm),
         "mov1 $rd$imm, cy",
-        [(set i8:$rd, (mov1fromcy i8:$rsrc, (i8 imm:$imm), CCreg))]>;
+        []>;
 }
 
 let usesCustomInserter = 1, Uses = [CCreg] in {
 //Instruction           Opcode
 //MOV1 [HL].X, CY       71 X1 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def MOV1_memr_cy : InstRL78_16bit<0x7181,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "mov1 $addr$imm, cy",
-        [(store1fromcy (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 
 let Uses = [CCreg] in {
@@ -4056,20 +4068,22 @@ let Uses = [CCreg] in {
 //Instruction           Opcode
 //MOV1 saddr.X, CY      71 X1 saddr (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def MOV1_saddr_cy : InstRL78_24bit<0x710100,
         (outs), (ins ABS8:$saddr, bitimm:$imm),
         "mov1 $saddr$imm, cy",
-        [(store1fromcy (i8 imm:$imm), SADDR:$saddr)]>;
+        []>;
 
 let hasSideEffects = 1 in {
 
 //Instruction         Opcode
 //MOV1 sfr.0. CY  71 09 sfr   (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 1 in
   def MOV1_sfr_cy : InstRL78_24bit<0x710900,
         (outs), (ins Sfr:$addr, bitimm:$imm),
         "mov1 $addr$imm, cy",
-        [(store1fromcy (i8 imm:$imm), SFR:$addr)]>;
+        []>;
 
 //Instruction         Opcode
 //MOV1 sfr.0. CY  71 09 sfr   (X -> 0..7)
@@ -4082,10 +4096,11 @@ let mayLoad = 0, mayStore = 1, isCodeGenOnly = 1 in
 //Instruction         Opcode
 //MOV1 CY, sfr.x ;71 xC sfr   (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def MOV1_cy_sfr : InstRL78_24bit<0x710C00,
         (outs), (ins Sfr:$addr, bitimm:$imm),
         "mov1 cy, $addr$imm ",
-        [(load1tocy (i8 imm:$imm), SFR:$addr)]>;
+        []>;
 
 //Instruction         Opcode
 //MOV1 CY, sfr.x ;71 xC sfr   (X -> 0..7)
@@ -4136,10 +4151,11 @@ let mayLoad = 0, mayStore = 0, isCodeGenOnly = 1 in
 //Instruction           Opcode
 //AND1 CY, saddr.X      71 X5 saddr (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def AND1_cy_saddrx : InstRL78_24bit<0x710500,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "and1 cy, $addr$imm",
-        [(and1cy (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 //AND1 CY, A.X          71 XD (X -> 0..7 -> 8..F)
 let mayLoad = 0, mayStore = 0 in
@@ -4153,10 +4169,11 @@ let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //AND1 CY, [HL].X       71 X5 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def AND1_cy_memr : InstRL78_16bit<0x7185,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "and1 cy, $addr$imm",
-        [(and1cy (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 
 let mayLoad = 1, mayStore = 0 in {
@@ -4220,10 +4237,11 @@ let mayLoad = 0, mayStore = 0, isCodeGenOnly = 1 in
 //Instruction           Opcode
 //OR1 CY, saddr.X      71 X6 saddr (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def OR1_cy_saddrx : InstRL78_24bit<0x710600,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "or1 cy, $addr$imm",
-        [(or1cy (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 //OR1 CY, A.X           71 XE (X -> 0..7 -> 8..F)
 let mayLoad = 0, mayStore = 0 in
@@ -4239,10 +4257,11 @@ let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //OR1 CY, [HL].X        71 X6 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def OR1_cy_memr : InstRL78_16bit<0x7186,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "or1 cy, $addr$imm",
-        [(or1cy (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 
 let hasSideEffects = 1 in {
@@ -4314,19 +4333,21 @@ let mayLoad = 1, mayStore = 0 in {
 //Instruction           Opcode
 //XOR1 CY, saddr.X      71 X7 saddr (X -> 0..7)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def XOR1_cy_saddrx : InstRL78_24bit<0x710700,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "xor1 cy, $addr$imm",
-        [(xor1cy (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //XOR1 CY, [HL].X       71 X7 (X -> 0..7 -> 8..F)
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def XOR1_cy_memr : InstRL78_16bit<0x7187,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "xor1 cy, $addr$imm",
-        [(xor1cy (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 } // usesCustomInserter = 1
 
 let hasSideEffects = 1 in {
@@ -4392,28 +4413,31 @@ def SET1_A : InstRL78_16bit<0x718A,
 //Instruction           Opcode
 //SET1 saddr.X          71 X2 saddr (X -> 0..7)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SET1_saddr : InstRL78_24bit<0x710200,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "set1 $addr$imm",
-        [(set1 (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 
 //Instruction           Opcode
 //SET1 !addr16.X        71 X0 adrl adrh (X -> 0..7)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SET1_abs16 : InstRL78_32bit<0x71000000,
         (outs), (ins ABS16:$addr, bitimm:$imm),
         "set1 $addr$imm",
-        [(set1 (i8 imm:$imm), ADDRABS16:$addr)]>;
+        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //SET1 [HL].X           71 X2 (X -> 0..7 -> 8..F)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SET1_memr : InstRL78_16bit<0x7182,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "set1 $addr$imm",
-        [(set1 (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 
 let hasSideEffects = 1 in {
@@ -4431,10 +4455,11 @@ def SET1_PSW : InstRL78_24bit<0x710AFA,
 
 //SET1 sfr.0                  ;71 xA sfr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def SET1_sfr : InstRL78_24bit<0x710A00,
         (outs), (ins Sfr:$addr, bitimm:$imm),
         "set1 $addr$imm",
-        [(set1 (i8 imm:$imm), SFR:$addr)]>;
+        []>;
 
 
 //SET1 sfr.0                  ;71 xA sfr
@@ -4495,27 +4520,30 @@ def CLR1_A : InstRL78_16bit<0x718B,
 //Instruction           Opcode
 //CLR1 saddr.X          71 X3 saddr (X -> 0..7)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def CLR1_saddr : InstRL78_24bit<0x710300,
         (outs), (ins ABS8:$addr, bitimm:$imm),
         "clr1 $addr$imm",
-        [(clr1 (i8 imm:$imm), SADDR:$addr)]>;
+        []>;
 
 //Instruction           Opcode
 //CLR1 !addr16.X        71 X8 adrl adrh (X -> 0..7)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def CLR1_abs16 : InstRL78_32bit<0x71080000,
         (outs), (ins ABS16:$addr, bitimm:$imm),
         "clr1 $addr$imm",
-        [(clr1 (i8 imm:$imm), ADDRABS16:$addr)]>;
+        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
 //CLR1 [HL].X           71 X3 (X -> 0..7 -> 8..F)
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def CLR1_memr : InstRL78_16bit<0x7183,
         (outs), (ins HLAddr:$addr, bitimm:$imm),
         "clr1 $addr$imm",
-        [(clr1 (i8 imm:$imm), ADDRr:$addr)]>;
+        []>;
 }
 
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
@@ -4532,10 +4560,11 @@ def CLR1_PSW : InstRL78_24bit<0x710BFA,
 
 //CLR1 sfr.x ;71 xB sfr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 1 in
 def CLR1_sfr : InstRL78_24bit<0x710B00,
         (outs), (ins Sfr:$addr, bitimm:$imm),
         "clr1 $addr$imm",
-        [(clr1 (i8 imm:$imm), SFR:$addr)]>;
+        []>;
 
 //CLR1 sfr.x ;71 xB sfr
 let mayStore = 1, isCodeGenOnly = 1 in
@@ -4584,10 +4613,11 @@ def not1cy : SDNode<"RL78ISD::NOT1CY", SDTNOT1CY, [SDNPHasChain, SDNPOptInGlue]>
 //NOT1 CY               71 C0
 let Defs = [CCreg], Uses = [CCreg] in {
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 0 in
   def NOT1_cy : InstRL78_16bit<0x71C0,
         (outs), (ins),
         "not1 cy",
-        [(not1cy)]>;
+        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4704,11 +4734,6 @@ def ret       : SDNode<"RL78ISD::RET", SDTRL78Ret,
 
 let isReturn = 1, isTerminator = 1, isBarrier = 1, Uses = [SPreg] in
 {
-  let isCodeGenOnly = 1 in
-  def RET_cg : InstRL78_8bit<0xD7,
-        (outs), (ins),
-        "ret",
-        [(ret)]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4720,11 +4745,6 @@ def reti       : SDNode<"RL78ISD::RETI", SDTRL78Ret,
 
 let isReturn = 1, isTerminator = 1, isBarrier = 1, Uses = [SPreg] in
 {
-  let isCodeGenOnly = 1 in
-  def RETI_cg : InstRL78_16bit<0x61FC,
-        (outs), (ins),
-        "reti",
-        [(reti)]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4736,11 +4756,6 @@ def retb       : SDNode<"RL78ISD::RETB", SDTRL78Ret,
 
 let isReturn = 1, isTerminator = 1, isBarrier = 1, Uses = [SPreg] in
 {
-  let isCodeGenOnly = 1 in
-  def RETB_cg : InstRL78_16bit<0x61EC,
-        (outs), (ins),
-        "retb",
-        [(retb)]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -5327,67 +5342,37 @@ def SEL : InstRL78_16bit<0x61CF,
 // NOP_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def NOP_cg : InstRL78_8bit<0x00,
-        (outs), (ins),
-        "nop",
-         [(int_rl78_nop)]>;
 
 //===----------------------------------------------------------------------===//
 // EI_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def EI_cg : InstRL78_24bit<0x717AFA,
-        (outs), (ins),
-        "ei",
-         [(int_rl78_ei)]>;
 
 //===----------------------------------------------------------------------===//
 // DI_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def DI_cg : InstRL78_24bit<0x717BFA,
-        (outs), (ins),
-        "di",
-         [(int_rl78_di)]>;
 
 //===----------------------------------------------------------------------===//
 // HALT_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def HALT_cg : InstRL78_16bit<0x61ED,
-        (outs), (ins),
-        "halt",
-         [(int_rl78_halt)]>;
 
 //===----------------------------------------------------------------------===//
 // STOP_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def STOP_cg : InstRL78_16bit<0x61FD,
-        (outs), (ins),
-        "stop",
-         [(int_rl78_stop)]>;
 
 //===----------------------------------------------------------------------===//
 // BRK_cg instruction
 //===----------------------------------------------------------------------===//
 
-let isCodeGenOnly = 1 in
 
-def BRK_cg : InstRL78_16bit<0x61CC,
-        (outs), (ins),
-        "brk",
-         [(int_rl78_brk)]>;
 
 } // hasSideEffects = 1, mayLoad = 0, mayStore = 0
 
