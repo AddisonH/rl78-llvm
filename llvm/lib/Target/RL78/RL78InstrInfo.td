@@ -3112,8 +3112,9 @@ let usesCustomInserter = 1, isCodeGenOnly = 1 in
 // We only use the low part of the result (R0), high part is discarded however
 // it is still clobbered by the instruction.
 let Defs = [R1] in {
+  let usesCustomInserter = 0 in
   def MUL8_r_r : InstRL78_8bit<0xD6,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+        (outs RL78XReg:$rd), (ins RL78AReg:$rsrc, RL78XReg:$rsrc2),
         "mulu $rd ; $rsrc2 trunk to i8",
         [(set i8:$rd, (mul i8:$rsrc, i8:$rsrc2))]>;
 }
@@ -3121,13 +3122,15 @@ let Defs = [R1] in {
 // We have defined the same thing 3 times which is not ideal
 // however the other solution will be is the define the following 2
 // as Pseudo and replace them with MUL8_r_r later ... there's no need for that.
+let usesCustomInserter = 0 in
 def MULU_zext_16_r_r : InstRL78_8bit<0xD6,
-        (outs RL78RPRegs:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+        (outs RL78AXRP:$rd), (ins RL78AReg:$rsrc, RL78XReg:$rsrc2),
         "mulu $rsrc2 ; $rd, $rsrc, $rsrc2",
         [(set i16:$rd, (mul (i16 (zext i8:$rsrc)), (i16 (zext i8:$rsrc2))))]>;
 
+let usesCustomInserter = 0 in
 def UMUL_LOHI_16_r_r : InstRL78_8bit<0xD6,
-        (outs RL78Reg:$rd, RL78Reg:$rd2), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+        (outs RL78XReg:$rd, RL78AReg:$rd2), (ins RL78AReg:$rsrc, RL78XReg:$rsrc2),
         "mulu $rsrc2 ; $rd, $rd2, $rsrc, $rsrc2",
         [(set i8:$rd, i8:$rd2, (umullohi i8:$rsrc, i8:$rsrc2))]>;
 
@@ -3151,15 +3154,17 @@ def isNotS3Core : Predicate<"!Subtarget->isRL78S3CoreType()">;
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1, Defs = [RP2] in
 {
 //we could have used mulh instead mulh just as easy; it makes no difference
+ let usesCustomInserter = 0 in
  def MUL16_rp_rp : InstRL78_24bit<0xCEFB01,
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+        (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BCRP:$rsrc2),
         "mulhu ;$rd, $rsrc2 trunk to i16",
         [(set i16:$rd, (mul i16:$rsrc, i16:$rsrc2))]>;
 }
 
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1 in {
+let usesCustomInserter = 0 in
 def MUL32_zext_r_r : InstRL78_24bit<0xCEFB01,
-        (outs RL78RPRegs:$rd, RL78RPRegs:$rd2), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+        (outs RL78AXRP:$rd, RL78BCRP:$rd2), (ins RL78AXRP:$rsrc, RL78BCRP:$rsrc2),
         "mulhu ;$rd, $rd2, $rsrc, $rsrc2",
         [(set i16:$rd, i16:$rd2, (umullohi i16:$rsrc, i16:$rsrc2))]>;
 }
@@ -3189,8 +3194,9 @@ let Predicates = [isNotS3Core], usesCustomInserter = 1 in {
 //===----------------------------------------------------------------------===//
 
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1 in {
+let usesCustomInserter = 0 in
 def MUL32_sext_r_r : InstRL78_24bit<0xCEFB02,
-        (outs RL78RPRegs:$rd, RL78RPRegs:$rd2), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+        (outs RL78AXRP:$rd, RL78BCRP:$rd2), (ins RL78AXRP:$rsrc, RL78BCRP:$rsrc2),
         "mulh ;$rd, $rd2, $rsrc, $rsrc2",
         [(set i16:$rd, i16:$rd2, (smullohi i16:$rsrc, i16:$rsrc2))]>;
 }
@@ -3213,8 +3219,9 @@ def MULH_cg : InstRL78_24bit<0xCEFB02,
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1 in {
 
 // The NOP_cg is based on RENESAS TECHNICAL UPDATE TN-RL*-A025C/E.
+let usesCustomInserter = 0 in
 def UDIVREM16_r_r : InstRL78_32bit<0xCEFB0300,
-        (outs RL78RPRegs:$rd, RL78RPRegs:$rd2), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
+        (outs RL78AXRP:$rd, RL78DERP:$rd2), (ins RL78AXRP:$rsrc, RL78DERP:$rsrc2),
         "divhu ;$rd, $rd2, $rsrc, $rsrc2\n\tnop",
         [(set i16:$rd, i16:$rd2, (udivrem i16:$rsrc, i16:$rsrc2))]>;
 }
@@ -3243,9 +3250,10 @@ def divwu : SDNode<"RL78ISD::DIVWU", SDTDIVWU, []>;
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1 in {
 
 // The NOP_cg is based on RENESAS TECHNICAL UPDATE TN-RL*-A025C/E.
+let usesCustomInserter = 0 in
 def UDIVREM32_r_r : InstRL78_32bit<0xCEFB0B00,
-        (outs RL78RPRegs:$rd, RL78RPRegs:$rd2, RL78RPRegs:$rd3, RL78RPRegs:$rd4),
-        (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2, RL78RPRegs:$rsrc3, RL78RPRegs:$rsrc4),
+        (outs RL78AXRP:$rd, RL78BCRP:$rd2, RL78DERP:$rd3, RL78HL:$rd4),
+        (ins RL78AXRP:$rsrc, RL78BCRP:$rsrc2, RL78DERP:$rsrc3, RL78HL:$rsrc4),
         "divwu ;$rd, $rd2, $rd3, $rd4, $rsrc, $rsrc2, $rsrc3, $rsrc4\n\tnop",
         [(set i16:$rd, i16:$rd2, i16:$rd3, i16:$rd4,
          (divwu i16:$rsrc, i16:$rsrc2, i16:$rsrc3, i16:$rsrc4))]>;
@@ -3276,14 +3284,16 @@ def mach :  SDNode<"RL78ISD::MACH", SDTMACHU, []>;
 let Predicates = [isS3Core], usesCustomInserter = 1, isCodeGenOnly = 1, Defs = [CCreg] in {
 
 // X + Y * Z
+let usesCustomInserter = 0 in
 def MACHU_CG : InstRL78_24bit<0xCEFB05,
-        (outs RL78RegMACRL:$rd1, RL78RegMACRH:$rd2), (ins RL78RegMACRL:$rsrcXL, RL78RegMACRH:$rsrcXH, RL78RPRegs:$rsrcY, RL78RPRegs:$rsrcZ),
+        (outs RL78RegMACRL:$rd1, RL78RegMACRH:$rd2), (ins RL78RegMACRL:$rsrcXL, RL78RegMACRH:$rsrcXH, RL78AXRP:$rsrcY, RL78BCRP:$rsrcZ),
         "machu ; macr, ax, bc",
         [(set i16:$rd1, i16:$rd2,
          (machu i16:$rsrcXL, i16:$rsrcXH, i16:$rsrcY, i16:$rsrcZ))]>;
 
+let usesCustomInserter = 0 in
 def MACH_CG : InstRL78_24bit<0xCEFB06,
-        (outs RL78RegMACRL:$rd1, RL78RegMACRH:$rd2), (ins RL78RegMACRL:$rsrcXL, RL78RegMACRH:$rsrcXH, RL78RPRegs:$rsrcY, RL78RPRegs:$rsrcZ),
+        (outs RL78RegMACRL:$rd1, RL78RegMACRH:$rd2), (ins RL78RegMACRL:$rsrcXL, RL78RegMACRH:$rsrcXH, RL78AXRP:$rsrcY, RL78BCRP:$rsrcZ),
         "mach ; macr, ax, bc",
         [(set i16:$rd1, i16:$rd2,
          (mach i16:$rsrcXL, i16:$rsrcXH, i16:$rsrcY, i16:$rsrcZ))]>;

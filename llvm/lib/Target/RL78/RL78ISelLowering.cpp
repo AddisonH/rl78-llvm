@@ -4674,56 +4674,6 @@ RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
 }
 
 
-// In order to implement the very strict register class constraints for the
-// various instructions we first started by writing in tablegen the real
-// constraints (i.e. RL78AReg for ADD dest). This made it impossible for the
-// both register allocators (greedy, pbpqp) to find any soluition even in simple
-// cases we ended up with errors like (even when disabling the register
-// coalescer):
-//
-// Assertion failed : MO->isDead() && "Cannot fold physreg def",
-// Assertion failed : !MIS.empty() && "Unexpected empty span of instructions!",
-// fatal error : error in backend : ran out of registers during register
-// allocation
-//
-// Next step was to relax the constratints and added
-// RL78InsertExchangeInstructionsPass. A further optimization was to use the
-// physical reg directly in cases were we have a single choice (which also means
-// less work for the register allocator):
-//
-// let Defs = [R1, CCreg], Uses = [R1] in{
-// def ADD_r_r : InstRL78_8bit<0x00,
-// (outs), (ins RL78RExceptA : $rsrc2),
-// "add a, $rsrc2",
-// [(set R1, (add R1, i8:$rsrc2))]>;
-// }
-//
-// This worked for a few instructions but later we ended up with the following
-// error (beside tablegen crashing): "Trying to add an operand to a machine
-// instr that is already done!" The solution implemented below is basically the
-// same as above just implemented differently so we don't get the above error.
-MachineBasicBlock *RL78TargetLowering::LowerMUL8(MachineInstr &MI,
-                                                 MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R0).add(MI.getOperand(2));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1).add(MI.getOperand(1));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::R0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::R0, true);
-  MI.getOperand(1).ChangeToRegister(RL78::R1, false);
-  MI.getOperand(2).ChangeToRegister(RL78::R0, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
 MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
                                                   MachineBasicBlock *BB) const {
@@ -5030,58 +4980,7 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
   return sinkMBB;
 }
 
-MachineBasicBlock *
-RL78TargetLowering::LowerMUL8Zext16(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R0).add(MI.getOperand(2));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1).add(MI.getOperand(1));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  MI.getOperand(1).ChangeToRegister(RL78::R1, false);
-  MI.getOperand(2).ChangeToRegister(RL78::R0, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
-MachineBasicBlock *
-RL78TargetLowering::LowerUMUL_LOHI16(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  //
-  // BB->dump();
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R0).add(MI.getOperand(3));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R1).add(MI.getOperand(2));
-  // First operand is the low part so it needs to go into R0.
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(1))
-      .addReg(RL78::R1, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::R0, true);
-  MI.getOperand(1).ChangeToRegister(RL78::R1, true);
-  MI.getOperand(2).ChangeToRegister(RL78::R1, false);
-  MI.getOperand(3).ChangeToRegister(RL78::R0, false);
-  //
-  // BB->dump();
-  return BB;
-}
 
 // Lower all 8 bit operations of the form: A <- A op <...>.
 MachineBasicBlock *
@@ -5249,86 +5148,7 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
   return BB;
 }
 
-MachineBasicBlock *RL78TargetLowering::LowerMULDIV16(MachineInstr &MI,
-                                                     MachineBasicBlock *BB,
-                                                     unsigned srcIndex) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  unsigned Reg2 =
-      (MI.getOpcode() == RL78::UDIVREM16_r_r) ? RL78::RP4 : RL78::RP2;
-  //
-  // BB->dump();
-  // Copy from generic reg class to AX/BC reg classes respectively.
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .add(MI.getOperand(srcIndex));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Reg2)
-      .add(MI.getOperand(srcIndex + 1));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  MI.getOperand(srcIndex).ChangeToRegister(RL78::RP0, false);
-  MI.getOperand(srcIndex + 1).ChangeToRegister(Reg2, false);
 
-  if (MI.getOpcode() == RL78::MUL16_rp_rp)
-    MI.addRegisterDead(RL78::RP2,
-                       MF->getSubtarget<RL78Subtarget>().getRegisterInfo());
-
-  if (srcIndex == 2) {
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::COPY))
-        .add(MI.getOperand(1))
-        .addReg(Reg2, RegState::Kill);
-    MI.getOperand(1).ChangeToRegister(Reg2, true);
-  }
-  //
-  // BB->dump();
-  return BB;
-}
-
-MachineBasicBlock *RL78TargetLowering::LowerDIVWU(MachineInstr &MI,
-                                                  MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(4));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP2).add(MI.getOperand(5));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP4).add(MI.getOperand(6));
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP6).add(MI.getOperand(7));
-  //
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(3))
-      .addReg(RL78::RP6, RegState::Kill);
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(2))
-      .addReg(RL78::RP4, RegState::Kill);
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(1))
-      .addReg(RL78::RP2, RegState::Kill);
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-  //
-  MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-  MI.getOperand(1).ChangeToRegister(RL78::RP2, true);
-  MI.getOperand(2).ChangeToRegister(RL78::RP4, true);
-  MI.getOperand(3).ChangeToRegister(RL78::RP6, true);
-  MI.getOperand(4).ChangeToRegister(RL78::RP0, false);
-  MI.getOperand(5).ChangeToRegister(RL78::RP2, false);
-  MI.getOperand(6).ChangeToRegister(RL78::RP4, false);
-  MI.getOperand(7).ChangeToRegister(RL78::RP6, false);
-
-  return BB;
-}
 
 
 MachineBasicBlock *
@@ -5424,20 +5244,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::SELECTCCBTBF116_esaddr_imm:
   case RL78::SELECTCCBTBF16_rp_rp:
     return LowerSELECTCC(false, MI, BB);
-  case RL78::MUL16_rp_rp:
-    return LowerMULDIV16(MI, BB, 1);
-  case RL78::MUL32_zext_r_r:
-    return LowerMULDIV16(MI, BB, 2);
-  case RL78::MUL32_sext_r_r:
-    return LowerMULDIV16(MI, BB, 2);
-  case RL78::UDIVREM16_r_r:
-    return LowerMULDIV16(MI, BB, 2);
-  case RL78::UDIVREM32_r_r:
-    return LowerDIVWU(MI, BB);
-  case RL78::MUL8_r_r:
-    return LowerMUL8(MI, BB);
-  case RL78::MULU_zext_16_r_r:
-    return LowerMUL8Zext16(MI, BB);
   case RL78::MUL16_rp_rp_S1_S2:
     return LowerMUL16(MI, BB);
   case RL78::SHLW_rp_rp:
@@ -5480,8 +5286,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return OptForSpeed
                ? LowerShiftOrRotateForSpeed(MI, BB)
                : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
-  case RL78::UMUL_LOHI_16_r_r:
-    return LowerUMUL_LOHI16(MI, BB);
   case RL78::ADD_r_imm:
     return Lower8BitOpAA(MI, BB);
   case RL78::ADD_r_memrr:
@@ -5704,18 +5508,6 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return Lower8bitASrc(MI, BB);
   case RL78::CALL_cs_rp:
     return LowerCallCSRP(MI, BB);
-  case RL78::MACH_CG:
-  case RL78::MACHU_CG: {
-    MachineFunction *MF = BB->getParent();
-    DebugLoc DL = MI.getDebugLoc();
-    const TargetInstrInfo *TII =
-        MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(4));
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP2).add(MI.getOperand(5));
-    MI.getOperand(4).ChangeToRegister(RL78::RP0, false);
-    MI.getOperand(5).ChangeToRegister(RL78::RP2, false);
-    return BB;
-  }
   case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:
   case RL78::LOAD_SELECTCC8_r_esaddrr_esaddrr:
   case RL78::LOAD_SELECTCC16_rp_esaddr16_esaddr16:
