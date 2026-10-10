@@ -131,18 +131,6 @@ static cl::opt<bool> EnableLinkOnceODROutlining(
     cl::desc("Enable the machine outliner on linkonceodr functions"),
     cl::init(false));
 
-static cl::opt<bool> UseSectionAttribute(
-    "use-section-attribute-in-outlined-functions", cl::Hidden,
-    cl::desc("RL78: outline only within a section, and keep outlined "
-             "functions in that section"),
-    cl::init(true));
-
-static cl::opt<bool> UseAddressSpace(
-    "use-address-space-in-outlined-functions", cl::Hidden,
-    cl::desc("RL78: outline only within a program address space, and keep "
-             "outlined functions in that address space"),
-    cl::init(true));
-
 /// Number of times to re-run the outliner. This is not the total number of runs
 /// as the outliner will run at least one time. The default value is set to 0,
 /// meaning the outliner will run one time and rerun zero times after that.
@@ -177,49 +165,6 @@ static cl::opt<bool> AppendContentHashToOutlinedName(
 
 namespace {
 
-/// On RL78, code is never outlined across functions placed in different
-/// sections or program address spaces: instructions from such functions are
-/// kept apart in the outliner's instruction mapping.
-static bool keepApartForOutlining(const Function &F) {
-  return F.getParent()->getTargetTriple().isRL78();
-}
-
-static StringRef getOutliningSection(const Function &F) {
-  if (F.hasSection())
-    return F.getSection();
-  if (F.hasFnAttribute("implicit-section-name"))
-    return F.getFnAttribute("implicit-section-name").getValueAsString();
-  return StringRef();
-}
-
-struct MachineInstrExpressionTraitOutliner : public MachineInstrExpressionTrait {
-  static unsigned getHashValue(const MachineInstr *const &MI) {
-    unsigned Hash = MachineInstrExpressionTrait::getHashValue(MI);
-    const Function &F = MI->getMF()->getFunction();
-    if (!keepApartForOutlining(F))
-      return Hash;
-    if (UseSectionAttribute)
-      Hash = hash_combine(Hash, getOutliningSection(F));
-    if (UseAddressSpace)
-      Hash = hash_combine(Hash, F.getAddressSpace());
-    return Hash;
-  }
-
-  static bool isEqual(const MachineInstr *const &LHS,
-                      const MachineInstr *const &RHS) {
-    if (!MachineInstrExpressionTrait::isEqual(LHS, RHS))
-      return false;
-    const Function &LF = LHS->getMF()->getFunction();
-    const Function &RF = RHS->getMF()->getFunction();
-    if (!keepApartForOutlining(LF))
-      return true;
-    if (UseSectionAttribute &&
-        getOutliningSection(LF) != getOutliningSection(RF))
-      return false;
-    return !UseAddressSpace || LF.getAddressSpace() == RF.getAddressSpace();
-  }
-};
-
 /// Maps \p MachineInstrs to unsigned integers and stores the mappings.
 struct InstructionMapper {
   const MachineModuleInfo &MMI;
@@ -235,7 +180,7 @@ struct InstructionMapper {
   unsigned LegalInstrNumber = 0;
 
   /// Correspondence from \p MachineInstrs to unsigned integers.
-  DenseMap<MachineInstr *, unsigned, MachineInstrExpressionTraitOutliner>
+  DenseMap<MachineInstr *, unsigned, MachineInstrExpressionTrait>
       InstructionIntegerMap;
 
   /// Correspondence between \p MachineBasicBlocks and target-defined flags.
@@ -283,7 +228,7 @@ struct InstructionMapper {
     InstrListForMBB.push_back(It);
     MachineInstr &MI = *It;
     bool WasInserted;
-    DenseMap<MachineInstr *, unsigned, MachineInstrExpressionTraitOutliner>::iterator
+    DenseMap<MachineInstr *, unsigned, MachineInstrExpressionTrait>::iterator
         ResultIt;
     std::tie(ResultIt, WasInserted) =
         InstructionIntegerMap.insert(std::make_pair(&MI, LegalInstrNumber));
@@ -954,16 +899,8 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
 
   // Create the function using an IR-level function.
   LLVMContext &C = M.getContext();
-  Candidate &FirstCand = OF.Candidates.front();
-  const Function &ParentFn = FirstCand.getMF()->getFunction();
-  Function *F;
-  if (keepApartForOutlining(ParentFn) && UseAddressSpace)
-    F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
-                         Function::ExternalLinkage, ParentFn.getAddressSpace(),
-                         FunctionName, &M);
-  else
-    F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
-                         Function::ExternalLinkage, FunctionName, M);
+  Function *F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
+                                 Function::ExternalLinkage, FunctionName, M);
 
   // NOTE: If this is linkonceodr, then we can take advantage of linker deduping
   // which gives us better results when we outline from linkonceodr functions.
@@ -975,6 +912,7 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
   F->addFnAttr(Attribute::OptimizeForSize);
   F->addFnAttr(Attribute::MinSize);
 
+  Candidate &FirstCand = OF.Candidates.front();
   const TargetInstrInfo &TII =
       *FirstCand.getMF()->getSubtarget().getInstrInfo();
 
@@ -987,15 +925,6 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
         return std::max(K, C.getMF()->getFunction().getUWTableKind());
       });
   F->setUWTableKind(UW);
-
-  if (keepApartForOutlining(ParentFn) && UseSectionAttribute) {
-    StringRef Section = getOutliningSection(ParentFn);
-    if (!Section.empty() &&
-        all_of(OF.Candidates, [&](const outliner::Candidate &Cand) {
-          return getOutliningSection(Cand.getMF()->getFunction()) == Section;
-        }))
-      F->setSection(Section);
-  }
 
   BasicBlock *EntryBB = BasicBlock::Create(C, "entry", F);
   IRBuilder<> Builder(EntryBB);

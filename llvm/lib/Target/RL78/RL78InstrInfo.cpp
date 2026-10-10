@@ -1485,6 +1485,16 @@ bool RL78InstrInfo::isFunctionSafeToOutlineFrom(
   if (!OutlineFromLinkOnceODRs && F.hasLinkOnceODRLinkage())
     return false;
 
+  // Don't outline from functions with section markings; the program could
+  // expect that all the code is in the named section.
+  if (F.hasSection())
+    return false;
+
+  // An outlined function is created in the default program address space, and
+  // a near function cannot call a far one or the reverse.
+  if (F.getAddressSpace() != F.getDataLayout().getProgramAddressSpace())
+    return false;
+
   // It's safe to outline from MF.
   return true;
 }

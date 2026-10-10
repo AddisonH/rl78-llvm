@@ -953,11 +953,7 @@ MCSection *TargetLoweringObjectFileELF::SelectSectionForGlobal(
   bool EmitUniqueSection = false;
   if (!(Flags & ELF::SHF_MERGE) && !Kind.isCommon()) {
     if (Kind.isText())
-      // RL78 puts every machine-outlined function in its own section.
-      EmitUniqueSection =
-          TM.getFunctionSections() ||
-          (TM.getTargetTriple().getArch() == Triple::RL78 &&
-           GO->getName().starts_with("OUTLINED_FUNCTION_"));
+      EmitUniqueSection = TM.getFunctionSections();
     else
       EmitUniqueSection = TM.getDataSections();
   }
