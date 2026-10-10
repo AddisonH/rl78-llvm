@@ -244,21 +244,12 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-enable-load-pre=false");
 
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-addr-sink-combine-base-offs=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-addr-sink-using-gep=false");
-
   // TODO: See if there is a replacement.
   // CmdArgs.push_back("-mllvm");
   // CmdArgs.push_back("-consider-local-interval-cost=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-block-placement=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-complex-addr-modes=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-machine-cse=true");
@@ -274,20 +265,11 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-extra-vectorizer-passes=true");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-force-split-store=true");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-keep-loops=false");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-no-phi-elim-live-out-early-exit=true");
 
   // TODO: See if there is a replacement.
   // CmdArgs.push_back("-mllvm");
   // CmdArgs.push_back("-simplifycfg-dup-ret=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-speculate-one-expensive-inst=false");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-bonus-inst-threshold=0");
@@ -302,19 +284,7 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-phi-node-folding-threshold=0");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-static-likely-prob=72");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-dup-indirect-size=14");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-tail-merge-size=2");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-merge-threshold=210");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-triangle-chain-count=8");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-unroll-threshold=9");
@@ -330,4 +300,12 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-phi-elim-edge-splitting=true");
+
+  // What the MachineOutliner leaves between two outlined calls often repeats
+  // as well. Outlining again costs a call and a return each time, so only
+  // where size is all that counts.
+  if (OptLevel == 'z') {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-machine-outliner-reruns=2");
+  }
 }
