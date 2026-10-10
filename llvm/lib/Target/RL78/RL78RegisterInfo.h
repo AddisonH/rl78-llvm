@@ -52,6 +52,11 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
 
   float getSpillWeightScaleFactor(const TargetRegisterClass *RC) const override;
 
+  /// True for the classes of one or a few registers that an instruction
+  /// may need an operand in (A, AX, HL, B or C, ...): a value of such a
+  /// class is kept next to that instruction.
+  bool isSmallClass(const TargetRegisterClass *RC) const;
+
   bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
                       unsigned SubReg, const TargetRegisterClass *DstRC,
                       unsigned DstSubReg, const TargetRegisterClass *NewRC,

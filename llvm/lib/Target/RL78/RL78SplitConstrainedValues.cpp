@@ -92,9 +92,9 @@ bool RL78SplitConstrainedValues::runOnMachineFunction(MachineFunction &MF) {
     const TargetRegisterClass *RC = MRI.getRegClassOrNull(V);
     if (!RC)
       continue;
-    const TargetRegisterClass *Wide = TRI->getLargestLegalSuperClass(RC, MF);
-    if (Wide == RC)
+    if (!static_cast<const RL78RegisterInfo *>(TRI)->isSmallClass(RC))
       continue;
+    const TargetRegisterClass *Wide = TRI->getLargestLegalSuperClass(RC, MF);
     MachineInstr *Def = MRI.getUniqueVRegDef(V);
     if (!Def || MRI.use_nodbg_empty(V))
       continue;

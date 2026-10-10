@@ -26,17 +26,7 @@ using namespace llvm;
 // 2. we emit a DW_CFA_offset: r37 at cfa-4 in the CIE.
 RL78RegisterInfo::RL78RegisterInfo() : RL78GenRegisterInfo(RL78::PCreg) {}
 
-// A value split away from the instruction that needs it in a particular
-// register (A, AX, HL, B or C, ...) may live in any register (pair).
-//
-// Transitional: only for the classes that hardware definitions alone use.
-// The older definitions give some operands a wider class than the
-// instruction encodes, and code generation protects those values with
-// RL78BCDEHL (RL78AdjustMemRefs): a piece split from such a value must keep
-// the class.
-const TargetRegisterClass *
-RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
-                                            const MachineFunction &MF) const {
+bool RL78RegisterInfo::isSmallClass(const TargetRegisterClass *RC) const {
   switch (RC->getID()) {
   case RL78::RL78AXRPRegClassID:
   case RL78::RL78HLRegClassID:
@@ -44,7 +34,6 @@ RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   case RL78::RL78DERPRegClassID:
   case RL78::RL78DEHLRegClassID:
   case RL78::RL78AXBCRPRegClassID:
-    return &RL78::RL78RPRegsRegClass;
   case RL78::RL78ARegRegClassID:
   case RL78::RL78XRegRegClassID:
   case RL78::RL78BCRegRegClassID:
@@ -53,8 +42,20 @@ RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   case RL78::RL78XBCEDHLRegRegClassID:
   case RL78::RL78LowRegClassID:
   case RL78::RL78ABCRegRegClassID:
-    return &RL78::RL78RegRegClass;
+    return true;
   }
+  return false;
+}
+
+// A value split away from the instruction that needs it in a particular
+// register (A, AX, HL, B or C, ...) may live in any register (pair).
+const TargetRegisterClass *
+RL78RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
+                                            const MachineFunction &MF) const {
+  if (RL78::RL78RPRegsRegClass.hasSubClassEq(RC))
+    return &RL78::RL78RPRegsRegClass;
+  if (RL78::RL78RegRegClass.hasSubClassEq(RC))
+    return &RL78::RL78RegRegClass;
   return RC;
 }
 
@@ -83,9 +84,8 @@ bool RL78RegisterInfo::shouldCoalesce(
     MachineInstr *MI, const TargetRegisterClass *SrcRC, unsigned SubReg,
     const TargetRegisterClass *DstRC, unsigned DstSubReg,
     const TargetRegisterClass *NewRC, LiveIntervals &LIS) const {
-  const MachineFunction &MF = *MI->getMF();
   auto IsSmall = [&](const TargetRegisterClass *RC) {
-    return getLargestLegalSuperClass(RC, MF) != RC;
+    return isSmallClass(RC);
   };
   if (!IsSmall(NewRC))
     return true;
