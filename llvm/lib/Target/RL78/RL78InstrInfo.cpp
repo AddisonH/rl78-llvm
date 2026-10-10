@@ -295,77 +295,142 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   return true;
 }
 
-void RL78InstrInfo::buildLogic16OnAX(MachineBasicBlock &MBB,
-                                     MachineBasicBlock::iterator I,
-                                     const DebugLoc &DL,
-                                     const TargetInstrInfo &TII, unsigned Op8,
-                                     const MachineOperand *Src, uint64_t Imm) {
+namespace {
+// The 8-bit instructions a 16-bit operation on AX is made of.
+struct WideOp {
+  unsigned R, I8, MHL, MHLi, Abs16;
+  bool Carry;
+};
+enum WideForm { WideRP, WideImm, WideMHLi, WideAbs16, NotWide };
+} // namespace
+
+static WideForm getWideOp(unsigned Opcode, WideOp &W) {
+  switch (Opcode) {
+#define RL78_WIDE(PSEUDO, OP, CARRY)                                           \
+  case RL78::PSEUDO##_AX_rp:                                                   \
+  case RL78::PSEUDO##_AX_i16:                                                  \
+  case RL78::PSEUDO##_AX_mHLi:                                                 \
+  case RL78::PSEUDO##_AX_abs16:                                                \
+    W = {RL78::OP##_A_r, RL78::OP##_A_i8, RL78::OP##_A_mHL, RL78::OP##_A_mHLi, \
+         RL78::OP##_A_abs16, CARRY};                                           \
+    return Opcode == RL78::PSEUDO##_AX_rp     ? WideRP                         \
+           : Opcode == RL78::PSEUDO##_AX_i16  ? WideImm                        \
+           : Opcode == RL78::PSEUDO##_AX_mHLi ? WideMHLi                       \
+                                              : WideAbs16;
+    RL78_WIDE(AND16, AND, false)
+    RL78_WIDE(OR16, OR, false)
+    RL78_WIDE(XOR16, XOR, false)
+    RL78_WIDE(ADDE, ADDC, true)
+    RL78_WIDE(SUBE, SUBC, true)
+#undef RL78_WIDE
+  }
+  return NotWide;
+}
+
+// AX = AX op source, as the 8-bit operation on A (the high byte) and, with
+// XCH A, X around it, on the low byte: low byte first when a carry goes from
+// one to the other.
+bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
+  WideOp W;
+  WideForm Form = getWideOp(MI.getOpcode(), W);
+  if (Form == NotWide)
+    return false;
+  MachineBasicBlock &MBB = *MI.getParent();
+  DebugLoc DL = MI.getDebugLoc();
+  const TargetRegisterInfo &TRI = getRegisterInfo();
+  assert(MI.getOperand(0).getReg() == RL78::RP0 && "not in AX");
+
+  // ADDE/SUBE AX, rp when the carry out is unused and speed matters: add
+  // the carry in with INCW/DECW under SKNC, then ADDW/SUBW.
+  if (W.Carry && Form == WideRP && MI.registerDefIsDead(RL78::CCreg, &TRI) &&
+      MI.getMF()->getTarget().getOptLevel() == CodeGenOptLevel::Aggressive) {
+    bool IsAdd = MI.getOpcode() == RL78::ADDE_AX_rp;
+    return BuildADDE_SUBBE_rp_rp(this, &MBB, MI, DL,
+                                 IsAdd ? RL78::INCW_rp : RL78::DECW_rp,
+                                 IsAdd ? RL78::ADDW_AX_rp : RL78::SUBW_AX_rp);
+  }
+
   auto Xch = [&] {
-    BuildMI(MBB, I, DL, TII.get(RL78::XCH_A_r_cg), RL78::R1)
+    BuildMI(MBB, MI, DL, get(RL78::XCH_A_X))
+        .addReg(RL78::R1, RegState::Define)
         .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
+        .addReg(RL78::R1)
+        .addReg(RL78::R0);
   };
-  if (Src) {
-    // A register pair: its halves, as subregisters before allocation.
-    auto Half = [&](MachineInstrBuilder MIB, unsigned Idx) {
-      Register R = Src->getReg();
-      if (R.isVirtual())
-        MIB.addReg(R, RegState::NoFlags, Idx);
+  auto OnA = [&](unsigned Opcode) {
+    return BuildMI(MBB, MI, DL, get(Opcode), RL78::R1).addReg(RL78::R1);
+  };
+  // The operation on A with the low or the high byte of the source.
+  auto Op = [&](bool Hi) {
+    switch (Form) {
+    case WideRP:
+      OnA(W.R).addReg(TRI.getSubReg(MI.getOperand(2).getReg(),
+                                    Hi ? RL78::sub_hi : RL78::sub_lo));
+      break;
+    case WideImm:
+      OnA(W.I8).addImm((MI.getOperand(2).getImm() >> (Hi ? 8 : 0)) & 0xFF);
+      break;
+    case WideMHLi: {
+      int64_t Disp = MI.getOperand(3).getImm() + Hi;
+      if (Disp)
+        OnA(W.MHLi).add(MI.getOperand(2)).addImm(Disp);
       else
-        MIB.addReg(MBB.getParent()->getSubtarget().getRegisterInfo()->getSubReg(
-            R, Idx));
-    };
-    // Both operands the same value, allocated to AX: x & x = x | x = x,
-    // x ^ x = 0.
-    if (Src->getReg() == RL78::RP0) {
-      if (Op8 == RL78::XOR_r_r)
-        BuildMI(MBB, I, DL, TII.get(RL78::CLRW_rp_cg), RL78::RP0);
-      return;
+        OnA(W.MHL).add(MI.getOperand(2));
+      break;
     }
-    Half(BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1).addReg(RL78::R1,
-                                                            RegState::Kill),
-         RL78::sub_hi);
+    case WideAbs16: {
+      MachineOperand Addr = MI.getOperand(2);
+      if (Addr.isImm())
+        Addr.setImm(Addr.getImm() + Hi);
+      else
+        Addr.setOffset(Addr.getOffset() + Hi);
+      OnA(W.Abs16).add(Addr);
+      break;
+    }
+    case NotWide:
+      break;
+    }
+  };
+
+  if (W.Carry) {
     Xch();
-    Half(BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1).addReg(RL78::R1,
-                                                            RegState::Kill),
-         RL78::sub_lo);
+    Op(false);
     Xch();
-    return;
+    Op(true);
+  } else if (Form == WideImm) {
+    // Per byte: AND with 0 clears it, AND with FFH and OR/XOR with 0 leave
+    // it, OR with FFH sets it.
+    bool IsAnd = W.I8 == RL78::AND_A_i8, IsOr = W.I8 == RL78::OR_A_i8;
+    for (bool Hi : {false, true}) {
+      unsigned Byte = (MI.getOperand(2).getImm() >> (Hi ? 8 : 0)) & 0xFF;
+      MCRegister Reg = Hi ? RL78::R1 : RL78::R0;
+      if (IsAnd && Byte == 0x00) {
+        BuildMI(MBB, MI, DL, get(RL78::CLRB_r), Reg);
+      } else if (IsOr && Byte == 0xFF) {
+        BuildMI(MBB, MI, DL, get(RL78::MOV_r_i8), Reg).addImm(0xFF);
+      } else if (Byte != (IsAnd ? 0xFF : 0x00)) {
+        if (!Hi)
+          Xch();
+        Op(Hi);
+        if (!Hi)
+          Xch();
+      }
+    }
+  } else {
+    Op(true);
+    Xch();
+    Op(false);
+    Xch();
   }
-  unsigned ImmLo = Imm & 0xFF;
-  unsigned ImmHi = (Imm >> 8) & 0xFF;
-  // Per byte (X low, A high): AND with 0 clears it, AND with 0xff and
-  // OR/XOR with 0 leave it, OR with 0xff sets it; otherwise operate in A.
-  if (ImmLo == 0x00 && Op8 == RL78::AND_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r_cg), RL78::R0);
-  } else if ((ImmLo != 0xff && Op8 == RL78::AND_r_imm) ||
-             (ImmLo != 0x00 &&
-              (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
-    Xch();
-    BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(ImmLo);
-    Xch();
-  } else if (Op8 == RL78::OR_r_imm && ImmLo == 0xff) {
-    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_i8), RL78::R0).addImm(ImmLo);
-  }
-  if (ImmHi == 0x00 && Op8 == RL78::AND_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::CLRB_r_cg), RL78::R1);
-  } else if ((ImmHi != 0xff && Op8 == RL78::AND_r_imm) ||
-             (ImmHi != 0x00 &&
-              (Op8 == RL78::OR_r_imm || Op8 == RL78::XOR_r_imm))) {
-    BuildMI(MBB, I, DL, TII.get(Op8), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(ImmHi);
-  } else if (ImmHi == 0xff && Op8 == RL78::OR_r_imm) {
-    BuildMI(MBB, I, DL, TII.get(RL78::MOV_r_i8), RL78::R1).addImm(ImmHi);
-  }
+  MI.eraseFromParent();
+  return true;
 }
 
 bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineBasicBlock *BB = MI.getParent();
   DebugLoc DL = BB->findDebugLoc(MI);
+  if (expandWideOnAX(MI))
+    return true;
   //      shl b, 0x05
   //      sknc
   //      Op ax, 0x08
@@ -426,42 +491,8 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     opcode = RL78::ROR_r_1;
     OpSize = 2;
     break;
-  case RL78::ADDE_rp_rp:
-      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::INCW_rp_cg, RL78::ADDW_rp_rp);
-  case RL78::SUBE_rp_rp:
-      return BuildADDE_SUBBE_rp_rp(this, BB, MI, DL, RL78::DECW_rp_cg, RL78::SUBW_rp_rp);
   case RL78::MUL16_rp_rp_S1_S2:
     return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
-  // Left for after allocation (see LowerAndOrXor16_*).
-  case RL78::AND16_rp_rp:
-  case RL78::AND2_16_rp_rp:
-  case RL78::OR16_rp_rp:
-  case RL78::OR2_16_rp_rp:
-  case RL78::XOR16_rp_rp:
-  case RL78::XOR2_16_rp_rp:
-  case RL78::AND16_rp_imm:
-  case RL78::OR16_rp_imm:
-  case RL78::XOR16_rp_imm: {
-    assert(MI.getOperand(0).getReg() == RL78::RP0 &&
-           MI.getOperand(1).getReg() == RL78::RP0 && "not in AX");
-    unsigned Op8;
-    switch (MI.getOpcode()) {
-    case RL78::AND16_rp_rp:
-    case RL78::AND2_16_rp_rp: Op8 = RL78::AND_r_r; break;
-    case RL78::OR16_rp_rp:
-    case RL78::OR2_16_rp_rp: Op8 = RL78::OR_r_r; break;
-    case RL78::XOR16_rp_rp:
-    case RL78::XOR2_16_rp_rp: Op8 = RL78::XOR_r_r; break;
-    case RL78::AND16_rp_imm: Op8 = RL78::AND_r_imm; break;
-    case RL78::OR16_rp_imm: Op8 = RL78::OR_r_imm; break;
-    default: Op8 = RL78::XOR_r_imm; break;
-    }
-    const MachineOperand &Src = MI.getOperand(2);
-    buildLogic16OnAX(*BB, MI, DL, *this, Op8, Src.isReg() ? &Src : nullptr,
-                     Src.isImm() ? Src.getImm() : 0);
-    MI.eraseFromParent();
-    return true;
-  }
   default:
     return false;
     break;

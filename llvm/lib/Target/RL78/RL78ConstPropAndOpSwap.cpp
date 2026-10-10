@@ -90,9 +90,9 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
 
         MachineInstr &MI1 = *Next;
 
-        if (MI1.getOpcode() == RL78::AND16_rp_rp ||
-            MI1.getOpcode() == RL78::OR16_rp_rp ||
-            MI1.getOpcode() == RL78::XOR16_rp_rp ||
+        if (MI1.getOpcode() == RL78::AND16_AX_rp ||
+            MI1.getOpcode() == RL78::OR16_AX_rp ||
+            MI1.getOpcode() == RL78::XOR16_AX_rp ||
             MI1.getOpcode() == RL78::ADD_r_r ||
             MI1.getOpcode() == RL78::AND_r_r ||
             MI1.getOpcode() == RL78::ADDW_rp_rp ||

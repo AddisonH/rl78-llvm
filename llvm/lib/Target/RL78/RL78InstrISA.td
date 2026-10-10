@@ -2168,3 +2168,85 @@ def : Pat<(int_rl78_brk), (BRK)>;
 def : Pat<(ret), (RET)>;
 def : Pat<(reti), (RETI)>;
 def : Pat<(retb), (RETB)>;
+
+//===----------------------------------------------------------------------===//
+// 16-bit operations made of two 8-bit ones
+//===----------------------------------------------------------------------===//
+
+// An instruction for code generation only, with exact operand classes like
+// the hardware instructions; expanded after register allocation.
+class RL78Pseudo<int size, dag outs, dag ins, list<dag> pattern = []>
+    : Instruction {
+  let Namespace = "RL78";
+  let OutOperandList = outs;
+  let InOperandList = ins;
+  let AsmString = "";
+  let Pattern = pattern;
+  let Size = size;
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+}
+
+// A word at [HL+byte] whose second byte is also in reach.
+def MemHLw : ComplexPattern<iPTR, 2, "SelectMemHLw", [], []>;
+
+// AND, OR, XOR and the add/subtract with carry of the upper words of 32-bit
+// values have no 16-bit form: the operation is done on A, then on X with
+// XCH A, X around it (RL78InstrInfo::expandPostRAPseudo). Node is the
+// operation on registers and constants, MemNode with a word in memory.
+multiclass RL78Wide<SDPatternOperator Node, SDPatternOperator MemNode,
+                    bit Carry = 0> {
+  let Constraints = "$rs = $rd" in {
+  def _AX_rp : RL78Pseudo<6, (outs RL78AXRP:$rd),
+                          (ins RL78AXRP:$rs, RL78BCDEHL:$rp),
+                          [(set i16:$rd, (Node i16:$rs, i16:$rp))]>;
+  // With carry, #0 and #FFFFH are INCW/DECW under a branch when the carry
+  // out is unused (custom inserter).
+  let usesCustomInserter = Carry in
+  def _AX_i16 : RL78Pseudo<6, (outs RL78AXRP:$rd),
+                           (ins RL78AXRP:$rs, i16imm:$imm),
+                           [(set i16:$rd, (Node i16:$rs, (i16 imm:$imm)))]>;
+  let mayLoad = 1 in {
+  def _AX_mHLi : RL78Pseudo<6, (outs RL78AXRP:$rd),
+                            (ins RL78AXRP:$rs, memHLi:$addr),
+                            [(set i16:$rd,
+                              (MemNode i16:$rs, (load MemHLw:$addr)))]>;
+  def _AX_abs16 : RL78Pseudo<8, (outs RL78AXRP:$rd),
+                             (ins RL78AXRP:$rs, addr16w:$addr),
+                             [(set i16:$rd,
+                               (MemNode i16:$rs, (load ADDRABS16:$addr)))]>;
+  }
+  }
+}
+let Defs = [CCreg] in {
+defm AND16 : RL78Wide<and, andmem>;
+defm OR16 : RL78Wide<or, ormem>;
+defm XOR16 : RL78Wide<xor, xormem>;
+let Uses = [CCreg] in {
+defm ADDE : RL78Wide<adde, adde, 1>;
+defm SUBE : RL78Wide<sube, sube, 1>;
+}
+}
+def : Pat<(andmem i16:$a, i16:$rp), (AND16_AX_rp $a, $rp)>;
+def : Pat<(ormem i16:$a, i16:$rp), (OR16_AX_rp $a, $rp)>;
+def : Pat<(xormem i16:$a, i16:$rp), (XOR16_AX_rp $a, $rp)>;
+
+// The high half of an i32 add of a 16-bit constant is adde(hi, 0): only the
+// carry. ADDE_rp_imm turns that into BNC + INCW, but when hi is a load the
+// commuted memory form adde(0, (load ...)) wins on complexity and adds the
+// carry byte by byte through A (x[i]++ on a 32-bit counter in memory: 15
+// instructions instead of 7). Prefer the immediate form for 0 and -1.
+def immCarryOnly : PatLeaf<(imm), [{
+  uint64_t V = N->getZExtValue() & 0xFFFF;
+  return V == 0 || V == 0xFFFF;
+}]>;
+let AddedComplexity = 100 in
+def : Pat<(adde i16:$rsrc, (i16 immCarryOnly:$imm)),
+          (ADDE_AX_i16 $rsrc, imm:$imm)>;
+
+// ~x is -1 - x: MOVW AX, #FFFFH and SUBW AX, rp are shorter than two XORs.
+let AddedComplexity = 10 in
+def : Pat<(not i16:$x), (SUBW_AX_rp (MOVW_rp_i16 -1), $x)>;

@@ -2310,37 +2310,14 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def AND16_rp_imm  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        ";and $rd, $rsrc, $imm16",
-        [(set i16:$rd, (and i16:$rsrc, (i16 imm:$imm16)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def AND16_rp_rp  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";and $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (and i16:$rsrc, i16:$rsrc2))]>;
 
-def AND16_rp_memri : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        ";and a, $addr",
-        [(set i16:$rd, (andmem i16:$rsrc, (load ADDRri16:$addr)))]>;
 
-def AND16_rp_abs16 : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        ";and a, $addr",
-        [(set i16:$rd, (andmem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def AND2_16_rp_rp  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";and $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (andmem i16:$rsrc, i16:$rsrc2))]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2476,37 +2453,14 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def OR16_rp_imm  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        ";or $rd, $rsrc, $imm16",
-        [(set i16:$rd, (or i16:$rsrc, (i16 imm:$imm16)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def OR16_rp_rp  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";or $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (or i16:$rsrc, i16:$rsrc2))]>;
 
-def OR16_rp_memri : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        ";or a, $addr",
-        [(set i16:$rd, (ormem i16:$rsrc, (load ADDRri16:$addr)))]>;
 
-def OR16_rp_abs16 : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        ";or a, $addr",
-        [(set i16:$rd, (ormem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def OR2_16_rp_rp  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";or $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (ormem i16:$rsrc, i16:$rsrc2))]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2641,37 +2595,14 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd" in {
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def XOR16_rp_imm  : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        ";xor $rd, $rsrc, $imm16",
-        [(set i16:$rd, (xor i16:$rsrc, (i16 imm:$imm16)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def XOR16_rp_rp : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";xor $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (xor i16:$rsrc, i16:$rsrc2))]>;
 
-def XOR16_rp_memri : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        ";xor a, $addr",
-        [(set i16:$rd, (xormem i16:$rsrc, (load ADDRri16:$addr)))]>;
 
-def XOR16_rp_abs16 : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        ";xor a, $addr",
-        [(set i16:$rd, (xormem i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
 // Clobbers CY; Z reflects only the last byte, so no Zflag (see
 // RL78CMPWithZeroElimination).
-let Defs = [CCreg] in
-def XOR2_16_rp_rp : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";xor $rd, $rsrc, $rsrc2",
-        [(set i16:$rd, (xormem i16:$rsrc, i16:$rsrc2))]>;
 
 }
 
@@ -2964,39 +2895,11 @@ def ADDW_rp_esaddr16 : InstRL78_32bit<0x11020000,
 //===----------------------------------------------------------------------===//
 
 let usesCustomInserter = 1, Defs = [CCreg, Zflag], Uses = [CCreg] in {
-  def ADDE_rp_imm : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        ";adde $rd, $rsrc, $imm16",
-         [(set i16:$rd, (adde i16:$rsrc, (i16 imm:$imm16)))]>;
 
-  def ADDE_rp_rp : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";adde $rd, $rsrc, $rsrc2",
-         [(set i16:$rd, (adde i16:$rsrc, i16:$rsrc2))]>;
 
-  def ADDE_rp_abs16 : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        ";adde $rd, $rsrc, $addr",
-         [(set i16:$rd, (adde i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
-  def ADDE_rp_memri : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        ";adde $rd, $rsrc, $addr",
-         [(set i16:$rd, (adde i16:$rsrc, (load ADDRri8:$addr)))]>;
 }
 
-// The high half of an i32 add of a 16-bit constant is adde(hi, 0): only the
-// carry. ADDE_rp_imm turns that into BNC + INCW, but when hi is a load the
-// commuted memory form adde(0, (load ...)) wins on complexity and adds the
-// carry byte by byte through A (x[i]++ on a 32-bit counter in memory: 15
-// instructions instead of 7). Prefer the immediate form for 0 and -1.
-def immCarryOnly : PatLeaf<(imm), [{
-  uint64_t V = N->getZExtValue() & 0xFFFF;
-  return V == 0 || V == 0xFFFF;
-}]>;
-let AddedComplexity = 100 in
-def : Pat<(adde i16:$rsrc, (i16 immCarryOnly:$imm)),
-          (ADDE_rp_imm RL78RPRegs:$rsrc, imm:$imm)>;
 
 //===----------------------------------------------------------------------===//
 // SUBW instruction
@@ -3083,25 +2986,9 @@ def SUBW_rp_esaddr16 : InstRL78_32bit<0x11220000,
 //===----------------------------------------------------------------------===//
 
 let usesCustomInserter = 1, Defs = [CCreg, Zflag], Uses = [CCreg] in {
-  def SUBE_rp_imm : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, i16imm:$imm16),
-        ";sube $rd, $rsrc, $imm16",
-         [(set i16:$rd, (sube i16:$rsrc, (i16 imm:$imm16)))]>;
 
-  def SUBE_rp_rp : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78RPRegs:$rsrc2),
-        ";sube $rd, $rsrc, $rsrc2",
-         [(set i16:$rd, (sube i16:$rsrc, i16:$rsrc2))]>;
 
-  def SUBE_rp_abs16 : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, ABS16:$addr),
-        ";sube $rd, $rsrc, $addr",
-         [(set i16:$rd, (sube i16:$rsrc, (load ADDRABS16:$addr)))]>;
 
-  def SUBE_rp_memri : Pseudo<
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr),
-        ";sube $rd, $rsrc, $addr",
-         [(set i16:$rd, (sube i16:$rsrc, (load ADDRri8:$addr)))]>;
 }
 
 //===----------------------------------------------------------------------===//

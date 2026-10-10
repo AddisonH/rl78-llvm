@@ -70,6 +70,7 @@ public:
   // [HL] and [HL+byte], byte 1 to 255.
   bool SelectMemHL(SDValue Addr, SDValue &Base);
   bool SelectMemHLi(SDValue Addr, SDValue &Base, SDValue &Disp);
+  bool SelectMemHLw(SDValue Addr, SDValue &Base, SDValue &Disp);
 
   // [DE]/[HL], [DE+byte]/[HL+byte] (byte 1 to 255, or 0 to 255 for the
   // instructions without a [DE]/[HL] form), word[BC], [HL+B]/[HL+C].
@@ -398,6 +399,12 @@ bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC
 bool RL78DAGToDAGISel::SelectMemHL(SDValue Addr, SDValue &Base) {
   SDValue Disp;
   return SelectADDRri(Addr, 255, false, Base, Disp) && isNullConstant(Disp);
+}
+
+// [HL+byte] and [HL+byte+1].
+bool RL78DAGToDAGISel::SelectMemHLw(SDValue Addr, SDValue &Base,
+                                    SDValue &Disp) {
+  return SelectADDRri(Addr, 254, false, Base, Disp);
 }
 
 bool RL78DAGToDAGISel::SelectMemHLi(SDValue Addr, SDValue &Base,

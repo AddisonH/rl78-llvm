@@ -3843,124 +3843,8 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
   return BB;
 }
 
-MachineBasicBlock *
-RL78TargetLowering::LowerAndOrXor16_rp_rp(unsigned int opcode, MachineInstr &MI,
-                                          MachineBasicBlock *BB) const {
-  // Only the AX operands are fixed here: the allocator then sees one
-  // instruction, expanded once the other operand has its register
-  // (RL78InstrInfo::expandPostRAPseudo).
-  return Lower16BitOpAXAX(MI, BB);
-}
 
-MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_memri(
-    unsigned int opcode, unsigned int opcode2, MachineInstr &MI,
-    MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  // MI.dump();
-  // BB->dump();
-  unsigned Offset = MI.getOperand(3).getImm();
 
-  if (Offset > 255) {
-    BuildMI(*BB, MI, DL, TII->get(RL78::LOAD16_rp_memBorCi), RL78::RP0)
-        .add(MI.getOperand(2))
-        .addImm(Offset);
-
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP4).add(MI.getOperand(1));
-
-    BuildMI(*BB, MI, DL, TII->get(opcode2), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R5, RegState::Kill);
-
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-
-    BuildMI(*BB, MI, DL, TII->get(opcode2), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R4, RegState::Kill);
-
-  } else {
-
-    // First insert the copies into AX and HL:
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0).add(MI.getOperand(1));
-    MI.getOperand(1).ChangeToRegister(RL78::RP0, false);
-
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP6).add(MI.getOperand(2));
-    MI.getOperand(2).ChangeToRegister(RL78::RP6, false);
-
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::RP6)
-        .addImm(Offset + 1);
-
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::RP6, RegState::Kill)
-        .addImm(Offset);
-  }
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
-      .add(MI.getOperand(0))
-      .addReg(RL78::RP0, RegState::Kill);
-
-  // The pseudo instruction is gone now.
-  MI.eraseFromParent();
-  // BB->dump();
-  return BB;
-}
-
-MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_abs16(
-    unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  unsigned Rs1 = MI.getOperand(1).getReg();
-  const GlobalValue *global = MI.getOperand(2).getGlobal();
-  unsigned offset = MI.getOperand(2).getOffset();
-  unsigned flags = MI.getOperand(2).getTargetFlags();
-  unsigned Rd = MI.getOperand(0).getReg();
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .addReg(Rs1, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset + 1, flags);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset, flags);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
-      .addReg(RL78::RP0, RegState::Kill);
-
-  MI.eraseFromParent();
-  return BB;
-}
 
 MachineBasicBlock *
 RL78TargetLowering::LowerSignedCMP0(MachineInstr &MI,
@@ -4450,38 +4334,6 @@ RL78TargetLowering::LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const 
       BB : LowerSignedCMPWMem(MI, BB);
 }
 
-static bool LowerXorSpecialCases(unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) {
-    if(MI.getOpcode() != RL78::XOR16_rp_imm)
-        return false;
-
-    DebugLoc DL = MI.getDebugLoc();
-    MachineFunction *MF = BB->getParent();
-    const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-    //~X <=> X ^ 0xFFFF <=> -1 - X.
-    if ((MI.getOperand(2).getImm() & 0xFFFF) == 0xFFFF) {
-        BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_i16), RL78::RP0).addImm(0xFFFF);
-        BuildMI(*BB, MI, DL, TII->get(RL78::SUBW_rp_rp), RL78::RP0)
-            .addReg(RL78::RP0)
-            .add(MI.getOperand(1));
-        BuildMI(*BB, MI, DL, TII->get(RL78::COPY))
-            .add(MI.getOperand(0))
-            .addReg(RL78::RP0, RegState::Kill);
-        MI.eraseFromParent();
-        return true;
-    }
-
-    return false;
-}
-
-MachineBasicBlock *RL78TargetLowering::LowerAndOrXor16_rp_imm(
-    unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
-  if (LowerXorSpecialCases(opcode, MI, BB))
-    return BB;
-  // See LowerAndOrXor16_rp_rp.
-  return Lower16BitOpAXAX(MI, BB);
-}
-
 static bool IsCarryDead(MachineInstr &MI) {
   for (unsigned i = 0; i < MI.getNumOperands(); i++)
     if (MI.getOperand(i).isReg() && MI.getOperand(i).getReg() == RL78::CCreg &&
@@ -4490,67 +4342,19 @@ static bool IsCarryDead(MachineInstr &MI) {
   return false;
 }
 
+
+// ADDE/SUBE AX, #0 or #FFFFH with the carry out unused: the carry in is added
+// or subtracted by an INCW/DECW that a branch on CY skips. Anything else is
+// left for RL78InstrInfo::expandWideOnAX.
 MachineBasicBlock *
-RL78TargetLowering::LowerADDE_SUBE_rp_rp(unsigned int opcode, MachineInstr &MI,
-                                         MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  unsigned Rs1 = MI.getOperand(1).getReg();
-  unsigned Rs2 = MI.getOperand(2).getReg();
-  unsigned Rd = MI.getOperand(0).getReg();
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .addReg(Rs1, RegState::Kill);
-
-  if (IsCarryDead(MI) && getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive) {
-    // After changing Op0 and Op1 to RP0, delegate it to expandPostRAPseudo.
-    // Since expandPostRAPseudo is using bundle and we disable outlining of bundles,
-    // we do this only when optimizing for speed.
-    BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-            TII->get(RL78::COPY), Rd)
-        .addReg(RL78::RP0);
-    MI.getOperand(0).ChangeToRegister(RL78::RP0, true);
-    MI.getOperand(1).ChangeToRegister(RL78::RP0, false);
-    return BB;
-
-  } else {
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(Rs2, RegState::NoFlags, RL78::sub_lo);
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-        .addReg(RL78::R0, RegState::Define)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(RL78::R0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addReg(Rs2, RegState::NoFlags, RL78::sub_hi);
-    BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
-        .addReg(RL78::RP0, RegState::Kill);
-
-    MI.eraseFromParent();
-    return BB;
-  }
-}
-
-MachineBasicBlock *
-RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int opcode, MachineInstr &MI,
+RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int, MachineInstr &MI,
                                           MachineBasicBlock *BB) const {
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
   unsigned Rs1 = MI.getOperand(1).getReg();
   unsigned Imm = MI.getOperand(2).getImm() & 0xFFFF;
-  unsigned ImmLo = MI.getOperand(2).getImm() & 0xFF;
-  unsigned ImmHi = ((unsigned)MI.getOperand(2).getImm() >> 8) & 0xFF;
   unsigned Rd = MI.getOperand(0).getReg();
-
   if (Imm == 0 || Imm == 0xFFFF) {
     // If the constant is 0 we need to consider only the carry.
 
@@ -4574,14 +4378,8 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int opcode, MachineInstr &MI,
           .addImm(Imm == 0xFFFF ? RL78CC::RL78CC_C : RL78CC::RL78CC_NC);
 
       unsigned carryOpcode;
-      if ((Imm == 0 && RL78::SUBC_A_imm == opcode) ||
-          (Imm == 0xFFFF && RL78::ADDC_A_imm == opcode))
-        carryOpcode = RL78::DECW_rp_cg;
-      else if ((Imm == 0 && RL78::ADDC_A_imm == opcode) ||
-               (Imm == 0xFFFF && RL78::SUBC_A_imm == opcode))
-        carryOpcode = RL78::INCW_rp_cg;
-      else
-        llvm_unreachable("Unexpected opcode in LowerADDE_Sube");
+      bool IsAdd = MI.getOpcode() == RL78::ADDE_AX_i16;
+      carryOpcode = (Imm == 0) == IsAdd ? RL78::INCW_rp : RL78::DECW_rp;
 
       unsigned RPTemp = BB->getParent()->getRegInfo().createVirtualRegister(
           &RL78::RL78RPRegsRegClass);
@@ -4600,103 +4398,10 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int opcode, MachineInstr &MI,
     }
   }
 
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .addReg(Rs1, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(ImmLo);
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addImm(ImmHi);
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
-      .addReg(RL78::RP0, RegState::Kill);
-
-  MI.eraseFromParent();
   return BB;
 }
 
-MachineBasicBlock *RL78TargetLowering::LowerADDE_SUBE_rp_memri(
-    unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
 
-  unsigned Rs1 = MI.getOperand(1).getReg();
-  unsigned MemReg = MI.getOperand(2).getReg();
-  unsigned Offset = MI.getOperand(3).getImm();
-  unsigned Rd = MI.getOperand(0).getReg();
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .addReg(Rs1, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(MemReg)
-      .addImm(Offset);
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(MemReg, RegState::Kill)
-      .addImm(Offset + 1);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
-      .addReg(RL78::RP0, RegState::Kill);
-
-  MI.eraseFromParent();
-  return BB;
-}
-
-MachineBasicBlock *RL78TargetLowering::LowerADDE_SUBE_rp_abs16(
-    unsigned int opcode, MachineInstr &MI, MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-
-  unsigned Rs1 = MI.getOperand(1).getReg();
-  const GlobalValue *global = MI.getOperand(2).getGlobal();
-  unsigned offset = MI.getOperand(2).getOffset();
-  unsigned flags = MI.getOperand(2).getTargetFlags();
-  unsigned Rd = MI.getOperand(0).getReg();
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::RP0)
-      .addReg(Rs1, RegState::Kill);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset, flags);
-  BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
-      .addReg(RL78::R0, RegState::Define)
-      .addReg(RL78::R1, RegState::Kill)
-      .addReg(RL78::R0, RegState::Kill);
-  BuildMI(*BB, MI, DL, TII->get(opcode), RL78::R1)
-      .addReg(RL78::R1, RegState::Kill)
-      .addGlobalAddress(global, offset + 1, flags);
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), Rd)
-      .addReg(RL78::RP0, RegState::Kill);
-
-  MI.eraseFromParent();
-  return BB;
-}
 
 // Lower SIGN_EXTEND/ZERO_EXTEND
 MachineBasicBlock *
@@ -5720,55 +5425,9 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return LowerEXTEND(false, MI, BB);
   case RL78::SEXT_8_16:
     return LowerEXTEND(true, MI, BB);
-  case RL78::ADDE_rp_imm:
-    return LowerADDE_SUBE_rp_imm(RL78::ADDC_A_imm, MI, BB);
-  case RL78::SUBE_rp_imm:
-    return LowerADDE_SUBE_rp_imm(RL78::SUBC_A_imm, MI, BB);
-  case RL78::ADDE_rp_memri:
-    return LowerADDE_SUBE_rp_memri(RL78::ADDC_r_memri, MI, BB);
-  case RL78::SUBE_rp_memri:
-    return LowerADDE_SUBE_rp_memri(RL78::SUBC_r_memri, MI, BB);
-  case RL78::ADDE_rp_abs16:
-    return LowerADDE_SUBE_rp_abs16(RL78::ADDC_r_abs16, MI, BB);
-  case RL78::SUBE_rp_abs16:
-    return LowerADDE_SUBE_rp_abs16(RL78::SUBC_r_abs16, MI, BB);
-  case RL78::ADDE_rp_rp:
-    return LowerADDE_SUBE_rp_rp(RL78::ADDC_r_r, MI, BB);
-  case RL78::SUBE_rp_rp:
-    return LowerADDE_SUBE_rp_rp(RL78::SUBC_r_r, MI, BB);
-  case RL78::AND16_rp_imm:
-    return LowerAndOrXor16_rp_imm(RL78::AND_r_imm, MI, BB);
-  case RL78::OR16_rp_imm:
-    return LowerAndOrXor16_rp_imm(RL78::OR_r_imm, MI, BB);
-  case RL78::XOR16_rp_imm:
-    return LowerAndOrXor16_rp_imm(RL78::XOR_r_imm, MI, BB);
-  case RL78::AND2_16_rp_rp:
-  case RL78::AND16_rp_rp:
-    return LowerAndOrXor16_rp_rp(RL78::AND_r_r, MI, BB);
-  case RL78::OR2_16_rp_rp:
-  case RL78::OR16_rp_rp:
-    return LowerAndOrXor16_rp_rp(RL78::OR_r_r, MI, BB);
-  case RL78::XOR2_16_rp_rp:
-  case RL78::XOR16_rp_rp:
-    return LowerAndOrXor16_rp_rp(RL78::XOR_r_r, MI, BB);
-  case RL78::AND16_rp_memri:
-    return LowerAndOrXor16_rp_memri(
-        RL78::AND_r_memri, RL78::AND_r_r, MI,
-        LowerToHLByteOrWordBC(2, 3, MI, BB));
-  case RL78::AND16_rp_abs16:
-    return LowerAndOrXor16_rp_abs16(RL78::AND_r_abs16, MI, BB);
-  case RL78::OR16_rp_memri:
-    return LowerAndOrXor16_rp_memri(
-        RL78::OR_r_memri, RL78::OR_r_r, MI,
-        LowerToHLByteOrWordBC(2, 3, MI, BB));
-  case RL78::OR16_rp_abs16:
-    return LowerAndOrXor16_rp_abs16(RL78::OR_r_abs16, MI, BB);
-  case RL78::XOR16_rp_memri:
-    return LowerAndOrXor16_rp_memri(
-        RL78::XOR_r_memri, RL78::XOR_r_r, MI,
-        LowerToHLByteOrWordBC(2, 3, MI, BB));
-  case RL78::XOR16_rp_abs16:
-    return LowerAndOrXor16_rp_abs16(RL78::XOR_r_abs16, MI, BB);
+  case RL78::ADDE_AX_i16:
+  case RL78::SUBE_AX_i16:
+    return LowerADDE_SUBE_rp_imm(0, MI, BB);
   case RL78::CMPW_rp_imm:
   case RL78::CMPW_rp_rp:
   case RL78::CMPW_rp_abs16:
