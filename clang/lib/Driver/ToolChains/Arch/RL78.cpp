@@ -281,12 +281,6 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-bonus-inst-threshold=0");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-min-jump-table-entries=5");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-optsize-jump-table-density=56");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-phi-node-folding-threshold=0");
 
   CmdArgs.push_back("-mllvm");
