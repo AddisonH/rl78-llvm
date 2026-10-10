@@ -388,12 +388,6 @@ let mayLoad = 0, mayStore = 0 in {
 //MOV X, saddr      D8 saddr
 //MOV B, saddr      E8 saddr
 //MOV C, saddr      F8 saddr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def LOAD8_rlo_saddr : InstRL78_16bit<0x8D00,
-        (outs RL78Reg:$rd), (ins ABS8:$addr),
-        "mov $rd, $addr",
-        []>;
 
 //Instruction       Opcode
 //MOV A, !addr16    8F adrl adrh
@@ -1034,12 +1028,6 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 
 //Instruction       Opcode
 //ADD A, [HL+byte]  0E adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def ADD_r_memri : InstRL78_16bit<0x0E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "add $rd, $addr",
-        []>;
 
 //ADD A, [HL]       0D
 
@@ -1131,11 +1119,6 @@ let mayLoad = 1, mayStore = 0 in {
 
 //Instruction       Opcode
 //ADDC A, [HL+byte]  1E adr
-let isCodeGenOnly = 1 in
-def ADDC_r_memri : InstRL78_16bit<0x1E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "addc $rd, $addr",
-        []>;
 
 //ADDC A, [HL]       1D
 
@@ -1176,12 +1159,6 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 
 //Instruction       Opcode
 //SUB A, [HL+byte]  2E adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def SUB_r_memri : InstRL78_16bit<0x2E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "sub $rd, $addr",
-        []>;
 
 //SUB A, [HL]       2D
 
@@ -1264,11 +1241,6 @@ let mayLoad = 1, mayStore = 0 in {
 
 //Instruction       Opcode
 //SUBC A, [HL+byte]  3E adr
-let isCodeGenOnly = 1 in
-def SUBC_r_memri : InstRL78_16bit<0x3E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "subc $rd, $addr",
-        []>;
 
 //SUBC A, [HL]       3D
 
@@ -1307,12 +1279,6 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag]  
 
 //Instruction       Opcode
 //AND A, [HL+byte]  5E adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def AND_r_memri : InstRL78_16bit<0x5E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "and $rd, $addr",
-        []>;
 
 //AND A, [HL]       5D
 
@@ -1394,12 +1360,6 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 
 //Instruction       Opcode
 //OR A, [HL+byte]   6E adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def OR_r_memri : InstRL78_16bit<0x6E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "or $rd, $addr",
-        []>;
 
 //OR A, [HL]        6D
 
@@ -1481,12 +1441,6 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 
 //Instruction       Opcode
 //XOR A, [HL+byte]  7E adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def XOR_r_memri : InstRL78_16bit<0x7E00,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RegOffsetAddr:$addr),
-        "xor $rd, $addr",
-        []>;
 
 //XOR A, [HL]       7D
 
@@ -1596,12 +1550,6 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in {
 //Instruction           Opcode
 //CMP A, [HL+B]         61 C0
 //CMP A, [HL+C]         61 C2
-  let isCodeGenOnly = 1 in
-  let mayLoad = 1, mayStore = 0 in
-  def CMP_r_memrr : InstRL78_16bit<0x61C0,
-        (outs), (ins RL78Reg:$rsrc, RegRegAddr:$addr, i8imm:$sign),
-        "cmp $rsrc, $addr",
-        []>;
 
 
 //Instruction           Opcode
@@ -1809,23 +1757,11 @@ let usesCustomInserter = 1, Defs = [CCreg, Zflag] in
 
 //Instruction         Opcode
 //CMPW AX, [HL+byte]  61 49 adr
-  let isCodeGenOnly = 1 in
-  let mayLoad = 1, mayStore = 0 in
-  def CMPW_rp_memri : InstRL78_24bit<0x614900,
-        (outs), (ins RL78RPRegs:$rsrc, RegOffsetAddr:$addr, i8imm:$sign),
-        "cmpw $rsrc, $addr",
-        []>;
 
 let mayLoad = 1, mayStore = 0 in {
 
 //Instruction         Opcode
 //CMPW AX, ES:[HL+byte] ;11 61 49 adr
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def CMPW_rp_esmemHLi : InstRL78_32bit<0x11614900,
-        (outs), (ins RL78RPRegs:$rsrc, EsRegRegAddr:$addr, i8imm:$sign),
-        "cmpw $rsrc, $addr",
-        []>;
 
 //Instruction         Opcode
 //CMPW AX, ES:!addr16 ;11 42 adrl adrh
