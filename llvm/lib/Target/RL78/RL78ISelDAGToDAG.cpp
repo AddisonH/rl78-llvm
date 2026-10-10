@@ -77,6 +77,9 @@ public:
   bool isIndexedAddr(SDValue Addr);
   bool SelectMemRP(SDValue Addr, SDValue &Base);
   bool SelectMemRPi(SDValue Addr, SDValue &Base, SDValue &Disp);
+  bool SelectMemRPiw0(SDValue Addr, SDValue &Base, SDValue &Disp);
+  bool SelectMemRPw(SDValue Addr, SDValue &Base);
+  bool SelectMemRPiw(SDValue Addr, SDValue &Base, SDValue &Disp);
   bool SelectMemRPi0(SDValue Addr, SDValue &Base, SDValue &Disp);
   bool SelectMemBCw(SDValue Addr, SDValue &Base, SDValue &Word);
   bool SelectMemHLr(SDValue Addr, SDValue &Base, SDValue &Index);
@@ -490,6 +493,25 @@ bool RL78DAGToDAGISel::SelectMemRP(SDValue Addr, SDValue &Base) {
 bool RL78DAGToDAGISel::SelectMemRPi(SDValue Addr, SDValue &Base,
                                     SDValue &Disp) {
   return SelectMemRPi0(Addr, Base, Disp) && !isNullConstant(Disp);
+}
+
+// [rp] and [rp+byte] of a word. There is no word at [HL+B] or [HL+C], so a
+// base plus a zero-extended byte is a base register like any other.
+bool RL78DAGToDAGISel::SelectMemRPiw0(SDValue Addr, SDValue &Base,
+                                      SDValue &Disp) {
+  SDValue A, B;
+  return !SelectADDRr8i16(Addr, A, B) && !SelectMemBCw(Addr, A, B) &&
+         SelectADDRri(Addr, 255, false, Base, Disp);
+}
+
+bool RL78DAGToDAGISel::SelectMemRPw(SDValue Addr, SDValue &Base) {
+  SDValue Disp;
+  return SelectMemRPiw0(Addr, Base, Disp) && isNullConstant(Disp);
+}
+
+bool RL78DAGToDAGISel::SelectMemRPiw(SDValue Addr, SDValue &Base,
+                                     SDValue &Disp) {
+  return SelectMemRPiw0(Addr, Base, Disp) && !isNullConstant(Disp);
 }
 
 // word[BC]: a register plus a constant above 255 or plus an address.

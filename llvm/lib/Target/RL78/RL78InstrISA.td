@@ -2028,6 +2028,8 @@ def : Pat<(RL78ucmp (i8 (load ADDRABS16:$addr)), 0),
 def MemRP : ComplexPattern<iPTR, 1, "SelectMemRP", [], []>;
 def MemRPi : ComplexPattern<iPTR, 2, "SelectMemRPi", [], []>;
 def MemRPi0 : ComplexPattern<iPTR, 2, "SelectMemRPi0", [], []>;
+def MemRPw : ComplexPattern<iPTR, 1, "SelectMemRPw", [], []>;
+def MemRPiw : ComplexPattern<iPTR, 2, "SelectMemRPiw", [], []>;
 def MemBCw : ComplexPattern<iPTR, 2, "SelectMemBCw", [], []>;
 def MemHLr : ComplexPattern<iPTR, 2, "SelectMemHLr", [], []>;
 
@@ -2074,16 +2076,16 @@ def : Pat<(store (i8 1), ADDRABS16:$a), (ONEB_abs16 ADDRABS16:$a)>;
 def : Pat<(i16 (load SADDR:$a)), (MOVW_rp_saddrp SADDR:$a)>;
 def : Pat<(i16 (load ADDRABS16:$a)), (MOVW_rp_abs16 ADDRABS16:$a)>;
 def : Pat<(i16 (load SFR:$a)), (MOVW_AX_sfrp SFR:$a)>;
-def : Pat<(i16 (load MemRP:$a)), (MOVW_AX_mRP MemRP:$a)>;
-def : Pat<(i16 (load MemRPi:$a)), (MOVW_AX_mRPi MemRPi:$a)>;
+def : Pat<(i16 (load MemRPw:$a)), (MOVW_AX_mRP MemRPw:$a)>;
+def : Pat<(i16 (load MemRPiw:$a)), (MOVW_AX_mRPi MemRPiw:$a)>;
 def : Pat<(i16 (load MemBCw:$a)), (MOVW_AX_mBCw MemBCw:$a)>;
 def : Pat<(i16 (load ADDRr8i16:$a)), (MOVW_AX_mBw ADDRr8i16:$a)>;
 
 def : Pat<(store i16:$v, SADDR:$a), (MOVW_saddrp_AX SADDR:$a, $v)>;
 def : Pat<(store i16:$v, ADDRABS16:$a), (MOVW_abs16_AX ADDRABS16:$a, $v)>;
 def : Pat<(store i16:$v, SFR:$a), (MOVW_sfrp_AX SFR:$a, $v)>;
-def : Pat<(store i16:$v, MemRP:$a), (MOVW_mRP_AX MemRP:$a, $v)>;
-def : Pat<(store i16:$v, MemRPi:$a), (MOVW_mRPi_AX MemRPi:$a, $v)>;
+def : Pat<(store i16:$v, MemRPw:$a), (MOVW_mRP_AX MemRPw:$a, $v)>;
+def : Pat<(store i16:$v, MemRPiw:$a), (MOVW_mRPi_AX MemRPiw:$a, $v)>;
 def : Pat<(store i16:$v, MemBCw:$a), (MOVW_mBCw_AX MemBCw:$a, $v)>;
 def : Pat<(store i16:$v, ADDRr8i16:$a), (MOVW_mBw_AX ADDRr8i16:$a, $v)>;
 def : Pat<(store (i16 imm:$i), SADDR:$a), (MOVW_saddrp_i16 SADDR:$a, imm:$i)>;
