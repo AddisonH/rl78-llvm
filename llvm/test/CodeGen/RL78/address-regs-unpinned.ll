@@ -19,7 +19,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw de, #0
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_4
 ; CHECK-NEXT:  .LBB0_2: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -30,7 +30,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; CHECK-NEXT:    ; in Loop: Header=BB0_2 Depth=1
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bnz $.LBB0_2
 ; CHECK-NEXT:  .LBB0_4: ; %done
 ; CHECK-NEXT:    movw ax, de
@@ -45,7 +45,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; PINNED:       ; %bb.0: ; %entry
 ; PINNED-NEXT:    movw hl, ax
 ; PINNED-NEXT:    movw de, #0
-; PINNED-NEXT:    cmpw ax, #0
+; PINNED-NEXT:    or a, x
 ; PINNED-NEXT:    bz $.LBB0_4
 ; PINNED-NEXT:  .LBB0_2: ; %loop
 ; PINNED-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -56,7 +56,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; PINNED-NEXT:    ; in Loop: Header=BB0_2 Depth=1
 ; PINNED-NEXT:    movw ax, [hl]
 ; PINNED-NEXT:    movw hl, ax
-; PINNED-NEXT:    cmpw ax, #0
+; PINNED-NEXT:    or a, x
 ; PINNED-NEXT:    bnz $.LBB0_2
 ; PINNED-NEXT:  .LBB0_4: ; %done
 ; PINNED-NEXT:    movw ax, de

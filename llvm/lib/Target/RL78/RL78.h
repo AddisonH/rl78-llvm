@@ -41,7 +41,7 @@ FunctionPass *createRL78ISelDag(RL78TargetMachine &TM, CodeGenOptLevel OptLevel)
 FunctionPass *createRL78InsertExchangeInstructionsPass();
 FunctionPass *createRL78ExpandPseudoInstsPass();
 FunctionPass *createRL78SelectBTCLRPass();
-FunctionPass *createRL78CMPWithZeroElimPass();
+FunctionPass *createRL78CMPWithZeroElimPass(bool Late = false);
 FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();

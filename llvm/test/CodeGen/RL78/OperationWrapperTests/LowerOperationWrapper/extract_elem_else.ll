@@ -35,7 +35,7 @@ define dso_local i16 @main() local_unnamed_addr {
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    mov a, #15
 ; CHECK-NEXT:    call !_test_smulll
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bnz $.LBB1_3
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, [sp+22]

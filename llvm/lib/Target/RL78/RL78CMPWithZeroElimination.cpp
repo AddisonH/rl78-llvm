@@ -11,6 +11,7 @@
 
 #include "RL78.h"
 #include "RL78Subtarget.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/Debug.h"
 
@@ -20,7 +21,8 @@ using namespace llvm;
 namespace {
 class RL78CMPWithZeroElimPass : public MachineFunctionPass {
 public:
-  RL78CMPWithZeroElimPass() : MachineFunctionPass(ID) {}
+  explicit RL78CMPWithZeroElimPass(bool Late = false)
+      : MachineFunctionPass(ID), Late(Late) {}
 
   StringRef getPassName() const override {
     return "RL78 CMP with 0 elimination";
@@ -30,13 +32,99 @@ public:
 
 private:
   static char ID;
+  // The last run, when no later pass moves values through AX any more.
+  bool Late;
 };
 
 char RL78CMPWithZeroElimPass::ID = 0;
 } // end anonymous namespace
 
-FunctionPass *llvm::createRL78CMPWithZeroElimPass() {
-  return new RL78CMPWithZeroElimPass();
+FunctionPass *llvm::createRL78CMPWithZeroElimPass(bool Late) {
+  return new RL78CMPWithZeroElimPass(Late);
+}
+
+// True if only the Z flag of the flags \p CMP sets is read.
+static bool onlyZeroFlagRead(MachineBasicBlock &MBB, MachineInstr &CMP,
+                             const TargetRegisterInfo *TRI) {
+  for (MachineBasicBlock::iterator I = std::next(CMP.getIterator()),
+                                   E = MBB.end();
+       I != E; ++I) {
+    if (I->isDebugInstr())
+      continue;
+    if (I->readsRegister(RL78::CCreg, TRI)) {
+      unsigned CCIdx;
+      if (I->getOpcode() == RL78::BRCC)
+        CCIdx = 1;
+      else if (I->getOpcode() == RL78::SKcc)
+        CCIdx = 0;
+      else
+        return false;
+      int64_t CC = I->getOperand(CCIdx).getImm();
+      if (CC != RL78CC::RL78CC_Z && CC != RL78CC::RL78CC_NZ)
+        return false;
+    }
+    if (I->modifiesRegister(RL78::CCreg, TRI))
+      return true;
+  }
+  return none_of(MBB.successors(), [](const MachineBasicBlock *Succ) {
+    return Succ->isLiveIn(RL78::CCreg);
+  });
+}
+
+// CMPW AX, #0 is 3 bytes. Two shorter ways to the same flags:
+//
+//   or a, x              2 bytes; Z as from the comparison, A is lost
+//   clrw bc; cmpw ax, bc 2 bytes, 2 instructions; all flags, BC is lost
+//
+// The second only where size counts more than the extra instruction.
+static bool shortenCMPWWithZero(MachineBasicBlock &MBB) {
+  MachineFunction &MF = *MBB.getParent();
+  if (!MF.getProperties().hasTracksLiveness())
+    return false;
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+
+  SmallVector<MachineInstr *, 4> CMPs;
+  for (MachineInstr &MI : MBB)
+    if (MI.getOpcode() == RL78::CMPW_AX_i16 && MI.getOperand(1).isImm() &&
+        MI.getOperand(1).getImm() == 0)
+      CMPs.push_back(&MI);
+
+  bool Changed = false;
+  for (MachineInstr *CMP : CMPs) {
+    // What is live after the comparison, which defines no register.
+    LivePhysRegs Live(*TRI);
+    Live.addLiveOuts(MBB);
+    for (MachineInstr &I : llvm::reverse(MBB)) {
+      if (&I == CMP)
+        break;
+      Live.stepBackward(I);
+    }
+    auto IsFree = [&](MCRegister Reg) {
+      for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
+        if (Live.contains(*AI))
+          return false;
+      return true;
+    };
+
+    const DebugLoc &DL = CMP->getDebugLoc();
+    if (IsFree(RL78::R1) && onlyZeroFlagRead(MBB, *CMP, TRI)) {
+      BuildMI(MBB, CMP, DL, TII->get(RL78::OR_A_r))
+          .addReg(RL78::R1, RegState::Define | RegState::Dead)
+          .addReg(RL78::R1, RegState::Kill)
+          .addReg(RL78::R0);
+    } else if (MF.getFunction().hasOptSize() && IsFree(RL78::RP2)) {
+      BuildMI(MBB, CMP, DL, TII->get(RL78::CLRW_rp), RL78::RP2);
+      BuildMI(MBB, CMP, DL, TII->get(RL78::CMPW_AX_rp))
+          .addReg(RL78::RP0)
+          .addReg(RL78::RP2, RegState::Kill);
+    } else {
+      continue;
+    }
+    CMP->eraseFromParent();
+    Changed = true;
+  }
+  return Changed;
 }
 
 static bool definesCCReg(MachineInstr &MI, bool requiresZflag) {
@@ -202,6 +290,9 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
       Inst->eraseFromParent();
       Changed = true;
     }
+
+    if (Late)
+      Changed |= shortenCMPWWithZero(MBB);
   }
   return Changed;
 }

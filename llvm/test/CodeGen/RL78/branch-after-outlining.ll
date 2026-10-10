@@ -16,7 +16,7 @@
 define dso_local void @f(i16 noundef %x) optsize {
 ; CHECK-LABEL: f:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %body
 ; CHECK-NEXT:    movw hl, #12
@@ -35,7 +35,7 @@ define dso_local void @f(i16 noundef %x) optsize {
 ;
 ; LONG-LABEL: f:
 ; LONG:       ; %bb.0: ; %entry
-; LONG-NEXT:    cmpw ax, #0
+; LONG-NEXT:    or a, x
 ; LONG-NEXT:    sknz
 ; LONG-NEXT:    br $!.LBB0_2
 ; LONG-NEXT:  ; %bb.1: ; %body

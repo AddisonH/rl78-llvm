@@ -15,7 +15,7 @@ define dso_local i16 @aj(i8 noundef %0) local_unnamed_addr #0 {
 ; CHECK-NEXT:    movw bc, #LOWW(_p)
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    movw bc, #15

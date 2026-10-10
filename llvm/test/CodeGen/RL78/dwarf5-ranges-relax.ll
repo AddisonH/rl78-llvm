@@ -18,14 +18,14 @@
 ; RELAX:   [DW_RLE_startx_length]: 0x00000000, 0x00000005
 ; RELAX:   [DW_RLE_startx_endx  ]: 0x00000001, 0x00000007
 ; NORELAX: [DW_RLE_startx_length]: 0x00000000, 0x00000005
-; NORELAX: [DW_RLE_startx_length]: 0x00000001, 0x0000001a
+; NORELAX: [DW_RLE_startx_length]: 0x00000001, 0x00000019
 
 ; INFO:      DW_TAG_subprogram
 ; INFO-NEXT:   DW_AT_low_pc (0x00000000)
 ; INFO-NEXT:   DW_AT_high_pc (0x00000005)
 ; INFO:      DW_TAG_subprogram
 ; INFO-NEXT:   DW_AT_low_pc (0x00000000)
-; INFO-NEXT:   DW_AT_high_pc (0x0000001a)
+; INFO-NEXT:   DW_AT_high_pc (0x00000019)
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
 target triple = "rl78-unknown-unknown-elf"

@@ -144,7 +144,7 @@ define void @br_rel16_bz_backward_jump_substitute(i16 %flag) {
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
 ; CHECK-NEXT:    movw ax, [sp+32]
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    br $!.LBB2_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
@@ -309,7 +309,7 @@ for.body:
 define void @bnz_rel8_forward_jump(i16 %exit_code) {
 ; CHECK-LABEL: bnz_rel8_forward_jump:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bnz $.LBB5_1
 ; CHECK-NEXT:  ; %bb.2: ; %if.end
 ; CHECK-NEXT:    nop
@@ -425,7 +425,7 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:    br $!.LBB6_1
 ; CHECK-NEXT:  .LBB6_2: ; %for.cond.cleanup
@@ -455,7 +455,7 @@ define void @br_rel16_bnz_forward_jump_substitute(i16 %exit_code) {
 ; CHECK-LABEL: br_rel16_bnz_forward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    subw sp, #32
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:    br $!.LBB7_1
 ; CHECK-NEXT:  .LBB7_2: ; %if.end

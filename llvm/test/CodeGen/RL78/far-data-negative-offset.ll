@@ -17,7 +17,7 @@ define ptr @negofs(ptr %p) {
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    movw ax, es:[hl]
-; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %clear
 ; CHECK-NEXT:    movw de, #0

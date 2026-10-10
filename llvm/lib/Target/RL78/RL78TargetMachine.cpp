@@ -290,7 +290,7 @@ void RL78PassConfig::addPreEmitPass() {
   addPass(createRL78InsertExchangeInstructionsPass());
   // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
   addPass(createMachineCopyPropagationPass(true));
-  addPass(createRL78CMPWithZeroElimPass());
+  addPass(createRL78CMPWithZeroElimPass(/*Late=*/true));
   if (!InsertNOPWithLabel.empty()) {
     addPass(createRL78InsertNOPWithLabelPass());
   }
