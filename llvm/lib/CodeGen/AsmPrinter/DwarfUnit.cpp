@@ -887,10 +887,11 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
               AlignInBytes);
   }
 
-// Add size if non-zero (derived types might be zero-sized.)
+  // Add size if non-zero (derived types might be zero-sized.) A pointer type
+  // has the size of an address unless it says otherwise (targets with
+  // pointers of several sizes).
   if (Size &&
-      (Tag != dwarf::DW_TAG_pointer_type ||
-       Asm->TM.getTargetTriple().isRL78()) &&
+      (Tag != dwarf::DW_TAG_pointer_type || Size != Asm->getPointerSize()) &&
       Tag != dwarf::DW_TAG_ptr_to_member_type &&
       Tag != dwarf::DW_TAG_reference_type &&
       Tag != dwarf::DW_TAG_rvalue_reference_type)
@@ -1880,8 +1881,7 @@ DIE &DwarfUnit::constructMemberDIE(DIE &Buffer, const DIDerivedType *DT) {
 
     DIELoc *VBaseLocationDie = new (DIEValueAllocator) DIELoc;
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_dup);
-    if (Asm->TM.getTargetTriple().isRL78() &&
-        (DT->getFlags() & DINode::FlagShortInheritanceDeref)) {
+    if (DT->getFlags() & DINode::FlagShortInheritanceDeref) {
       // For near we need only 2 byte addresses, not 4.
       addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
       addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
@@ -1891,8 +1891,7 @@ DIE &DwarfUnit::constructMemberDIE(DIE &Buffer, const DIDerivedType *DT) {
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_constu);
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_udata, DT->getOffsetInBits());
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_minus);
-    if (Asm->TM.getTargetTriple().isRL78() &&
-        (DT->getFlags() & DINode::FlagShortInheritanceDeref)) {
+    if (DT->getFlags() & DINode::FlagShortInheritanceDeref) {
       addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
       addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
     } else {
