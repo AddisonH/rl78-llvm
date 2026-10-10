@@ -25,8 +25,8 @@ top of the new model.
 | --- | --- |
 | RL78 lit tests (`llvm/test/CodeGen/RL78`, `MC/RL78`, `MC/Disassembler/RL78`) | all pass |
 | Every encoding of the Software Manual, assembled and disassembled | 1,224 of 1,224 |
-| GCC C torture, execution, near data (`-O0`, `-O2`, `-Os`) | 4,050 of 4,542 runs pass |
-| GCC C torture, execution, far data (`-O0`, `-O2`) | 2,636 of 3,028 runs pass |
+| GCC C torture, execution, near data (`-O0`, `-O2`, `-Os`) | 4,054 of 4,542 runs pass |
+| GCC C torture, execution, far data (`-O0`, `-O2`) | 2,638 of 3,028 runs pass |
 | CoreMark, `-O3` and `-Os` | correct CRCs |
 | Embench, `-Os` | 17 programs run and verify their results |
 

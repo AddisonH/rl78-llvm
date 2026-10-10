@@ -1364,6 +1364,16 @@ unsigned RL78TargetLowering::getJumpTableEncoding() const {
   return MachineJumpTableInfo::EK_BlockAddress;
 }
 
+// A jump table is a table of 16-bit addresses and the jump is BR AX, which
+// goes to CS:AX: that reaches the cases only when all code is in the first
+// 64 KiB, with CS left at 0. The table itself is read as near data.
+bool RL78TargetLowering::areJTsAllowed(const Function *Fn) const {
+  if (Subtarget->HasFarCodeModel() || Subtarget->HasFarDataModel() ||
+      Fn->getAddressSpace() == RL78AS::FarCode)
+    return false;
+  return TargetLowering::areJTsAllowed(Fn);
+}
+
 bool RL78TargetLowering::decomposeMulByConstant(LLVMContext &Context, EVT VT,
                                                 SDValue C) const {
   // We have mulu.

@@ -2035,10 +2035,6 @@ void Clang::AddPPCTargetArgs(const ArgList &Args,
 
 void Clang::AddRL78TargetArgs(const ArgList &Args,
                               ArgStringList &CmdArgs) const {
-  // There is no 20-bit indirect jump, only a 16-bit one.
-  // TODO: jump tables would work without -mfar-code and with the PLT disabled.
-  CmdArgs.push_back("-fno-jump-tables");
-
   // TODO: disable VLAs properly for RL78.
   CmdArgs.push_back("-Wvla");
 
@@ -2077,17 +2073,6 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
       break;
     }
   }
-
-  // Only inline when asked to, except at -O3.
-  Arg *OptArg = Args.getLastArg(options::OPT_O_Group);
-  char OptLevel =
-      (OptArg && OptArg->getNumValues()) ? OptArg->getValue()[0] : '\0';
-  if (OptLevel != 0 && OptLevel != '3' &&
-      !Args.getLastArg(options::OPT_finline_functions,
-                       options::OPT_finline_hint_functions,
-                       options::OPT_fno_inline_functions,
-                       options::OPT_fno_inline))
-    CmdArgs.push_back("-fno-inline");
 
   rl78::addRL78PassTuneArgs(Args, CmdArgs);
 }

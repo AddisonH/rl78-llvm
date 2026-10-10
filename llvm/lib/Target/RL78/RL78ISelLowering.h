@@ -88,6 +88,8 @@ public:
 
   unsigned getJumpTableEncoding() const override;
 
+  bool areJTsAllowed(const Function *Fn) const override;
+
   void getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
                           const CallBase &I, MachineFunction &MF,
                           unsigned Intrinsic) const override;

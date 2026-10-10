@@ -229,6 +229,12 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   if (OptLevel != 's' && OptLevel != 'z')
     return;
 
+  // A call is 3 or 4 bytes and arguments arrive in registers: only a callee
+  // that is about as small as the call itself, or has no other caller, is
+  // worth inlining (LLVM's -Os threshold of 50 grows RL78 code).
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back("-inline-threshold=5");
+
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-licm");
 
