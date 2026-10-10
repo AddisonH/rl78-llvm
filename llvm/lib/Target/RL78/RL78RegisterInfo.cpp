@@ -175,9 +175,12 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
                       unsigned int Offset) {
   unsigned int opCode = MI.getOpcode();
   bool is8bit = (opCode == RL78::LOAD8_r_stack_slot) ||
-                (opCode == RL78::STORE8_stack_slot_r);
+                (opCode == RL78::STORE8_stack_slot_r) ||
+                (opCode == RL78::MOV_A_mSPi) || (opCode == RL78::MOV_mSPi_A);
   bool isLoad = ((opCode == RL78::LOAD8_r_stack_slot) ||
-                 (opCode == RL78::LOAD16_rp_stack_slot));
+                 (opCode == RL78::LOAD16_rp_stack_slot) ||
+                 (opCode == RL78::MOV_A_mSPi) ||
+                 (opCode == RL78::MOVW_AX_mSPi));
   llvm::Register mainRegister =
       isLoad ? MI.getOperand(0).getReg() : MI.getOperand(2).getReg();
   if (mainRegister == RL78::RP0 || mainRegister == RL78::R1) {
@@ -334,10 +337,39 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   // MI.dump();
   // MI.getParent()->dump();
+  // The hardware [SP+byte] forms become [HL+byte] when the frame is
+  // addressed through HL.
+  auto UseFrameReg = [&](Register Reg) {
+    if (Reg == RL78::SPreg)
+      return;
+    switch (MI.getOpcode()) {
+    case RL78::MOV_A_mSPi:
+      MI.setDesc(TII->get(RL78::MOV_A_mRPi));
+      break;
+    case RL78::MOV_mSPi_A:
+      MI.setDesc(TII->get(RL78::MOV_mRPi_A));
+      break;
+    case RL78::MOV_mSPi_i8:
+      MI.setDesc(TII->get(RL78::MOV_mRPi_i8));
+      break;
+    case RL78::MOVW_AX_mSPi:
+      MI.setDesc(TII->get(RL78::MOVW_AX_mRPi));
+      break;
+    case RL78::MOVW_mSPi_AX:
+      MI.setDesc(TII->get(RL78::MOVW_mRPi_AX));
+      break;
+    }
+  };
+  bool IsWordLoad = MI.getOpcode() == RL78::LOAD16_rp_stack_slot ||
+                    MI.getOpcode() == RL78::MOVW_AX_mSPi;
   if ((MI.getOpcode() == RL78::LOAD8_r_stack_slot) ||
       (MI.getOpcode() == RL78::LOAD16_rp_stack_slot) ||
       (MI.getOpcode() == RL78::STORE8_stack_slot_r) ||
-      (MI.getOpcode() == RL78::STORE16_stack_slot_rp)) {
+      (MI.getOpcode() == RL78::STORE16_stack_slot_rp) ||
+      (MI.getOpcode() == RL78::MOV_A_mSPi) ||
+      (MI.getOpcode() == RL78::MOVW_AX_mSPi) ||
+      (MI.getOpcode() == RL78::MOV_mSPi_A) ||
+      (MI.getOpcode() == RL78::MOVW_mSPi_AX)) {
 
     int offsetAdj = 0;
     if (FrameReg == RL78::RP4) {
@@ -346,7 +378,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
           .addReg(RL78::RP6, RegState::Kill);
       offsetAdj += 2;
 
-      if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot) {
+      if (!IsWordLoad) {
         BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp_cg))
             .addReg(RL78::RP0, RegState::Kill);
         offsetAdj += 2;
@@ -363,7 +395,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       BuildMI(MBB, II, DL, TII->get(RL78::MOVW_rp_AX_cg), RL78::RP6)
           .addReg(RL78::RP0, RegState::Kill);
 
-      if (MI.getOpcode() != RL78::LOAD16_rp_stack_slot)
+      if (!IsWordLoad)
         BuildMI(MBB, II, DL, TII->get(RL78::POP_rp_cg), RL78::RP0);
 
       FrameReg = RL78::RP6;
@@ -371,6 +403,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     }
 
     if (isUInt<8>(Offset + offsetAdj)) {
+      UseFrameReg(FrameReg);
       MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
       if (isUInt<8>(Offset + 4))
@@ -387,8 +420,10 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // This is a 16 bit machine, we shouldn't have a stack offset which is 32
     // bit.
     llvm_unreachable("Invalid stack offset!");
-  } else if (MI.getOpcode() == RL78::STORE8_stack_slot_imm) {
+  } else if (MI.getOpcode() == RL78::STORE8_stack_slot_imm ||
+             MI.getOpcode() == RL78::MOV_mSPi_i8) {
     if (isUInt<8>(Offset)) {
+      UseFrameReg(FrameReg);
       MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
       if (isUInt<8>(Offset + 4))

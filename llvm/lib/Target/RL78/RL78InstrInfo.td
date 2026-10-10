@@ -477,10 +477,11 @@ def STORE8_abs16_imm : InstRL78_32bit<0xCF000000,
 //Instruction			Opcode
 //MOV [SP+byte], #byte	C8 adr data
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 1 in
 def STORE8_stack_slot_imm : InstRL78_24bit<0xC80000,
         (outs), (ins STACKSlot:$addr, i8imm:$imm),
         "mov $addr, $imm",
-        [(store (i8 imm:$imm), ADDRSPi:$addr)]>;
+        []>;
 
 //MOV sfr, #byte ;CE sfr data
 let hasSideEffects = 1 in
@@ -561,10 +562,11 @@ def STORE8_memHLi_imm : InstRL78_24bit<0xCC0000,
 //Instruction       Opcode
 //MOV A, [SP+byte]  88 adr
 let isCodeGenOnly = 1 in
+let mayLoad = 1, mayStore = 0 in
 def LOAD8_r_stack_slot : InstRL78_16bit<0x8800,
         (outs RL78Reg:$rd), (ins STACKSlot:$addr),
         "mov $rd, $addr",
-        [(set i8:$rd, (load ADDRSPi:$addr))]>;
+        []>;
 
 //Instruction       Opcode
 //MOV !addr16, A    9F adrl adrh
@@ -578,10 +580,11 @@ def STORE8_abs16_r : InstRL78_24bit<0x9F0000,
 //Instruction       Opcode
 //MOV [SP+byte], A  98 adr
 let isCodeGenOnly = 1 in
+let mayLoad = 0, mayStore = 1 in
 def STORE8_stack_slot_r : InstRL78_16bit<0x9800,
         (outs), (ins STACKSlot:$addr, RL78Reg:$rsrc),
         "mov $addr, $rsrc",
-        [(store i8:$rsrc, ADDRSPi:$addr)]>;
+        []>;
 
 //MOV A, word[B]    09 adrl adrh
 //MOV A, word[C]    29 adrl adrh
@@ -1312,9 +1315,10 @@ def LOAD16_rp_esaddr16 : InstRL78_32bit<0x11AF0000,
         [(set i16:$rd, (load ESADDRABS16:$addr))]>;
 
 
-let mayLoad = 1, mayStore = 0 in
+// The address of a stack slot: MOVW AX, SP and ADDW AX, #word.
+let mayLoad = 0, mayStore = 0, usesCustomInserter = 0, Defs = [CCreg] in
 def MOVW_rp_stack_slot : Pseudo<
-        (outs RL78RPRegs:$rd), (ins STACKSlot:$addr),
+        (outs RL78AXRP:$rd), (ins STACKSlot:$addr),
         ";movw $rd, $addr",
         []>;
 
@@ -1538,17 +1542,19 @@ def STORE16_esmemHLi_rp : InstRL78_24bit<0x11BC00,
 
 //MOVW AX, [SP+byte]    A8 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 1, mayStore = 0 in
   def LOAD16_rp_stack_slot : InstRL78_16bit<0xA800,
         (outs RL78RPRegs:$rd), (ins STACKSlot:$addr),
         "movw $rd, $addr",
-        [(set i16:$rd, (load ADDRSPi:$addr))]>;
+        []>;
 
 //MOVW [SP+byte], AX    B8 adr
   let isCodeGenOnly = 1 in
+  let mayLoad = 0, mayStore = 1 in
   def STORE16_stack_slot_rp : InstRL78_16bit<0xB800,
         (outs), (ins STACKSlot:$addr, RL78RPRegs:$rsrc),
         "movw $addr, $rsrc",
-        [(store i16:$rsrc, ADDRSPi:$addr)]>;
+        []>;
 
 //MOVW ES:!addr16, AX   ;11 BF adrl adrh
 let isCodeGenOnly = 1 in

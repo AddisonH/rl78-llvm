@@ -43,7 +43,9 @@ Register RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
   // MI.dump();
   if ((MI.getOpcode() == RL78::LOAD8_r_stack_slot) ||
-      (MI.getOpcode() == RL78::LOAD16_rp_stack_slot)) {
+      (MI.getOpcode() == RL78::LOAD16_rp_stack_slot) ||
+      (MI.getOpcode() == RL78::MOV_A_mSPi) ||
+      (MI.getOpcode() == RL78::MOVW_AX_mSPi)) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -61,7 +63,9 @@ Register RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 Register RL78InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                            int &FrameIndex) const {
   if ((MI.getOpcode() == RL78::STORE8_stack_slot_r) ||
-      (MI.getOpcode() == RL78::STORE16_stack_slot_rp)) {
+      (MI.getOpcode() == RL78::STORE16_stack_slot_rp) ||
+      (MI.getOpcode() == RL78::MOV_mSPi_A) ||
+      (MI.getOpcode() == RL78::MOVW_mSPi_AX)) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -1457,6 +1461,11 @@ public:
     case RL78::LOAD16_rp_stack_slot:
     case RL78::STORE8_stack_slot_r:
     case RL78::STORE16_stack_slot_rp:
+    case RL78::MOV_A_mSPi:
+    case RL78::MOVW_AX_mSPi:
+    case RL78::MOV_mSPi_A:
+    case RL78::MOVW_mSPi_AX:
+    case RL78::MOV_mSPi_i8:
       if (RegMask.test(SP))
         return Hazard;
       return NoHazard;

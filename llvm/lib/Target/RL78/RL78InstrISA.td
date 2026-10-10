@@ -2105,3 +2105,12 @@ def : Pat<(store i16:$v, MemBCw:$a), (MOVW_mBCw_AX MemBCw:$a, $v)>;
 def : Pat<(store i16:$v, ADDRr8i16:$a), (MOVW_mBw_AX ADDRr8i16:$a, $v)>;
 def : Pat<(store (i16 imm:$i), SADDR:$a), (MOVW_saddrp_i16 SADDR:$a, imm:$i)>;
 def : Pat<(store (i16 imm:$i), SFR:$a), (MOVW_sfrp_i16 SFR:$a, imm:$i)>;
+
+// The stack: MOV/MOVW with [SP+byte], through A and AX. The frame index is in
+// the place of SP until frame index elimination. (The allocator's spill code
+// uses the *_stack_slot pseudos, which take any register.)
+def : Pat<(i8 (load ADDRSPi:$a)), (MOV_A_mSPi ADDRSPi:$a)>;
+def : Pat<(store i8:$v, ADDRSPi:$a), (MOV_mSPi_A ADDRSPi:$a, $v)>;
+def : Pat<(store (i8 imm:$i), ADDRSPi:$a), (MOV_mSPi_i8 ADDRSPi:$a, imm:$i)>;
+def : Pat<(i16 (load ADDRSPi:$a)), (MOVW_AX_mSPi ADDRSPi:$a)>;
+def : Pat<(store i16:$v, ADDRSPi:$a), (MOVW_mSPi_AX ADDRSPi:$a, $v)>;
