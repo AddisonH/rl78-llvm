@@ -46,20 +46,25 @@ define dso_local i8 @ad(i8 noundef %0, i8 noundef %1) local_unnamed_addr #0 {
 define dso_local i32 @ae(i16 noundef %0, i16 noundef %1, i32 noundef %2) local_unnamed_addr #0 {
 ; CHECK-LABEL: ae:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw !0xffff0, ax
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw !0xffff2, ax
 ; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, !0xffff0
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, !0xffff2
 ; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %4 = sext i16 %0 to i32
   %5 = sext i16 %1 to i32

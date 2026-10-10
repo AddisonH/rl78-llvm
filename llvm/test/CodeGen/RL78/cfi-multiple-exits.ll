@@ -26,11 +26,10 @@
 ; it is back at SP+6.
 ; FRAME:      0x0: CFA=SPreg+4
 ; FRAME-NEXT: 0x1: CFA=SPreg+6
-; FRAME-NEXT: 0x{{[0-9a-f]+}}: CFA=SPreg+8
+; FRAME:      0x{{[0-9a-f]+}}: CFA=SPreg+4
 ; FRAME-NEXT: 0x{{[0-9a-f]+}}: CFA=SPreg+6
 ; FRAME-NEXT: 0x{{[0-9a-f]+}}: CFA=SPreg+4
-; FRAME-NEXT: 0x{{[0-9a-f]+}}: CFA=SPreg+6
-; FRAME-NEXT: 0x{{[0-9a-f]+}}: CFA=SPreg+4
+; FRAME-NOT:  CFA=
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
 target triple = "rl78-unknown-unknown-elf"

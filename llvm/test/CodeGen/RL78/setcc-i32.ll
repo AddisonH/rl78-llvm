@@ -9,21 +9,18 @@ define i16 @sgt(i32 %a, i32 %b) {
 ; CHECK-LABEL: sgt:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, bc
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, b
+; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    bh $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    clrw ax
@@ -43,14 +40,14 @@ define i16 @ule(i32 %a, i32 %b) {
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, de
+; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    bnh $.LBB1_1
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    clrw ax
@@ -68,35 +65,31 @@ define i16 @ule(i32 %a, i32 %b) {
 define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-LABEL: sel:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #6
+; CHECK-NEXT:    subw sp, #4
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, [sp+12]
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [sp+10]
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:    movw [sp+4], ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    cmpw ax, bc
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, b
+; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    bc $.LBB2_1
 ; CHECK-NEXT:  ; %bb.2:
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    addw sp, #6
+; CHECK-NEXT:    movw ax, [sp+12]
+; CHECK-NEXT:    addw sp, #4
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB2_1:
 ; CHECK-NEXT:    movw ax, [sp+2]
-; CHECK-NEXT:    addw sp, #6
+; CHECK-NEXT:    addw sp, #4
 ; CHECK-NEXT:    ret
   %c = icmp slt i32 %a, %b
   %s = select i1 %c, i16 %x, i16 %y

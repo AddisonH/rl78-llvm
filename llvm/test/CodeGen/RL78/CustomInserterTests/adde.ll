@@ -26,17 +26,19 @@ define dso_local i32 @aa(i32 noundef %0) local_unnamed_addr #0 {
 define dso_local i32 @ab(i32 noundef %0, ptr nocapture noundef readonly %1) local_unnamed_addr #1 {
 ; CHECK-LABEL: ab:
 ; CHECK:       ; %bb.0:
+; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    addw ax, [hl+8]
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+10]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+11]
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %3 = getelementptr inbounds i32, ptr %1, i16 2
   %4 = load i32, ptr %3, align 2
@@ -78,7 +80,6 @@ define dso_local i32 @ad(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-NEXT:    addw ax, de
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    ; kill: def $rp0 killed $rp0 def $r1 def $r0
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, l
 ; CHECK-NEXT:    xch a, x

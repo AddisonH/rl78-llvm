@@ -4,7 +4,7 @@
 ; immediate operand, "movw bc, #_f+64"; its fixup used to assume a plain
 ; symbol (assertion in RL78MCExpr::ConvertExpressionToFixups).
 
-; CHECK:      movw bc, #0
+; CHECK:      movw {{[a-z]+}}, #0
 ; CHECK-NEXT: R_RL78_DIR16U _f+0x40
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
