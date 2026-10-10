@@ -2081,12 +2081,10 @@ bool AtomicExpandImpl::expandAtomicOpToLibcall(
 
   const Align AllocaAlignment = DL.getPrefTypeAlign(SizedIntTy);
 
-  // TODO: the "order" argument type is "int", not int32. So
-  // getInt32Ty may be wrong if the arch uses e.g. 16-bit ints.
-  // RL78: int is 16 bits, and the 32-bit argument would shift the registers
-  // of the following arguments.
-  Type *OrderingTy = M->getTargetTriple().isRL78() ? Type::getInt16Ty(Ctx)
-                                                   : Type::getInt32Ty(Ctx);
+  // The "order" argument type is "int", which is 16 bits wide on the 16-bit
+  // architectures (as TargetLibraryInfo assumes too).
+  Type *OrderingTy = M->getTargetTriple().isArch16Bit() ? Type::getInt16Ty(Ctx)
+                                                        : Type::getInt32Ty(Ctx);
   assert(Ordering != AtomicOrdering::NotAtomic && "expect atomic MO");
   Constant *OrderingVal =
       ConstantInt::get(OrderingTy, (int)toCABI(Ordering));

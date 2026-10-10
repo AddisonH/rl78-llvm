@@ -353,7 +353,7 @@ public:
   const DataLayout &getDataLayout() const;
 
   /// Return the pointer size from the TargetMachine
-  unsigned getPointerSize() const;
+  virtual unsigned getPointerSize() const;
 
   /// Return information about subtarget.
   const MCSubtargetInfo &getSubtargetInfo() const;

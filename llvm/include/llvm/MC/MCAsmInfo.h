@@ -433,6 +433,11 @@ protected:
   // STARTOF, SIZEOF, ...).
   bool HasRL78Expressions = false;
 
+  // If true, basic block labels keep their names in an object file. With
+  // linker relaxation they stay in the symbol table, where they then mark
+  // branch targets.
+  bool UseNamesOnBlockLabels = false;
+
   // False if label differences in linker-relaxable sections cannot be
   // relocated as ULEB128 values (no SET/SUB_ULEB128-style relocations):
   // DWARF 5 range and location lists then avoid them.
@@ -748,6 +753,7 @@ public:
 
   bool shouldUseMotorolaIntegers() const { return UseMotorolaIntegers; }
   bool hasRL78Expressions() const { return HasRL78Expressions; }
+  bool useNamesOnBlockLabels() const { return UseNamesOnBlockLabels; }
   bool canRelocateULEB128Differences() const {
     return CanRelocateULEB128Differences;
   }

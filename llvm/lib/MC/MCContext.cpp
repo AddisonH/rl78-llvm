@@ -379,9 +379,7 @@ MCSymbol *MCContext::createBlockSymbol(const Twine &Name, bool AlwaysEmit) {
     return getOrCreateSymbol(MAI.getInternalSymbolPrefix() + Name);
 
   bool IsTemporary = !SaveTempLabels;
-  // RL78 keeps block labels named (as in LLVM 17): linker relaxation keeps
-  // them in the symbol table, where they label branch targets.
-  if (IsTemporary && !UseNamesOnTempLabels && !TT.isRL78())
+  if (IsTemporary && !UseNamesOnTempLabels && !MAI.useNamesOnBlockLabels())
     return createSymbolImpl(nullptr, IsTemporary);
   return createRenamableSymbol(MAI.getInternalSymbolPrefix() + Name,
                                /*AlwaysAddSuffix=*/false, IsTemporary);

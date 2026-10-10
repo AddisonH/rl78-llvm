@@ -51,6 +51,10 @@ public:
 
   StringRef getPassName() const override { return "RL78 Assembly Printer"; }
 
+  // Debug information and other address tables use far (32-bit) addresses in
+  // every memory model.
+  unsigned getPointerSize() const override { return TM.getPointerSize(2); }
+
   void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
   void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                        const char *Modifier = nullptr);
