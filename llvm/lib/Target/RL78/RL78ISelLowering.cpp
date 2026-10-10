@@ -4314,38 +4314,6 @@ MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
 
 
 
-MachineBasicBlock *
-RL78TargetLowering::LowerShiftOrRotateForSpeed(MachineInstr &MI,
-                                               MachineBasicBlock *BB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
-  unsigned Rd = MI.getOperand(0).getReg();
-  unsigned Rs1 = MI.getOperand(1).getReg();
-  unsigned Rs2 = MI.getOperand(2).getReg();
-
-  // The result class may be any 16-bit class (RL78AXRP among them), so go by
-  // its width.
-  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
-  Register NewRd =
-      TRI->getRegSizeInBits(*MRI.getRegClass(MI.getOperand(0).getReg())) == 16
-          ? RL78::RP0
-          : RL78::R1;
-
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::R3).addReg(Rs2);
-  BuildMI(*BB, MI, DL, TII->get(RL78::COPY), NewRd).addReg(Rs1);
-  BuildMI(*BB, std::next(MachineBasicBlock::iterator(MI)), DL,
-          TII->get(RL78::COPY), Rd)
-      .addReg(NewRd);
-
-  MI.getOperand(0).ChangeToRegister(NewRd, true);
-  MI.getOperand(1).ChangeToRegister(NewRd, false);
-  MI.getOperand(2).ChangeToRegister(RL78::R3, false);
-
-  return BB;
-}
-
 MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
     MachineInstr &MI, MachineBasicBlock *BB, unsigned int opcode,
     bool isI8) const {
@@ -4355,9 +4323,18 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
   MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
 
-  unsigned Rd = MI.getOperand(0).getReg();
-  unsigned Rd1 = MI.getOperand(1).getReg();
-  unsigned Rd2 = MI.getOperand(2).getReg();
+  // The operands are in A or AX and B, where the unrolled form needs them:
+  // selection copied them there. The loop takes them from any register.
+  auto BeforeCopy = [&](Register Reg) {
+    const MachineInstr *Def = MRI.getVRegDef(Reg);
+    if (Def && Def->isCopy() && Def->getOperand(1).getReg().isVirtual() &&
+        !Def->getOperand(1).getSubReg())
+      return Def->getOperand(1).getReg();
+    return Reg;
+  };
+  Register Rd = MI.getOperand(0).getReg();
+  Register Rd1 = BeforeCopy(MI.getOperand(1).getReg());
+  Register Rd2 = BeforeCopy(MI.getOperand(2).getReg());
   const TargetRegisterClass *RC =
       isI8 ? &RL78::RL78RegRegClass : &RL78::RL78RPRegsRegClass;
   const TargetRegisterClass *RC2 = &RL78::RL78RegRegClass;
@@ -4368,8 +4345,6 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
   Register RV6 = MRI.createVirtualRegister(RC2);
   Register RV7 = MRI.createVirtualRegister(RC);
   Register RV8 = MRI.createVirtualRegister(RC);
-  Register RP0 = isI8 ? RL78::R1 : RL78::RP0;
-  Register RP2 = RL78::R2;
   //
   const BasicBlock *LLVM_BB = BB->getBasicBlock();
   MachineFunction::iterator It = std::next(MachineFunction::iterator(BB));
@@ -4398,27 +4373,19 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
   sinkMBB3->addSuccessor(sinkMBB3);
   sinkMBB3->addSuccessor(sinkMBB);
 
-  // sinkMBB2:
-  // RV8 = COPY Rd1.
+  // sinkMBB2: the value and the count; nothing to do when the count is 0.
   BuildMI(*sinkMBB2, sinkMBB2->begin(), DL, TII->get(RL78::COPY), RV8)
-      .addReg(Rd1, RegState::Kill);
-
-  // RV4 = COPY Rd2.
+      .addReg(Rd1);
   BuildMI(*sinkMBB2, sinkMBB2->end(), DL, TII->get(RL78::COPY), RV4)
       .addReg(Rd2);
-
-  // RP2 = COPY Rd2.
-  BuildMI(*sinkMBB2, sinkMBB2->end(), DL, TII->get(RL78::COPY), RP2)
-      .addReg(Rd2, RegState::Kill);
-
-  // CMP0 R2 == 0 => Z flag = 1.
+  Register Count = MRI.createVirtualRegister(&RL78::RL78LowRegClass);
+  BuildMI(*sinkMBB2, sinkMBB2->end(), DL, TII->get(RL78::COPY), Count)
+      .addReg(Rd2);
   BuildMI(*sinkMBB2, sinkMBB2->end(), DL, TII->get(RL78::CMP0_r))
-      .addReg(RL78::R2);
-
-  // if Z flag == 1 => go to sinkMBB.
+      .addReg(Count, RegState::Kill);
   BuildMI(*sinkMBB2, sinkMBB2->end(), DL, TII->get(RL78::BRCC))
       .addMBB(sinkMBB)
-      .addImm(2);
+      .addImm(RL78CC::RL78CC_Z);
 
   // sinkMBB3:
   //  RV1 = phi [ RV8, sinkMBB2 ], [ RV5, sinkMBB3 ].
@@ -4435,66 +4402,28 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
       .addReg(RV6)
       .addMBB(sinkMBB3);
 
-  // RP0 = COPY RV1.
-  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::COPY), RP0)
+  // One step, on registers of the class the instruction takes.
+  unsigned StepOpc = opcode == RL78::ROTL16_rp_rp   ? RL78::ROLW_AX_1
+                     : opcode == RL78::ROTR16_rp_rp ? RL78::RORW_AX_1
+                                                    : opcode;
+  const MCInstrDesc &StepDesc = TII->get(StepOpc);
+  const TargetRegisterClass *StepRC = TII->getRegClass(StepDesc, 0);
+  Register StepIn = MRI.createVirtualRegister(StepRC);
+  Register StepOut = MRI.createVirtualRegister(StepRC);
+  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::COPY), StepIn)
       .addReg(RV1, RegState::Kill);
-
-  switch (opcode) {
-  case RL78::SHLW_rp_n:
-  case RL78::SHRW_AX_n:
-  case RL78::SARW_AX_n:
-  case RL78::SHL_r_n:
-  case RL78::SHR_A_n:
-  case RL78::SAR_A_n:
-    // RP0 = Op RP0, 1.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(opcode), RP0)
-        .addReg(RP0, RegState::Kill)
-        .addImm(1);
-    break;
-  case RL78::ROL_A_1:
-  case RL78::ROR_A_1:
-      BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(opcode), RP0)
-        .addReg(RP0, RegState::Kill);
-    break;
-  case RL78::ROTL16_rp_rp:
-    // MOV1 CY, a.7.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::MOV1_CY_A_b))
-        .addReg(RL78::R1)
-        .addImm(7);
-    // RP0 = ROLWC RP0, 1.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::ROLWC_rp_1), RP0)
-        .addReg(RP0, RegState::Kill);
-    break;
-
-  case RL78::ROTR16_rp_rp:
-    // RP0 = SHRW RP0, 1.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::SHRW_AX_n), RP0)
-        .addReg(RP0, RegState::Kill)
-        .addImm(1);
-    // MOV1 a.7, CY.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::MOV1_A_b), RL78::R1)
-        .addReg(RL78::R1, RegState::Kill)
-        .addImm(7);
-    break;
-  }
-
-  // RV5 = COPY RP0.
+  MachineInstrBuilder Step =
+      BuildMI(*sinkMBB3, sinkMBB3->end(), DL, StepDesc, StepOut)
+          .addReg(StepIn, RegState::Kill);
+  // The shifts take the count; the rotates are by one.
+  if (StepDesc.getNumOperands() == 3)
+    Step.addImm(1);
   BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::COPY), RV5)
-      .addReg(RP0, RegState::Kill);
+      .addReg(StepOut, RegState::Kill);
 
-  // RP2 = COPY RV2.
-  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::COPY), RP2)
+  // RV6 = DEC RV2, and round again until it is 0.
+  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::DEC_r), RV6)
       .addReg(RV2, RegState::Kill);
-
-  // R2 = DEC_r_cg R2.
-  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::DEC_r), RL78::R2)
-      .addReg(RL78::R2, RegState::Kill);
-
-  // RV6 = COPY RP2.
-  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::COPY), RV6)
-      .addReg(RP2, RegState::Kill);
-
-  // go to sinkMBB3.
   BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::Bcc_rel8))
       .addMBB(sinkMBB3)
       .addImm(RL78CC::RL78CC_NZ);
@@ -4588,45 +4517,28 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RL78::MUL16_rp_rp_S1_S2:
     return LowerMUL16(MI, BB);
   case RL78::SHLW_rp_rp:
-    return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
-                       : LowerShift_Or_LowerRotate_rp_rp(
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(
                              MI, BB, RL78::SHLW_rp_n, false);
   case RL78::SHRW_rp_rp:
-    return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
-                       : LowerShift_Or_LowerRotate_rp_rp(
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(
                              MI, BB, RL78::SHRW_AX_n, false);
   case RL78::SARW_rp_rp:
-    return OptForSpeed ? LowerShiftOrRotateForSpeed(MI, BB)
-                       : LowerShift_Or_LowerRotate_rp_rp(
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(
                              MI, BB, RL78::SARW_AX_n, false);
   case RL78::SHL_r_r:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHL_r_n, true);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHL_r_n, true);
   case RL78::SHR_r_r:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHR_A_n, true);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SHR_A_n, true);
   case RL78::SAR_r_r:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SAR_A_n, true);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::SAR_A_n, true);
   case RL78::ROTL_rp_rp:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROL_A_1, true);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROL_A_1, true);
   case RL78::ROTR_rp_rp:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROR_A_1, true);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROR_A_1, true);
   case RL78::ROTL16_rp_rp:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTL16_rp_rp, false);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTL16_rp_rp, false);
   case RL78::ROTR16_rp_rp:
-    return OptForSpeed
-               ? LowerShiftOrRotateForSpeed(MI, BB)
-               : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
+    return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
   case RL78::CALL_cs_rp:
     return LowerCallCSRP(MI, BB);
   case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:

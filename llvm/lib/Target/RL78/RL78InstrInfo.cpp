@@ -497,6 +497,21 @@ bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     break;
   case RL78::MUL16_rp_rp_S1_S2:
     return Build_MUL16_rp_rp_S2(this, BB, MI, DL);
+  case RL78::ROLW_AX_1:
+    BuildMI(*BB, MI, DL, get(RL78::MOV1_CY_A_b)).addReg(RL78::R1).addImm(7);
+    BuildMI(*BB, MI, DL, get(RL78::ROLWC_rp_1), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill);
+    MI.eraseFromParent();
+    return true;
+  case RL78::RORW_AX_1:
+    BuildMI(*BB, MI, DL, get(RL78::SHRW_AX_n), RL78::RP0)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addImm(1);
+    BuildMI(*BB, MI, DL, get(RL78::MOV1_A_b), RL78::R1)
+        .addReg(RL78::R1)
+        .addImm(7);
+    MI.eraseFromParent();
+    return true;
   default:
     return false;
     break;

@@ -2190,6 +2190,13 @@ class RL78Pseudo<int size, dag outs, dag ins, list<dag> pattern = []>
   let mayStore = 0;
 }
 
+// A 16-bit rotate by one: MOV1 CY, A.7 + ROLWC AX, 1 to the left and
+// SHRW AX, 1 + MOV1 A.7, CY to the right.
+let Constraints = "$rs = $rd", Defs = [CCreg] in {
+def ROLW_AX_1 : RL78Pseudo<4, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs)>;
+def RORW_AX_1 : RL78Pseudo<4, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs)>;
+}
+
 // A word at [HL+byte] whose second byte is also in reach.
 def MemHLw : ComplexPattern<iPTR, 2, "SelectMemHLw", [], []>;
 

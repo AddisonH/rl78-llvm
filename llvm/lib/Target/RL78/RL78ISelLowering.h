@@ -330,8 +330,6 @@ private:
                                         MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL8(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL16(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerShiftOrRotateForSpeed(MachineInstr &MI,
-                                                MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerShift_Or_LowerRotate_rp_rp(MachineInstr &MI,
                                                      MachineBasicBlock *BB,
                                                      unsigned int opcode,

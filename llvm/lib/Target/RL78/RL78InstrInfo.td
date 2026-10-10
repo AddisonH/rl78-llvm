@@ -1976,10 +1976,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHR A, X          31 XA (X -> 1..7)
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SHR_r_r : Pseudo<
-    (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RL78BReg8:$rsrc2),
     ";shr $rd, $rsrc2",
     [(set i8:$rd, (srl i8:$rsrc, i8:$rsrc2))]>;
 
@@ -2010,10 +2011,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHRW AX, 15       31 FE
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SHRW_rp_rp : Pseudo<
-    (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BReg8:$rsrc2),
     ";shrw $rd, $rsrc2",
     [(set i16:$rd, (srl i16:$rsrc, i8:$rsrc2))]>;
 }
@@ -2029,10 +2031,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHL C, X          31 X7 (X -> 1..7)
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SHL_r_r : Pseudo<
-    (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RL78BReg8:$rsrc2),
     ";shl $rd, $rsrc2",
     [(set i8:$rd, (shl i8:$rsrc, i8:$rsrc2))]>;
 
@@ -2049,10 +2052,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SHLW BC, X        31 XC (X -> 1..15)
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SHLW_rp_rp : Pseudo<
-    (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BReg8:$rsrc2),
     ";shlw $rd, $rsrc2",
     [(set i16:$rd, (shl i16:$rsrc, i8:$rsrc2))]>;
 }
@@ -2066,10 +2070,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SAR A, X          31 XB (X -> 1..7)
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SAR_r_r : Pseudo<
-    (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RL78BReg8:$rsrc2),
     ";sar $rd, $rsrc2",
     [(set i8:$rd, (sra i8:$rsrc, i8:$rsrc2))]>;
 
@@ -2099,10 +2104,11 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], usesCustomInserter = 1 in {
 //SARW AX, 15       31 FF
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1, Defs = [R3] in {
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def SARW_rp_rp : Pseudo<
-    (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BReg8:$rsrc2),
     ";sarw $rd, $rsrc2",
     [(set i16:$rd, (sra i16:$rsrc, i8:$rsrc2))]>;
 }
@@ -2134,25 +2140,29 @@ let usesCustomInserter = 1, Defs = [R3] in {
 
 }
 
-let Constraints = "$rsrc = $rd", usesCustomInserter = 1 in {
+// Shifts and rotates by a count in a register: the value in A or AX and the
+// count in B, which the unrolled form (-O3, expanded after register
+// allocation) uses up; a loop on any registers otherwise (custom inserter).
+let Constraints = "$rsrc = $rd", usesCustomInserter = 1,
+    Defs = [R3, CCreg] in {
 
 def ROTR_rp_rp : Pseudo<
-    (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RL78BReg8:$rsrc2),
     ";rotr $rd, $rsrc2",
     [(set i8:$rd, (rotr i8:$rsrc, i8:$rsrc2))]>;
 
 def ROTL_rp_rp : Pseudo<
-    (outs RL78Reg:$rd), (ins RL78Reg:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AReg:$rd), (ins RL78AReg:$rsrc, RL78BReg8:$rsrc2),
     ";rotl $rd, $rsrc2",
     [(set i8:$rd, (rotl i8:$rsrc, i8:$rsrc2))]>;
 
 def ROTR16_rp_rp : Pseudo<
-    (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BReg8:$rsrc2),
     ";rotr $rd, $rsrc2",
     [(set i16:$rd, (rotr i16:$rsrc, i8:$rsrc2))]>;
 
 def ROTL16_rp_rp : Pseudo<
-    (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc, RL78Reg:$rsrc2),
+    (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BReg8:$rsrc2),
     ";rotl $rd, $rsrc2",
     [(set i16:$rd, (rotl i16:$rsrc, i8:$rsrc2))]>;
 
