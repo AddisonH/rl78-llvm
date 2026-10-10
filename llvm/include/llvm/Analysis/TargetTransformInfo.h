@@ -858,6 +858,12 @@ public:
   LLVM_ABI bool isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
                               const TargetTransformInfo::LSRCost &C2) const;
 
+  /// Return true if IVUsers (and so LSR) should track induction variables of
+  /// \p BitWidth although it is not a legal integer width. A target with
+  /// narrow registers can want this for the wider loop counters of C code,
+  /// whose truncated uses feed its address arithmetic.
+  LLVM_ABI bool shouldTrackIllegalIVWidth(unsigned BitWidth) const;
+
   /// Return true if LSR major cost is number of registers. Targets which
   /// implement their own isLSRCostLess and unset number of registers as major
   /// cost should return false, otherwise return true.

@@ -26,6 +26,7 @@ class AssumptionCache;
 class DominatorTree;
 class ScalarEvolution;
 class SCEV;
+class TargetTransformInfo;
 class IVUsers;
 
 /// IVStrideUse - Keep track of one use of a strided induction variable.
@@ -96,6 +97,7 @@ class IVUsers {
   LoopInfo *LI;
   DominatorTree *DT;
   ScalarEvolution *SE;
+  const TargetTransformInfo *TTI;
   SmallPtrSet<Instruction*, 16> Processed;
 
   /// IVUses - A list of all tracked IV uses of induction variable expressions
@@ -107,11 +109,12 @@ class IVUsers {
 
 public:
   LLVM_ABI IVUsers(Loop *L, AssumptionCache *AC, LoopInfo *LI,
-                   DominatorTree *DT, ScalarEvolution *SE);
+                   DominatorTree *DT, ScalarEvolution *SE,
+                   const TargetTransformInfo *TTI = nullptr);
 
   IVUsers(IVUsers &&X)
       : L(std::move(X.L)), AC(std::move(X.AC)), DT(std::move(X.DT)),
-        SE(std::move(X.SE)), Processed(std::move(X.Processed)),
+        SE(std::move(X.SE)), TTI(X.TTI), Processed(std::move(X.Processed)),
         IVUses(std::move(X.IVUses)), EphValues(std::move(X.EphValues)) {
     for (IVStrideUse &U : IVUses)
       U.Parent = this;

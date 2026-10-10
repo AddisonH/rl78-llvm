@@ -450,6 +450,10 @@ bool TargetTransformInfo::isLSRCostLess(const LSRCost &C1,
   return TTIImpl->isLSRCostLess(C1, C2);
 }
 
+bool TargetTransformInfo::shouldTrackIllegalIVWidth(unsigned BitWidth) const {
+  return TTIImpl->shouldTrackIllegalIVWidth(BitWidth);
+}
+
 bool TargetTransformInfo::isNumRegsMajorCostOfLSR() const {
   return TTIImpl->isNumRegsMajorCostOfLSR();
 }

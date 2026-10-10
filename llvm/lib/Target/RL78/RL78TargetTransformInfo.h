@@ -45,6 +45,13 @@ public:
 
   bool hasDivRemOp(Type *DataType, bool IsSigned) const override;
 
+  // 32-bit loop counters are common in C (uint32_t, long), and their
+  // truncated uses index 16-bit address arithmetic: have LSR
+  // strength-reduce those uses.
+  bool shouldTrackIllegalIVWidth(unsigned BitWidth) const override {
+    return BitWidth == 32;
+  }
+
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE) const override;

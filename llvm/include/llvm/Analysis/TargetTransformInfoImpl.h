@@ -333,6 +333,10 @@ public:
                     C2.ScaleCost, C2.ImmCost, C2.SetupCost);
   }
 
+  virtual bool shouldTrackIllegalIVWidth(unsigned BitWidth) const {
+    return false;
+  }
+
   virtual bool isNumRegsMajorCostOfLSR() const { return true; }
 
   virtual bool shouldDropLSRSolutionIfLessProfitable() const { return false; }

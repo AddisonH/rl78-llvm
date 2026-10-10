@@ -18,6 +18,7 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/DataLayout.h"
@@ -35,7 +36,7 @@ AnalysisKey IVUsersAnalysis::Key;
 
 IVUsers IVUsersAnalysis::run(Loop &L, LoopAnalysisManager &AM,
                              LoopStandardAnalysisResults &AR) {
-  return IVUsers(&L, &AR.AC, &AR.LI, &AR.DT, &AR.SE);
+  return IVUsers(&L, &AR.AC, &AR.LI, &AR.DT, &AR.SE, &AR.TTI);
 }
 
 char IVUsersWrapperPass::ID = 0;
@@ -45,6 +46,7 @@ INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_END(IVUsersWrapperPass, "iv-users", "Induction Variable Users",
                     false, true)
 
@@ -153,13 +155,10 @@ bool IVUsers::AddUsersIfInteresting(Instruction *I) {
   // LSR is not APInt clean, do not touch integers bigger than 64-bits.
   // Also avoid creating IVs of non-native types. For example, we don't want a
   // 64-bit IV in 32-bit code just because the loop has one 64-bit cast.
-  // RL78 (16-bit): 32-bit loop counters are common in C (uint32_t, long),
-  // and their truncated uses index 16-bit address arithmetic. Track them, so
-  // LSR can strength-reduce those uses.
+  // A target may ask for a width that is not legal all the same.
   uint64_t Width = SE->getTypeSizeInBits(I->getType());
-  if (Width > 64 ||
-      (!DL.isLegalInteger(Width) &&
-       !(Width == 32 && I->getModule()->getTargetTriple().isRL78())))
+  if (Width > 64 || (!DL.isLegalInteger(Width) &&
+                     !(TTI && TTI->shouldTrackIllegalIVWidth(Width))))
     return false;
 
   // Don't attempt to promote ephemeral values to indvars. They will be removed
@@ -254,8 +253,8 @@ IVStrideUse &IVUsers::AddUser(Instruction *User, Value *Operand) {
 }
 
 IVUsers::IVUsers(Loop *L, AssumptionCache *AC, LoopInfo *LI, DominatorTree *DT,
-                 ScalarEvolution *SE)
-    : L(L), AC(AC), LI(LI), DT(DT), SE(SE) {
+                 ScalarEvolution *SE, const TargetTransformInfo *TTI)
+    : L(L), AC(AC), LI(LI), DT(DT), SE(SE), TTI(TTI) {
   // Collect ephemeral values so that AddUsersIfInteresting skips them.
   EphValues.clear();
   CodeMetrics::collectEphemeralValues(L, AC, EphValues);
@@ -309,6 +308,7 @@ void IVUsersWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfoWrapperPass>();
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<ScalarEvolutionWrapperPass>();
+  AU.addRequired<TargetTransformInfoWrapperPass>();
   AU.setPreservesAll();
 }
 
@@ -319,7 +319,10 @@ bool IVUsersWrapperPass::runOnLoop(Loop *L, LPPassManager &LPM) {
   auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
 
-  IU.reset(new IVUsers(L, AC, LI, DT, SE));
+  auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(
+      *L->getHeader()->getParent());
+
+  IU.reset(new IVUsers(L, AC, LI, DT, SE, TTI));
   return false;
 }
 
