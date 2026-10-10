@@ -234,11 +234,11 @@ std::multimap<unsigned int, Specialization> A_memDEHL_spec = {
 };
 
 std::multimap<unsigned int, Specialization> limitedRegOp_spec = {
-    {RL78::XCH_A_r_cg, {RL78::XCH_A_X_cg, {RL78::R1}, {RL78::R0}, "XCH_A_X_cg"}},
+    {RL78::XCH_A_r_cg, {RL78::XCH_A_X, {RL78::R1}, {RL78::R0}, "XCH_A_X_cg"}},
     {RL78::AND1_cy_r, {RL78::AND1_cy_A, {RL78::R1}, {}, "AND1_cy_A"}},
     {RL78::OR1_cy_r, {RL78::OR1_cy_A, {RL78::R1}, {}, "OR1_cy_A"}},
     {RL78::XOR1_cy_r, {RL78::XOR1_cy_A, {RL78::R1}, {}, "XOR1_cy_A"}},
-    {RL78::MOVW_rp_sp, {RL78::MOVW_AX_sp, {RL78::RP0}, {}, "MOVW_AX_sp", -1}}};
+    {RL78::MOVW_rp_sp, {RL78::MOVW_AX_SP, {RL78::RP0}, {}, "MOVW_AX_sp", -1}}};
 
 std::multimap<unsigned int, Specialization> enumImmOp_spec = {
     {RL78::B_cc, {RL78::B_BNH, RL78CC::RL78CC_NH, "B_BNH"}},
@@ -337,7 +337,7 @@ bool RL78InstructionSpecializationPass::replaceInstruction(
 bool replaceMACRMoves(MachineInstr &MI, MachineBasicBlock &MBB, const TargetInstrInfo *TII) {
 #define MACRHigh 0xFFF2
 #define MACRLow 0xFFF0
-  if (MI.getOpcode() == RL78::MOVW_rp_AX_cg &&
+  if (MI.getOpcode() == RL78::MOVW_rp_AX &&
       (MI.getOperand(0).getReg() == RL78::MACRH ||
        MI.getOperand(0).getReg() == RL78::MACRL)) {
     unsigned DestAddr =
@@ -346,7 +346,7 @@ bool replaceMACRMoves(MachineInstr &MI, MachineBasicBlock &MBB, const TargetInst
         .addImm(DestAddr)
         .add(MI.getOperand(1));
     return true;
-  } else if (MI.getOpcode() == RL78::MOVW_AX_rp_cg &&
+  } else if (MI.getOpcode() == RL78::MOVW_AX_rp &&
              (MI.getOperand(1).getReg() == RL78::MACRH ||
               MI.getOperand(1).getReg() == RL78::MACRL)) {
     unsigned SrcAddr =

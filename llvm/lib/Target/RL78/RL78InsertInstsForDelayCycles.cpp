@@ -68,14 +68,14 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_1_4(
     //    br #.NextMBB  ; 3 cycles
     //  .NextMBB:
     MachineBasicBlock *NextMBB = MBB.splitAt(MI);
-    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8_cg)).addMBB(NextMBB);
+    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8)).addMBB(NextMBB);
     break;
   }
   case 4: {
     // Unconditional branch to next instruction + One NOP_cg instruction.
     MachineBasicBlock *NextMBB = MBB.splitAt(MI);
     BuildMI(MBB, MI, DL, TII.get(RL78::NOP));
-    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8_cg)).addMBB(NextMBB);
+    BuildMI(MBB, MI, DL, TII.get(RL78::BR_rel8)).addMBB(NextMBB);
     break;
   }
   default: {
@@ -121,7 +121,7 @@ void RL78InsertInstsForDelayCycles::processDelayCycleInst_6_1279(
   // Add DEC R1 at the end of MBB. This is later ater splitted into LoopBB.
   // This small hack is because splitAt method does not work on the end.
   // We stick to use splitAt method because we want automatic update of liveins.
-  BuildMI(MBB, MBB.end(), DL, TII.get(RL78::DEC_r_cg), RL78::R1)
+  BuildMI(MBB, MBB.end(), DL, TII.get(RL78::DEC_r), RL78::R1)
       .addReg(RL78::R1);
   MachineBasicBlock *LoopBB = MBB.splitAt(MI);
   LoopBB->addSuccessor(LoopBB);

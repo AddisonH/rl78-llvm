@@ -348,50 +348,20 @@ def shift16imm  : Operand<i8> {
 let mayLoad = 0, mayStore = 0 in {
 
 //MOV ES, #byte      41 data
-let isCodeGenOnly = 1 in
-def MOV_es_imm : InstRL78_16bit<0x4100,
-        (outs RL78RegES:$rd), (ins i8imm:$imm8),
-        "mov $rd, $imm8",
-        []>;
 
 //Instruction       Opcode
 //MOV A, ES			8E FD
-let isCodeGenOnly = 1 in
-def MOV_A_es : InstRL78_16bit<0x8EFD,
-        (outs RL78AReg:$rd), (ins RL78RegES:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOV ES, A			9E FD
-let isCodeGenOnly = 1 in
-def MOV_es_A : InstRL78_16bit<0x9EFD,
-        (outs RL78RegES:$rd), (ins RL78AReg:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOV A, CS			8E FC
-let isCodeGenOnly = 1 in
-def MOV_A_cs : InstRL78_16bit<0x8EFC,
-        (outs RL78AReg:$rd), (ins RL78RegCS:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOV CS, A			9E FC
-let isCodeGenOnly = 1 in
-def MOV_cs_A : InstRL78_16bit<0x9EFC,
-        (outs RL78RegCS:$rd), (ins RL78AReg:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 //MOV CS, #byte      CE FC data
-let isCodeGenOnly = 1 in
-def MOV_cs_imm : InstRL78_24bit<0xcefc00,
-        (outs RL78RegCS:$rd), (ins i8imm:$imm8),
-        "mov $rd, $imm8",
-        []>;
 
 //Instruction       Opcode
 //MOV A, X          60
@@ -401,11 +371,6 @@ def MOV_cs_imm : InstRL78_24bit<0xcefc00,
 //MOV A, D          65
 //MOV A, L          66
 //MOV A, H          67
-let isCodeGenOnly = 1 in
-def MOV_A_r_cg : InstRL78_8bit<0x60,
-        (outs RL78AReg:$rd), (ins RL78XBCEDHLReg:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOV X, A          70
@@ -415,11 +380,6 @@ def MOV_A_r_cg : InstRL78_8bit<0x60,
 //MOV D, A          75
 //MOV L, A          76
 //MOV H, A          77
-let isCodeGenOnly = 1 in
-def MOV_r_A_cg : InstRL78_8bit<0x70,
-        (outs RL78XBCEDHLReg:$rd), (ins RL78AReg:$rsrc),
-        "mov $rd, $rsrc",
-        []>;
 
 } // mayLoad = 0, mayStore = 0
 
@@ -782,11 +742,6 @@ def XCH_A_r_cg  : InstRL78_16bit<0x618A,
 
 //Instruction       Opcode
 //XCH A, X          08
-let isCodeGenOnly = 1 in
-def XCH_A_X_cg  : InstRL78_8bit<0x08,
-        (outs RL78AReg:$rd, RL78XReg:$rd2), (ins RL78AReg:$rsrc, RL78XReg:$rsrc2),
-        "xch $rd, $rsrc2",
-        []>;
 
 } // mayLoad = 0, mayStore = 0
 
@@ -863,11 +818,6 @@ def BSWAP_rp : InstRL78_8bit<0x08,
 let usesCustomInserter = 1, isReMaterializable = 1, mayLoad = 0, mayStore = 0 in {
 //Instruction       Opcode
 //ONEB r            EX (X..B -> 0..3)
-let isCodeGenOnly = 1 in
-def ONEB_r_cg  : InstRL78_8bit<0xE0,
-        (outs RL78Reg:$rd), (ins),
-        "oneb $rd",
-        []>;
 }
 
 //ONEB saddr        E4 saddr
@@ -885,11 +835,6 @@ def ONEB_r_cg  : InstRL78_8bit<0xE0,
 let usesCustomInserter = 1, isReMaterializable = 1, mayLoad = 0, mayStore = 0 in {
 //Instruction       Opcode
 //CLRB r            FX (X..C -> 0..3)
-let isCodeGenOnly = 1 in
-def CLRB_r_cg  : InstRL78_8bit<0xF0,
-        (outs RL78Reg:$rd), (ins),
-        "clrb $rd",
-        []>;
 }
 
 //CLRB saddr        F4 saddr
@@ -938,31 +883,16 @@ let mayLoad = 0, mayStore = 0 in {
 
 //Instruction       Opcode
 //MOVW SP, #word    CB F8 datal datah
-let isCodeGenOnly = 1 in
-def MOVW_sp_imm  : InstRL78_32bit<0xCBF80000,
-        (outs RL78SPReg:$rd), (ins i16imm:$imm16),
-        "movw $rd, $imm16",
-        []>;
 
 //Instruction       Opcode
 //MOVW AX, BC       13
 //MOVW AX, DE       15
 //MOVW AX, HL       17
-let isCodeGenOnly = 1 in
-def MOVW_AX_rp_cg : InstRL78_8bit<0x13,
-        (outs RL78AXRP:$rd), (ins RL78BCDEHL:$rsrc),
-        "movw $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOVW BC, AX       12
 //MOVW DE, AX       14
 //MOVW HL, AX       16
-let isCodeGenOnly = 1 in
-def MOVW_rp_AX_cg : InstRL78_8bit<0x12,
-        (outs RL78BCDEHL:$rd), (ins RL78AXRP:$rsrc),
-        "movw $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOVW BC, SP       DB adrl adrh
@@ -975,19 +905,9 @@ def MOVW_rp_sp  : InstRL78_24bit<0xDBF8FF,
         []>;
 
 //MOVW AX, SP       AE F8
-let isCodeGenOnly = 1 in
-def MOVW_AX_sp  : InstRL78_16bit<0xAEF8,
-        (outs RL78RPRegs:$rd), (ins RL78SPReg:$rsrc),
-        "movw $rd, $rsrc",
-        []>;
 
 //Instruction       Opcode
 //MOVW SP, AX       BE F8
-let isCodeGenOnly = 1 in
-def MOVW_sp_rp  : InstRL78_16bit<0xBEF8,
-        (outs RL78SPReg:$rd), (ins RL78RPRegs:$rsrc),
-        "movw $rd, $rsrc",
-        []>;
 
 } // mayLoad = 0, mayStore = 0
 
@@ -1300,12 +1220,6 @@ let Constraints = "$rsrc = $rd, $rsrc2 = $rd2" in
 //XCHW AX, BC   33
 //XCHW AX, DE   35
 //XCHW AX, HL   37
-let mayLoad = 0, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def XCHW_AX_rp_cg  : InstRL78_8bit<0x33,
-        (outs RL78AXRP:$rd, RL78BCDEHL:$rd2), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
-        "xchw $rd, $rsrc2",
-        []>;
 
   let usesCustomInserter = 1, isCodeGenOnly = 1 in {
     let usesCustomInserter = 0 in
@@ -1325,11 +1239,6 @@ let isReMaterializable = 1, mayLoad = 0, mayStore = 0 in {
 //Instruction   Opcode
 //ONEW AX       E6
 //ONEW BC       E7
-  let isCodeGenOnly = 1 in
-  def ONEW_rp_cg : InstRL78_8bit<0xE6,
-         (outs RL78AXBCRP:$rd), (ins),
-         "onew $rd",
-         []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1341,11 +1250,6 @@ let isReMaterializable = 1, mayLoad = 0, mayStore = 0 in {
 //Instruction   Opcode
 //CLRW AX       F6
 //CLRW BC       F7
-  let isCodeGenOnly = 1 in
-  def CLRW_rp_cg : InstRL78_8bit<0xF6,
-         (outs RL78AXBCRP:$rd), (ins),
-         "clrw $rd",
-         []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2223,12 +2127,6 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 }
 
 //ADDW SP, #byte    10 data
-let mayLoad = 0, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def ADDW_sp_imm : InstRL78_16bit<0x1000,
-        (outs RL78SPReg:$rd), (ins RL78SPReg:$rsrc, i16imm:$imm16),
-        "addw $rd, $imm16",
-         []>;
 
 let Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag], mayLoad = 1, mayStore = 0, usesCustomInserter = 1 in {
 
@@ -2294,12 +2192,6 @@ let usesCustomInserter = 1, Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag] i
 }
 
 //SUBW SP, #byte    20 data
-let mayLoad = 0, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def SUBW_sp_imm : InstRL78_16bit<0x2000,
-        (outs RL78SPReg:$rd), (ins RL78SPReg:$rsrc, i16imm:$imm16),
-        "subw $rd, $imm16",
-         []>;
 
 let Constraints = "$rsrc = $rd", Defs = [CCreg, Zflag], mayLoad = 1, mayStore = 0, usesCustomInserter = 1 in {
 //Instruction         Opcode
@@ -2589,12 +2481,6 @@ let Constraints = "$rsrc = $rd" in {
 
 //Instruction       Opcode
 //INC r             80 (X..H -> 0..7)
-  let isCodeGenOnly = 1 in
-  let mayLoad = 0, mayStore = 0 in
-  def INC_r_cg  : InstRL78_8bit<0x80,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
-        "inc $rd",
-        []>;
 
 } // Constraints = "$rsrc = $rd"
 
@@ -2639,12 +2525,6 @@ let Constraints = "$rsrc = $rd" in {
 
 //Instruction       Opcode
 //DEC r             90 (X..H -> 0..7)
-  let isCodeGenOnly = 1 in
-  let mayLoad = 0, mayStore = 0 in
-  def DEC_r_cg  : InstRL78_8bit<0x90,
-        (outs RL78Reg:$rd), (ins RL78Reg:$rsrc),
-        "dec $rd",
-        []>;
 
 } // Constraints = "$rsrc = $rd"
 
@@ -2689,12 +2569,6 @@ let Constraints = "$rsrc = $rd" in {
 //INCW BC           A3
 //INCW DE           A5
 //INCW HL           A7
-let isCodeGenOnly = 1 in
-let mayLoad = 0, mayStore = 0 in
-def INCW_rp_cg  : InstRL78_8bit<0xA1,
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
-        "incw $rd",
-        []>;
 }
 
 //Instruction       Opcode
@@ -2734,12 +2608,6 @@ let Constraints = "$rsrc = $rd" in {
 //DECW BC           B3
 //DECW DE           B5
 //DECW HL           B7
-  let isCodeGenOnly = 1 in
-  let mayLoad = 0, mayStore = 0 in
-  def DECW_rp_cg  : InstRL78_8bit<0xB1,
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
-        "decw $rd",
-        []>;
 }
 
 //Instruction       Opcode
@@ -3055,12 +2923,6 @@ let Constraints = "$rsrc = $rd", Defs = [CCreg], Uses = [CCreg] in {
 //Instruction       Opcode
 //ROLWC AX, 1       61 EE
 //ROLWC BC, 1       61 FE
-let mayLoad = 0, mayStore = 0 in
-let isCodeGenOnly = 1 in
-def ROLWC_rp_1_cg  : InstRL78_16bit<0x61EE,
-        (outs RL78RPRegs:$rd), (ins RL78RPRegs:$rsrc),
-        "rolwc $rd, 1",
-        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3533,12 +3395,6 @@ def not1cy : SDNode<"RL78ISD::NOT1CY", SDTNOT1CY, [SDNPHasChain, SDNPOptInGlue]>
 //Instruction           Opcode
 //NOT1 CY               71 C0
 let Defs = [CCreg], Uses = [CCreg] in {
-  let isCodeGenOnly = 1 in
-  let mayLoad = 0, mayStore = 0 in
-  def NOT1_cy : InstRL78_16bit<0x71C0,
-        (outs), (ins),
-        "not1 cy",
-        []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3684,11 +3540,6 @@ let Defs = [SPreg], Uses = [SPreg], mayLoad = 0, mayStore = 1 in {
 //PUSH BC           C3
 //PUSH DE           C5
 //PUSH HL           C7
-  let isCodeGenOnly = 1 in
-  def PUSH_rp_cg : InstRL78_8bit<0xC1,
-        (outs), (ins RL78RPRegs:$rsrc),
-        "push $rsrc",
-        []>;
 
   let Uses = [CCreg] in {
     let isCodeGenOnly = 1 in
@@ -3710,11 +3561,6 @@ let Defs = [SPreg], Uses = [SPreg], mayLoad = 1, mayStore = 0 in {
 //POP BC            C2
 //POP DE            C4
 //POP HL            C6
-  let isCodeGenOnly = 1 in
-  def POP_rp_cg : InstRL78_8bit<0xC0,
-        (outs RL78RPRegs:$rd), (ins),
-        "pop $rd",
-        []>;
 
   let Defs = [CCreg] in {
     let isCodeGenOnly = 1 in
@@ -3926,19 +3772,9 @@ let isTerminator = 1, isBranch = 1, isBarrier = 1 in {
 let mayLoad = 0, mayStore = 0 in {
 
 //BR $addr20    EF adr
-  let isCodeGenOnly = 1 in
-  def BR_rel8_cg : InstRL78_16bit<0xEF00,
-        (outs), (ins brtargetRel8:$addr),
-        "br $addr",
-         []>;
 
 
 //BR $!addr20 EE adrl adrh
-  let isCodeGenOnly = 1 in
-  def BR_rel16_cg : InstRL78_24bit<0xEE0000,
-        (outs), (ins brtargetRel16:$addr),
-        "br $addr",
-         []>;
 
 } // mayLoad = 0, mayStore = 0
 

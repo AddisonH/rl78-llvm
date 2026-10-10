@@ -183,7 +183,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
             // INC r writes r, which the CMP left dead: only Z is wanted.
             Register R = prevI->getOperand(0).getReg();
             BuildMI(MBB, prevI.getReverse(), prevI->getDebugLoc(),
-                    TII->get(RL78::INC_r_cg))
+                    TII->get(RL78::INC_r))
                 .addReg(R, RegState::Define | RegState::Dead)
                 .addReg(R, RegState::Kill);
             BuildMI(MBB, BRCC, BRCC.getDebugLoc(),

@@ -44,12 +44,12 @@ using ESValue = std::tuple<bool, Register, unsigned, int64_t>;
 
 static std::optional<ESValue> getESValue(const MachineInstr &MI,
                                          const MachineRegisterInfo &MRI) {
-  if (MI.getOpcode() == RL78::MOV_es_imm) {
+  if (MI.getOpcode() == RL78::MOV_ES_i8) {
     if (!MI.getOperand(1).isImm())
       return std::nullopt;
     return ESValue(true, Register(), 0, MI.getOperand(1).getImm());
   }
-  if (MI.getOpcode() != RL78::MOV_es_A)
+  if (MI.getOpcode() != RL78::MOV_ES_A)
     return std::nullopt;
   Register Reg = MI.getOperand(1).getReg();
   unsigned Sub = MI.getOperand(1).getSubReg();
@@ -91,7 +91,7 @@ bool RL78ESOptPass::runOnMachineFunction(MachineFunction &MF) {
       if (V && Current && *V == *Current) {
         // The copy into A feeding MOV es, a.
         MachineInstr *Copy = nullptr;
-        if (MI.getOpcode() == RL78::MOV_es_A) {
+        if (MI.getOpcode() == RL78::MOV_ES_A) {
           Register A = MI.getOperand(1).getReg();
           if (A.isVirtual()) {
             if (MRI.hasOneNonDBGUse(A))

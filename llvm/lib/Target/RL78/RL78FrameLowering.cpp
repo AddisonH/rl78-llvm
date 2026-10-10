@@ -135,7 +135,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     } else {
       for (unsigned reg = 0; reg < 4; ++reg) {
         if ((1 << reg) & mask) {
-          BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+          BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
               .addReg(RL78::RP0 + (reg % 4))
               .setMIFlags(MachineInstr::FrameSetup);
           NumBytesForCSRegs += 2;
@@ -143,34 +143,34 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       }
     }
     if (mask & (1 << 5) && mask & (1 << 4)) {
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_cs), RL78::R1)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_CS), RL78::R1)
           .addReg(RL78::CS)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A_cg), RL78::R0)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_r_A), RL78::R0)
           .addReg(RL78::R1)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_ES), RL78::R1)
           .addReg(RL78::ES)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
           .addReg(RL78::RP0)
           .setMIFlags(MachineInstr::FrameSetup);
       NumBytesForCSRegs += 2;
     } else {
       if (mask & (1 << 4)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_cs), RL78::R1)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_CS), RL78::R1)
             .addReg(RL78::CS)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
         NumBytesForCSRegs += 2;
       }
       if (mask & (1 << 5)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_es), RL78::R1)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_ES), RL78::R1)
             .addReg(RL78::ES)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
         NumBytesForCSRegs += 2;
@@ -181,7 +181,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_abs16), RL78::RP0)
             .addImm(Addr)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
         NumBytesForCSRegs += 2;
@@ -194,7 +194,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
     // Reserve a slot for the old sp.
     NumBytes += 2;
     // Save AX, to be restored after we are done aligning.
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
         .addReg(RL78::RP0)
         .setMIFlags(MachineInstr::FrameSetup);
   }
@@ -204,11 +204,11 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
   // Emit SUBW SP, #N.
   if (NumBytes > 0) {
     if (NumBytes == 2)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
           .addReg(RL78::RP0)
           .setMIFlags(MachineInstr::FrameSetup);
     else if (NumBytes < 0x100)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytes)
           .setMIFlags(MachineInstr::FrameSetup);
@@ -221,11 +221,11 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       // SUBW_sp_imm = 1;
       // Total:
       // 1 + 1 = 2 cycles
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytes - 0xFE)
           .setMIFlags(MachineInstr::FrameSetup);
@@ -238,15 +238,15 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       // SUBW_sp_imm = 1;
       // Total:
       // 1 + 1 + 1 = 3 cycles
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytes - (0xFE * 2))
           .setMIFlags(MachineInstr::FrameSetup);
@@ -261,7 +261,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         // XCHW_AX_rp_cg = 1; MOVW_rp_sp = 1; SUBW_rp_imm = 1; MOVW_sp_rp = 1;
         // Total:
         // 1 + 1 + 1 + 1 + 1 = 5 cycles
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -273,10 +273,10 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
             .addReg(RL78::RP0)
             .addImm(NumBytes)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -297,7 +297,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
             .addReg(RL78::RP0)
             .addImm(NumBytes)
             .setMIFlags(MachineInstr::FrameSetup);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameSetup);
       }
@@ -343,12 +343,12 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
         .setMIFlags(MachineInstr::FrameSetup);
 
     // Change SP to the new aligned address.
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
         .addReg(RL78::RP0, RegState::Kill)
         .setMIFlags(MachineInstr::FrameSetup);
 
     // Save the old sp just above the new stack start.
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp_cg), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
         .addReg(RL78::RP6)
         .setMIFlags(MachineInstr::FrameSetup);
     if (isUInt<8>(NumBytes)) {
@@ -366,7 +366,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
 
     } else if (isUInt<16>(NumBytes + 2)) {
       // Store using word[BC], save the old sp.
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
           .addReg(RL78::RP2, RegState::Kill)
           .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP2)
@@ -379,10 +379,10 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
           .setMIFlags(MachineInstr::FrameSetup);
 
       // Restore old ax value.
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp_cg), RL78::RP0)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_AX_rp), RL78::RP0)
           .addReg(RL78::RP6, RegState::Kill)
           .setMIFlags(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_AX_cg), RL78::RP2)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_AX), RL78::RP2)
           .addReg(RL78::RP0, RegState::Kill)
           .setMIFlags(MachineInstr::FrameSetup);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::LOAD16_rp_rpi), RL78::RP0)
@@ -390,7 +390,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
           .addImm(NumBytes)
           .setMIFlags(MachineInstr::FrameSetup);
 
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP2)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2)
           .setMIFlags(MachineInstr::FrameSetup);
     } else
       llvm_unreachable("Invalid stack offset!");
@@ -499,7 +499,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       MF.getSubtarget().getRegisterInfo());
 
   if (RegInfo.shouldRealignStack(MF)) {
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP6, RegState::Kill)
@@ -512,7 +512,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
           .setMIFlags(MachineInstr::FrameDestroy);
     else if (isUInt<16>(NumBytesAdjusted)) {
       // Load using word[BC], restore the old sp.
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp_cg))
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
           .addReg(RL78::RP2, RegState::Kill)
           .setMIFlags(MachineInstr::FrameDestroy);
       BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_rp_sp), RL78::RP2)
@@ -522,15 +522,15 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
           .addReg(RL78::RP2, RegState::Kill)
           .addImm(NumBytesAdjusted)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP2)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP2)
           .setMIFlags(MachineInstr::FrameDestroy);
     } else
       llvm_unreachable("Invalid stack offset!");
 
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
         .addReg(RL78::RP0)
         .setMIFlags(MachineInstr::FrameDestroy);
-    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+    BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP6, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP6, RegState::Kill)
@@ -541,10 +541,10 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
 
   if (NumBytesAdjusted != 0) {
     if (NumBytesAdjusted == 2) 
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP6)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP6)
           .setMIFlags(MachineInstr::FrameDestroy);
     else if (NumBytesAdjusted < 0x100)
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytesAdjusted)
           .setMIFlags(MachineInstr::FrameDestroy);
@@ -557,11 +557,11 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       // ADDW_sp_imm = 1;
       // Total:
       // 1 + 1 = 2 cycles
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytesAdjusted - 0xFE)
           .setMIFlags(MachineInstr::FrameDestroy);
@@ -574,15 +574,15 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       // ADDW_sp_imm = 1;
       // Total:
       // 1 + 1 + 1 = 3 cycles
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(0xFE)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_sp_imm), RL78::SPreg)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::ADDW_SP_i8), RL78::SPreg)
           .addReg(RL78::SPreg)
           .addImm(NumBytesAdjusted - (0xFE * 2))
           .setMIFlags(MachineInstr::FrameDestroy);
@@ -597,7 +597,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
         // Total:
         // 1 + 1 + 1 + 1 + 1 = 5 cycles
 
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -609,10 +609,10 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
             .addReg(RL78::RP0)
             .addImm(NumBytesAdjusted)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::XCHW_AX_rp), RL78::RP0)
             .addReg(RL78::RP6, RegState::Define)
             .addReg(RL78::RP0, RegState::Kill)
             .addReg(RL78::RP6, RegState::Kill)
@@ -634,7 +634,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
             .addReg(RL78::RP0)
             .addImm(NumBytesAdjusted)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_sp_rp), RL78::SPreg)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOVW_SP_AX), RL78::SPreg)
             .addReg(RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
       }
@@ -646,7 +646,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       MF.getFunction().hasFnAttribute("interrupt")) {
     if (mask & (1 << 6)) {
       for (unsigned Addr : {0xFFF2u, 0xFFF0u}) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
         BuildMI(MBB, MBBI, dl, TII.get(RL78::STORE16_abs16_rp))
             .addImm(Addr)
@@ -656,31 +656,31 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       }
     }
     if (mask & (1 << 5) && mask & (1 << 4)) {
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP0)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_es_A), RL78::ES)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_ES_A), RL78::ES)
           .addReg(RL78::R1)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r_cg), RL78::R1)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_A_r), RL78::R1)
           .addReg(RL78::R0)
           .setMIFlags(MachineInstr::FrameDestroy);
-      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_cs_A), RL78::CS)
+      BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_CS_A), RL78::CS)
           .addReg(RL78::R1)
           .setMIFlags(MachineInstr::FrameDestroy);
       NumBytes -= 2;
     } else {
       if (mask & (1 << 5)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_es_A), RL78::ES)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_ES_A), RL78::ES)
             .addReg(RL78::R1)
             .setMIFlags(MachineInstr::FrameDestroy);
         NumBytes -= 2;
       }
       if (mask & (1 << 4)) {
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg), RL78::RP0)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp), RL78::RP0)
             .setMIFlags(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_cs_A), RL78::CS)
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::MOV_CS_A), RL78::CS)
             .addReg(RL78::R1)
             .setMIFlags(MachineInstr::FrameDestroy);
         NumBytes -= 2;
@@ -690,7 +690,7 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
     if (!Bank) {
       for (unsigned reg = 4; reg > 0; --reg) {
         if ((1 << (reg - 1)) & mask) {
-          BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp_cg),
+          BuildMI(MBB, MBBI, dl, TII.get(RL78::POP_rp),
                   RL78::RP0 + ((reg - 1) % 4))
               .setMIFlags(MachineInstr::FrameDestroy);
           NumBytes -= 2;

@@ -3691,7 +3691,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate_r_imm(MachineInstr &MI,
         .addReg(RL78::R1, RegState::Kill);
     break;
   case 4:
-    BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r_cg), RL78::R0);
+    BuildMI(*BB, MI, DL, TII->get(RL78::CLRB_r), RL78::R0);
     BuildMI(*BB, MI, DL, TII->get(RL78::SHRW_rp_i), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)
         .addImm(4);
@@ -3746,25 +3746,25 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
   switch (rotAmmount) {
   case 1: {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     break;
   }
   case 2: {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     break;
   }
   case 3: {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     break;
   }
@@ -3776,7 +3776,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
   case 12:
   case 13:
   case 14: {
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_AX_cg), RL78::RP2)
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP2)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(RL78::SHLW_rp_imm), RL78::RP2)
         .addReg(RL78::RP2, RegState::Kill)
@@ -3810,7 +3810,7 @@ MachineBasicBlock *RL78TargetLowering::LowerRotate16_rp_imm(
     break;
   case 9: {
     BuildMI(*BB, MI, DL, TII->get(RL78::MOV1_cy_r)).addReg(RL78::R1).addImm(7);
-    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::ROLWC_rp_1), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill);
     BuildMI(*BB, MI, DL, TII->get(RL78::XCH_A_r_cg), RL78::R1)
         .addReg(RL78::R0, RegState::Define)
@@ -4249,7 +4249,7 @@ MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
         .addReg(RL78::R2, RegState::Kill);
 
     // AX register contents is transferred to the DE register.
-    BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_AX_cg), RL78::RP4)
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOVW_rp_AX), RL78::RP4)
         .addReg(RL78::RP0, RegState::Kill);
 
     // The A register contents and B register contents are exchanged.
@@ -4264,7 +4264,7 @@ MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
 
     // The memory contents of the AX register are exchanged with those of the BC
     // register.
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP2, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP2, RegState::Kill);
@@ -4275,7 +4275,7 @@ MachineBasicBlock *RL78TargetLowering::LowerMUL16(MachineInstr &MI,
 
     // The memory contents of the AX register are exchanged with those of the DE
     // register.
-    BuildMI(*BB, MI, DL, TII->get(RL78::XCHW_AX_rp_cg), RL78::RP0)
+    BuildMI(*BB, MI, DL, TII->get(RL78::XCHW_AX_rp), RL78::RP0)
         .addReg(RL78::RP4, RegState::Define)
         .addReg(RL78::RP0, RegState::Kill)
         .addReg(RL78::RP4, RegState::Kill);
@@ -4457,7 +4457,7 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
         .addReg(RL78::R1)
         .addImm(7);
     // RP0 = ROLWC RP0, 1.
-    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::ROLWC_rp_1_cg), RP0)
+    BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::ROLWC_rp_1), RP0)
         .addReg(RP0, RegState::Kill);
     break;
 
@@ -4482,7 +4482,7 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
       .addReg(RV2, RegState::Kill);
 
   // R2 = DEC_r_cg R2.
-  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::DEC_r_cg), RL78::R2)
+  BuildMI(*sinkMBB3, sinkMBB3->end(), DL, TII->get(RL78::DEC_r), RL78::R2)
       .addReg(RL78::R2, RegState::Kill);
 
   // RV6 = COPY RP2.

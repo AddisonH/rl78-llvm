@@ -239,6 +239,19 @@ void llvm::lowerToHardware(const MCInst &In, SmallVectorImpl<MCInst> &Out,
   // A hardware instruction already (inline asm, or code generation using
   // the hardware definitions).
   if (MII.get(In.getOpcode()).TSFlags & 1) {
+    // Every register must be one the instruction encodes: the encoder takes
+    // the register's number and would not notice.
+    const MCInstrDesc &Desc = MII.get(In.getOpcode());
+    for (unsigned I = 0, E = std::min<unsigned>(Desc.getNumOperands(),
+                                                 In.getNumOperands());
+         I != E; ++I) {
+      const MCOperand &Op = In.getOperand(I);
+      int16_t RC = Desc.operands()[I].RegClass;
+      if (RC >= 0 && Op.isReg() && !MRI.getRegClass(RC).contains(Op.getReg()))
+        reportFatalInternalError(Twine("RL78: ") + MII.getName(In.getOpcode()) +
+                                 " with " + MRI.getName(Op.getReg()) +
+                                 " as operand " + Twine(I));
+    }
     Out.push_back(In);
     return;
   }

@@ -5,7 +5,7 @@ target triple = "rl78-unknown-unknown-elf"
 
 @y = dso_local local_unnamed_addr global ptr addrspace(2) null, align 2
 
-; Tests elimination of redundant MOV_es_imm instructions.
+; Tests elimination of redundant MOV_ES_i8 instructions.
 ; CHECK-LABEL: _test_sym
 ; CHECK: mov es, a
 ; CHECK-NOT: mov es, a
@@ -25,10 +25,10 @@ entry:
   ret void
 }
 
-; Tests elimination of redundant MOV_es_A without a preceding copy in R1.
+; Tests elimination of redundant MOV_ES_A without a preceding copy in R1.
 ; The far pointer is reloaded after a byte store through it, which may alias
 ; the pointer itself; the loads are marked invariant so that both stores use
-; the same ES value (without that, both MOV_es_A are required).
+; the same ES value (without that, both MOV_ES_A are required).
 ; CHECK-LABEL: _test_copy
 ; CHECK: mov es, a
 ; CHECK-NOT: mov es, a
@@ -43,7 +43,7 @@ define dso_local void @test_copy(i8 noundef %c) local_unnamed_addr {
   ret void
 }
 
-; Tests elimination of redundant MOV_es_A when preceded by an identical copy to R1.
+; Tests elimination of redundant MOV_ES_A when preceded by an identical copy to R1.
 ; CHECK-LABEL: _test_copy_2
 ; CHECK: mov es, a
 ; CHECK-NOT: mov es, a

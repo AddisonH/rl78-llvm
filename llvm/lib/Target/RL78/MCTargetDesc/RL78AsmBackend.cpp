@@ -231,7 +231,7 @@ namespace llvm {
                                          ArrayRef<MCOperand> Operands,
                                          const MCSubtargetInfo &STI) const {
     // BR_rel16_cg until code generation emits the hardware definitions.
-    return Opcode == RL78::BR_rel16 || Opcode == RL78::BR_rel16_cg;
+    return Opcode == RL78::BR_rel16 || Opcode == RL78::BR_rel16;
   }
 
   void RL78AsmBackend::relaxInstruction(MCInst &Inst,
@@ -241,9 +241,6 @@ namespace llvm {
     switch (Inst.getOpcode()) {
     case RL78::BR_rel16:
       Res.setOpcode(RL78::BR_rel8);
-      break;
-    case RL78::BR_rel16_cg:
-      Res.setOpcode(RL78::BR_rel8_cg);
       break;
     default:
       return;
