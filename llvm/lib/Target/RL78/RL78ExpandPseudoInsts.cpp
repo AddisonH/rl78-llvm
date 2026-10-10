@@ -237,7 +237,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16))
               .add(MI.getOperand(0));
         else
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_addr20))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_abs20))
               .add(MI.getOperand(0));
         break;
       }
@@ -251,7 +251,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_rel16))
               .add(MI.getOperand(0));
         else
-          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_addr20))
+          BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::BR_abs20))
               .add(MI.getOperand(0));
         break;
       }

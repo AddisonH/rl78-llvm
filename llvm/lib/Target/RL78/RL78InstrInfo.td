@@ -2220,12 +2220,6 @@ let Defs = [CCreg] in {
 
 //Instruction       Opcode
 //MOV1 CY, saddr.X      71 X4 saddr (X -> 0..7)
-let isCodeGenOnly = 1 in
-let mayLoad = 1, mayStore = 0 in
-def MOV1_cy_saddr : InstRL78_24bit<0x710400,
-        (outs), (ins ABS8:$addr, bitimm:$imm),
-        "mov1 cy, $addr$imm",
-        []>;
 
 let usesCustomInserter = 1 in {
 //Instruction           Opcode
@@ -2238,8 +2232,6 @@ let usesCustomInserter = 1 in {
 }
 }
 
-def : Pat<(mov1tocy (i8 (load SADDR:$addr)), (i8 imm:$imm)),
-          (MOV1_cy_saddr SADDR:$addr, imm:$imm)>;
 
 let Defs = [CCreg], Uses = [CCreg], hasSideEffects = 1 in {
 
@@ -3114,11 +3106,6 @@ let Predicates = [isNotS1Core] in {
 //SEL RB1           61 DF
 //SEL RB2           61 EF
 //SEL RB3           61 FF
-let isCodeGenOnly = 1 in
-def SEL : InstRL78_16bit<0x61CF,
-        (outs), (ins SELRBx:$rsrc),
-        "sel $rsrc",
-         [(sel_rb i8:$rsrc)]>;
 }
 
 //===----------------------------------------------------------------------===//

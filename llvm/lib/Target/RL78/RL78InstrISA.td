@@ -2372,3 +2372,6 @@ def : Pat<(set1 (i8 imm:$b), ESAbs16:$m), (SET1_eabs16_b ESAbs16:$m, imm:$b)>;
 def : Pat<(set1 (i8 imm:$b), ESHL:$m), (SET1_emHL_b ESHL:$m, imm:$b)>;
 def : Pat<(clr1 (i8 imm:$b), ESAbs16:$m), (CLR1_eabs16_b ESAbs16:$m, imm:$b)>;
 def : Pat<(clr1 (i8 imm:$b), ESHL:$m), (CLR1_emHL_b ESHL:$m, imm:$b)>;
+
+// SEL RBn.
+def : Pat<(sel_rb i8:$rb), (SEL_RBn i8:$rb)>, Requires<[isNotS1Core]>;

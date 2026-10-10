@@ -129,7 +129,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       // handler, the instruction for switching register banks is not output
       // even if register bank switching is specified
       if (mask || MFI.hasCalls())
-        BuildMI(MBB, MBBI, dl, TII.get(RL78::SEL))
+        BuildMI(MBB, MBBI, dl, TII.get(RL78::SEL_RBn))
             .addImm(Bank >> 1)
             .setMIFlags(MachineInstr::FrameSetup);
     } else {

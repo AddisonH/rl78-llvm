@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Code generation still emits the older instruction definitions (the NAME_cg,
-// LOAD*, STORE* ... of RL78InstrInfo.td), which stand for groups of hardware
-// forms. This turns each into the hardware form(s) of RL78InstrISA.td that
-// encode it, so that the MC layer only ever sees hardware instructions.
-// Transitional: it goes as code generation moves to the hardware definitions.
+// Code generation emits the hardware instructions of RL78InstrISA.td and a
+// few pseudos that stand for one or more of them (calls, tail calls, the
+// multiply and divide sequences, the low half of a 32-bit compare). This
+// expands those, so that the MC layer only ever sees hardware instructions,
+// and checks that every register is one the instruction encodes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,86 +25,15 @@
 
 using namespace llvm;
 
-namespace {
-enum CondSet : uint8_t { CondNone, CondCZ, CondH, CondTF, Condany };
-
-// One hardware form an older opcode may become. Operand I of the hardware
-// instruction is operand Src[I] of the older one; the older operands in Drop
-// are displacements that must be 0 (the short [HL] form of [HL+byte]).
-struct HardwareForm {
-  unsigned Old;
-  unsigned New;
-  uint8_t NumOps;
-  int8_t Src[8];
-  int8_t Drop[4];
-  CondSet Cond[8];
-};
-
-const HardwareForm Forms[] = {
-#include "RL78HardwareForms.inc"
-};
-} // namespace
-
-static bool condFits(CondSet C, int64_t CC) {
-  switch (C) {
-  case CondNone:
-  case Condany:
-    return true;
-  case CondCZ:
-    return CC <= RL78CC::RL78CC_NZ;
-  case CondH:
-    return CC == RL78CC::RL78CC_H || CC == RL78CC::RL78CC_NH;
-  case CondTF:
-    return CC == RL78CC::RL78CC_Z || CC == RL78CC::RL78CC_NZ;
-  }
-  return false;
-}
-
-static bool fits(const HardwareForm &F, const MCInst &In,
-                 const MCInstrInfo &MII, const MCRegisterInfo &MRI) {
-  for (int8_t D : F.Drop) {
-    if (D < 0)
-      break;
-    const MCOperand &Op = In.getOperand(D);
-    if (!Op.isImm() || Op.getImm() != 0)
-      return false;
-  }
-  const MCInstrDesc &Desc = MII.get(F.New);
-  for (unsigned I = 0; I < F.NumOps; ++I) {
-    const MCOperand &Op = In.getOperand(F.Src[I]);
-    int16_t RC = Desc.operands()[I].RegClass;
-    if (RC >= 0 && (!Op.isReg() || !MRI.getRegClass(RC).contains(Op.getReg())))
-      return false;
-    if (F.Cond[I] != CondNone && (!Op.isImm() || !condFits(F.Cond[I], Op.getImm())))
-      return false;
-  }
-  return true;
-}
-
-static int64_t sfrAddress(MCRegister Reg) {
-  switch (Reg) {
-  case RL78::SPL:
-    return 0xFFFF8;
-  case RL78::SPH:
-    return 0xFFFF9;
-  case RL78::PSW:
-    return 0xFFFFA;
-  case RL78::CS:
-    return 0xFFFFC;
-  case RL78::ES:
-    return 0xFFFFD;
-  case RL78::PMC:
-    return 0xFFFFE;
-  case RL78::MEM:
-    return 0xFFFFF;
-  }
-  llvm_unreachable("not a register that is an sfr");
-}
-
-// The older definitions that are more than one hardware instruction or whose
-// operands do not line up with a hardware form's.
+// The pseudos that are still instructions when they are printed: one or more
+// hardware instructions each.
 static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
   auto Reg = [&](unsigned I) { return In.getOperand(I).getReg(); };
+  // The hardware instruction with the pseudo's first operand.
+  auto As = [&](unsigned Opc) {
+    Out.push_back(MCInstBuilder(Opc).addOperand(In.getOperand(0)));
+    return true;
+  };
   MCInst XchAX = MCInstBuilder(RL78::XCH_A_X)
                      .addReg(RL78::R1)
                      .addReg(RL78::R0)
@@ -129,9 +58,23 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
                       .addReg(Reg(1)));
     Out.push_back(XchAX);
     return true;
+  // The calls and jumps of code generation say what a call clobbers and
+  // which jump is a tail call.
   case RL78::CALL_cs_rp:
-    Out.push_back(MCInstBuilder(RL78::CALL_rp).addReg(Reg(0)));
-    return true;
+  case RL78::CALL_rp_cg:
+    return As(RL78::CALL_rp);
+  case RL78::CALL_addr16:
+    return As(RL78::CALL_abs16);
+  case RL78::CALL_addr20:
+    return As(RL78::CALL_abs20);
+  case RL78::CALLT_addr5:
+    return As(RL78::CALLT);
+  case RL78::BR_AX_cg:
+    return As(RL78::BR_AX);
+  case RL78::BR_addr16:
+    return As(RL78::BR_abs16);
+  case RL78::BR_addr20:
+    return As(RL78::BR_abs20);
   case RL78::HI16_rp_addr:
     Out.push_back(MCInstBuilder(RL78::MOVW_rp_i16)
                       .addReg(Reg(0))
@@ -226,29 +169,6 @@ void llvm::lowerToHardware(const MCInst &In, SmallVectorImpl<MCInst> &Out,
   }
   if (lowerSpecial(In, Out))
     return;
-  static const auto Sorted = [] {
-    std::vector<const HardwareForm *> V;
-    for (const HardwareForm &F : Forms)
-      V.push_back(&F);
-    std::stable_sort(V.begin(), V.end(),
-                     [](auto *A, auto *B) { return A->Old < B->Old; });
-    return V;
-  }();
-  auto It = std::lower_bound(
-      Sorted.begin(), Sorted.end(), In.getOpcode(),
-      [](const HardwareForm *F, unsigned Opc) { return F->Old < Opc; });
-  for (; It != Sorted.end() && (*It)->Old == In.getOpcode(); ++It) {
-    const HardwareForm &F = **It;
-    if (!fits(F, In, MII, MRI))
-      continue;
-    MCInst I;
-    I.setOpcode(F.New);
-    I.setLoc(In.getLoc());
-    for (unsigned Op = 0; Op < F.NumOps; ++Op)
-      I.addOperand(In.getOperand(F.Src[Op]));
-    Out.push_back(I);
-    return;
-  }
   reportFatalInternalError(Twine("RL78: no hardware form for ") +
                            MII.getName(In.getOpcode()));
 }

@@ -1393,7 +1393,7 @@ public:
   void EmitInstruction(SUnit *SU) override {
     RegMask.reset();
     Issue = true;
-    SelI = SU->getInstr()->getOpcode() == RL78::SEL;
+    SelI = SU->getInstr()->getOpcode() == RL78::SEL_RBn;
     // SU->getInstr()->dump();
     for (unsigned i = 0; i < SU->getInstr()->getNumOperands(); ++i) {
       if (SU->getInstr()->getOperand(i).isReg() &&
