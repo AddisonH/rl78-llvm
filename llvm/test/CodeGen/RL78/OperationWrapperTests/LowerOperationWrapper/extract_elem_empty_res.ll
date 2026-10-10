@@ -23,8 +23,6 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw hl, #0
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw [de], ax

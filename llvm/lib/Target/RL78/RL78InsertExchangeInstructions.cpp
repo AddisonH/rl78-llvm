@@ -553,6 +553,80 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
   return ChangedAny;
 }
 
+// Whether Reg (or a part of it) is live after MI.
+static bool isLiveAfter(MachineBasicBlock &MBB, const MachineInstr &MI,
+                        Register Reg, const TargetRegisterInfo *TRI) {
+  LivePhysRegs LPR(*TRI);
+  LPR.addLiveOuts(MBB);
+  for (MachineInstr &I : llvm::reverse(MBB)) {
+    if (&I == &MI)
+      break;
+    LPR.stepBackward(I);
+  }
+  for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
+    if (LPR.contains(*AI))
+      return true;
+  return false;
+}
+
+// A value is reloaded into BC, DE or HL right after AX was set, so the load
+// would have to go around AX (xchw, movw ax, [sp+n], xchw). Two shapes where
+// loading into AX first is shorter:
+//
+//   movw ax, r1; rp = [sp+n]; addw ax, rp (rp dead)
+//     -> movw ax, [sp+n]; addw ax, r1
+//
+//   movw ax, rp; rp = [sp+n]
+//     -> movw ax, [sp+n]; xchw ax, rp
+static bool loadIntoAXFirst(MachineBasicBlock &MBB,
+                            const TargetRegisterInfo *TRI,
+                            const TargetInstrInfo *TII) {
+  bool Changed = false;
+  for (MachineBasicBlock::iterator It = MBB.begin(); It != MBB.end();) {
+    MachineInstr &Copy = *It++;
+    if (Copy.getOpcode() != RL78::MOVW_AX_rp)
+      continue;
+    Register Src = Copy.getOperand(1).getReg();
+    auto LoadIt = nextNonDebug(MBB, Copy.getIterator());
+    if (Src == RL78::RP0 || LoadIt == MBB.end() ||
+        LoadIt->getOpcode() != RL78::LOAD16_rp_stack_slot)
+      continue;
+    MachineInstr &Load = *LoadIt;
+    Register Dst = Load.getOperand(0).getReg();
+    if (Dst == RL78::RP0 || !RL78::RL78BCDEHLRegClass.contains(Dst))
+      continue;
+
+    auto UseIt = nextNonDebug(MBB, LoadIt);
+    if (UseIt != MBB.end() && UseIt->getOpcode() == RL78::ADDW_AX_rp &&
+        UseIt->getOperand(2).getReg() == Dst &&
+        !isLiveAfter(MBB, *UseIt, Dst, TRI)) {
+      Load.getOperand(0).setReg(RL78::RP0);
+      UseIt->getOperand(2).setReg(Src);
+      UseIt->getOperand(2).setIsKill(false);
+      // Src is now read after the instructions in between.
+      for (auto I = std::next(Copy.getIterator()); I != UseIt; ++I)
+        I->clearRegisterKills(Src, TRI);
+      It = std::next(LoadIt);
+      Copy.eraseFromParent();
+      Changed = true;
+      continue;
+    }
+
+    if (Dst != Src)
+      continue;
+    Load.getOperand(0).setReg(RL78::RP0);
+    BuildMI(MBB, std::next(LoadIt), Load.getDebugLoc(),
+            TII->get(RL78::XCHW_AX_rp), RL78::RP0)
+        .addReg(Dst, RegState::Define)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addReg(Dst, RegState::Kill);
+    It = std::next(LoadIt);
+    Copy.eraseFromParent();
+    Changed = true;
+  }
+  return Changed;
+}
+
 bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
     MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();
@@ -569,8 +643,10 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   // Before the liveness below: this changes which exchanges are needed.
   if (RL78AccumSched)
     for (MachineBasicBlock &MBB : MF)
-      if (!MBB.empty())
+      if (!MBB.empty()) {
         moveLoadToWhereAXIsDead(MBB, TRI);
+        loadIntoAXFirst(MBB, TRI, TII);
+      }
 
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.empty())

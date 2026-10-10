@@ -342,7 +342,6 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    movw [sp+6], ax
 ; SCHED-NEXT:    movw ax, hl
 ; SCHED-NEXT:    movw [sp+20], ax
-; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    movw ax, [sp+6]
 ; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xchw ax, de
@@ -381,8 +380,6 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, [sp+8]
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, de
-; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    movw ax, [sp+12]
 ; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
@@ -504,8 +501,6 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw de, ax
-; SCHED-NEXT:    movw ax, bc
-; SCHED-NEXT:    xchw ax, bc
 ; SCHED-NEXT:    movw ax, [sp+8]
 ; SCHED-NEXT:    xchw ax, bc
 ; SCHED-NEXT:    xor a, h
@@ -524,8 +519,6 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    addc a, b
 ; SCHED-NEXT:    movw bc, ax
 ; SCHED-NEXT:    movw [sp+6], ax
-; SCHED-NEXT:    movw ax, de
-; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    movw ax, [sp+20]
 ; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
