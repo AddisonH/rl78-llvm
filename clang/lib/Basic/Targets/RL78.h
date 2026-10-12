@@ -43,6 +43,10 @@ public:
     // Define RL78 specific macros.
     Builder.defineMacro("__RL78__");
 
+    // There is no _BitInt; like GCC, do not advertise a maximum width
+    // (libc++ keys its _BitInt overloads on this macro).
+    Builder.undefineMacro("__BITINT_MAXWIDTH__");
+
     if (Opts.CPlusPlus)
       Builder.defineMacro("_GNU_SOURCE");
 

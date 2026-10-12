@@ -403,8 +403,26 @@ const MCExpr *RL78AsmPrinter::lowerConstantGV(const GlobalValue *GV, int DstAS,
 const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV,
                                              const Constant *BaseCV,
                                              uint64_t Offset) {
-  if (useBaseLowerConstant)
+  if (useBaseLowerConstant) {
+    // Far data has a 16-bit index into a 32-bit pointer. An object does not
+    // cross a 64 KiB page, so an in-bounds offset is unsigned there; the
+    // generic code sign-extends it.
+    const auto *CE = dyn_cast<ConstantExpr>(CV);
+    const DataLayout &DL = getDataLayout();
+    if (CE && CE->getOpcode() == Instruction::GetElementPtr &&
+        DL.getIndexTypeSizeInBits(CE->getType()) <
+            DL.getPointerTypeSizeInBits(CE->getType())) {
+      APInt OffsetAI(DL.getIndexTypeSizeInBits(CE->getType()), 0);
+      cast<GEPOperator>(CE)->accumulateConstantOffset(DL, OffsetAI);
+      const MCExpr *Base = lowerConstant(CE->getOperand(0));
+      if (!OffsetAI)
+        return Base;
+      return MCBinaryExpr::createAdd(
+          Base, MCConstantExpr::create(OffsetAI.getZExtValue(), OutContext),
+          OutContext);
+    }
     return AsmPrinter::lowerConstant(CV, BaseCV, Offset);
+  }
 
   const Constant *Op = nullptr;
   unsigned DstAS = 0;

@@ -1306,8 +1306,7 @@ template <class ELFT> void ObjFile<ELFT>::postParse() {
     uint32_t secIdx = eSym.st_shndx;
     uint8_t binding = eSym.getBinding();
     if (LLVM_UNLIKELY(binding != STB_GLOBAL && binding != STB_WEAK &&
-                      binding != STB_GNU_UNIQUE) &&
-        ctx.arg.emachine != EM_RL78)
+                      binding != STB_GNU_UNIQUE))
       Err(ctx) << this << ": symbol (" << i
                << ") has invalid binding: " << (int)binding;
 

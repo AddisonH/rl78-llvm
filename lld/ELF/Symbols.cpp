@@ -113,10 +113,6 @@ static uint64_t getSymVA(Ctx &ctx, const Symbol &sym, int64_t addend) {
     if (d.isSection())
       va -= addend;
 
-    // RL78 secend symbol should point to the end of section address + 1
-    if (ctx.arg.emachine == EM_RL78 && sym.getName().starts_with("__stop_"))
-      va += 1;
-
     // MIPS relocatable files can mix regular and microMIPS code.
     // Linker needs to distinguish such code. To do so microMIPS
     // symbols has the `STO_MIPS_MICROMIPS` flag in the `st_other`

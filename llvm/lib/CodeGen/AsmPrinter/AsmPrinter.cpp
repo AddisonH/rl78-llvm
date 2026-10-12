@@ -1715,10 +1715,9 @@ void AsmPrinter::emitStackSizeSection(const MachineFunction &MF) {
   const MCSymbol *FunctionSymbol = getFunctionBegin();
   uint64_t StackSize =
       FrameInfo.getStackSize() + FrameInfo.getUnsafeStackSize();
-  // RL78 uses 32-bit addresses here even with near code.
-  OutStreamer->emitSymbolValue(FunctionSymbol, TM.getTargetTriple().isRL78()
-                                                   ? 4
-                                                   : TM.getProgramPointerSize());
+  // The address has the width of the object file's addresses, which a near
+  // code pointer need not have.
+  OutStreamer->emitSymbolValue(FunctionSymbol, MAI.getCodePointerSize());
   OutStreamer->emitULEB128IntValue(StackSize);
 
   OutStreamer->popSection();
@@ -2404,14 +2403,12 @@ void AsmPrinter::emitFunctionBody() {
   }
 
   EmittedInsts += NumInstsInFunction;
-  if (NumInstsInFunction) {
-    MachineOptimizationRemarkAnalysis R(DEBUG_TYPE, "InstructionCount",
-                                        MF->getFunction().getSubprogram(),
-                                        &MF->front());
-    R << ore::NV("NumInstructions", NumInstsInFunction)
-      << " instructions in function";
-    ORE->emit(R);
-  }
+  MachineOptimizationRemarkAnalysis R(DEBUG_TYPE, "InstructionCount",
+                                      MF->getFunction().getSubprogram(),
+                                      &MF->front());
+  R << ore::NV("NumInstructions", NumInstsInFunction)
+    << " instructions in function";
+  ORE->emit(R);
 
   // If the function is empty and the object file uses .subsections_via_symbols,
   // then we need to emit *something* to the function body to prevent the
@@ -3915,14 +3912,7 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV,
     if (!OffsetAI)
       return Base;
 
-    // RL78 far data has a 16-bit index into a 32-bit pointer: objects do not
-    // cross a 64 KiB page, so an in-bounds offset is unsigned.
-    int64_t Offset = TM.getTargetTriple().isRL78() &&
-                             OffsetAI.getBitWidth() <
-                                 getDataLayout().getPointerTypeSizeInBits(
-                                     CE->getType())
-                         ? OffsetAI.getZExtValue()
-                         : OffsetAI.getSExtValue();
+    int64_t Offset = OffsetAI.getSExtValue();
     return MCBinaryExpr::createAdd(Base, MCConstantExpr::create(Offset, Ctx),
                                    Ctx);
   }

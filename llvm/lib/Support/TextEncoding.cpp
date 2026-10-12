@@ -65,9 +65,8 @@ static std::optional<TextEncoding> getKnownEncoding(StringRef Name) {
   // No space left in output buffer. Double the size of the underlying
   // memory in the SmallVectorImpl, adjust pointer and length and continue
   // the conversion.
-  // Grow at least to 16 bytes: doubling an empty buffer would loop forever.
-  Capacity = (Capacity < Result.max_size() / 2) ? std::max<size_t>(2 * Capacity, 16)
-                                                : Result.max_size();
+  Capacity =
+      (Capacity < Result.max_size() / 2) ? 2 * Capacity : Result.max_size();
   Result.resize(0);
   Result.resize_for_overwrite(Capacity);
   Output = static_cast<char *>(Result.data());

@@ -47,11 +47,6 @@ if(${LLVM_NATIVE_ARCH} MATCHES "^(AArch64|Hexagon|Sparc|SystemZ)$")
   set(RUN_PYTHON_TESTS FALSE)
 endif()
 
-# Bypass python tests on RL78
-if("RL78" IN_LIST LLVM_TARGETS_TO_BUILD)
-  set(RUN_PYTHON_TESTS FALSE)
-endif()
-
 # Tests will fail if cross-compiling for a different target, as tests will try
 # to use the host Python3_EXECUTABLE and make FFI calls to functions in target
 # libraries.

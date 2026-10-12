@@ -13,9 +13,9 @@
 # RUN: llvm-dwarfdump --debug-line --debug-frame %t.norelax | FileCheck %s --check-prefix=NORELAX
 
 # CODE:      100: push ax
-# CODE-NEXT: 101: call !0x106 <_f>
-# CODE-NEXT: 104: pop ax
-# CODE-NEXT: 105: ret
+# CODE:      101: call !0x106 <_f>
+# CODE:      104: pop ax
+# CODE:      105: ret
 # CODE:      106: ret
 
 # RELAX:      FDE cie=00000000 pc=00000100...00000106

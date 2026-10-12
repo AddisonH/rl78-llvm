@@ -2010,12 +2010,7 @@ CharLiteralParser::CharLiteralParser(const char *begin, const char *end,
     IsMultiChar = false;
   }
 
-  // RL78 (16-bit int) evaluates multi-character constants in 32 bits, as
-  // CC-RL does.
-  const TargetInfo &TI = PP.getTargetInfo();
-  llvm::APInt LitVal(TI.getTriple().isRL78() ? TI.getChar32Width()
-                                             : TI.getIntWidth(),
-                     0);
+  llvm::APInt LitVal(PP.getTargetInfo().getIntWidth(), 0);
 
   // Narrow character literals act as though their value is concatenated
   // in this implementation, but warn on overflow.

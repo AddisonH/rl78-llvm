@@ -4544,10 +4544,7 @@ LexStart:
         }
       }
       return true;
-    } else if (LangOpts.RenesasRL78)
-      // RL78 (vendor): '@' is always lexed as a token.
-      Kind = tok::at;
-    else
+    } else
       Kind = tok::unknown;
     break;
 
