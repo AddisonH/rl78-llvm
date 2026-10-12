@@ -69,7 +69,8 @@ What is different from the Renesas 17.0.1 releases:
   | `#pragma interrupt f(vect=..)`, `#pragma interrupt_brk` | `__attribute__((interrupt(vect=..)))`, `__attribute__((brk_interrupt))` |
   | `#pragma saddr`, `__saddr` | `__attribute__((saddr))` |
   | `#pragma callt`, `__callt` | `__attribute__((callt))`; the linker also fills the table by itself (`--relax-callt`) |
-  | `#pragma near` / `far` | `__near` / `__far` |
+  | `#pragma near` / `far`, `__far` on a function | the code model (`-mfar-code`); see below |
+  | `-mfar-data`, `-mfar-rom` | `__far` on the pointers and objects that need it |
   | `#pragma inline` / `noinline` | `__attribute__((always_inline))` / `((noinline))` |
   | `#pragma section` | `#pragma clang section`, `__attribute__((section(..)))` |
   | `#pragma pack` / `unpack` | `__attribute__((packed))`, `#pragma pack(n)` |
@@ -110,8 +111,29 @@ build/bin/llvm-mc -triple=rl78 -show-encoding file.s
 build/bin/llvm-objdump -d file.o
 ```
 
-`-mcpu=s1`, `s2` or `s3` selects the core (default `s3`); `-mfar-code` and
-`-mfar-data` select the memory models.
+`-mcpu=s1`, `s2` or `s3` selects the core (default `s3`).
+
+### Memory model
+
+- **Data is near**: pointers are 16 bits and reach F0000H-FFFFFH, where
+  all RAM is, and constants through the mirror area.
+- **Far data is a type**: `__far` (a predefined macro for
+  `__attribute__((address_space(2)))`) on a pointer or an object gives a
+  32-bit pointer holding a 20-bit address, for tables in flash outside the
+  mirror. A near pointer converts to a far one implicitly; `__near` is
+  accepted and means nothing.
+
+  ```c
+  const unsigned char __far table[4096] = { /* ... */ };
+  unsigned char get(const unsigned char __far *p, unsigned i) { return p[i]; }
+  ```
+
+- **Code is near, or far with `-mfar-code`**, for the whole program:
+  functions and pointers to them are then 20-bit (32 bits wide). Interrupt
+  handlers and `callt` functions are placed in near code by their
+  attributes. In C++ with `-mfar-code`, vtable slots stay 16 bits; the
+  linker adds a trampoline in near code for a virtual function above
+  64 KiB.
 
 Linking a complete program also needs a C library and startup code built for
 RL78 (newlib and libgloss in the Renesas toolchain). This repository does not
