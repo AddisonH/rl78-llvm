@@ -4842,6 +4842,7 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     SDValue NullConstant = DAG.getConstant(0x00, dl, MVT::i16);
     SDValue LowValue, HighValue;
     bool IsSrcAddress = CastNode->getDestAddressSpace() == RL78AS::FarCode;
+    bool KnownNonNull = false;
     if (GlobalAddressSDNode *G =
             dyn_cast<GlobalAddressSDNode>(N->getOperand(0))) {
       const GlobalValue *GV = G->getGlobal();
@@ -4852,6 +4853,9 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
       LowValue =
           DAG.getNode(RL78ISD::LOW16, SDLoc(LowAddress), MVT::i16, LowAddress);
       IsSrcAddress |= GV->getValueType()->isFunctionTy();
+      // The address of an object is not null (unless it is a weak
+      // reference that may stay undefined).
+      KnownNonNull = !GV->hasExternalWeakLinkage();
     } else {
       LowValue = N->getOperand(0);
     }
@@ -4863,7 +4867,8 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
       // the null check for these makes a big difference.
       const auto LowOpcode = LowValue.getOpcode();
       HighValue =
-          (LowOpcode == ISD::FrameIndex || LowOpcode == ISD::TargetFrameIndex)
+          (KnownNonNull || LowOpcode == ISD::FrameIndex ||
+           LowOpcode == ISD::TargetFrameIndex)
                       ? NonNullPrefix
                       : DAG.getSelect(dl, MVT::i16,
                                       DAG.getSetCC(dl, MVT::i16, LowValue,
