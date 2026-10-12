@@ -10611,10 +10611,8 @@ def RL78SaddrDocs : Documentation {
   let Content = [{
 Clang supports the ``__attribute__((saddr))`` attribute on RL78 targets. This
 attribute may be attached to a global variable definition and instructs the 
-backend that this variable will be allocated to the saddr memory area.
-
-Note that ``__saddr`` keyword only has effect when -frenesas-extensions is 
-specified on the command line.
+backend that this variable will be allocated to the saddr memory area
+(0xFFE20-0xFFF1F), where instructions reach it with a one-byte address.
   }];
 }
 
@@ -10623,11 +10621,10 @@ def RL78CalltDocs : Documentation {
   let Heading = "callt";
   let Content = [{
 Clang supports the ``__attribute__((callt))`` attribute on RL78 targets. This
-attribute allows to specify the function should be called with the ``callt``
-instruction.
-
-Note that ``__callt`` keyword only has effect when -frenesas-extensions is 
-specified on the command line.
+attribute specifies that the function is called with the two-byte ``callt``
+instruction, through an entry in the call table (0x80-0xBF). With
+``--relax-callt`` the linker gives the entries left over to the most called
+functions by itself.
   }];
 }
 

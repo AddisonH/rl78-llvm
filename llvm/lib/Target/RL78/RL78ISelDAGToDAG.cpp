@@ -138,7 +138,7 @@ public:
   bool SelectESAbs16(SDValue Addr, SDValue &ES, SDValue &Abs);
 
   bool SelectADDRABS16(SDValue Addr, SDValue &Base);
-  bool SelectSaddr(SDValue Addr, SDValue &Base);
+  bool SelectSaddr(SDNode *Parent, SDValue Addr, SDValue &Base);
   bool SelectSFR(SDValue Addr, SDValue &Base);
 
   bool SelectESADDRr(SDValue Addr, SDValue &BaseHi, SDValue &BaseLow);
@@ -730,10 +730,27 @@ bool RL78DAGToDAGISel::SelectESADDRABS16(SDValue Addr, SDValue &BaseHi,
          selectADDRABS16(Addr.getOperand(1), BaseLow, CurDAG, false);
 }
 
-bool RL78DAGToDAGISel::SelectSaddr(SDValue Addr, SDValue &Base) {
-  if (Addr.getOpcode() != RL78ISD::LOW8)
+bool RL78DAGToDAGISel::SelectSaddr(SDNode *Parent, SDValue Addr,
+                                   SDValue &Base) {
+  // A variable in the short direct area.
+  if (Addr.getOpcode() == RL78ISD::LOW8) {
+    Base = Addr->getOperand(0);
+    return true;
+  }
+  // A constant address in the area, FFE20H to FFF1FH (a register written as
+  // an integer cast to a pointer). A word (saddrp) has to be at an even
+  // address.
+  auto *C = dyn_cast<ConstantSDNode>(Addr);
+  if (!C)
     return false;
-  Base = Addr->getOperand(0);
+  uint64_t Address = C->getZExtValue() & 0xFFFF;
+  if (Address < 0xFE20 || Address > 0xFF1F)
+    return false;
+  if (auto *Mem = dyn_cast_or_null<MemSDNode>(Parent))
+    if (Mem->getMemoryVT().getStoreSize() > 1 && (Address & 1))
+      return false;
+  // The operand is the full 20-bit address.
+  Base = CurDAG->getTargetConstant(0xF0000 | Address, SDLoc(Addr), MVT::i32);
   return true;
 }
 

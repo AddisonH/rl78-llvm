@@ -194,6 +194,7 @@ def ADDRSPi : ComplexPattern<i16, 2, "SelectADDRSPi", [frameindex], []>;
 // The slot of an argument passed on the stack (never written).
 def ADDRArgSP : ComplexPattern<i16, 2, "SelectADDRArgSP", [frameindex], []>;
 def ADDRABS16 : ComplexPattern<iPTR, 1, "SelectADDRABS16", [], []>;
+let WantsParent = true in
 def SADDR : ComplexPattern<iPTR, 1, "SelectSaddr", [], []>;
 def SFR : ComplexPattern<iPTR, 1, "SelectSFR", [], []>;
 def ESADDRr : ComplexPattern<iPTR, 2, "SelectESADDRr", []>;
