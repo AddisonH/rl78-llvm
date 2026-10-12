@@ -76,6 +76,7 @@ private:
   const TargetRegisterInfo *TRI = nullptr;
 
   bool trySink(MachineInstr &Use);
+  bool trySinkDef(MachineInstr &Use);
   bool physRegLiveAt(MachineBasicBlock::iterator I, MCRegister R) const;
 };
 } // end anonymous namespace
@@ -288,6 +289,138 @@ bool RL78SinkToAccumulator::trySink(MachineInstr &Use) {
   return true;
 }
 
+// The same for a value that is in the accumulator by its register class:
+//
+//   %v:rl78axrp = MOVW_AX_mRP %p    ; the operand MACH reads from AX
+//   %t:rl78axrp = MOVW_AX_mRPi %q, 2
+//   %b:rl78bcrp = COPY %t
+//   ... = MACH_CG ..., %v, %b
+//
+// %v and %t both want AX, and %v is the one that waits, in another register
+// or on the stack. Move the definition of %v down to its one use when it
+// crosses the definition of another accumulator value on the way.
+bool RL78SinkToAccumulator::trySinkDef(MachineInstr &Use) {
+  // A copy into a class with a choice of registers is as good a place to
+  // wait as any. And where the two operands can change places, the one
+  // computed last is the one that stays in the accumulator anyway (sinking
+  // into these cost Embench nettle-sha256 8%).
+  if (Use.isCopy() && (!Use.getOperand(0).getReg().isVirtual() ||
+                       MRI->getRegClass(Use.getOperand(0).getReg())
+                               ->getNumRegs() > 1))
+    return false;
+  switch (Use.getOpcode()) {
+  case RL78::ADDW_AX_rp:
+  case RL78::ADD_A_r:
+  case RL78::AND_A_r:
+  case RL78::OR_A_r:
+  case RL78::XOR_A_r:
+  case RL78::AND16_AX_rp:
+  case RL78::OR16_AX_rp:
+  case RL78::XOR16_AX_rp:
+    return false;
+  }
+  MachineBasicBlock &MBB = *Use.getParent();
+  auto IsAccClass = [&](Register R) {
+    if (!R.isVirtual())
+      return false;
+    const TargetRegisterClass *RC = MRI->getRegClass(R);
+    return RC == &RL78::RL78AXRPRegClass || RC == &RL78::RL78ARegRegClass;
+  };
+  for (const MachineOperand &UseMO : Use.uses()) {
+    if (!UseMO.isReg() || UseMO.getSubReg() || !IsAccClass(UseMO.getReg()))
+      continue;
+    Register V = UseMO.getReg();
+    if (!MRI->hasOneNonDBGUse(V))
+      continue;
+    MachineInstr *Def = MRI->getUniqueVRegDef(V);
+    if (!Def || Def->getParent() != &MBB || Def->isPHI() || Def->isCall() ||
+        Def->mayStore() || Def->hasUnmodeledSideEffects() ||
+        Def->hasOrderedMemoryRef() || Def->isInlineAsm() ||
+        Def->getNumExplicitDefs() != 1)
+      continue;
+    // The flags are the only physical register it may write, and nothing
+    // may be waiting for them where it lands; it reads none but SP.
+    bool Movable = true, WritesFlags = false;
+    for (const MachineOperand &MO : Def->operands()) {
+      if (!MO.isReg() || !MO.getReg().isPhysical())
+        continue;
+      if (MO.isDef() && MO.getReg() == RL78::CCreg && MO.isDead())
+        WritesFlags = true;
+      else if (MO.isDef() || !MRI->isReserved(MO.getReg()))
+        Movable = false;
+    }
+    if (!Movable || (WritesFlags && physRegLiveAt(Use.getIterator(), RL78::CCreg)))
+      continue;
+
+    bool CrossesAcc = false, Safe = true;
+    unsigned N = 0;
+    for (auto J = std::next(Def->getIterator()); J != Use.getIterator(); ++J) {
+      if (J->isDebugInstr())
+        continue;
+      if (++N > SinkWindow || J->isCall() || J->hasUnmodeledSideEffects() ||
+          J->isInlineAsm() || J->modifiesRegister(RL78::SPreg, TRI) ||
+          (Def->mayLoad() && (J->mayStore() || J->hasOrderedMemoryRef()))) {
+        Safe = false;
+        break;
+      }
+      for (const MachineOperand &MO : J->operands()) {
+        if (!MO.isReg() || !MO.isDef())
+          continue;
+        if (IsAccClass(MO.getReg()))
+          CrossesAcc = true;
+        // Not below an argument or return value set up in its register:
+        // that register may be the one V or an input of Def has to be in.
+        if (MO.getReg().isPhysical() && MO.getReg() != RL78::CCreg)
+          Safe = false;
+      }
+      if (!Safe)
+        break;
+    }
+    if (!Safe || !CrossesAcc)
+      continue;
+
+    // Its inputs must be used again at or after Use, or outside this block,
+    // so that their live ranges stay as they are. One may be lengthened
+    // if it can live outside the accumulator: it then waits where V would
+    // have waited.
+    unsigned Lengthened = 0;
+    for (const MachineOperand &MO : Def->uses()) {
+      if (!MO.isReg() || !MO.getReg().isVirtual())
+        continue;
+      bool LiveOn = false;
+      for (MachineInstr &UI : MRI->use_nodbg_instructions(MO.getReg())) {
+        if (&UI == Def)
+          continue;
+        if (UI.getParent() != &MBB || UI.isPHI()) {
+          LiveOn = true;
+          break;
+        }
+        for (auto K = Use.getIterator(); K != MBB.end() && !LiveOn; ++K)
+          LiveOn = &*K == &UI;
+        if (LiveOn)
+          break;
+      }
+      if (!LiveOn)
+        Lengthened += IsAccClass(MO.getReg()) || MO.getSubReg() ? 2 : 1;
+    }
+    if (Lengthened > 1)
+      continue;
+
+    LLVM_DEBUG(dbgs() << "Sinking " << *Def << "  to " << Use);
+    for (const MachineOperand &MO : Def->uses())
+      if (MO.isReg() && MO.getReg().isVirtual())
+        MRI->clearKillFlags(MO.getReg());
+    // Debug uses of V in between lose their value.
+    for (MachineOperand &MO : llvm::make_early_inc_range(MRI->use_operands(V)))
+      if (MO.getParent()->isDebugInstr())
+        MO.setReg(Register());
+    MBB.splice(Use.getIterator(), &MBB, Def->getIterator());
+    ++NumSunk;
+    return true;
+  }
+  return false;
+}
+
 bool RL78SinkToAccumulator::runOnMachineFunction(MachineFunction &MF) {
   if (!EnableSinkToAcc || skipFunction(MF.getFunction()))
     return false;
@@ -298,6 +431,6 @@ bool RL78SinkToAccumulator::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF)
     for (MachineInstr &MI : llvm::make_early_inc_range(MBB))
-      Changed |= trySink(MI);
+      Changed |= trySink(MI) || trySinkDef(MI);
   return Changed;
 }

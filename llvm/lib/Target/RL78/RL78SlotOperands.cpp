@@ -307,6 +307,13 @@ bool RL78SlotOperands::findSlotUses(MachineInstr &Load, bool HLIsSP,
              prevInstr(Uses[0].MI->getIterator()) == &Load)
       LoadCost = 0;
   }
+  // The same with the reload before the MOVW AX, rp.
+  if (Size == 2 && Uses.size() == 1 &&
+      Uses[0].MI->getOpcode() == RL78::ADDW_AX_rp)
+    if (MachineInstr *Copy = prevInstr(Uses[0].MI->getIterator());
+        Copy && Copy->getOpcode() == RL78::MOVW_AX_rp &&
+        prevInstr(Copy->getIterator()) == &Load)
+      LoadCost = 0;
   unsigned SetHL = NumHLUses && !Shared ? 1 : 0;
   if (!OptSize)
     return SetHL + (Hazard ? 1 : 0) < LoadCost;

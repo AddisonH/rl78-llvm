@@ -574,6 +574,7 @@ static bool isLiveAfter(MachineBasicBlock &MBB, const MachineInstr &MI,
 // loading into AX first is shorter:
 //
 //   movw ax, r1; rp = [sp+n]; addw ax, rp (rp dead)
+//   rp = [sp+n]; movw ax, r1; addw ax, rp (rp dead)
 //     -> movw ax, [sp+n]; addw ax, r1
 //
 //   movw ax, rp; rp = [sp+n]
@@ -587,6 +588,25 @@ static bool loadIntoAXFirst(MachineBasicBlock &MBB,
     if (Copy.getOpcode() != RL78::MOVW_AX_rp)
       continue;
     Register Src = Copy.getOperand(1).getReg();
+    // The load before the copy: AX is free there, the copy writes it.
+    auto PrevIt = prevNonDebug(MBB, Copy.getIterator());
+    auto AddIt = nextNonDebug(MBB, Copy.getIterator());
+    if (Src != RL78::RP0 && PrevIt != MBB.end() && AddIt != MBB.end() &&
+        PrevIt->getOpcode() == RL78::LOAD16_rp_stack_slot &&
+        AddIt->getOpcode() == RL78::ADDW_AX_rp) {
+      Register Dst = PrevIt->getOperand(0).getReg();
+      if (Dst != RL78::RP0 && Dst != Src &&
+          RL78::RL78BCDEHLRegClass.contains(Dst) &&
+          AddIt->getOperand(2).getReg() == Dst &&
+          !isLiveAfter(MBB, *AddIt, Dst, TRI)) {
+        PrevIt->getOperand(0).setReg(RL78::RP0);
+        AddIt->getOperand(2).setReg(Src);
+        AddIt->getOperand(2).setIsKill(false);
+        Copy.eraseFromParent();
+        Changed = true;
+        continue;
+      }
+    }
     auto LoadIt = nextNonDebug(MBB, Copy.getIterator());
     if (Src == RL78::RP0 || LoadIt == MBB.end() ||
         LoadIt->getOpcode() != RL78::LOAD16_rp_stack_slot)

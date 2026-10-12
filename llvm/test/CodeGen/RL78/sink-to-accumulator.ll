@@ -14,12 +14,12 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-LABEL: dot4:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push bc
-; CHECK-NEXT:    subw sp, #8
+; CHECK-NEXT:    subw sp, #6
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+8]
+; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [hl]
@@ -31,9 +31,6 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw [sp+8], ax
-; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    movw [sp+6], ax
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw de, ax
@@ -45,37 +42,36 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw !0xffff2, ax
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw ax, [de]
 ; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, de
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [de]
-; CHECK-NEXT:    movw [sp+4], ax
 ; CHECK-NEXT:    movw ax, [hl+4]
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    mach
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [de]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [hl+6]
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw hl, sp
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+2]
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    addw ax, [hl+0]
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw ax, [de+6]
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, !0xffff0
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, !0xffff2
 ; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw sp, #10
+; CHECK-NEXT:    addw sp, #8
 ; CHECK-NEXT:    ret
 ;
 ; NOSINK-LABEL: dot4:
@@ -128,9 +124,7 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; NOSINK-NEXT:    movw ax, [sp+4]
 ; NOSINK-NEXT:    mach
 ; NOSINK-NEXT:    movw ax, [sp+0]
-; NOSINK-NEXT:    movw bc, ax
-; NOSINK-NEXT:    movw ax, de
-; NOSINK-NEXT:    addw ax, bc
+; NOSINK-NEXT:    addw ax, de
 ; NOSINK-NEXT:    movw de, ax
 ; NOSINK-NEXT:    movw ax, [de]
 ; NOSINK-NEXT:    movw de, ax

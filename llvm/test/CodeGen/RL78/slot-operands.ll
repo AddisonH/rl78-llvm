@@ -130,3 +130,21 @@ define i16 @once(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) optsize {
   %s = sub i16 %a, %e
   ret i16 %s
 }
+
+; A single ADDW takes its operands either way round: the slot goes straight
+; into AX and HL is not needed.
+define i16 @sum(i16 %a, i16 %b, i16 %c, i16 %d, i16 %s) {
+; CHECK-LABEL: sum:
+; CHECK:       ; %bb.0:
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    ret
+;
+; RELOAD-LABEL: sum:
+; RELOAD:       ; %bb.0:
+; RELOAD-NEXT:    movw ax, [sp+6]
+; RELOAD-NEXT:    addw ax, bc
+; RELOAD-NEXT:    ret
+  %r = add i16 %b, %s
+  ret i16 %r
+}
