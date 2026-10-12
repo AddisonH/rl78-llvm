@@ -1029,6 +1029,21 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
           .addReg(SrcReg, RegState::Kill);
     }
   } 
+  else if ((SrcReg == RL78::MACRH || SrcReg == RL78::MACRL) &&
+           (DestReg == RL78::MACRH || DestReg == RL78::MACRL)) {
+    // One half of MACR to the other (a MACH result that is the next MACH's
+    // addend): both are memory, so the value goes through AX, which is saved
+    // around it.
+    BuildMI(MBB, I, DL, get(RL78::PUSH_rp)).addReg(RL78::RP0, RegState::Kill);
+    BuildMI(MBB, I, DL, get(RL78::MOVW_rp_abs16), RL78::RP0)
+        .addImm(SrcReg == RL78::MACRH ? MACRHigh : MACRLow)
+        .addReg(SrcReg, RegState::Implicit | getKillRegState(KillSrc));
+    BuildMI(MBB, I, DL, get(RL78::MOVW_abs16_AX))
+        .addImm(DestReg == RL78::MACRH ? MACRHigh : MACRLow)
+        .addReg(RL78::RP0, RegState::Kill)
+        .addReg(DestReg, RegState::ImplicitDefine);
+    BuildMI(MBB, I, DL, get(RL78::POP_rp), RL78::RP0);
+  }
   else if (SrcReg == RL78::MACRH || SrcReg == RL78::MACRL) {
     unsigned SrcAddr = SrcReg == RL78::MACRH ? MACRHigh : MACRLow;
     // MACR is memory mapped: the copy is a load from its address. The
