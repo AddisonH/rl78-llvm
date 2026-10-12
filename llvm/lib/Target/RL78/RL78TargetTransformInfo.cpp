@@ -74,4 +74,24 @@ void RL78TTIImpl::getUnrollingPreferences(
   if (ST->isRL78S3CoreType() && L->getSubLoops().size() == 1 &&
       hasMACReduction(L->getSubLoops()[0]))
     UP.UnrollAndJam = false;
+
+  // A small innermost loop spends a good part of its time on the counter and
+  // the branch. At -O3 the driver has those with a count known only at run
+  // time unrolled (-unroll-runtime); do the same for a constant count too
+  // large to unroll completely, and for a count with a known bound.
+  if (!L->isInnermost() || L->getHeader()->getParent()->hasOptSize())
+    return;
+  unsigned Size = 0;
+  for (const BasicBlock *BB : L->blocks())
+    for (const Instruction &I : *BB) {
+      if (isa<CallBase>(I) && !isa<IntrinsicInst>(I))
+        return;
+      ++Size;
+    }
+  if (Size > 30)
+    return;
+  UP.Partial = UP.UpperBound = true;
+  UP.PartialThreshold = 150;
+  // As many copies as -unroll-runtime makes; more save little more.
+  UP.MaxCount = 8;
 }
