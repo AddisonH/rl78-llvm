@@ -300,6 +300,8 @@ bool RL78SinkToAccumulator::trySink(MachineInstr &Use) {
 // or on the stack. Move the definition of %v down to its one use when it
 // crosses the definition of another accumulator value on the way.
 bool RL78SinkToAccumulator::trySinkDef(MachineInstr &Use) {
+  if (Use.isPHI() || Use.isDebugInstr())
+    return false;
   // A copy into a class with a choice of registers is as good a place to
   // wait as any. And where the two operands can change places, the one
   // computed last is the one that stays in the accumulator anyway (sinking
