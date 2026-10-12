@@ -1297,82 +1297,6 @@ template <class ELFT> void Writer<ELFT>::sortSections() {
   ctx.script->adjustSectionsAfterSorting();
 }
 
-// Determines the relative order of the RL78 absolute-address (_AT) sections.
-// Near ones are grouped by name prefix, sorted by address and placed before the
-// regular section of the same name (.rodata_AT03000 before .rodata) while
-// keeping their addresses increasing; far ones (above 64 KiB) go last.
-static void sortRL78ATSections(Ctx &ctx) {
-  SmallVector<SectionCommand *, 0> &cmds = ctx.script->sectionCommands;
-  SmallDenseMap<StringRef, std::pair<SmallVector<SectionCommand *, 4>, size_t>,
-                4>
-      atSecs;
-  SmallVector<SectionCommand *, 4> farATSecs;
-  auto addrOf = [](const SectionCommand *cmd) {
-    return cast<OutputDesc>(cmd)->osec.addrExpr().getValue();
-  };
-
-  // Extract the absolute sections from cmds into atSecs/farATSecs.
-  auto i = cmds.begin();
-  auto j = i;
-  for (const auto e = cmds.end(); i != e; ++i) {
-    auto *osd = dyn_cast<OutputDesc>(*i);
-    if (osd && (osd->osec.flags & SHF_RENESAS_ABS) && osd->osec.addrExpr &&
-        osd->osec.name.contains("_AT")) {
-      if (addrOf(*i) > 0xFFFF) {
-        farATSecs.push_back(*i);
-        continue;
-      }
-      StringRef pref = osd->osec.name.substr(0, osd->osec.name.find("_AT"));
-      auto &[secs, idx] = atSecs[pref];
-      if (secs.empty())
-        idx = i - cmds.begin();
-      secs.push_back(*i);
-    } else {
-      *j++ = *i;
-    }
-  }
-  cmds.resize(j - cmds.begin());
-
-  // Addresses and indices in cmds of the near AT sections inserted so far.
-  SmallVector<std::pair<uint64_t, size_t>, 4> addrIdxs;
-  for (auto &[pref, entry] : atSecs) {
-    auto &[secs, idx] = entry;
-    llvm::sort(secs, [&](auto *a, auto *b) { return addrOf(a) < addrOf(b); });
-
-    // Tentatively insert just before the regular section with the same name;
-    // if there is none, use the original (rank-based) index.
-    size_t pos = std::find_if(cmds.begin(), cmds.end(),
-                              [pref = pref](const SectionCommand *cmd) {
-                                auto *osd = dyn_cast<OutputDesc>(cmd);
-                                return osd && osd->osec.name == pref;
-                              }) -
-                 cmds.begin();
-    if (pos == cmds.size())
-      pos = idx;
-
-    // Keep the AT sections in address order: if the tentative position
-    // disagrees with the address order, move next to the neighbouring AT
-    // section.
-    uint64_t addr = addrOf(secs.front());
-    auto itByAddr = llvm::lower_bound(
-        addrIdxs, addr, [](auto &a, uint64_t b) { return a.first < b; });
-    auto itByPos = llvm::lower_bound(
-        addrIdxs, pos, [](auto &a, size_t b) { return a.second < b; });
-    if (itByAddr != itByPos)
-      pos = itByAddr < itByPos ? itByAddr->second : (itByAddr - 1)->second + 1;
-
-    for (size_t k = 0; k != secs.size(); ++k)
-      itByAddr = std::next(addrIdxs.insert(itByAddr, {addrOf(secs[k]), pos + k}));
-    for (; itByAddr != addrIdxs.end(); ++itByAddr)
-      itByAddr->second += secs.size();
-
-    cmds.insert(cmds.begin() + pos, secs.begin(), secs.end());
-  }
-
-  llvm::sort(farATSecs, [&](auto *a, auto *b) { return addrOf(a) < addrOf(b); });
-  cmds.append(farATSecs.begin(), farATSecs.end());
-}
-
 template <class ELFT> void Writer<ELFT>::sortOrphanSections() {
   // Orphan sections are sections present in the input files which are
   // not explicitly placed into the output file by the linker script.
@@ -1450,9 +1374,6 @@ template <class ELFT> void Writer<ELFT>::sortOrphanSections() {
     std::rotate(pos, nonScriptI, end);
     nonScriptI = end;
   }
-
-  if (ctx.arg.emachine == EM_RL78)
-    sortRL78ATSections(ctx);
 }
 
 static bool compareByFilePosition(InputSection *a, InputSection *b) {
@@ -2296,12 +2217,11 @@ template <class ELFT> void Writer<ELFT>::addStartEndSymbols() {
 // the leading '.'), linkers are expected to define __start_<secname> and
 // __stop_<secname> symbols. They are at beginning and end of the section,
 // respectively. This is not requested by the ELF standard, but GNU ld and
-// gold provide the feature, and used by many programs. RL78 defines them for
-// every output section.
+// gold provide the feature, and used by many programs.
 template <class ELFT>
 void Writer<ELFT>::addStartStopSymbols(OutputSection &osec) {
   StringRef s = osec.name;
-  if (!isValidCIdentifier(s) && ctx.arg.emachine != EM_RL78)
+  if (!isValidCIdentifier(s))
     return;
   StringSaver &ss = ctx.saver;
   Defined *startSym = addOptionalRegular(ctx, ss.save("__start_" + s), &osec, 0,

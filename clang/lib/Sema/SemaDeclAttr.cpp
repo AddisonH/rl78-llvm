@@ -3633,17 +3633,6 @@ CodeSegAttr *Sema::mergeCodeSegAttr(Decl *D, const AttributeCommonInfo &CI,
   return ::new (Context) CodeSegAttr(Context, CI, Name);
 }
 
-RL78AddressAttr *Sema::mergeRL78AddressAttr(Decl *D,
-                                            const AttributeCommonInfo &CI,
-                                            unsigned Address) {
-  if (const auto *ExistingAttr = D->getAttr<RL78AddressAttr>()) {
-    if (ExistingAttr->getAddress() != Address) {
-      Diag(ExistingAttr->getLocation(), diag::err_duplicate_address_attribute);
-      return nullptr;
-    }
-  }
-  return ::new (Context) RL78AddressAttr(Context, CI, Address);
-}
 
 static void handleCodeSegAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   StringRef Str;
@@ -7859,13 +7848,6 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
       // For -mfar-data, set the near AS internally; otherwise saddr var ptrs will be far.
       if (S.getLangOpts().RenesasRL78DataModel)
         cast<VarDecl>(D)->setType(S.Context.getAddrSpaceQualType(cast<VarDecl>(D)->getType(), LangAS::__near));
-      // Saddr address space is [0xFFE20, 0xFFF20)
-      if(const auto *A = D->getAttr<RL78AddressAttr>()) {
-        if((A->getAddress() < 0xFFE20) || (A->getAddress() >= 0xFFF20)) {
-		  S.Diag(AL.getLoc(), diag::err_expected) << "an address between 0xFFE20 and 0xFFF20";
-          break;
-        }
-      }
       D->addAttr(::new (S.Context) RL78SaddrAttr(S.Context, AL));
       break;
   case ParsedAttr::AT_RL78Far:
@@ -7888,91 +7870,6 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
     break;
   case ParsedAttr::AT_BRKInterrupt:
     handleRL78InterruptAttr(S, D, AL, true);
-    break;
-  case ParsedAttr::AT_Address: {
-    // Check the attribute argument.
-    if (AL.getNumArgs() != 1) {
-      S.Diag(AL.getLoc(), diag::err_attribute_wrong_number_arguments)
-          << AL << 1;
-      AL.setInvalid();
-      break;
-    }
-    if (D->getAttr<RL78AddressAttr>()) {
-      S.Diag(AL.getLoc(), diag::err_duplicate_address_attribute);
-      AL.setInvalid();
-      break;
-    }
-    // The address must by an 32 bit unsigned integer.
-    Expr *addressExpr = static_cast<Expr *>(AL.getArgAsExpr(0));
-    std::optional<llvm::APSInt> addressInt = addressExpr->getIntegerConstantExpr(S.Context);
-    if (!addressInt.has_value()) {
-      S.Diag(AL.getLoc(), diag::err_attribute_argument_type)
-          << AL << AANT_ArgumentIntegerConstant
-          << addressExpr->getSourceRange();
-      AL.setInvalid();
-      break;
-    }
-    unsigned address = static_cast<unsigned>(addressInt.value().getZExtValue());
-
-    // CCRL specification:
-    // - When #pragma address is declared for a variable that is not a
-    //   const-qualified variable and is explicitly or implicitly specified as
-    //   near and if the specified absolute address is not in the range from
-    //   0x0F0000 to 0x0FFFFF, a compilation error will occur.
-    // - When the address specified for a const variable that is explicitly or
-    //   implicitly specified as near is not in the mirror source area,
-    //   a linkage error will occur. [V1.05 or later].
-    // NOTE: const-qualified variable can be allocated in the mirror area.
-    //       The compiler cannot check the actual address.
-    if ((!cast<VarDecl>(D)->getType().isConstQualified()) &&
-        (cast<VarDecl>(D)->getType().getAddressSpace() != LangAS::__far_data) &&
-        ((address < 0x0F0000) || (address > 0x0FFFFF))) {
-      // Near pointer must be in the range [0x0F0000, 0x0FFFFF].
-      S.Diag(AL.getLoc(), diag::err_attribute_address_space_out_of_range)
-          << "near" << "0x0F0000" << "0x0FFFFF"
-          << addressExpr->getSourceRange();
-      AL.setInvalid();
-      break;
-    }
-    uint64_t DeclTypeSize = D->getASTContext().getTypeSize(cast<VarDecl>(D)->getType()) / 8;
-    // An object cannot cross the boundary of 64KB.
-    if ((!cast<VarDecl>(D)->getType().isConstQualified()) &&
-        (address & 0xFFFF) + DeclTypeSize > 0x010000) {
-      S.Diag(AL.getLoc(), diag::err_attribute_address_across_boundary)
-          << DeclTypeSize << addressExpr->getSourceRange();
-      AL.setInvalid();
-      break;
-    }
-    // Saddr address space is [0xFFE20, 0xFFF20). The address must be even.
-    if(const auto *A = D->getAttr<RL78SaddrAttr>()) {
-      if((address < 0xFFE20) || (address >= 0xFFF20)) {
-        S.Diag(AL.getLoc(), diag::err_expected) << "an address between 0xFFE20 and 0xFFF20";
-        break;
-      }
-      if ((address % 2 != 0)) {
-        S.Diag(AL.getLoc(), diag::err_expected) << "an even address";
-        break;
-      }
-    }
-    D->addAttr(::new (S.Context) RL78AddressAttr(S.Context, AL, address));
-    // Just add a "dummy" section attribute to:
-    // -avoid implicit section attributes being set.
-    // -avoid CommonLinkage.
-    // -generate warnings when unsed togheter with section attribute.
-    // Another solution will be to check for !hasAttr<RL78AddressAttr>()
-    // in various locations.
-    //TODO: this dosn't solve the section attribute problem if that one is specfied first
-    std::string buf;
-    llvm::raw_string_ostream stream(buf);
-    stream << (llvm::format_hex_no_prefix(address, 5, true));
-    std::string section = "_AT" + stream.str();
-    D->addAttr(::new (S.Context) SectionAttr(S.Context, AL, section));
-    break;
-  }
-  case ParsedAttr::AT_InlineASM:
-    D->addAttr(::new (S.Context) RL78InlineASMAttr(S.Context, AL));
-    // Mark as naked, so we don't generate code that adjusts the stack, saves parameters, etc.
-    D->addAttr(::new (S.Context) NakedAttr(S.Context, AL));
     break;
   case ParsedAttr::AT_Interrupt:
     handleInterruptAttr(S, D, AL);

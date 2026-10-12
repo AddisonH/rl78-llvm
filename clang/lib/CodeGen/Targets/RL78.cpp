@@ -131,20 +131,6 @@ class RL78TargetCodeGenInfo : public TargetCodeGenInfo {
   return true;
 }
 
-// the section name placeholder is optional and consists of two characters,
-// the first being an '|'; it will be replaced with the section prefix
-// (default section name based on its type) only if not already prefixed
-// by a custom section name; otherwise, it is simply removed
-std::string replaceSectionNamePlaceholder(std::string sectionName,
-                                          std::string sectionPrefix) const {
-  if (auto pos = sectionName.find('|'); pos != std::string::npos) {
-    sectionName.erase(pos, 2);
-    if (!pos)
-      sectionName.insert(0, sectionPrefix);
-  }
-  return sectionName;
-}
-
   bool isBss(const VarDecl *VD, const llvm::GlobalVariable *GV) const {
     return !VD->hasInit() && !GV->isConstant();
   }
@@ -186,19 +172,6 @@ public:
         Fn->addFnAttr("callt");
       }
 
-      if (const auto *Attr = FD->getAttr<RL78InlineASMAttr>()) {
-        Fn->addFnAttr("inline_asm");
-      }
-      // CC-RL #pragma section: resolve the placeholder and add the near/far
-      // suffix. (Clang 23 sets the pragma section directly on the function;
-      // 17 used the "implicit-section-name" attribute.)
-      if (CGM.getLangOpts().RenesasExt && Fn->hasSection() &&
-          FD->hasAttr<PragmaClangTextSectionAttr>() &&
-          !FD->hasAttr<SectionAttr>()) {
-        std::string section = replaceSectionNamePlaceholder(
-            Fn->getSection().str(), isFar ? ".textf" : ".text");
-        Fn->setSection(section + (isFar ? "_f" : "_n"));
-      }
     }
 
     if (const auto *VD = dyn_cast_or_null<VarDecl>(D)) {
@@ -209,78 +182,6 @@ public:
           GV->getAddressSpace() == CGM.getContext().getTargetAddressSpace(LangAS::Default))
           isFar = true; 
       
-      // Generate section name/prefix based on kind and attributes
-      std::string prefix;
-      if (isData(VD, Var))
-        prefix = VD->hasAttr<RL78SaddrAttr>() ? ".sdata"
-                                              : isFar ? ".dataf" : ".data";
-      else if (isBss(VD, Var))
-        prefix =
-            VD->hasAttr<RL78SaddrAttr>() ? ".sbss" : isFar ? ".bssf" : ".bss";
-      else {
-        if (CGM.getLangOpts().RenesasExt)
-          prefix = isFar ? ".constf" : ".const";
-        else
-          prefix = isFar ? ".frodata" : ".rodata";
-      }
-
-      // Add the _n, _f suffix to sections in case of custom section names or
-      // allocate the variable to the correct section based on the far
-      // attribute.
-      std::string suffix;
-      if (VD->hasAttr<RL78SaddrAttr>()) {
-        suffix = "_s";
-      } else {
-        suffix = isFar ? "_f" : "_n";
-      }
-
-      if (VD->hasAttr<RL78AddressAttr>()) {
-        SectionAttr *attr = VD->getAttr<SectionAttr>();
-        std::string section = attr->getName().str();
-        attr->setName(CGM.getContext(), prefix + section);
-		Var->addAttribute("abs_addr");
-        Var->setSection(attr->getName());
-        return;
-      }
-
-      if (Var->isConstant() && CGM.getLangOpts().RenesasExt) {
-        // signal that we need to emit const/constf prefix instead of
-        // rodata/frodata
-        Var->addAttribute("use-renesas-naming");
-      }
-
-      llvm::AttributeSet AS = Var->getAttributes();
-      if (CGM.getLangOpts().RenesasExt && AS.hasAttribute("bss-section") &&
-          VD->hasAttr<PragmaClangBSSSectionAttr>()) {
-        std::string section = AS.getAttribute("bss-section").getValueAsString().str();
-        section = replaceSectionNamePlaceholder(section, prefix);
-        AS = AS.removeAttribute(CGM.getLLVMContext(), "bss-section");
-        AS = AS.addAttribute(CGM.getLLVMContext(), "bss-section",
-                             section + suffix);
-      }
-
-      if (CGM.getLangOpts().RenesasExt && AS.hasAttribute("data-section") &&
-          VD->hasAttr<PragmaClangDataSectionAttr>()) {
-        std::string section =
-            AS.getAttribute("data-section").getValueAsString().str();
-        section = replaceSectionNamePlaceholder(section, prefix);
-        AS = AS.removeAttribute(CGM.getLLVMContext(), "data-section");
-        AS = AS.addAttribute(CGM.getLLVMContext(), "data-section",
-                             section + suffix);
-      }
-
-      if (CGM.getLangOpts().RenesasExt && AS.hasAttribute("rodata-section") &&
-          VD->hasAttr<PragmaClangRodataSectionAttr>()) {
-        std::string section =
-            AS.getAttribute("rodata-section").getValueAsString().str();
-        section = replaceSectionNamePlaceholder(section, prefix);
-        AS = AS.removeAttribute(CGM.getLLVMContext(), "rodata-section");
-        AS = AS.addAttribute(CGM.getLLVMContext(), "rodata-section",
-                             section + suffix);
-      }
-
-      Var->setAttributes(AS);
-
       if (VD->hasAttr<RL78SaddrAttr>()) {
         if(GV->getLinkage() == llvm::GlobalVariable::CommonLinkage)
           GV->setLinkage(llvm::GlobalVariable::ExternalLinkage);

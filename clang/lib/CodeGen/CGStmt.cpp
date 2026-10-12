@@ -2812,9 +2812,6 @@ void AsmConstraintsInfo::EmitAsmStmt() {
           : llvm::InlineAsm::AD_Intel;
   llvm::InlineAsm::AsmDialect AsmDialect =
       isa<MSAsmStmt>(&S) ? llvm::InlineAsm::AD_Intel : GnuAsmDialect;
-  // RL78 uses AD_ATT for both GCC and MS (#pragma inline_asm) statements.
-  if (CGF.getContext().getTargetInfo().getTriple().isRL78())
-    AsmDialect = llvm::InlineAsm::AD_ATT;
 
   llvm::InlineAsm *IA = llvm::InlineAsm::get(
       FTy, AsmString, Constraints, HasSideEffect,

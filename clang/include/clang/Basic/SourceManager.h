@@ -59,10 +59,6 @@
 #include <utility>
 #include <vector>
 
-namespace llvm {
-class TextEncodingConverter;
-} // namespace llvm
-
 namespace clang {
 
 class ASTReader;
@@ -223,8 +219,7 @@ public:
   ///   will be emitted at.
   std::optional<llvm::MemoryBufferRef>
   getBufferOrNone(DiagnosticsEngine &Diag, FileManager &FM,
-                  SourceLocation Loc = SourceLocation(),
-                  llvm::TextEncodingConverter *Converter = nullptr) const;
+                  SourceLocation Loc = SourceLocation()) const;
 
   /// Returns the size of the content encapsulated by this
   /// ContentCache.
@@ -1063,11 +1058,10 @@ public:
   /// If there is an error opening this buffer the first time, return
   /// std::nullopt.
   std::optional<llvm::MemoryBufferRef>
-  getBufferOrNone(FileID FID, SourceLocation Loc = SourceLocation(),
-                  llvm::TextEncodingConverter *Converter = nullptr) const {
+  getBufferOrNone(FileID FID, SourceLocation Loc = SourceLocation()) const {
     if (auto *Entry = getSLocEntryForFile(FID))
       return Entry->getFile().getContentCache().getBufferOrNone(
-          Diag, getFileManager(), Loc, Converter);
+          Diag, getFileManager(), Loc);
     return std::nullopt;
   }
 

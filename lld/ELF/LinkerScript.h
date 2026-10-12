@@ -368,7 +368,6 @@ public:
   ExprValue getSymbolValue(StringRef name, const Twine &loc);
 
   void addOrphanSections();
-  void placeRL78ATSection(OutputSection &osec, StringRef name, uint64_t addr);
   void diagnoseOrphanHandling() const;
   void diagnoseMissingSGSectionAddress() const;
   void adjustOutputSections();

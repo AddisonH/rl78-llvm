@@ -7150,20 +7150,6 @@ private:
   std::unique_ptr<PragmaHandler> MaxTokensTotalPragmaHandler;
   std::unique_ptr<PragmaHandler> ExportHandler;
   std::unique_ptr<PragmaHandler> RISCVPragmaHandler;
-  // RL78 / CC-RL pragmas.
-  std::unique_ptr<PragmaHandler> InterruptHandler;
-  std::unique_ptr<PragmaHandler> BrkInterruptHandler;
-  std::unique_ptr<PragmaHandler> SectionHandler;
-  std::unique_ptr<PragmaHandler> InlineHandler;
-  std::unique_ptr<PragmaHandler> NoInlineHandler;
-  std::unique_ptr<PragmaHandler> InlineASMHandler;
-  std::unique_ptr<PragmaHandler> AddressHandler;
-  std::unique_ptr<PragmaHandler> SaddrHandler;
-  std::unique_ptr<PragmaHandler> CalltHandler;
-  std::unique_ptr<PragmaHandler> NearHandler;
-  std::unique_ptr<PragmaHandler> FarHandler;
-  std::unique_ptr<PragmaHandler> CCRLPackHandler;
-  std::unique_ptr<PragmaHandler> CCRLUnpackHandler;
 
   /// Initialize all pragma handlers.
   void initializePragmaHandlers();
@@ -7745,8 +7731,6 @@ public:
   StmtResult ParseSEHLeaveStatement();
 
   Decl *ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope);
-  /// RL78 #pragma inline_asm function body.
-  Decl *ParseInlineASMFunctionStatementBody(Decl *Decl, ParseScope &BodyScope);
 
   /// ParseFunctionTryBlock - Parse a C++ function-try-block.
   ///

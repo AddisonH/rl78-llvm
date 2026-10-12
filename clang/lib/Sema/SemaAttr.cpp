@@ -432,8 +432,7 @@ void Sema::ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,
 void Sema::ActOnPragmaClangSection(SourceLocation PragmaLoc,
                                    PragmaClangSectionAction Action,
                                    PragmaClangSectionKind SecKind,
-                                   StringRef SecName,
-                                   std::string *OutSecName) {
+                                   StringRef SecName) {
   PragmaClangSection *CSec;
   int SectionFlags = ASTContext::PSF_Read;
   switch (SecKind) {
@@ -461,14 +460,6 @@ void Sema::ActOnPragmaClangSection(SourceLocation PragmaLoc,
 
   if (Action == PragmaClangSectionAction::Clear) {
     CSec->Valid = false;
-    return;
-  }
-
-  if (Action == PragmaClangSectionAction::GetName) {
-    if (!CSec->Valid && !CSec->SectionName.empty())
-      CSec->SectionName.clear(); // make sure the section name is empty if not valid
-    if (OutSecName)
-      *OutSecName = CSec->SectionName;
     return;
   }
 

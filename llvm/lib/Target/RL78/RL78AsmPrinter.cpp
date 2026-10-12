@@ -61,7 +61,6 @@ public:
 
   void emitStartOfAsmFile(Module &) override;
   void emitFunctionBodyStart() override;
-  void emitFunctionBodyEnd() override;
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
   void emitInstruction(const MachineInstr *MI) override;
   void emitHardware(const MachineInstr *MI);
@@ -271,15 +270,6 @@ void RL78AsmPrinter::emitFunctionBodyStart() {
     // Apply vector start offset.
     emitInterruptVectorSymbol(Specs);
     LastVect = CurrentVect;
-  }
-}
-
-void RL78AsmPrinter::emitFunctionBodyEnd() {
-  if (MF->getFunction().hasFnAttribute("inline_asm")) {
-    // Since we marked with naked the inline_asm function, we need to add a
-    // return to it's end.
-    getTargetStreamer().getStreamer().emitInstruction(MCInstBuilder(RL78::RET),
-                                                      getSubtargetInfo());
   }
 }
 

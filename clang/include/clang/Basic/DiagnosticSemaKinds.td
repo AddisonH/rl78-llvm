@@ -448,18 +448,11 @@ def error_rl78_storage_attribute : Error<
    "variable/function was already qualified with %0">;
 def error_rl78_callt_change : Error<
    "incompatible declaration: function was previously declared %select{with | without}0 callt">;
-def err_rl78_pragma_address_conflict : Error<
-   "conflicting addresses specified with #pragma address">;
-def err_rl78_pragma_address_boundary : Error<
-   "variable allocated on 64k boundary">;
 def err_rl78_saddr_not_applicable: Error<"saddr attribute only applies to non-constant, static storage duration variables">;
-def err_rl78_address_not_applicable: Error<"address attribute only applies to non-constant, static storage duration variables">;
 def err_rl78_vla_unsupported : Error<
    "variable length arrays are not supported for the current target">;
 def err_rl78_dynamic_alloca_unsupported : Error<
    "dynamic stack allocation is not supported for the current target">;
-def err_ccrl_pragma_incompatibility: Error<"incompatible pragma mixing">;
-def err_renesas_missing_paren : Error<"expected a left parenthesis">;
 def warn_unused_parameter : Warning<"unused parameter %0">,
   InGroup<UnusedParameter>, DefaultIgnore;
 def warn_unused_but_set_parameter : Warning<"parameter %0 set but not used">,
@@ -3655,10 +3648,6 @@ def err_function_decl_cmse_ns_call : Error<
   "functions may not be declared with 'cmse_nonsecure_call' attribute">;
 def err_attribute_address_function_type : Error<
   "function type may not be qualified with an address space">;
-def err_attribute_address_space_out_of_range : Error<
-  "address is out of range for the '%0' address space where [%1, %2] is valid">;
-def err_attribute_address_across_boundary : Error<
-  "object allocated to the address with size %0 bytes violates 64KB boundary of the address space">;
 def err_as_qualified_auto_decl : Error<
   "automatic variable qualified with an%select{| invalid}0 address space">;
 def warn_ignored_as_qualifier : Warning<
@@ -3799,7 +3788,6 @@ def err_conflicting_codeseg_attribute : Error<
   "conflicting code segment specifiers">;
 def warn_duplicate_codeseg_attribute : Warning<
   "duplicate code segment specifiers">, InGroup<Section>;
-def err_duplicate_address_attribute : Error<"duplicate attribute address specifiers">;
 
 def err_expansion_stmt_invalid_init : Error<
   "cannot expand expression of type %0">;

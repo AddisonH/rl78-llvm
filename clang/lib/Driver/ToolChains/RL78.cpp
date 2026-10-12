@@ -390,15 +390,13 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Adding default linker script if -T option not specified
   if (!Args.hasArg(options::OPT_T)) {
-    // Handling -frenesas-extensions, -fsim and -mfar-data options for
+    // Handling -fsim and -mfar-data options for
     // default linker script usage.
     const auto Mdata = Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
     const auto FarData = Mdata && Mdata->getOption().getID() == options::OPT_mfar_data;
 
     std::string linkerscript = FarData ? "rl78-far-data.ld" : "rl78.ld";
-    if (const Arg *Msim = Args.getLastArg(options::OPT_frenesas_extensions))
-      linkerscript = "rl78-frenesas-extensions.ld"; // NOTE: no far-data version for this yet
-    else if (const Arg *Msim = Args.getLastArg(options::OPT_fsim))
+    if (const Arg *Msim = Args.getLastArg(options::OPT_fsim))
       linkerscript = FarData ? "rl78-sim-far-data.ld" : "rl78-sim.ld";
     CmdArgs.push_back(
         Args.MakeArgString("-T" + GetStartObjectPath(TC, linkerscript)));
@@ -431,10 +429,6 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-lsim");
     } else {
       CmdArgs.push_back("-lnosys");
-    }
-    if (const Arg *ReneExt =
-            Args.getLastArg(options::OPT_frenesas_extensions)) {
-      CmdArgs.push_back("-lrenesas");
     }
 
 	if (const Arg *Mnano = Args.getLastArg(options::OPT_fnewlib_nano)) {

@@ -782,14 +782,8 @@ void ObjFile<ELFT>::initializeSections(bool ignoreComdats,
 
     // SHF_EXCLUDE'ed sections are discarded by the linker. However,
     // if -r is given, we'll let the final link discard such sections.
-    // This is compatible with GNU. On RL78 the same bit is SHF_RENESAS_ABS,
-    // which marks the absolute-address (#pragma address) "_AT" sections.
-    bool rl78ATSection = false;
-    if (ctx.arg.emachine == EM_RL78 && (sec.sh_flags & SHF_RENESAS_ABS))
-      rl78ATSection =
-          check(obj.getSectionName(sec, shstrtab)).contains("_AT");
-    if ((sec.sh_flags & SHF_EXCLUDE) && !ctx.arg.relocatable &&
-        !rl78ATSection) {
+    // This is compatible with GNU.
+    if ((sec.sh_flags & SHF_EXCLUDE) && !ctx.arg.relocatable) {
       if (type == SHT_LLVM_CALL_GRAPH_PROFILE)
         cgProfileSectionIndex = i;
       if (type == SHT_LLVM_ADDRSIG) {

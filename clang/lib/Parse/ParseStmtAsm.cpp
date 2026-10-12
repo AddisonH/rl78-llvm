@@ -360,7 +360,6 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
   SourceManager &SrcMgr = PP.getSourceManager();
   SourceLocation EndLoc = AsmLoc;
   SmallVector<Token, 4> AsmToks;
-  const llvm::Triple &TheTriple = Actions.Context.getTargetInfo().getTriple();
 
   bool SingleLineMode = true;
   unsigned BraceNesting = 0;
@@ -457,10 +456,6 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
         Tok.clearFlag(Token::LeadingSpace);
         AsmToks.push_back(Tok);
       }
-      if (TheTriple.isRL78()) {
-        BraceNesting--;
-        break;
-      }
       EndLoc = ConsumeBrace();
       BraceNesting--;
       // Finish if all of the opened braces in the inline asm section were
@@ -513,8 +508,9 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
   SmallVector<StringRef, 4> ClobberRefs;
 
   // We need an actual supported target.
+  const llvm::Triple &TheTriple = Actions.Context.getTargetInfo().getTriple();
   const llvm::Target *TheTarget = nullptr;
-  if (!TheTriple.isX86() && !TheTriple.isRL78()) {
+  if (!TheTriple.isX86()) {
     Diag(AsmLoc, diag::err_msasm_unsupported_arch) << TheTriple.getArchName();
   } else {
     std::string Error;

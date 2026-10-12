@@ -1092,45 +1092,6 @@ ExprResult Sema::DefaultVariadicArgumentPromotion(Expr *E, VariadicCallType CT,
 
   E = ExprRes.get();
 
-  QualType ExprType = E->getType();
-  if (getLangOpts().RenesasExt && ExprType->isPointerType()) {
-    QualType ExprSubType =
-        cast<PointerType>(ExprType->getCanonicalTypeInternal())
-            ->getPointeeType();
-    if (!ExprSubType->isFunctionType() &&
-      getAddressSpace(ExprSubType, Context) != LangAS::__far_data) {
-      QualType ExprTypeWithDestAS = Context.getAddrSpaceQualType(
-          Context.removeAddrSpaceQualType(ExprSubType), LangAS::__far_data);
-      ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
-      E = ImpCastExprToType(E, ExprTypeWithDestAS, CK_AddressSpaceConversion,
-                          E->getValueKind()).get();
-    } else if (ExprSubType->isFunctionType() &&
-        getAddressSpace(ExprSubType, Context) != LangAS::__far_code) {
-        if (const FunctionNoProtoType* FPT =
-            dyn_cast<FunctionNoProtoType>(ExprSubType)) {
-              FunctionType::ExtInfo EPI = FPT->getExtInfo();
-              EPI = EPI.withFar(true);
-              QualType ExprTypeWithDestAS =
-                  Context.getFunctionNoProtoType(FPT->getReturnType(), EPI);
-              ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
-              E = ImpCastExprToType(E, ExprTypeWithDestAS,
-                                  CK_AddressSpaceConversion, E->getValueKind())
-                    .get();
-      } else if (const FunctionProtoType *FPT =
-                       dyn_cast<FunctionProtoType>(ExprSubType)) {
-                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-                EPI.ExtInfo = EPI.ExtInfo.withFar(true);
-                QualType ExprTypeWithDestAS = Context.getFunctionType(FPT->getReturnType(),
-                                                 FPT->getParamTypes(), EPI);
-                ExprTypeWithDestAS = Context.getPointerType(ExprTypeWithDestAS);
-                E = ImpCastExprToType(E, ExprTypeWithDestAS,
-                                      CK_AddressSpaceConversion,
-                                      E->getValueKind())
-                        .get();
-        }
-    }
-  }
-
   // Diagnostics regarding non-POD argument types are
   // emitted along with format string checking in Sema::CheckFunctionCall().
   if (isValidVarArgType(E->getType()) == VarArgKind::Undefined) {
@@ -4924,41 +4885,6 @@ Sema::CreateUnaryExprOrTypeTraitExpr(Expr *E, SourceLocation OpLoc,
     PE = TransformToPotentiallyEvaluated(E);
     if (PE.isInvalid()) return ExprError();
     E = PE.get();
-  }
-
-  if ((ExprKind == UETT_SecTop) || (ExprKind == UETT_SecEnd)) {
-    SmallString<120> Buffer;
-    auto *PE = dyn_cast<ParenExpr>(E);
-    if (!PE) {
-      Diag(E->getBeginLoc(), diag::err_renesas_missing_paren);
-      return ExprError();
-    }
-    auto *SL = dyn_cast<StringLiteral>(PE->getSubExpr());
-    if (!SL) {
-      Diag(PE->getSubExpr()->getBeginLoc(), diag::err_expr_not_string_literal);
-      return ExprError();
-    }
-    std::string prefix = ((ExprKind == UETT_SecTop) ? "_start_" : "_stop_"); 
-    auto &Ident = Context.Idents.getOwn(prefix + SL->getString().str());
-
-    // If Default address space is __near address space 
-    // we need to make the pointer __far.
-    QualType type = Context.getAddrSpaceQualType(Context.VoidPtrTy, LangAS::__far_code);
-
-    auto *VD = VarDecl::Create(
-        Context, getCurLexicalContext(), SourceLocation(),
-        SourceLocation(), &Ident, type,
-        Context.CreateTypeSourceInfo(type), SC_Extern);
-    // Add weak attribute in order to dissuade clang from making any assumptions
-    // regarding the exact value.
-    VD->addAttr(WeakAttr::CreateImplicit(Context, SourceLocation()));
-    Expr *RefE = DeclRefExpr::Create(
-        Context, NestedNameSpecifierLoc(), SourceLocation(), VD, false,
-        SourceLocation(), type, VK_LValue);
-
-    return UnaryOperator::Create(Context,
-        RefE, UO_AddrOf, Context.getPointerType(type), VK_PRValue,
-        OK_Ordinary, SourceLocation(), false, CurFPFeatureOverrides());
   }
 
   // C99 6.5.3.4p4: the type (an unsigned integer type) is size_t.

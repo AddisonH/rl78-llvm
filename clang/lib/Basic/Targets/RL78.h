@@ -80,29 +80,6 @@ public:
     else 
       Builder.defineMacro("__RL78_SMALL__");
 
-    // CCRL specific macros enabled only when using -frenesas-extensions.
-    if(Opts.RenesasExt) {
-      // Pretend we are CCRL.
-      Builder.defineMacro("__CCRL__");
-      Builder.defineMacro("__CCRL");
-      // TODO: define when newlib/compiler-rt multilib expects near to far
-      // pointer promotion in va_arg Builder.defineMacro("__RENESAS__"); 
-      
-      if (has64BitDoubles)
-        Builder.defineMacro("__DBL8");
-      else
-        Builder.defineMacro("__DBL4");
-      
-      if (Opts.CharIsSigned)
-        Builder.defineMacro("__SCHAR");
-      else 
-         Builder.defineMacro("__UCHAR");
-
-      if (Opts.UnsignedBitfields)
-        Builder.defineMacro("__UBIT");
-      else
-        Builder.defineMacro("__SBIT");
-    }
 
   }
 

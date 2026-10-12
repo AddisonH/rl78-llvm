@@ -2953,8 +2953,6 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
     NewAttr = S.mergeSectionAttr(D, *SA, SA->getName());
   else if (const auto *CSA = dyn_cast<CodeSegAttr>(Attr))
     NewAttr = S.mergeCodeSegAttr(D, *CSA, CSA->getName());
-  else if (const auto *RAA = dyn_cast<RL78AddressAttr>(Attr))
-    NewAttr = S.mergeRL78AddressAttr(D, *RAA, RAA->getAddress());
   else if (const auto *IA = dyn_cast<MSInheritanceAttr>(Attr))
     NewAttr = S.mergeMSInheritanceAttr(D, *IA, IA->getBestCase(),
                                        IA->getInheritanceModel());
@@ -6971,25 +6969,6 @@ Sema::ActOnTypedefDeclarator(Scope* S, Declarator& D, DeclContext* DC,
     return nullptr;
   }
 
-   if (getLangOpts().RenesasExt) {
-
-    for (const auto &entry : RenesasCCRLPragmaEntries)
-      if (entry.Identifier.compare(D.getName().Identifier->getName()) == 0) {
-        switch (entry.PragmaType) {
-        case Sema::RenesasCCRLPragmaType::CCRLSaddr: {
-          Diag(D.getName().StartLocation, diag::err_rl78_saddr_not_applicable);
-          break;
-        }
-        case Sema::RenesasCCRLPragmaType::CCRLAddress: {
-          Diag(D.getName().StartLocation, diag::err_rl78_address_not_applicable);
-          break;
-        }
-        default:
-          break;
-        };
-      }
-  }
-
   TypedefDecl *NewTD = ParseTypedefDecl(S, D, TInfo->getType(), TInfo);
   if (!NewTD) return nullptr;
 
@@ -7254,10 +7233,6 @@ void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
             if (getLangOpts().RenesasRL78RomModelFar)
               NewVarType =
                   Context.getAddrSpaceQualType(NewVarType, LangAS::__far_data);
-            else if (getLangOpts().RenesasExt && !getLangOpts()
-                         .RenesasRL78DataModel)
-              NewVarType =
-                  Context.getAddrSpaceQualType(NewVarType, LangAS::__near);
           }
         }
       }
@@ -8645,116 +8620,6 @@ NamedDecl *Sema::ActOnVariableDeclarator(
 
   if (IsMemberSpecialization && !NewVD->isInvalidDecl())
     CompleteMemberSpecialization(NewVD, Previous);
-
-  if (Context.getTargetInfo().getTriple().isRL78()) {
-    if (getLangOpts().RenesasExt)
-      for (const auto &entry : RenesasCCRLPragmaEntries)
-        if (entry.Identifier.compare(NewVD->getNameAsString()) == 0) {
-          switch (entry.PragmaType) {
-          case Sema::RenesasCCRLPragmaType::CCRLAddress: {
-            // CCRL specification:
-            // When #pragma address is declared for a variable that is not a
-            // const-qualified variable and is explicitly or implicitly
-            // specified as near and if the specified absolute address is not in
-            // the range from 0x0F0000 to 0x0FFFFF, a compilation error will
-            // occur.
-            if ((!cast<VarDecl>(NewVD)->getType().isConstQualified()) &&
-                (cast<VarDecl>(NewVD)->getType().getAddressSpace() !=
-                 LangAS::__far_data) &&
-                ((entry.ExtraData < 0x0F0000) ||
-                 (entry.ExtraData > 0x0FFFFF))) {
-
-              Diag(NewVD->getLocation(), diag::err_expected)
-                  << "a non  const-qualified variable with address between "
-                     "0x0F0000 and 0x0FFFFF";
-              break;
-            }
-
-            const TypeInfo EntryInfo =
-                NewVD->getASTContext().getTypeInfo(NewVD->getType());
-            //  Do not allocate a variable over a 64-Kbyte boundary
-            if (((entry.ExtraData + EntryInfo.Width / 8 - 1) & 0x0F0000) !=
-                (entry.ExtraData & 0x0F0000)) {
-              Diag(NewVD->getLocation(),
-                   diag::err_rl78_pragma_address_boundary);
-            }
-
-            // If a single address is specified for separate variables or the
-            // addresses allocated to separate variables overlap, an error will
-            // occur.
-            for (const auto &otherEntry : RenesasCCRLPragmaEntries)
-              if (entry.Identifier != otherEntry.Identifier &&
-                  otherEntry.PragmaType == entry.PragmaType &&
-                  otherEntry.PragmaType == RenesasCCRLPragmaType::CCRLAddress) {
-                if (entry.ExtraData == otherEntry.ExtraData ||
-                    (entry.ExtraData < otherEntry.ExtraData &&
-                     (entry.ExtraData + EntryInfo.Width / 8 - 1) >=
-                         otherEntry.ExtraData)) {
-                  Diag(entry.Loc, diag::err_rl78_pragma_address_conflict);
-                  Diag(otherEntry.Loc, diag::note_previous_declaration);
-                }
-                break;
-              }
-
-            unsigned alignment =
-                Context
-                    .getTypeInfoDataSizeInChars(cast<VarDecl>(NewVD)->getType()).Align.getQuantity();
-            if ((!cast<VarDecl>(NewVD)->getType().isConstQualified()) &&
-                (cast<VarDecl>(NewVD)->getType().getAddressSpace() !=
-                 LangAS::__far_data) &&
-                ((entry.ExtraData % alignment != 0))) {
-              Diag(NewVD->getLocation(), diag::err_expected)
-                  << "a non  const-qualified variable with an even address";
-              break;
-            }
-            NewVD->addAttr(
-                RL78AddressAttr::CreateImplicit(Context, entry.ExtraData));
-            // Just add a dummy section attribute to:
-            // -avoid implicit section attributes being set.
-            // -avoid CommonLinkage.
-            // -generate warnings when unsed togheter with section attribute.
-            // Another solution will be to check for !hasAttr<RL78AddressAttr>()
-            // in various locations.
-            std::string buf;
-            llvm::raw_string_ostream stream(buf);
-            stream << (llvm::format_hex_no_prefix(entry.ExtraData, 5, true));
-            std::string section = "_AT" + stream.str();
-            NewVD->addAttr(SectionAttr::CreateImplicit(Context, section));
-            break;
-          }
-          case Sema::RenesasCCRLPragmaType::CCRLSaddr: {
-            // OR: if(NewVD->getType().getQualifiers().getAddressSpace() ==
-            // LangAS::__far) NewVD->dump(); pragma saddr overrides __near/__far
-            // (see CCRL specification).
-            if (NewVD->getType().hasAddressSpace()) {
-              NewVD->setType(Context.removeAddrSpaceQualType(NewVD->getType()));
-            }
-            // If __saddr is specified for a const type variable, a compilation
-            // error will occur.
-            // If __saddr is specified for a variable which does not have static
-            // storage duration, a compilation error will occur.
-            if (NewVD->getType().isConstQualified() ||
-                (NewVD->isLocalVarDeclOrParm() && !NewVD->isStaticLocal() &&
-                 !NewVD->isExternC())) {
-              Diag(D.getName().StartLocation,
-                   diag::err_rl78_saddr_not_applicable);
-              break;
-            }
-            // For -mfar-data, set the near AS internally; otherwise saddr var
-            // ptrs will be far.
-            if (getLangOpts().RenesasRL78DataModel)
-              NewVD->setType(Context.getAddrSpaceQualType(NewVD->getType(),
-                             LangAS::__near));
-            // NewVD->dump();
-            NewVD->addAttr(RL78SaddrAttr::CreateImplicit(Context));
-            break;
-          }
-          default:
-            break;
-          }
-          break;
-        }
-  }
 
   emitReadOnlyPlacementAttrWarning(*this, NewVD);
 
@@ -10366,28 +10231,6 @@ static bool isStdBuiltin(ASTContext &Ctx, FunctionDecl *FD,
   }
 }
 
-static void dropFarFromFunctionDecl(ASTContext &Context, FunctionDecl *NewFD) {
-  if (getAddressSpace(NewFD->getType(), Context) == LangAS::__far_code) {
-    if (const FunctionNoProtoType *FPT =
-            dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
-      if (FPT->getFar()) {
-        FunctionType::ExtInfo EPI = FPT->getExtInfo();
-        EPI = EPI.withFar(false);
-        NewFD->setType(
-            Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
-      }
-    } else if (const FunctionProtoType *FPT =
-                   dyn_cast<FunctionProtoType>(NewFD->getType())) {
-      if (FPT->getFar()) {
-        FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-        EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-        NewFD->setType(Context.getFunctionType(FPT->getReturnType(),
-                                               FPT->getParamTypes(), EPI));
-      }
-    }
-  }
-}
-
 NamedDecl*
 Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                               TypeSourceInfo *TInfo, LookupResult &Previous,
@@ -11626,138 +11469,14 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       break;
     }
 
-if (Context.getTargetInfo().getTriple().isRL78()) {
-    if (getLangOpts().RenesasExt) {
-      for (const auto &entry : RenesasCCRLPragmaEntries)
-        if (entry.Identifier.compare(NewFD->getNameAsString()) == 0) {
-          switch (entry.PragmaType) {
-          case Sema::RenesasCCRLPragmaType::CCRLInterrupt:
-            if (!NewFD->getDeclaredReturnType().getTypePtr()->isVoidType())
-              Diag(NewFD->getLocation(), diag::warn_rl78_interrupt_attribute_return_type);
-            if ( !NewFD->param_empty())
-              Diag(NewFD->getLocation(), diag::warn_rl78_interrupt_attribute_parameters);
-            // Silently drop __far or #pragma __far if vect was specified
-            if(!entry.ExtraDataVects.empty())
-                dropFarFromFunctionDecl(Context, NewFD);
-            NewFD->addAttr(
-               RL78InterruptAttr::CreateImplicit(Context, entry.ExtraData,
-  const_cast<unsigned *>(entry.ExtraDataVects.begin()),
-  entry.ExtraDataVects.size())); 
-            // Retain interrupt function declared with "static".
-            if (NewFD->getStorageClass() == SC_Static)
-              NewFD->addAttr(UsedAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLBrkInterrupt:
-            if (!NewFD->getDeclaredReturnType().getTypePtr()->isVoidType())
-              Diag(NewFD->getLocation(),
-                   diag::warn_rl78_interrupt_attribute_return_type);
-            if (!NewFD->param_empty())
-              Diag(NewFD->getLocation(),
-                   diag::warn_rl78_interrupt_attribute_parameters);
-            // Silently drop __far or #pragma __far
-            dropFarFromFunctionDecl(Context, NewFD);
-            NewFD->addAttr(
-                RL78BRKInterruptAttr::CreateImplicit(Context, entry.ExtraData));
-            // Retain interrupt function declared with "static".
-            if (NewFD->getStorageClass() == SC_Static)
-              NewFD->addAttr(UsedAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLInline:
-            NewFD->addAttr(AlwaysInlineAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLNoInline:
-            NewFD->addAttr(NoInlineAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLInlineASM:
-            NewFD->addAttr(RL78InlineASMAttr::CreateImplicit(Context));
-            // Mark as naked, so we don't generate code that adjusts the stack, saves parameters, etc.
-            NewFD->addAttr(NakedAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLCallt:
-            // Silently drop __far or #pragma __far
-            dropFarFromFunctionDecl(Context, NewFD);
-            if (NewFD->isInlineSpecified())
-              Diag(NewFD->getLocation(),
-                   diag::err_attributes_are_not_compatible)
-                  << "callt"
-                  << "inline"
-                  << true;
-            else
-              NewFD->addAttr(RL78CalltAttr::CreateImplicit(Context));
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLNear: {
-            //If #pragma near is specified, __callt/__far function keywords are ignored
-            if (const FunctionNoProtoType * FPT = dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
-              if (FPT->getFar()) {
-                FunctionType::ExtInfo EPI = FPT->getExtInfo();
-                EPI = EPI.withFar(false);
-                NewFD->setType(Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
-              }
-            }
-            else if (const FunctionProtoType * FPT = dyn_cast<FunctionProtoType>(NewFD->getType())) {
-              if (FPT->getFar()) {
-                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-                EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-                NewFD->setType(Context.getFunctionType(FPT->getReturnType(), FPT->getParamTypes(), EPI));
-              }
-            }
-            if (NewFD->hasAttr<RL78CalltAttr>()) {
-              NewFD->dropAttr<RL78CalltAttr>();
-            }
-            if (NewFD->isInlineSpecified())
-              Diag(NewFD->getLocation(),
-                   diag::err_attributes_are_not_compatible)
-                  << "near"
-                  << "inline"
-                  << true;
-            NewFD->addAttr(RL78NearAttr::CreateImplicit(Context));
-            break;
-          }
-          case Sema::RenesasCCRLPragmaType::CCRLFar:
-            // Only add far if no __callt/brk_interrupt/interrupt was used so
-            // far
-            if (!NewFD->hasAttr<RL78CalltAttr>() &&
-                !NewFD->hasAttr<RL78InterruptAttr>() &&
-                !NewFD->hasAttr<RL78BRKInterruptAttr>()) {
-              if (const FunctionProtoType * FPT = dyn_cast<FunctionProtoType>(NewFD->getType())) {
-                FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-                EPI.ExtInfo = EPI.ExtInfo.withFar(true);
-                NewFD->setType(Context.getFunctionType(
-                  FPT->getReturnType(), FPT->getParamTypes(), EPI));
-              } else if (const FunctionNoProtoType * FPT = dyn_cast<FunctionNoProtoType>(NewFD->getType())) {
-                  FunctionType::ExtInfo EPI = FPT->getExtInfo();
-                  EPI = EPI.withFar(true);
-                  NewFD->setType(
-                    Context.getFunctionNoProtoType(FPT->getReturnType(), EPI));
-              }
-            }
-            if (NewFD->isInlineSpecified())
-              Diag(NewFD->getLocation(),
-                   diag::err_attributes_are_not_compatible)
-                  << "far"
-                  << "inline" << true;
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLAddress:
-                 Diag(NewFD->getLocation(), diag::err_rl78_address_not_applicable);
-            break;
-          case Sema::RenesasCCRLPragmaType::CCRLSaddr:
-            // If __saddr is specified for a function, a compilation error will
-            // occur.
-            Diag(NewFD->getLocation(), diag::err_rl78_saddr_not_applicable);
-            break;
-          }
-          break;
-        }
-    }
-	
-	//Restriction: This If __inline, __callt or another #pragma is specified, a compilation error will occur.
-	if ((NewFD->hasAttr<RL78InterruptAttr>() ||	NewFD->hasAttr<RL78BRKInterruptAttr>()) && 
-		(NewFD->hasAttr<RL78InlineASMAttr>() || NewFD->hasAttr<RL78CalltAttr>() ||
-			NewFD->hasAttr<AlwaysInlineAttr>() || NewFD->isInlined())) {
-
-		Diag(NewFD->getLocation(), diag::err_expected) << "only attribute or pragma interrupt. Incompatible pragma or interrupt combination.";
-	}  
-  }
+  // An RL78 interrupt handler cannot be inlined or called through the CALLT
+  // table.
+  if ((NewFD->hasAttr<RL78InterruptAttr>() ||
+       NewFD->hasAttr<RL78BRKInterruptAttr>()) &&
+      (NewFD->hasAttr<RL78CalltAttr>() || NewFD->hasAttr<AlwaysInlineAttr>() ||
+       NewFD->isInlined()))
+    Diag(NewFD->getLocation(), diag::err_expected)
+        << "only attribute interrupt. Incompatible attribute combination.";
 
   // Similar to no_builtin logic above, at this point of the code
   // FunctionDecl::isThisDeclarationADefinition() always returns `false`
@@ -15686,18 +15405,6 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     if (CurInitSeg && var->getInit())
       var->addAttr(InitSegAttr::CreateImplicit(Context, CurInitSeg->getString(),
                                                CurInitSegLoc));
-  }
-
-  // CCRL specification:
-  // If #pragma address is specified for a variable that is not a
-  // const-qualified variable and is declared with an initial value,
-  // an error will occur
-  if (var->hasAttr<RL78AddressAttr>() && !var->getType().isConstQualified() &&
-      var->hasInit()) {
-
-    Diag(var->getLocation(), diag::err_expected)
-        << "a const qualified variable or a non-const qualified variable "
-           "without initial value.";
   }
 
   // All the following checks are C++ only.
@@ -19900,29 +19607,6 @@ FieldDecl *Sema::HandleField(Scope *S, RecordDecl *Record,
   return NewFD;
 }
 
-/// Whether 'signed' or 'unsigned' was written on the builtin type at the end
-/// of T's typedef chain (for -funsigned-bitfields).
-static bool hasWrittenBuiltinSign(QualType T) {
-  while (const auto *TT = T->getAs<TypedefType>()) {
-    const TypeSourceInfo *TSI = TT->getDecl()->getTypeSourceInfo();
-    if (!TSI)
-      return false;
-    TypeLoc TL = TSI->getTypeLoc().getUnqualifiedLoc();
-    while (true) {
-      if (auto PTL = TL.getAs<ParenTypeLoc>())
-        TL = PTL.getInnerLoc().getUnqualifiedLoc();
-      else if (auto ATL = TL.getAs<AttributedTypeLoc>())
-        TL = ATL.getModifiedLoc().getUnqualifiedLoc();
-      else
-        break;
-    }
-    if (auto BTL = TL.getAs<BuiltinTypeLoc>())
-      return BTL.getWrittenSignSpec() != TypeSpecifierSign::Unspecified;
-    T = TT->getDecl()->getUnderlyingType();
-  }
-  return false;
-}
-
 FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
                                 TypeSourceInfo *TInfo,
                                 RecordDecl *Record, SourceLocation Loc,
@@ -20019,32 +19703,6 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
     if (!BitWidth) {
       InvalidDecl = true;
       BitWidth = nullptr;
-    } else if (D && LangOpts.UnsignedBitfields && !LangOpts.CPlusPlus) {
-      // -funsigned-bitfields (RL78/CC-RL): a plain integer bit-field is
-      // unsigned unless 'signed' was written, here or in the typedef chain.
-      const DeclSpec &DS = D->getDeclSpec();
-      if (DS.getTypeSpecSign() == TypeSpecifierSign::Unspecified &&
-          !(DS.getTypeSpecType() == TST_typename &&
-            hasWrittenBuiltinSign(GetTypeFromParser(DS.getRepAsType())))) {
-        QualType U = T.getCanonicalType().getUnqualifiedType();
-        QualType NewU;
-        // The other types allowed in bit-fields (_Bool, wchar*, enums) have no
-        // signed/unsigned variant.
-        if (U == Context.IntTy)
-          NewU = Context.UnsignedIntTy;
-        else if (U == Context.ShortTy)
-          NewU = Context.UnsignedShortTy;
-        else if (U == Context.LongTy)
-          NewU = Context.UnsignedLongTy;
-        else if (U == Context.LongLongTy)
-          NewU = Context.UnsignedLongLongTy;
-        else if (U == Context.CharTy) // Overrides LangOpts.CharIsSigned.
-          NewU = Context.UnsignedCharTy;
-        else if (U == Context.Int128Ty)
-          NewU = Context.UnsignedInt128Ty;
-        if (!NewU.isNull())
-          T = Context.getQualifiedType(NewU, T.getQualifiers());
-      }
     }
   }
 

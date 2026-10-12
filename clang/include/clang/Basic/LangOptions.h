@@ -597,10 +597,6 @@ public:
   // received as a result of a standard operator new (-fcheck-new)
   bool CheckNew = false;
 
-  /// RL78: encoding of the main source file (-finput-charset); it is converted
-  /// to UTF-8 before lexing. Literals use LiteralEncoding (-fexec-charset).
-  std::string InputCharset;
-
   /// The HLSL root signature version for dxil.
   llvm::dxbc::RootSignatureVersion HLSLRootSigVer;
 

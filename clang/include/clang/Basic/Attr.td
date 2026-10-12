@@ -5428,25 +5428,10 @@ def RL78BRKInterrupt : InheritableAttr, TargetSpecificAttr<TargetRL78> {
 }
 
 def RL78Saddr : InheritableAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [GCC<"saddr">, CustomKeyword<"__saddr">];
+  let Spellings = [GCC<"saddr">];
   let Subjects = SubjectList<[GlobalVar]>;
   let ParseKind = "Saddr";
   let Documentation = [RL78SaddrDocs];
-}
-
-def RL78InlineASM : InheritableAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [GCC<"inline_asm">];
-  let Subjects = SubjectList<[Function]>;
-  let ParseKind = "InlineASM";
-  let Documentation = [RL78InlineASMDocs];
-}
-
-def RL78Address : InheritableAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [GCC<"address">];
-  let Subjects = SubjectList<[GlobalVar]>;
-  let Args = [UnsignedArgument<"Address">];
-  let ParseKind = "Address";
-  let Documentation = [RL78AddressDocs];
 }
 
 def RL78Near : TypeAttr, TargetSpecificAttr<TargetRL78> {
@@ -5460,7 +5445,7 @@ def RL78Far : TypeAttr, TargetSpecificAttr<TargetRL78> {
 }
 
 def RL78Callt : InheritableAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [GCC<"callt">, CustomKeyword<"__callt">];
+  let Spellings = [GCC<"callt">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [RL78CalltDocs];
 }

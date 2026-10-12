@@ -4756,9 +4756,7 @@ def unique_source_file_identifier_EQ: Joined<["-"], "funique-source-file-identif
   HelpText<"Specify the source file identifier for -funique-source-file-names; "
            "uses the source file path if not specified">,
   MarshallingInfoString<CodeGenOpts<"UniqueSourceFileIdentifier">>;
-def funsigned_bitfields : Flag<["-"], "funsigned-bitfields">, Group<f_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  MarshallingInfoFlag<LangOpts<"UnsignedBitfields">>;
+def funsigned_bitfields : Flag<["-"], "funsigned-bitfields">, Group<f_Group>;
 def funsigned_char : Flag<["-"], "funsigned-char">, Group<f_Group>;
 def fno_unsigned_char : Flag<["-"], "fno-unsigned-char">;
 def funwind_tables : Flag<["-"], "funwind-tables">, Group<f_Group>;
@@ -7180,11 +7178,6 @@ foreach i = {0-7} in
 } // let Flags = [TargetSpecific]
 
 // RL78 options.
-def frenesas_extensions : Flag<["-"], "frenesas-extensions">, Group<f_Group>,
-  Visibility<[ClangOption, CC1Option]>, HelpText<"Use Renesas CC Extensions.">,
-  MarshallingInfoFlag<LangOpts<"RenesasExt">>;
-def fno_renesas_extensions : Flag<["-"], "fno-renesas-extensions">,
-  Group<f_Group>, Visibility<[ClangOption, CC1Option]>;
 def fnewlib_nano : Flag<["-"], "fnewlib-nano">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Uses newlib nano optimized libc_nano.a instead of libc.a.">;
@@ -7712,10 +7705,6 @@ let Visibility = [CC1Option, CC1AsOption, FC1Option] in {
 def tune_cpu : Separate<["-"], "tune-cpu">,
   HelpText<"Tune for a specific cpu type">,
   MarshallingInfoString<TargetOpts<"TuneCPU">>;
-def finput_charset : Separate<["-"], "finput-charset">, MetaVarName<"<encoding>">,
-  HelpText<"Set the <encoding> of the main source file; it is converted to "
-           "UTF-8 before lexing (RL78).">,
-  MarshallingInfoString<LangOpts<"InputCharset">>;
 def fexec_charset : Separate<["-"], "fexec-charset">, MetaVarName<"<encoding>">,
   HelpText<"Set the <encoding> for ordinary string and character literals. "
            "Supported character encodings include ISO-8859-1, UTF-8, IBM1047, "

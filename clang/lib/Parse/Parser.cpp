@@ -16,7 +16,6 @@
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/DiagnosticParse.h"
-#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/StackExhaustionHandler.h"
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Lex/ModuleLoader.h"
@@ -1412,11 +1411,6 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
     }
   } else
     Actions.ActOnDefaultCtorInitializers(Res);
-
-  // RL78 #pragma inline_asm: the body is assembly.
-  if (Actions.Context.getTargetInfo().getTriple().isRL78() && Res &&
-      Res->hasAttr<RL78InlineASMAttr>())
-    return ParseInlineASMFunctionStatementBody(Res, BodyScope);
 
   return ParseFunctionStatementBody(Res, BodyScope);
 }

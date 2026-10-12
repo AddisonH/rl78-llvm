@@ -1275,20 +1275,9 @@ def err_pragma_clang_section_expected_equal : Error<
 def warn_pragma_expected_section_name : Warning<
   "expected a string literal for the section name in '#pragma %0' - ignored">,
   InGroup<IgnoredPragmas>;
-def warn_pragma_invalid : Warning<
-  "invalid pragma declaration">,
-  InGroup<IgnoredPragmas>;
 def warn_attribute_invalid : Warning<
   "invalid attribute declaration">,
   InGroup<IgnoredPragmas>;
-// '#pragma section' related errors
-def err_pragma_expected_ccrl_section_name : Error<
-  "invalid new section name used in '#pragma section'">;
-def warn_pragma_expected_section_type : Warning<
-  "expected one of [bss|data|const|text] section kind in '#pragma section' - ignored">,
-  InGroup<IgnoredPragmas>;
-// range error
-def err_range_error : Error<"expected integer literal in range %0">;
 
 def warn_pragma_expected_section_push_pop_or_name : Warning<
   "expected push, pop or a string literal for the section name in '#pragma %0' - ignored">,

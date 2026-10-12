@@ -804,8 +804,6 @@ public:
     case tok::tilde:
     case tok::kw_sizeof:
     case tok::kw_alignof:
-    case tok::kw___sectop:
-    case tok::kw___secend:
       return true;
     default:
       return false;
@@ -831,7 +829,7 @@ public:
     return isOneOf(tok::kw_throw, tok::kw_typeid, tok::kw_return,
                    tok::kw_sizeof, tok::kw_alignof, tok::kw_alignas,
                    tok::kw_decltype, tok::kw_noexcept, tok::kw_static_assert,
-                   tok::kw__Atomic, tok::kw___sectop, tok::kw___secend,
+                   tok::kw__Atomic,
 #define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) tok::kw___##Trait,
 #include "clang/Basic/TransformTypeTraits.def"
                    tok::kw_requires);

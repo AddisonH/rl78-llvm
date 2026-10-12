@@ -309,11 +309,6 @@ static unsigned parseSectionFlags(const Triple &TT, StringRef flagsStr,
       else
         return -1U;
       break;
-    case 'Y':
-      if (TT.getArch() != Triple::RL78)
-        return -1U;
-      flags |= ELF::SHF_RENESAS_ABS;
-      break;
     case 's':
       if (TT.getArch() != Triple::hexagon)
         return -1U;

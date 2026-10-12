@@ -18,14 +18,6 @@ entry:
 ; CHECK: .section{{[[:space:]]+}}.textf
 ; CHECK-LABEL: _boo:
 
-@a =  constant i8 77, align 1 #0
-; CHECK: .section{{[[:space:]]+}}.const
-; CHECK: _a:
-; CHECK-NEXT: 77
-; FAR: .section{{[[:space:]]+}}.constf
-; FAR: _a:
-; FAR-NEXT: 77
-
 @b = constant i8 77
 ; CHECK: .section{{[[:space:]]+}}.rodata
 ; CHECK: _b:
@@ -57,5 +49,4 @@ entry:
 ; FAR: _f:
 ; FAR-NEXT: 77
 
-attributes #0 = { "use-renesas-naming" }
 attributes #1 = { "saddr" }

@@ -17,29 +17,18 @@ class TextEncodingConverter;
 } // namespace llvm
 
 namespace clang {
-enum ConversionAction {
-  CA_NoConversion,
-  CA_ToLiteralEncoding,
-  /// RL78: main source file from -finput-charset to UTF-8.
-  CA_FromInputEncoding
-};
+enum ConversionAction { CA_NoConversion, CA_ToLiteralEncoding };
 
 class TextEncoding {
   llvm::StringRef LiteralEncoding;
   std::unique_ptr<llvm::TextEncodingConverter> ToLiteralEncodingConverter;
-  llvm::StringRef InputEncoding;
-  std::unique_ptr<llvm::TextEncodingConverter> FromInputEncodingConverter;
 
 public:
   llvm::TextEncodingConverter *getConverter(ConversionAction Action) const;
   static std::error_code
   setConvertersFromOptions(TextEncoding &TE, const clang::LangOptions &Opts);
-  static std::error_code
-  setInputConverterFromOptions(TextEncoding &TE,
-                               const clang::LangOptions &Opts);
 
   llvm::StringRef getLiteralEncoding() { return LiteralEncoding; }
-  llvm::StringRef getInputEncoding() { return InputEncoding; }
 };
 } // namespace clang
 #endif

@@ -53,9 +53,8 @@ enum TokenKey : unsigned {
   KEYFIXEDPOINT = 0x8000000,
   KEYDEFERTS = 0x10000000,
   KEYNOHLSL = 0x20000000,
-  // RL78 keys are above KEYMAX so that KEYALL does not include them.
+  // KEYRL78 is above KEYMAX so that KEYALL does not include it.
   KEYRL78 = 0x40000000,
-  KEYRENESASCC = 0x80000000,
   KEYMAX = KEYNOHLSL, // The maximum key
   KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX20,
   KEYALL = (KEYMAX | (KEYMAX - 1)) & ~KEYNOMS18 & ~KEYNOOPENCL &
@@ -156,13 +155,6 @@ inline bool isLiteral(TokenKind K) {
 #endif
 
   return isInLiteralRange;
-}
-
-/// Return true if this is a utf literal kind.
-inline bool isUTFLiteral(TokenKind K) {
-  return K == tok::utf8_char_constant || K == tok::utf8_string_literal ||
-         K == tok::utf16_char_constant || K == tok::utf16_string_literal ||
-         K == tok::utf32_char_constant || K == tok::utf32_string_literal;
 }
 
 /// Return true if this is any of tok::annot_* kinds.

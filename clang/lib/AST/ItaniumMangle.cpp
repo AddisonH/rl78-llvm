@@ -5498,15 +5498,6 @@ recurse:
           << getTraitSpelling(SAE->getKind());
       return;
     }
-    case UETT_SecTop:
-    case UETT_SecEnd: {
-      DiagnosticsEngine &Diags = Context.getDiags();
-      unsigned DiagID = Diags.getCustomDiagID(
-          DiagnosticsEngine::Error,
-          "cannot yet mangle __sectop/__secend expression");
-      Diags.Report(DiagID);
-      return;
-    }
     }
     break;
   }

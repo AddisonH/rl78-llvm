@@ -4187,9 +4187,7 @@ void Parser::ParseDeclarationSpecifiers(
       continue;
     }
     case tok::kw___near:
-    case tok::kw___far:
-    case tok::kw___saddr:
-    case tok::kw___callt: {
+    case tok::kw___far: {
       IdentifierInfo *AttrName = Tok.getIdentifierInfo();
       tok::TokenKind Kind = Tok.getKind();
       SourceLocation AttrNameLoc = ConsumeToken();

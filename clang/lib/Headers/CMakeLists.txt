@@ -155,6 +155,10 @@ set(systemz_files
   vecintrin.h
   )
 
+set(rl78_files
+  rl78intrin.h
+  )
+
 set(ve_files
   velintrin.h
   velintrin_gen.h
@@ -339,6 +343,7 @@ set(files
   ${riscv_files}
   ${spirv_files}
   ${systemz_files}
+  ${rl78_files}
   ${ve_files}
   ${x86_files}
   ${gpu_files}
@@ -574,6 +579,7 @@ add_dependencies("clang-resource-headers"
                  "riscv-resource-headers"
                  "spirv-resource-headers"
                  "systemz-resource-headers"
+                 "rl78-resource-headers"
                  "ve-resource-headers"
                  "webassembly-resource-headers"
                  "x86-resource-headers"
@@ -599,6 +605,7 @@ add_header_target("ppc-resource-headers" "${ppc_files};${ppc_wrapper_files}")
 add_header_target("ppc-htm-resource-headers" "${ppc_htm_files}")
 add_header_target("riscv-resource-headers" "${riscv_files};${riscv_generated_files}")
 add_header_target("systemz-resource-headers" "${systemz_files};${zos_wrapper_files}")
+add_header_target("rl78-resource-headers" "${rl78_files}")
 add_header_target("ve-resource-headers" "${ve_files}")
 add_header_target("webassembly-resource-headers" "${webassembly_files}")
 add_header_target("x86-resource-headers" "${x86_files}")
@@ -784,6 +791,12 @@ install(
   COMPONENT systemz-resource-headers)
 
 install(
+  FILES ${rl78_files}
+  DESTINATION ${header_install_dir}
+  EXCLUDE_FROM_ALL
+  COMPONENT rl78-resource-headers)
+
+install(
   FILES ${ve_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
@@ -910,6 +923,9 @@ if (NOT LLVM_ENABLE_IDE)
   add_llvm_install_targets(install-systemz-resource-headers
                            DEPENDS systemz-resource-headers
                            COMPONENT systemz-resource-headers)
+  add_llvm_install_targets(install-rl78-resource-headers
+                           DEPENDS rl78-resource-headers
+                           COMPONENT rl78-resource-headers)
   add_llvm_install_targets(install-ve-resource-headers
                            DEPENDS ve-resource-headers
                            COMPONENT ve-resource-headers)

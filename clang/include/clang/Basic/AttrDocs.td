@@ -10605,44 +10605,6 @@ Example usage:
   }];
 }
 
-def RL78InlineASMDocs : Documentation {
-  let Category = DocCatFunction;
-  let Heading = "inline_asm";
-  let Content = [{
-Clang supports the ``__attribute__((inline_asm))`` attribute on RL78 targets.
-This attribute allows the body of the function to be assembly code.
-
-Example usage:
-
-.. code-block:: c
-
-  __attribute__((inline_asm)) int label(void) { movw ax, bc }
-  int main(void) {
-    label();
-    return 0;
-  }
-
-  }];
-}
-
-def RL78AddressDocs : Documentation {
-  let Category = DocCatFunction;
-  let Heading = "address";
-  let Content = [{
-Clang supports the ``__attribute__((address(<absolute-address>)))`` attribute
-on RL78 targets. This attribute allows the specification of the absolute address
-where the variable will be allocated.
-
-Example usage:
-
-.. code-block:: c
-
-  //io is allocated to address 0xffe00
-  __attribute__((address(0xffe00))) int io;
-  
-  }];
-}
-
 def RL78SaddrDocs : Documentation {
   let Category = DocCatVariable;
   let Heading = "saddr";

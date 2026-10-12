@@ -20,13 +20,11 @@ void RL78ELFTargetObjectFile::Initialize(MCContext &Ctx,
 std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
     SectionKind Kind, const GlobalObject *GO) const {
   bool isFar = false;
-  bool useRenesasNaming = false;
   bool isSaddr = false;
   if (GO) {
     const GlobalVariable *GV = dyn_cast<GlobalVariable>(GO);
     const Function *GF = dyn_cast<Function>(GO);
     if (GV) {
-      useRenesasNaming = GV->getAttributes().hasAttribute("use-renesas-naming");
       isSaddr = GV->getAttributes().hasAttribute("saddr");
       // this works also for the default AS which is far with -mfar-data
       isFar = GV->getParent()->getDataLayout().getPointerSizeInBits(
@@ -41,13 +39,8 @@ std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
 
   if (Kind.isText())
     return isFar ? ".textf" : ".text";
-  if (Kind.isReadOnly()) {
-    if (useRenesasNaming) {
-      return isFar ? ".constf" : ".const";
-    } else {
-      return isFar ? ".frodata" : ".rodata";
-    }
-  }
+  if (Kind.isReadOnly())
+    return isFar ? ".frodata" : ".rodata";
 
   if (isSaddr) {
     return Kind.isData() ? ".sdata" : ".sbss";

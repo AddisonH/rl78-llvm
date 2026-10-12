@@ -2258,7 +2258,7 @@ bool Sema::CheckTSBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
 bool Sema::CheckRL78BuiltinFunctionCall(const TargetInfo &TI,
                                         unsigned BuiltinID, CallExpr *TheCall) {
   switch (BuiltinID) {
-  case RL78::BI__delay_cycles:
+  case RL78::BI__builtin_rl78_delay_cycles:
     return BuiltinConstantArgRange(TheCall, 0, 1, 83886097);
   }
   return false;

@@ -1303,7 +1303,6 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::BR_CC);
   setTargetDAGCombine(ISD::BRCOND);
   setTargetDAGCombine(ISD::INLINEASM);
-  setTargetDAGCombine(ISD::TRAP);
   setTargetDAGCombine(ISD::SELECT);
   setTargetDAGCombine({ISD::SETCC, ISD::SELECT_CC});
   setTargetDAGCombine({ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX});
@@ -3521,33 +3520,6 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
       return PerformTruncateCombine(N, DCI);
   case ISD::SHL:
       return PerformSHLCombine(N, DCI);
-  case ISD::TRAP:
-      // A trap will be inserted in a naked function if the trap-unreachable
-      // options is specified. In case of pragma inline_asm, this is not what we
-      // want, so we combine them here.
-      if (DCI.DAG.getMachineFunction().getFunction().hasFnAttribute(
-              "inline_asm")) {
-      if (N->getOperand(0)->getOpcode() == ISD::INLINEASM)
-        return N->getOperand(0);
-      if (N->getOperand(0)->getOpcode() == ISD::INTRINSIC_VOID) {
-        unsigned IntNo = cast<ConstantSDNode>(N->getOperand(0).getOperand(1))
-                             ->getZExtValue();
-        // Keep in sync with RL78TargetLowering::ExpandInlineAsm
-        switch (IntNo) {
-        case Intrinsic::rl78_nop:
-        case Intrinsic::rl78_halt:
-        case Intrinsic::rl78_stop:
-        case Intrinsic::rl78_brk:
-        case Intrinsic::rl78_ei:
-        case Intrinsic::rl78_di:
-          return N->getOperand(0);
-        default:
-          break;
-        }
-      }
-      }
-      return SDValue();
-
   case ISD::INLINEASM: {
       // Since the targetexternal symbol was created in the program address
       // space, which can be __far, we need to replace the i32 reference with a
@@ -4562,7 +4534,6 @@ bool RL78TargetLowering::ExpandInlineAsm(CallInst *CI) const {
     AsmStr = AsmPieces[0].lower();
     Module *M = CI->getModule();
     Function *Int;
-    // Keep in sync with RL78TargetLowering::PerformDAGCombine ISD::TRAP.
     if (AsmStr.compare("nop") == 0) {
       Int = Intrinsic::getOrInsertDeclaration(M, Intrinsic::rl78_nop);
     } else if ((AsmStr.compare("halt") == 0)) {

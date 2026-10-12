@@ -473,12 +473,7 @@ enum class PragmaClangSectionKind {
   Relro = 5
 };
 
-enum class PragmaClangSectionAction {
-  Set = 0,
-  Clear = 1,
-  /// RL78 #pragma section: only compute the section name (see OutSecName).
-  GetName = 2
-};
+enum class PragmaClangSectionAction { Set = 0, Clear = 1 };
 
 enum class PragmaOptionsAlignKind {
   Native,  // #pragma options align=native
@@ -2207,8 +2202,7 @@ public:
   void ActOnPragmaClangSection(SourceLocation PragmaLoc,
                                PragmaClangSectionAction Action,
                                PragmaClangSectionKind SecKind,
-                               StringRef SecName,
-                               std::string *OutSecName = nullptr);
+                               StringRef SecName);
 
   /// ActOnPragmaOptionsAlign - Called on well formed \#pragma options align.
   void ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,
@@ -5049,8 +5043,6 @@ public:
   /// would otherwise reject the section specifier.
   llvm::Error isValidSectionSpecifier(StringRef Str);
   bool checkSectionName(SourceLocation LiteralLoc, StringRef Str);
-  RL78AddressAttr *mergeRL78AddressAttr(Decl *D, const AttributeCommonInfo &CI,
-                                        unsigned Address);
   CodeSegAttr *mergeCodeSegAttr(Decl *D, const AttributeCommonInfo &CI,
                                 StringRef Name);
 
@@ -11501,34 +11493,6 @@ public:
     FpPragmaStack.CurrentValue = FPO.getChangesFrom(FPOptions(LangOpts));
   }
 
-  /// RL78: CC-RL pragmas that name a function or variable, applied when the
-  /// declaration is seen.
-  enum class RenesasCCRLPragmaType {
-    CCRLInterrupt,
-    CCRLBrkInterrupt,
-    CCRLInline,
-    CCRLNoInline,
-    CCRLInlineASM,
-    CCRLAddress,
-    CCRLSaddr,
-    CCRLCallt,
-    CCRLNear,
-    CCRLFar
-  };
-
-  struct RenesasCCRLPragmaEntry {
-    std::string Identifier;
-    SourceLocation Loc;
-    RenesasCCRLPragmaType PragmaType;
-    unsigned ExtraData;
-    SmallVector<unsigned, 4> ExtraDataVects;
-  };
-
-  SmallVector<RenesasCCRLPragmaEntry, 4> RenesasCCRLPragmaEntries;
-
-  void ActOnCCRLPragmaEntry(
-      const SmallVectorImpl<RenesasCCRLPragmaEntry> &PragmaEntries,
-      SourceLocation Loc);
 
   ArrayRef<InventedTemplateParameterInfo> getInventedParameterInfos() const {
     return llvm::ArrayRef(InventedParameterInfos.begin() +

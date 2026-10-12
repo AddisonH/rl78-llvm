@@ -2589,53 +2589,6 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
   return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
 }
 
-Decl *Parser::ParseInlineASMFunctionStatementBody(Decl *Decl,
-                                                  ParseScope &BodyScope) {
-  assert(Tok.is(tok::l_brace));
-  SourceLocation LBraceLoc = Tok.getLocation();
-
-  PrettyDeclStackTraceEntry CrashInfo(Actions.Context, Decl, LBraceLoc,
-                                      "parsing inline_asm function body");
-
-  // Do not enter a scope for the brace, as the arguments are in the same scope
-  // (the function body) as the body itself.  Instead, just read the statement
-  // list and put it into a CompoundStmt for safe keeping.
-  StmtResult FnBody;
-  {
-    Sema::CompoundScopeRAII CompoundScope(Actions);
-
-    StmtVector Stmts;
-    ParenBraceBracketBalancer BalancerRAIIObj(*this);
-    // We start with an l_brace so ParseMicrosoftAsmStatement thinks we are
-    // in a multi-line instruction block which needs to end with r_brace.
-    StmtResult Res = ParseMicrosoftAsmStatement(LBraceLoc);
-    Res = Actions.ActOnFinishFullStmt(Res.get());
-    if (Res.isUsable())
-      Stmts.push_back(Res.get());
-
-    SourceLocation CloseLoc = Tok.getLocation();
-    if (Tok.isNot(tok::r_brace)) {
-      Diag(Tok, diag::err_expected) << tok::r_brace;
-      Sema::CompoundScopeRAII CompoundScope(Actions);
-      FnBody = Actions.ActOnCompoundStmt(LBraceLoc, LBraceLoc, {}, false);
-      BodyScope.Exit();
-      return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
-    }
-    ConsumeBrace();
-
-    FnBody = Actions.ActOnCompoundStmt(LBraceLoc, CloseLoc, Stmts, false);
-  }
-
-  // If the function body could not be parsed, make a bogus compoundstmt.
-  if (FnBody.isInvalid()) {
-    Sema::CompoundScopeRAII CompoundScope(Actions);
-    FnBody = Actions.ActOnCompoundStmt(LBraceLoc, LBraceLoc, {}, false);
-  }
-
-  BodyScope.Exit();
-  return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
-}
-
 Decl *Parser::ParseFunctionTryBlock(Decl *Decl, ParseScope &BodyScope) {
   assert(Tok.is(tok::kw_try) && "Expected 'try'");
   SourceLocation TryLoc = ConsumeToken();

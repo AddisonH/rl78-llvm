@@ -523,10 +523,8 @@ static unsigned getELFSectionType(StringRef Name, SectionKind K) {
   if (Name == ".llvm.lto")
     return ELF::SHT_LLVM_LTO;
 
-  // Renesas RL78 uninitialized-data sections, including the "_AT" sections
-  // that place a variable at an absolute address.
-  if (Name.starts_with(".bss_AT") || Name.starts_with(".bssf") ||
-      Name.starts_with(".sbss"))
+  // Renesas RL78 far and short-address uninitialized data.
+  if (Name.starts_with(".bssf") || Name.starts_with(".sbss"))
     return ELF::SHT_NOBITS;
 
   if (K.isBSS() || K.isThreadBSS())
@@ -840,11 +838,6 @@ static MCSection *selectExplicitSectionGlobal(const GlobalObject *GO,
   auto [Group, IsComdat, ExtraFlags, Type, EntrySize] =
       getGlobalObjectInfo(GO, TM, SectionName, Kind);
   Flags |= ExtraFlags;
-
-  if (TM.getTargetTriple().getArch() == Triple::RL78)
-    if (const auto *GV = dyn_cast<GlobalVariable>(GO))
-      if (GV->getAttributes().hasAttribute("abs_addr"))
-        Flags |= ELF::SHF_RENESAS_ABS;
 
   const unsigned UniqueID = calcUniqueIDUpdateFlagsAndSize(
       GO, SectionName, Kind, TM, Ctx, Mang, Flags, EntrySize, NextUniqueID,

@@ -1221,9 +1221,6 @@ Parser::ParseCastExpression(CastParseKind ParseKind, bool isAddressOfOperand,
   case tok::kw___builtin_omp_required_simd_align:
   case tok::kw___builtin_vectorelements:
   case tok::kw__Countof:
-  // RL78 (CC-RL): '__sectop' / '__secend' '(' "section-name" ')'
-  case tok::kw___sectop:
-  case tok::kw___secend:
     if (NotPrimaryExpression)
       *NotPrimaryExpression = true;
     AllowSuffix = false;
@@ -2089,8 +2086,7 @@ Parser::ParseExprAfterUnaryExprOrTypeTrait(const Token &OpTok,
                        tok::kw___datasizeof, tok::kw___alignof, tok::kw_alignof,
                        tok::kw__Alignof, tok::kw_vec_step,
                        tok::kw___builtin_omp_required_simd_align,
-                       tok::kw___builtin_vectorelements, tok::kw__Countof,
-                       tok::kw___sectop, tok::kw___secend) &&
+                       tok::kw___builtin_vectorelements, tok::kw__Countof) &&
          "Not a typeof/sizeof/alignof/vec_step expression!");
 
   ExprResult Operand;
@@ -2225,8 +2221,7 @@ ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
   assert(Tok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof, tok::kw___alignof,
                      tok::kw_alignof, tok::kw__Alignof, tok::kw_vec_step,
                      tok::kw___builtin_omp_required_simd_align,
-                     tok::kw___builtin_vectorelements, tok::kw__Countof,
-                     tok::kw___sectop, tok::kw___secend) &&
+                     tok::kw___builtin_vectorelements, tok::kw__Countof) &&
          "Not a sizeof/alignof/vec_step expression!");
   Token OpTok = Tok;
   ConsumeToken();
@@ -2312,12 +2307,6 @@ ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
     break;
   case tok::kw___builtin_omp_required_simd_align:
     ExprKind = UETT_OpenMPRequiredSimdAlign;
-    break;
-  case tok::kw___sectop:
-    ExprKind = UETT_SecTop;
-    break;
-  case tok::kw___secend:
-    ExprKind = UETT_SecEnd;
     break;
   case tok::kw___datasizeof:
     ExprKind = UETT_DataSizeOf;

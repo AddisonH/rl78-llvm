@@ -450,18 +450,6 @@ bool SectionPattern::excludesFile(const InputFile &file) const {
   return excludesFileCache->second;
 }
 
-// Identifies an RL78 absolute-address section (#pragma address, named
-// <prefix>_AT<hex address>) and returns its address.
-static std::optional<uint64_t> getRL78ATSectionAddr(Ctx &ctx,
-                                                    const InputSectionBase *s) {
-  uint64_t addr;
-  if (ctx.arg.emachine == EM_RL78 && (s->flags & SHF_RENESAS_ABS))
-    if (size_t pos = s->name.rfind("_AT"); pos != StringRef::npos)
-      if (to_integer(s->name.substr(pos + 3), addr, 16))
-        return addr;
-  return std::nullopt;
-}
-
 bool LinkerScript::shouldKeep(InputSectionBase *s) {
   for (InputSectionDescription *id : keptSections)
     if (id->matchesFile(*s->file))
@@ -470,9 +458,6 @@ bool LinkerScript::shouldKeep(InputSectionBase *s) {
             (s->flags & id->withFlags) == id->withFlags &&
             (s->flags & id->withoutFlags) == 0)
           return true;
-  // RL78 absolute-address sections are always kept.
-  if (getRL78ATSectionAddr(ctx, s))
-    return true;
   return false;
 }
 
@@ -1021,61 +1006,9 @@ static OutputDesc *addInputSec(Ctx &ctx,
 }
 
 // Add sections that didn't match any sections command.
-// Places an orphan RL78 absolute-address section at its address and picks its
-// memory region.
-void LinkerScript::placeRL78ATSection(OutputSection &osec, StringRef name,
-                                      uint64_t addr) {
-  if (name.starts_with(".bss_AT") || name.starts_with(".bssf_AT")) {
-    osec.memoryRegionName = "RAM";
-  } else if (name.starts_with(".const_AT") || name.starts_with(".constf_AT")) {
-    osec.memoryRegionName = "ROM";
-  } else {
-    osec.memoryRegionName = "RAM";
-    bool found = false;
-    for (const auto &[regName, region] : memoryRegions) {
-      uint64_t start = region->getOrigin();
-      if (addr >= start && addr < start + region->getLength()) {
-        osec.memoryRegionName = regName.str();
-        found = true;
-        break;
-      }
-    }
-    if (!found)
-      Warn(ctx) << "Couldn't find memory region for section '" << name
-                << "'; assuming 'RAM'";
-  }
-
-  // A near const variable placed at an address outside the mirror source
-  // area cannot be reached through the mirror.
-  if (name.starts_with(".const_AT")) {
-    if (MemoryRegion *m = memoryRegions.lookup("MIRROR")) {
-      uint64_t mirrorStart = m->getOrigin() - 0xF0000;
-      uint64_t mirrorEnd = mirrorStart + m->getLength();
-      if (addr < mirrorStart || addr >= mirrorEnd)
-        Err(ctx) << name << " is outside of the MIRROR source area [0x"
-                 << Twine::utohexstr(mirrorStart) << ", 0x"
-                 << Twine::utohexstr(mirrorEnd) << "]";
-    } else {
-      Err(ctx) << "memory region 'MIRROR' not declared";
-    }
-  }
-  osec.addrExpr = [=] { return addr; };
-  osec.lmaExpr = [=] { return addr; };
-}
-
 void LinkerScript::addOrphanSections() {
   StringMap<TinyPtrVector<OutputSection *>> map;
   SmallVector<OutputDesc *, 0> v;
-
-  // RL78 #pragma address must not place two sections at the same address.
-  if (ctx.arg.emachine == EM_RL78) {
-    DenseSet<uint64_t> atAddrs;
-    for (InputSectionBase *isec : ctx.inputSections)
-      if (std::optional<uint64_t> addr = getRL78ATSectionAddr(ctx, isec))
-        if (!atAddrs.insert(*addr).second)
-          Err(ctx) << "Address conflict: Multiple '" << isec->name
-                   << "' sections were found!";
-  }
 
   auto add = [&](InputSectionBase *s, StringRef name = {}) {
     if (s->isLive() && !s->parent) {
@@ -1088,11 +1021,8 @@ void LinkerScript::addOrphanSections() {
       } else if (OutputSection *sec = findByName(sectionCommands, name)) {
         sec->recordSection(s);
       } else {
-        if (OutputDesc *osd = addInputSec(ctx, map, s, name)) {
-          if (std::optional<uint64_t> addr = getRL78ATSectionAddr(ctx, s))
-            placeRL78ATSection(osd->osec, name, *addr);
+        if (OutputDesc *osd = addInputSec(ctx, map, s, name))
           v.push_back(osd);
-        }
         assert(isa<MergeInputSection>(s) ||
                s->getOutputSection()->sectionIndex == UINT32_MAX);
       }

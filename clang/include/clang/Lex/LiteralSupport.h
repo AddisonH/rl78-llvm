@@ -185,11 +185,8 @@ private:
   /// SkipBinaryDigits - Read and skip over any binary digits, up to End.
   /// Return a pointer to the first non-binary digit or End.
   const char *SkipBinaryDigits(const char *ptr) {
-    // CC-RL (-frenesas-extensions) also accepts '_' as a digit separator in
-    // binary literals.
     while (ptr != ThisTokEnd &&
-           (*ptr == '0' || *ptr == '1' || isDigitSeparator(*ptr) ||
-            (LangOpts.RenesasExt && *ptr == '_')))
+           (*ptr == '0' || *ptr == '1' || isDigitSeparator(*ptr)))
       ptr++;
     return ptr;
   }

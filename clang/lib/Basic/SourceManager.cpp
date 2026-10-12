@@ -30,7 +30,6 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/TextEncoding.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -123,8 +122,7 @@ const char *ContentCache::getInvalidBOM(StringRef BufStr) {
 
 std::optional<llvm::MemoryBufferRef>
 ContentCache::getBufferOrNone(DiagnosticsEngine &Diag, FileManager &FM,
-                              SourceLocation Loc,
-                              llvm::TextEncodingConverter *Converter) const {
+                              SourceLocation Loc) const {
   // Lazily create the Buffer for ContentCaches that wrap files.  If we already
   // computed it, just return what we have.
   if (IsBufferInvalid)
@@ -152,19 +150,7 @@ ContentCache::getBufferOrNone(DiagnosticsEngine &Diag, FileManager &FM,
     return std::nullopt;
   }
 
-  if (Converter) {
-    // RL78 -finput-charset: convert the file contents to UTF-8.
-    SmallString<0> Converted;
-    Converted.reserve((*BufferOrError)->getBufferSize() + 1);
-    if (std::error_code EC =
-            Converter->convert((*BufferOrError)->getBuffer(), Converted))
-      Diag.Report(Loc, diag::err_file_conversion_failed)
-          << ContentsEntry->getName() << EC.message();
-    Buffer = llvm::MemoryBuffer::getMemBufferCopy(
-        Converted, (*BufferOrError)->getBufferIdentifier());
-  } else {
-    Buffer = std::move(*BufferOrError);
-  }
+  Buffer = std::move(*BufferOrError);
 
   // Check that the file's size fits in an 'unsigned' (with room for a
   // past-the-end value). This is deeply regrettable, but various parts of
@@ -186,9 +172,8 @@ ContentCache::getBufferOrNone(DiagnosticsEngine &Diag, FileManager &FM,
   // have come from a stat cache).
   // The buffer will always be larger than the file size on z/OS in the presence
   // of characters outside the base character set.
-  assert(Converter ||
-         Buffer->getBufferSize() >= (size_t)ContentsEntry->getSize());
-  if (!Converter && !ContentsEntry->isNamedPipe() &&
+  assert(Buffer->getBufferSize() >= (size_t)ContentsEntry->getSize());
+  if (!ContentsEntry->isNamedPipe() &&
       Buffer->getBufferSize() < (size_t)ContentsEntry->getSize()) {
     Diag.Report(Loc, diag::err_file_modified) << ContentsEntry->getName();
 

@@ -19605,10 +19605,6 @@ bool IntExprEvaluator::VisitUnaryExprOrTypeTraitExpr(
     Info.FFDiag(E->getBeginLoc());
     return false;
   }
-  case UETT_SecTop:
-  case UETT_SecEnd:
-    // RL78 __sectop/__secend: section addresses are link-time values.
-    return false;
   }
 
   llvm_unreachable("unknown expr/type trait");
@@ -20270,9 +20266,7 @@ static bool TryEvaluateBuiltinNaN(const ASTContext &Context,
     if (SNaN)
       Result = llvm::APFloat::getSNaN(Sem, false, &fill);
     else
-      // CC-RL (-frenesas-extensions) emits a "negative" quiet NaN.
-      Result = llvm::APFloat::getQNaN(Sem, Context.getLangOpts().RenesasExt,
-                                      &fill);
+      Result = llvm::APFloat::getQNaN(Sem, false, &fill);
   } else {
     // Prior to IEEE 754-2008, architectures were allowed to choose whether
     // the first bit of their significand was set for qNaN or sNaN. MIPS chose

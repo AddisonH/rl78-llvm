@@ -1591,8 +1591,7 @@ bool NumericLiteralParser::GetIntegerValue(llvm::APInt &Val) {
   if (alwaysFitsInto64Bits(radix, NumDigits)) {
     uint64_t N = 0;
     for (const char *Ptr = DigitsBegin; Ptr != SuffixBegin; ++Ptr)
-      // '_' is the CC-RL separator for binary literals (see SkipBinaryDigits).
-      if (!isDigitSeparator(*Ptr) && *Ptr != '_')
+      if (!isDigitSeparator(*Ptr))
         N = N * radix + llvm::hexDigitValue(*Ptr);
 
     // This will truncate the value to Val's input width. Simply check
@@ -1610,7 +1609,7 @@ bool NumericLiteralParser::GetIntegerValue(llvm::APInt &Val) {
 
   bool OverflowOccurred = false;
   while (Ptr < SuffixBegin) {
-    if (isDigitSeparator(*Ptr) || *Ptr == '_') {
+    if (isDigitSeparator(*Ptr)) {
       ++Ptr;
       continue;
     }

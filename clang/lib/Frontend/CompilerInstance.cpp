@@ -12,7 +12,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/DiagnosticDriver.h"
 #include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/FileManager.h"
@@ -566,10 +565,6 @@ void CompilerInstance::createPreprocessor(TranslationUnitKind TUKind) {
                                                        getLangOpts()))
     PP->getDiagnostics().Report(clang::diag::err_fe_text_encoding_config)
         << PP->getTextEncoding().getLiteralEncoding();
-  if (TextEncoding::setInputConverterFromOptions(PP->getTextEncoding(),
-                                                 getLangOpts()))
-    PP->getDiagnostics().Report(clang::diag::err_drv_invalid_value)
-        << "-finput-charset" << PP->getTextEncoding().getInputEncoding();
 }
 
 // ASTContext

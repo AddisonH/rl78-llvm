@@ -75,13 +75,8 @@ bool Preprocessor::EnterSourceFile(FileID FID, ConstSearchDirIterator CurDir,
     MaxIncludeStackDepth = IncludeMacroStack.size();
 
   // Get the MemoryBuffer for this FID, if it fails, we fail.
-  // RL78 -finput-charset: only the main file is converted to UTF-8.
   std::optional<llvm::MemoryBufferRef> InputFile =
-      getSourceManager().getBufferOrNone(
-          FID, Loc,
-          FID == SourceMgr.getMainFileID()
-              ? TE.getConverter(CA_FromInputEncoding)
-              : nullptr);
+      getSourceManager().getBufferOrNone(FID, Loc);
   if (!InputFile) {
     SourceLocation FileStart = SourceMgr.getLocForStartOfFile(FID);
     Diag(Loc, diag::err_pp_error_opening_file)

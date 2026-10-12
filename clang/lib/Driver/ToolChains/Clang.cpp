@@ -53,7 +53,6 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/TextEncoding.h"
 #include "llvm/Support/YAMLParser.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
 #include "llvm/TargetParser/ARMTargetParserCommon.h"
@@ -2044,10 +2043,6 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
 
   // TODO: maybe this can be removed at some point.
   CmdArgs.push_back("-fno-aligned-allocation");
-
-  // CC-RL calling convention compatibility.
-  if (Args.hasArg(options::OPT_frenesas_extensions))
-    CmdArgs.push_back("-fshort-enums");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-join-splitedges");
@@ -7897,12 +7892,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     EH = addExceptionArgs(Args, InputType, TC, KernelOrKext,
                           IsDeviceOffloadAction, Runtime, CmdArgs);
 
-  // RL78 / CC-RL language options.
+  // RL78 memory models.
   if (RawTriple.isRL78()) {
-    if (Args.hasFlag(options::OPT_frenesas_extensions,
-                     options::OPT_fno_renesas_extensions, false)) {
-      CmdArgs.push_back("-frenesas-extensions");
-    }
     if (Args.hasFlag(options::OPT_mfar_code, options::OPT_mnear_code, false))
       CmdArgs.push_back("-mfar-code");
     bool FarData =
@@ -8045,52 +8036,30 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // -fno-common is the default, set -fcommon only when that flag is set.
   Args.addOptInFlag(CmdArgs, options::OPT_fcommon, options::OPT_fno_common);
 
-  // -fsigned-bitfields is default; -funsigned-bitfields is supported for RL78
-  // (C only).
+  // -fsigned-bitfields is default, and clang doesn't yet support
+  // -funsigned-bitfields.
   if (!Args.hasFlag(options::OPT_fsigned_bitfields,
-                    options::OPT_funsigned_bitfields, true)) {
-    if (RawTriple.isRL78())
-      CmdArgs.push_back("-funsigned-bitfields");
-    else
-      D.Diag(diag::warn_drv_clang_unsupported)
-          << Args.getLastArg(options::OPT_funsigned_bitfields)
-                 ->getAsString(Args);
-  }
+                    options::OPT_funsigned_bitfields, true))
+    D.Diag(diag::warn_drv_clang_unsupported)
+        << Args.getLastArg(options::OPT_funsigned_bitfields)->getAsString(Args);
 
   // -fsigned-bitfields is default, and clang doesn't support -fno-for-scope.
   if (!Args.hasFlag(options::OPT_ffor_scope, options::OPT_fno_for_scope, true))
     D.Diag(diag::err_drv_clang_unsupported)
         << Args.getLastArg(options::OPT_fno_for_scope)->getAsString(Args);
 
-  // -finput_charset=UTF-8 is default. Reject others, except on RL78, which
-  // converts the main file (and supports any encoding the host converts).
+  // -finput_charset=UTF-8 is default. Reject others
   if (Arg *inputCharset = Args.getLastArg(options::OPT_finput_charset_EQ)) {
     StringRef value = inputCharset->getValue();
-    if (RawTriple.isRL78() && !value.equals_insensitive("utf-8")) {
-      if (llvm::TextEncodingConverter::create(value, "UTF-8")) {
-        CmdArgs.push_back("-finput-charset");
-        CmdArgs.push_back(Args.MakeArgString(value));
-      } else {
-        D.Diag(diag::err_drv_invalid_value) << inputCharset->getAsString(Args)
-                                            << value;
-      }
-    } else if (!value.equals_insensitive("utf-8"))
+    if (!value.equals_insensitive("utf-8"))
       D.Diag(diag::err_drv_invalid_value) << inputCharset->getAsString(Args)
                                           << value;
   }
 
-  // -fexec_charset=UTF-8 is default. Reject others, except on RL78.
+  // -fexec_charset=UTF-8 is default. Reject others
   if (Arg *execCharset = Args.getLastArg(options::OPT_fexec_charset_EQ)) {
     StringRef value = execCharset->getValue();
-    if (RawTriple.isRL78() && !value.equals_insensitive("utf-8")) {
-      if (llvm::TextEncodingConverter::create("UTF-8", value)) {
-        CmdArgs.push_back("-fexec-charset");
-        CmdArgs.push_back(Args.MakeArgString(value));
-      } else {
-        D.Diag(diag::err_drv_invalid_value) << execCharset->getAsString(Args)
-                                            << value;
-      }
-    } else if (!value.equals_insensitive("utf-8"))
+    if (!value.equals_insensitive("utf-8"))
       D.Diag(diag::err_drv_invalid_value) << execCharset->getAsString(Args)
                                           << value;
   }
@@ -9502,16 +9471,6 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   case llvm::Triple::riscv64be:
     AddRISCVTargetArgs(Args, CmdArgs);
     break;
-
-  case llvm::Triple::RL78: {
-    // Default include paths: the current directory and the source's.
-    CmdArgs.push_back("-I.");
-    SmallString<1024> Dir(Inputs[0].getFilename());
-    llvm::sys::path::remove_filename(Dir);
-    if (!Dir.empty())
-      CmdArgs.push_back(Args.MakeArgString("-I" + Dir));
-    break;
-  }
 
   case llvm::Triple::hexagon:
     if (Args.hasFlag(options::OPT_mdefault_build_attributes,
