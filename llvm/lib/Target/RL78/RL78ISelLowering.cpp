@@ -1649,23 +1649,6 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-// An addrspacecast (1 -> 0) is needed for the sret ptrs if -mfar-data,
-// because the ptr to stack slot is near and the default pointer type is far.
-// A simple zero-extend won't cut it as the data near segment is 0xF, not 0x0.
-SDValue RL78TargetLowering::lowerStackSlotForSRet(SDValue StackSlot,
-                                                  Type *&StackSlotPtrType,
-                                                  CallLoweringInfo &CLI) const {
-  const auto &DL = CLI.DAG.getDataLayout();
-
-  if (DL.getPointerSizeInBits() == 32) {
-    StackSlotPtrType = PointerType::get(CLI.RetTy, 0);
-    return CLI.DAG.getAddrSpaceCast(
-        SDLoc(StackSlot), getPointerTy(DL), StackSlot, DL.getAllocaAddrSpace(), 0);
-  }
-
-  return SDValue{};
-}
-
 SDValue RL78TargetLowering::LowerExternalSymbol(SDValue Op,
                                                 SelectionDAG &DAG) const {
   ExternalSymbolSDNode *S = cast<ExternalSymbolSDNode>(Op);

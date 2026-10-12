@@ -5135,15 +5135,6 @@ public:
   /// outgoing token chain. It calls LowerCall to do the actual lowering.
   std::pair<SDValue, SDValue> LowerCallTo(CallLoweringInfo &CLI) const;
 
-  /// Give target a chance to custom lower a stack slot for sret demotion.
-  /// Returns the lowered stack slot (in which case the type might be changed
-  /// as well) or an empty value if custom lowering isn't needed (the default).
-  virtual SDValue lowerStackSlotForSRet(SDValue /*StackSlot*/,
-                                        Type *& /*StackSlotPtrType*/,
-                                        CallLoweringInfo & /*CLI*/) const {
-    return SDValue();
-  }
-
   /// This hook must be implemented to lower calls into the specified
   /// DAG. The outgoing arguments to the call are described by the Outs array,
   /// and the values to be returned by the call are described by the Ins

@@ -230,9 +230,6 @@ public:
     return PtrVT.getSizeInBits() == 32;
   }
 
-  SDValue lowerStackSlotForSRet(SDValue StackSlot, Type *&StackSlotPtrType,
-                                CallLoweringInfo &CLI) const override;
-
 private:
   // CC-RL calling convention specific operand allocator functions
   void

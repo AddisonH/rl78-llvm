@@ -11501,10 +11501,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     Type *StackSlotPtrType = PointerType::get(Context, DL.getAllocaAddrSpace());
 
     DemoteStackSlot = CLI.DAG.getFrameIndex(DemoteStackIdx, getFrameIndexTy(DL));
-    SDValue LoweredStackSlot =
-        lowerStackSlotForSRet(DemoteStackSlot, StackSlotPtrType, CLI);
-    ArgListEntry Entry(LoweredStackSlot ? LoweredStackSlot : DemoteStackSlot,
-                       StackSlotPtrType);
+    ArgListEntry Entry(DemoteStackSlot, StackSlotPtrType);
     Entry.IsSRet = true;
     Entry.Alignment = Alignment;
     CLI.getArgs().insert(CLI.getArgs().begin(), Entry);

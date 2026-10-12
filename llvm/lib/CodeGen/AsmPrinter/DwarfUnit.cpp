@@ -1880,23 +1880,23 @@ DIE &DwarfUnit::constructMemberDIE(DIE &Buffer, const DIDerivedType *DT) {
     // BaseAddr = ObAddr + *((*ObAddr) - Offset)
 
     DIELoc *VBaseLocationDie = new (DIEValueAllocator) DIELoc;
-    addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_dup);
-    if (DT->getFlags() & DINode::FlagShortInheritanceDeref) {
-      // For near we need only 2 byte addresses, not 4.
+    // The vtable pointer and the offset in the vtable are data pointer
+    // sized, which need not be the size of a DWARF address.
+    unsigned DataPtrSize = Asm->getDataLayout().getPointerSize(0);
+    auto AddDeref = [&] {
+      if (DataPtrSize == Asm->MAI.getCodePointerSize()) {
+        addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
+        return;
+      }
       addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
-      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
-    } else {
-      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
-    }
+      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, DataPtrSize);
+    };
+    addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_dup);
+    AddDeref();
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_constu);
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_udata, DT->getOffsetInBits());
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_minus);
-    if (DT->getFlags() & DINode::FlagShortInheritanceDeref) {
-      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref_size);
-      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, 2);
-    } else {
-      addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_deref);
-    }
+    AddDeref();
     addUInt(*VBaseLocationDie, dwarf::DW_FORM_data1, dwarf::DW_OP_plus);
 
     addBlock(MemberDie, dwarf::DW_AT_data_member_location, VBaseLocationDie);

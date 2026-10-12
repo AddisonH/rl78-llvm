@@ -2643,10 +2643,6 @@ void CGDebugInfo::CollectCXXBasesAux(
     // BI->isVirtual() and bits when not.
 
     BFlags |= getAccessFlag(BI.getAccessSpecifier(), RD);
-
-    // For RL78 we need to know if we should use 2 or 4 byte addresses.
-    if (CGM.getTarget().getTriple().isRL78())
-      BFlags |= llvm::DINode::FlagShortInheritanceDeref;
     llvm::DIType *DTy = DBuilder.createInheritance(RecordTy, BaseTy, BaseOffset,
                                                    VBPtrOffset, BFlags);
     EltTys.push_back(DTy);
