@@ -23,63 +23,62 @@
   
   #include "def.S"
   
-  .PUBLIC __COM_mulul
-  .EXTERN __COM_mului
+  .globl __COM_mulul
+  .extern __COM_mului
   
   .text
 __COM_mulul:
-  $IF(_RL78_S3)
+#if _RL78_S3
   PUSH BC
   MOVW HL, AX
-  $ELSE
+#else
   PUSH DE
   PUSH BC
   PUSH AX
-  $ENDIF
-  
-  $IF(_RL78_S3)
+#endif
+#if _RL78_S3
   MOVW AX, [SP+6]
   MULHU
-  $ELSE
+#else
   MOVW AX, [SP+10]
   CALL !!__COM_mului
   POP HL
-  $ENDIF
+#endif
   MOVW [HL], AX
   MOVW AX, BC
   MOVW [HL+2], AX
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, DE
   MOVW BC, AX
   MOVW AX, [SP+6]
   MULHU
-  $ELSE
+#else
   PUSH HL
   MOVW AX, [SP+4]
   MOVW BC, AX
   MOVW AX, [SP+10]
   CALL !!__COM_mului
   POP HL
-  $ENDIF
+#endif
   ADDW AX, [HL+2]
   MOVW [HL+2], AX
   SKNC
   INCW BC
   MOVW AX, BC
   MOVW [HL+4], AX
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, [SP+0]
   MOVW BC, AX
   MOVW AX, [SP+8]
   MULHU
-  $ELSE
+#else
   PUSH HL
   MOVW AX, [SP+2]
   MOVW BC, AX
   MOVW AX, [SP+12]
   CALL !!__COM_mului
   POP HL
-  $ENDIF
+#endif
   ADDW AX, [HL+2]
   MOVW [HL+2], AX
   SKNC
@@ -90,19 +89,19 @@ __COM_mulul:
   CLRW AX
   ROLWC AX, 1
   MOVW [HL+6], AX
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, DE
   MOVW BC, AX
   MOVW AX, [SP+8]
   MULHU
-  $ELSE
+#else
   PUSH HL
   MOVW AX, [SP+4]
   MOVW BC, AX
   MOVW AX, [SP+12]
   CALL !!__COM_mului
   POP HL
-  $ENDIF
+#endif
   ADDW AX, [HL+4]
   MOVW [HL+4], AX
   SKNC
@@ -110,12 +109,11 @@ __COM_mulul:
   MOVW AX, BC
   ADDW AX, [HL+6]
   MOVW [HL+6], AX
-  
-  $IF(_RL78_S3)
+#if _RL78_S3
   ADDW SP, #2
-  $ELSE
+#else
   ADDW SP, #4
-  $ENDIF
+#endif
   RET
 .Lfunc_end1:
   .size __COM_mulul, .Lfunc_end1-__COM_mulul  

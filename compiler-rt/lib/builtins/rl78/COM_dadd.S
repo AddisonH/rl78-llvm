@@ -26,12 +26,12 @@
 #define __COM_dadd  __COM_dadd_nd
 #endif
 
-  .PUBLIC __COM_dadd
-  .EXTERN __COM_llshr
-  .EXTERN __REL_d_check
-  .EXTERN __REL_d_shl11
-  .EXTERN __REL_d_inf
-  .EXTERN __REL_d_round
+  .globl __COM_dadd
+  .extern __COM_llshr
+  .extern __REL_d_check
+  .extern __REL_d_shl11
+  .extern __REL_d_inf
+  .extern __REL_d_round
   
   .text
 #ifdef __OPTIMIZE_SIZE__

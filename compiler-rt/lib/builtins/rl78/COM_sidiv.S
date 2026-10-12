@@ -21,18 +21,17 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_sidiv
-  $IFN(_RL78_S3)
-  .EXTERN __COM_uidiv
-  $ENDIF
-  
+  .globl __COM_sidiv
+#if !_RL78_S3
+  .extern __COM_uidiv
+#endif
   .text
 
 .L_ZERODIV:
   DECW AX
   RET
 __COM_sidiv:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW DE, AX
   CLRW AX
   CMPW AX, BC
@@ -64,7 +63,7 @@ __COM_sidiv:
   SUBW AX, BC
 .L_END:
   RET
-  $ELSE
+#else
   MOVW DE, AX
   CLRW AX
   CMPW AX, BC
@@ -83,13 +82,13 @@ __COM_sidiv:
   CLRW AX
   SUBW AX, DE
 .L2:
-  $IF(_XMULDIV)
+#if _XMULDIV
   CALL !!__COM_uidiv
-  $ELSE
+#else
   PUSH HL
   CALL !!__COM_uidiv
   POP HL
-  $ENDIF
+#endif
   DEC L
   BNZ $.L_END
   MOVW BC, AX
@@ -97,7 +96,7 @@ __COM_sidiv:
   SUBW AX, BC
 .L_END:
   RET
-  $ENDIF
+#endif
 .Lfunc_end1:
   .size __COM_sidiv, .Lfunc_end1-__COM_sidiv
 

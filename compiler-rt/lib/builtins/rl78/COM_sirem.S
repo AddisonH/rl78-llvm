@@ -21,15 +21,14 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_sirem
-  $IFN(_RL78_S3)
-  .EXTERN __COM_uirem
-  $ENDIF
-  
+  .globl __COM_sirem
+#if !_RL78_S3
+  .extern __COM_uirem
+#endif
   .text
 
 __COM_sirem:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW DE, AX
   CLRW AX
   CMPW AX, BC
@@ -61,7 +60,7 @@ __COM_sirem:
 .L_END:
   MOVW AX, DE
   RET
-  $ELSE
+#else
   MOVW HL, AX
   CLRW AX
   CMPW AX, BC
@@ -85,13 +84,13 @@ __COM_sirem:
   SUBW AX, DE
 .L2:
   XCHW AX, BC
-  $IF(_XMULDIV)
+#if _XMULDIV
   CALL !!__COM_uirem
-  $ELSE
+#else
   PUSH HL
   CALL !!__COM_uirem
   POP HL
-  $ENDIF
+#endif
   DEC L
   BNZ $.L_END
   MOVW BC, AX
@@ -99,7 +98,7 @@ __COM_sirem:
   SUBW AX, BC
 .L_END:
   RET
-  $ENDIF
+#endif
 .Lfunc_end1:
   .size __COM_sirem, .Lfunc_end1-__COM_sirem
 

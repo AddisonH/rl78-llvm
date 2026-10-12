@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_remui
+  .globl __COM_remui
   
   .text
 
@@ -42,7 +42,7 @@ __COM_remui:
   BR $.L_ZERODIV
 #endif
 .L1:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW DE, AX
   MOVW AX, BC
   CLRB A
@@ -50,8 +50,8 @@ __COM_remui:
   DIVHU
   MOV A, E
   RET
-  $ELSE
-  $IF(_XMULDIV)
+#else
+#if _XMULDIV
   PUSH PSW
   DI
   MOV !LOWW(MDUC), #0x080
@@ -70,7 +70,7 @@ __COM_remui:
   POP PSW
   MOV A, X
   RET
-  $ELSE
+#else
   CLRB B
   XCHW AX, BC
   MOVW DE, AX
@@ -88,7 +88,7 @@ __COM_remui:
   BNZ $.L2
   MOV A, X
   RET
-  $ENDIF
-  $ENDIF
+#endif
+#endif
 .Lfunc_end1:
   .size __COM_remui, .Lfunc_end1-__COM_remui

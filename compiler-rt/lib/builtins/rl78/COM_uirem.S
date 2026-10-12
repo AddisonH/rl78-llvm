@@ -21,28 +21,28 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_uirem
+  .globl __COM_uirem
   
   .text
 __COM_uirem:
   MOVW DE, AX
   CLRW AX
   CMPW AX, BC
-  $IF(_RL78_S3)
-  $ELSE
+#if _RL78_S3
+#else
   MOVW AX, DE
-  $ENDIF
+#endif
 #ifdef __OPTIMIZE_SIZE__
   BZ $.L_ZERODIV
 #else
   SKNZ
   BR $.L_ZERODIV
 #endif
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, BC
   XCHW AX, DE
   DIVHU
-  $ELSEIF(_XMULDIV)
+#elif _XMULDIV
   PUSH PSW
   DI
   MOV !LOWW(MDUC), #0x080
@@ -58,7 +58,7 @@ __COM_uirem:
   BT A.0, $.L1
   MOVW AX, !LOWW(MDCL)
   POP PSW
-  $ELSE
+#else
   XCHW AX, BC
   MOVW DE, AX
   CLRW AX
@@ -73,13 +73,12 @@ __COM_uirem:
 .L2:
   DEC L
   BNZ $.L1
-  $ENDIF
-  
+#endif
 .L_ZERODIV:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, DE
-  $ELSE
-  $ENDIF
+#else
+#endif
   RET
 .Lfunc_end1:
   .size __COM_uirem, .Lfunc_end1-__COM_uirem

@@ -25,10 +25,10 @@
 #define __COM_ddiv  __COM_ddiv_nd
 #endif
 
-  .PUBLIC __COM_ddiv
-  .EXTERN __REL_d_check
-  .EXTERN __REL_d_inf
-  .EXTERN __REL_d_round
+  .globl __COM_ddiv
+  .extern __REL_d_check
+  .extern __REL_d_inf
+  .extern __REL_d_round
   
   .text
 #ifdef __OPTIMIZE_SIZE__

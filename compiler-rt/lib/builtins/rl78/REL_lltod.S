@@ -22,9 +22,9 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __REL_lltod
-  .EXTERN __REL_setexp_ll
-  .EXTERN __REL_d_round
+  .globl __REL_lltod
+  .extern __REL_setexp_ll
+  .extern __REL_d_round
   
   .text
   

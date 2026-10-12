@@ -26,8 +26,8 @@
 #define __COM_ulldiv  __COM_ulldiv_nd
 #endif
 
-  .PUBLIC __COM_ulldiv
-  .EXTERN __REL_lldiv
+  .globl __COM_ulldiv
+  .extern __REL_lldiv
   
   .text
 #ifndef __OPTIMIZE_SIZE__

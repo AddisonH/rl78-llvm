@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_ucrem
+  .globl __COM_ucrem
   
   .text
 __COM_ucrem:
@@ -32,13 +32,13 @@ __COM_ucrem:
   SKNZ
   BR $.L_ZERODIV
 #endif  
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW DE, AX
   SHRW AX, 8
   MOV D, A
   DIVHU
   MOV A, E
-  $ELSEIF(_XMULDIV)
+#elif _XMULDIV
   MOVW DE, AX
   SHRW AX, 8
   MOV D, A
@@ -58,7 +58,7 @@ __COM_ucrem:
   MOVW AX, !LOWW(MDCL)
   POP PSW
   MOV A, X
-  $ELSE
+#else
   MOVW DE, AX
   MOV D, #8
   CLRB X
@@ -72,8 +72,7 @@ __COM_ucrem:
 .L2:
   DEC D
   BNZ $.L1
-  $ENDIF
-  
+#endif
 .L_ZERODIV:
   RET
 .Lfunc_end1:

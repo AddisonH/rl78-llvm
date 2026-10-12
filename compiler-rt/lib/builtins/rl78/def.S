@@ -7,43 +7,43 @@
 //===----------------------------------------------------------------------===//
 
 #ifdef __RL78_S3__
-    _RL78_S3	.EQU	1
-    _XMAC		.EQU	0
-    _XMULDIV	.EQU	0
-    _XMUL		.EQU	0
-    MACRH		.EQU	0xFFFF2
-    MACRL		.EQU	0xFFFF0
+    #define _RL78_S3 1
+    #define _XMAC 0
+    #define _XMULDIV 0
+    #define _XMUL 0
+    #define MACRH 0xFFFF2
+    #define MACRL 0xFFFF0
 #else
-    _RL78_S3	.EQU	0
+    #define _RL78_S3 0
     #ifdef  __MDA_ENABLED__
-        _XMAC		.EQU	1
-        _XMULDIV	.EQU	1
-        _XMUL		.EQU	1
-        MDAL		.EQU	0xFFFF0
-        MDAH		.EQU	0xFFFF2
-        MDBL		.EQU	0xFFFF6
-        MDBH		.EQU	0xFFFF4
-        MDCL		.EQU	0xF00E0
-        MDCH		.EQU	0xF00E2
-        MDUC		.EQU	0xF00E8
+        #define _XMAC 1
+        #define _XMULDIV 1
+        #define _XMUL 1
+        #define MDAL 0xFFFF0
+        #define MDAH 0xFFFF2
+        #define MDBL 0xFFFF6
+        #define MDBH 0xFFFF4
+        #define MDCL 0xF00E0
+        #define MDCH 0xF00E2
+        #define MDUC 0xF00E8
     #else
-        _XMAC		.EQU	0
+        #define _XMAC 0
         #ifdef  XMULDIV
-            _XMULDIV	.EQU	1
-            _XMUL		.EQU	1
+            #define _XMULDIV 1
+            #define _XMUL 1
         #else
-            _XMULDIV	.EQU	0
+            #define _XMULDIV 0
             #ifdef  XMUL
-                _XMUL		.EQU	1
+                #define _XMUL 1
             #else
-                _XMUL		.EQU	0
+                #define _XMUL 0
             #endif
         #endif
     #endif
 #endif
 
 #ifdef DBL4
-    _DBL4		.EQU	1
+    #define _DBL4 1
 #else
-    _DBL4		.EQU	0
+    #define _DBL4 0
 #endif

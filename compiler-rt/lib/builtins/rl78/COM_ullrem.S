@@ -26,8 +26,8 @@
 #define __COM_ullrem  __COM_ullrem_nd
 #endif
 
-  .PUBLIC __COM_ullrem
-  .EXTERN __REL_llrem
+  .globl __COM_ullrem
+  .extern __REL_llrem
   
   .text
 #ifndef __OPTIMIZE_SIZE__

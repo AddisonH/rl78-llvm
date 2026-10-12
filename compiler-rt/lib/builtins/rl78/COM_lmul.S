@@ -21,11 +21,11 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_lmul
+  .globl __COM_lmul
   
   .text
 __COM_lmul:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW HL, AX
   MOVW AX, [SP+4]
   MULHU
@@ -43,8 +43,8 @@ __COM_lmul:
   ADDW AX, HL
   XCHW AX, BC
   RET
-  $ELSE
-  $IF(_XMULDIV)
+#else
+#if _XMULDIV
   PUSH PSW
   DI
   CLRB !LOWW(MDUC)
@@ -68,7 +68,7 @@ __COM_lmul:
   ADDW AX, DE
   XCHW AX, BC
   RET
-  $ELSE
+#else
   MOVW DE, AX
   MOVW AX, [SP+4]
   MOV A, B
@@ -127,8 +127,8 @@ __COM_lmul:
   SKNC
   INCW BC
   RET
-  $ENDIF
-  $ENDIF
+#endif
+#endif
 .Lfunc_end1:
   .size __COM_lmul, .Lfunc_end1-__COM_lmul
 

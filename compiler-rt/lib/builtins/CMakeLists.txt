@@ -1140,8 +1140,6 @@ set(ASM_RL78_SOURCES
   rl78/REL_delay_cycles_24bit.S
 )
 
-set_property(SOURCE ${ASM_RL78_SOURCES} PROPERTY COMPILE_FLAGS -frenesas-extensions)
-
 set(ALL_RL78_SOURCES
   ${GENERIC_SOURCES_RL78}
   ${ASM_RL78_SOURCES})

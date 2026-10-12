@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_divui
+  .globl __COM_divui
   
   .text
 #ifdef __OPTIMIZE_SIZE__
@@ -90,16 +90,15 @@ __COM_divui:
   CMP0 C
   SKNZ
   BR $.L_ZERODIV
-  
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW DE, AX
   MOVW AX, BC
   CLRB A
   XCHW AX, DE
   DIVHU
   RET
-  $ELSE
-  $IF(_XMULDIV)
+#else
+#if _XMULDIV
   PUSH PSW
   DI
   MOV !LOWW(MDUC), #0x080
@@ -117,7 +116,7 @@ __COM_divui:
   MOVW AX, MDAL
   POP PSW
   RET
-  $ELSE
+#else
   CLRB B
   XCHW AX, BC
   MOVW DE, AX
@@ -135,8 +134,8 @@ __COM_divui:
   BNZ $.L2
   MOVW AX, BC
   RET
-  $ENDIF
-  $ENDIF
+#endif
+#endif
 #endif
 .Lfunc_end1:
   .size __COM_divui, .Lfunc_end1-__COM_divui

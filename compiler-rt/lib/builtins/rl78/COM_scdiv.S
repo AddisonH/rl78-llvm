@@ -21,11 +21,10 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_scdiv
-  $IFN(_RL78_S3)
-  .EXTERN __COM_ucdiv
-  $ENDIF
-  
+  .globl __COM_scdiv
+#if !_RL78_S3
+  .extern __COM_ucdiv
+#endif
   .text
 
 .L_ZERODIV:
@@ -51,16 +50,16 @@ __COM_scdiv:
   XOR A, #0x0FF
   INC A
 .L2:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOV E, A
   CLRB A
   MOV D, A
   DIVHU
   MOV A, X
-  $ELSE
+#else
   XCH A, X
   CALL !!__COM_ucdiv
-  $ENDIF
+#endif
   DEC C
   BNZ $.L_END
   XOR A, #0x0FF

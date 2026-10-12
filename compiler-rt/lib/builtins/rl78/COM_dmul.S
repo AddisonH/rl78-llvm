@@ -25,12 +25,12 @@
 #define __COM_dmul  __COM_dmul_nd
 #endif
 
-  .PUBLIC __COM_dmul
-  .EXTERN __COM_mulul
-  .EXTERN __REL_d_check
-  .EXTERN __REL_d_inf
-  .EXTERN __REL_d_shl11
-  .EXTERN __REL_d_round
+  .globl __COM_dmul
+  .extern __COM_mulul
+  .extern __REL_d_check
+  .extern __REL_d_inf
+  .extern __REL_d_shl11
+  .extern __REL_d_round
   
 
 

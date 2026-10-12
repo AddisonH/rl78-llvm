@@ -21,11 +21,10 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_screm
-  $IFN(_RL78_S3)
-  .EXTERN __COM_ucrem
-  $ENDIF
-  
+  .globl __COM_screm
+#if !_RL78_S3
+  .extern __COM_ucrem
+#endif
   .text
 
 __COM_screm:
@@ -47,16 +46,16 @@ __COM_screm:
   XOR A, #0x0FF
   INC A
 .L2:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOV E, A
   CLRB A
   MOV D, A
   DIVHU
   MOV A, E
-  $ELSE
+#else
   XCH A, X
   CALL !!__COM_ucrem
-  $ENDIF
+#endif
   DEC C
   BNZ $.L_END
   XOR A, #0x0FF

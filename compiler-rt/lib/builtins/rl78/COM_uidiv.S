@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_uidiv
+  .globl __COM_uidiv
   
   .text
 .L_ZERODIV:
@@ -37,12 +37,12 @@ __COM_uidiv:
   SKNZ
   BR $.L_ZERODIV
 #endif
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW AX, BC
   XCHW AX, DE
   DIVHU
   RET
-  $ELSEIF(_XMULDIV)
+#elif _XMULDIV
   MOVW AX, DE
   PUSH PSW
   DI
@@ -60,7 +60,7 @@ __COM_uidiv:
   MOVW AX, MDAL
   POP PSW
   RET
-  $ELSE
+#else
   MOVW AX, DE
   XCHW AX, BC
   MOVW DE, AX
@@ -78,7 +78,7 @@ __COM_uidiv:
   BNZ $.L1
   MOVW AX, BC
   RET
-  $ENDIF
+#endif
 .Lfunc_end1:
   .size __COM_uidiv, .Lfunc_end1-__COM_uidiv
   

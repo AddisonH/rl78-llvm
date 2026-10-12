@@ -21,11 +21,10 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_slrem
-  $IFN(_RL78_S3)
-  .EXTERN __COM_ulrem
-  $ENDIF
-  
+  .globl __COM_slrem
+#if !_RL78_S3
+  .extern __COM_ulrem
+#endif
   .text
 
 .L_ZERODIV:
@@ -67,7 +66,7 @@ __COM_slrem:
   MOV X, A
   SUBW AX, [HL+8]
 .L2:
-  $IF(_RL78_S3)
+#if _RL78_S3
   MOVW HL, AX
   MOVW AX, [SP+6]
   XCHW AX, DE
@@ -86,7 +85,7 @@ __COM_slrem:
   MOVW BC, AX
   MOVW AX, DE
   RET
-  $ELSE
+#else
   PUSH AX
   MOVW AX, [HL+6]
   PUSH AX
@@ -107,7 +106,7 @@ __COM_slrem:
   MOVW AX, DE
 .L_END:
   RET
-  $ENDIF
+#endif
 .Lfunc_end1:
   .size __COM_slrem, .Lfunc_end1-__COM_slrem
 

@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
   #include "def.S"
   
-  .PUBLIC __COM_lshr
+  .globl __COM_lshr
   
   .text
 #ifndef __OPTIMIZE_SIZE__

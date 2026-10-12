@@ -25,9 +25,9 @@
 #define __COM_slldiv  __COM_slldiv_nd
 #endif
 
-  .PUBLIC __COM_slldiv
-  .EXTERN __REL_lldiv
-  .EXTERN __REL_llrev
+  .globl __COM_slldiv
+  .extern __REL_lldiv
+  .extern __REL_llrev
   
   .text
 #ifndef __OPTIMIZE_SIZE__
