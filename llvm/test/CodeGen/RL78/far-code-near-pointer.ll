@@ -10,8 +10,8 @@ target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16
 declare i16 @f() addrspace(3)
 
 ; CHECK-LABEL: _vcall:
-; CHECK:       mov cs, a
-; CHECK:       call
+; CHECK:       mov cs, #0
+; CHECK-NEXT:  call ax
 define i16 @vcall(ptr %slot) addrspace(3) {
   %fn = load ptr, ptr %slot, align 2
   %r = call addrspace(0) i16 %fn()
@@ -22,6 +22,12 @@ define i16 @vcall(ptr %slot) addrspace(3) {
 ; CHECK:       movw ax, #_f
 define i16 @memptr() addrspace(3) {
   ret i16 ptrtoint (ptr addrspace(3) @f to i16)
+}
+
+; CHECK-LABEL: _voidptr:
+; CHECK:       movw ax, #_f
+define ptr @voidptr() addrspace(3) {
+  ret ptr addrspacecast (ptr addrspace(3) @f to ptr)
 }
 
 ; CHECK-LABEL: _vtable:

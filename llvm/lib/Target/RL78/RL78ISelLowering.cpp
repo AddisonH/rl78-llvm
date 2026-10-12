@@ -1313,7 +1313,7 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setTargetDAGCombine({ISD::SETCC, ISD::SELECT_CC});
   setTargetDAGCombine({ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX});
   // To eliminate casts between far_code and far_data
-  //setTargetDAGCombine(ISD::ADDRSPACECAST);
+  setTargetDAGCombine(ISD::ADDRSPACECAST);
 
   // To replace special cases of 16bit ops
   setTargetDAGCombine(ISD::AND);
@@ -3518,6 +3518,19 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
       return PerformSUBCombine(N, DCI);
   case ISD::TRUNCATE:
       return PerformTruncateCombine(N, DCI);
+  case ISD::ADDRSPACECAST:
+    // A far function's address as a near pointer ((void *)f with far code):
+    // a plain reference, like its truncation (see PerformTruncateCombine).
+    if (N->getValueType(0) == MVT::i16)
+      if (auto *G = dyn_cast<GlobalAddressSDNode>(N->getOperand(0)))
+        if (G->getValueType(0) == MVT::i32 &&
+            G->getGlobal()->getValueType()->isFunctionTy())
+          return DCI.DAG.getNode(
+              RL78ISD::LOW16, SDLoc(N), MVT::i16,
+              DCI.DAG.getTargetGlobalAddress(G->getGlobal(), SDLoc(N),
+                                             MVT::i16, G->getOffset(),
+                                             RL78MCExpr::VK_RL78_FUNCTION));
+    return SDValue();
   case ISD::SHL:
       return PerformSHLCombine(N, DCI);
   case ISD::INLINEASM: {
@@ -4402,7 +4415,20 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo *TII = MF->getSubtarget<RL78Subtarget>().getInstrInfo();
-  if (MI.getOperand(1).isReg()) {
+  // A constant page (0 for a near pointer called from far code) is loaded
+  // with MOV CS, #byte.
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  MachineInstr *HighDef =
+      MI.getOperand(1).isReg() && MI.getOperand(1).getReg().isVirtual()
+          ? MRI.getVRegDef(MI.getOperand(1).getReg())
+          : nullptr;
+  if (HighDef && HighDef->getOpcode() == RL78::MOVW_rp_i16 &&
+      HighDef->getOperand(1).isImm()) {
+    BuildMI(*BB, MI, DL, TII->get(RL78::MOV_CS_i8), RL78::CS)
+        .addImm(HighDef->getOperand(1).getImm() & 0xFF);
+    if (MRI.hasOneNonDBGUse(MI.getOperand(1).getReg()))
+      HighDef->eraseFromParent();
+  } else if (MI.getOperand(1).isReg()) {
     BuildMI(*BB, MI, DL, TII->get(RL78::COPY), RL78::CS)
         .addReg(MI.getOperand(1).getReg(),
                 MI.getOperand(1).isKill() ? RegState::Kill : RegState::NoFlags, RL78::sub_lo);
