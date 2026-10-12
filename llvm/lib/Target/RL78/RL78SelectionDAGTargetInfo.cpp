@@ -33,26 +33,19 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
   // Emit a library call.
   TargetLowering::ArgListTy Args;
 
-  // If the default pointer size is 32 bits, -mfar-data is in effect
-  const auto FarData = DAG.getDataLayout().getPointerSizeInBits() == 32;
-
-  // If that is the case, but we see *any* near pointers, we need to promote them to far
-  // as memcpy == _COM_memcpy_ff (i.e. we don't have a func version working w/ near ptrs)
-  // NOTE: we do this promotion here as we may optimize it in the future (e.g.
-  // have a _COM_memcpy_nn available for this when building with -mfar-data?)
-  // NOTE2: we can also get a near/far ptr mix with -mfar-rom or with a ptr to data
-  // explicitly marked __far, so also use a general test (if the ptr sizes are different)
-  if (FarData ||
-      DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) !=
-          DAG.getDataLayout().getPointerSizeInBits(SrcPtrInfo.getAddrSpace())) {
+  // With one near and one far pointer the near one is promoted: the library
+  // has a routine for two near pointers and one for two far ones
+  // (_COM_memcpy_ff).
+  if (DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) !=
+      DAG.getDataLayout().getPointerSizeInBits(SrcPtrInfo.getAddrSpace())) {
     const auto nearSeg = DAG.getConstant(0xf, dl, MVT::i16);
     if (DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 16) {
       Op1 = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, Op1, nearSeg);
-      DstPtrInfo.AddrSpace = FarData ? 0 : 2;
+      DstPtrInfo.AddrSpace = 2;
     }
     if (DAG.getDataLayout().getPointerSizeInBits(SrcPtrInfo.getAddrSpace()) == 16) {
       Op2 = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, Op2, nearSeg);
-      SrcPtrInfo.AddrSpace = FarData ? 0 : 2;
+      SrcPtrInfo.AddrSpace = 2;
     }
   }
 
@@ -61,10 +54,7 @@ RL78SelectionDAGTargetInfo::EmitTargetCodeForMemcpymove(
   Args.emplace_back(
       Op2, PointerType::get(*DAG.getContext(), SrcPtrInfo.getAddrSpace()));
 
-  // -mfar-data makes the default ptr size (in address space 0) 32-bit;
-  // in this case, use address space 1 (near) to reflect that size_t remains 16-bit
-  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext(),
-                                                            FarData ? 1 : 0));
+  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext()));
 
   const char *libcallName =
       DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 32
@@ -117,27 +107,11 @@ SDValue RL78SelectionDAGTargetInfo::EmitTargetCodeForMemset(
   // Emit a library call.
   TargetLowering::ArgListTy Args;
 
-  // If the default pointer size is 32 bits, -mfar-data is in effect
-  const auto FarData = DAG.getDataLayout().getPointerSizeInBits() == 32;
-
-  // If that's the case and we get a near pointer, we need to promote it to far
-  // as memset == _COM_memset_f (i.e. we don't have a near-ptr version of memset)
-  // NOTE: we do this promotion here as we may optimize it in the future (e.g.
-  // have a _COM_memset_n available for this when building with -mfar-data)
-  if (FarData && DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 16) {
-    const auto nearSeg = DAG.getConstant(0xf, dl, MVT::i16);
-    Op1 = DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, Op1, nearSeg);
-    DstPtrInfo.AddrSpace = 0;
-  }
-
   Args.emplace_back(
       Op1, PointerType::get(*DAG.getContext(), DstPtrInfo.getAddrSpace()));
   // Here we pass it as i16, despite only the low i8 part being used
   Args.emplace_back(Op2, Type::getInt16Ty(*DAG.getContext()));
-  // -mfar-data makes the default ptr size (in address space 0) 32-bit;
-  // in this case, use address space 1 (near) to reflect that size_t remains 16-bit
-  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext(),
-                                                            FarData ? 1 : 0));
+  Args.emplace_back(Op3, DAG.getDataLayout().getIntPtrType(*DAG.getContext()));
 
   const char *libcallName =
       DAG.getDataLayout().getPointerSizeInBits(DstPtrInfo.getAddrSpace()) == 32

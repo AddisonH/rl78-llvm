@@ -27,7 +27,7 @@ private:
 
   /// SRetReturnReg - Holds the virtual register(s) into which the sret
   /// argument is passed.
-  unsigned SRetReturnReg[2];
+  unsigned SRetReturnReg;
 
   /// IsLeafProc - True if the function is a leaf procedure.
   bool IsLeafProc;
@@ -36,10 +36,10 @@ private:
 
 public:
   RL78MachineFunctionInfo()
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg{0},
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
   RL78MachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI)
-      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg{0},
+      : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
 
   MachineFunctionInfo *
@@ -55,8 +55,8 @@ public:
   int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
   void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
 
-  unsigned getSRetReturnReg(unsigned Idx = 0) const { return SRetReturnReg[Idx]; }
-  void setSRetReturnReg(unsigned Reg, unsigned Idx = 0) { SRetReturnReg[Idx] = Reg; }
+  unsigned getSRetReturnReg() const { return SRetReturnReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
   void setLeafProc(bool rhs) { IsLeafProc = rhs; }
   bool isLeafProc() const { return IsLeafProc; }

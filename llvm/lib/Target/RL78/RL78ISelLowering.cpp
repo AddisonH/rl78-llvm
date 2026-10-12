@@ -100,28 +100,10 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     if (!Reg)
       llvm_unreachable("sret virtual register not created in the entry block");
     auto PtrVT = getPointerTy(DAG.getDataLayout());
-    if (PtrVT.getSizeInBits() == 16) {
-      SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
-      Chain = DAG.getCopyToReg(Chain, DL, RL78::RP0, Val, Flag);
-      Flag = Chain.getValue(1);
-      RetOps.push_back(DAG.getRegister(RL78::RP0, PtrVT));
-    }
-    else {
-      assert(PtrVT.getSizeInBits() == 32);
-      unsigned SReg = SFI->getSRetReturnReg(1);
-      if (!SReg)
-        llvm_unreachable("sret virtual segment register not created in the entry block");
-
-      SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, MVT::i16);
-      auto Chain1 = DAG.getCopyToReg(Chain, DL, RL78::RP4, Val, Flag);
-      Flag = Chain1.getValue(1);
-      RetOps.push_back(DAG.getRegister(RL78::RP4, MVT::i16));
-
-      SDValue SVal = DAG.getCopyFromReg(Chain, DL, SReg, MVT::i8);
-      auto Chain2 = DAG.getCopyToReg(Chain, DL, RL78::R1, SVal, Flag);
-      Flag = Chain2.getValue(1);
-      RetOps.push_back(DAG.getRegister(RL78::R1, MVT::i8));
-    }
+    SDValue Val = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
+    Chain = DAG.getCopyToReg(Chain, DL, RL78::RP0, Val, Flag);
+    Flag = Chain.getValue(1);
+    RetOps.push_back(DAG.getRegister(RL78::RP0, PtrVT));
   }
 
   // Add the flag if we have it.
@@ -214,21 +196,12 @@ SDValue RL78TargetLowering::LowerFormalArguments(
   if (MF.getFunction().hasStructRetAttr()) {
     // Copy the SRet Argument to SRetReturnReg.
     RL78MachineFunctionInfo *SFI = MF.getInfo<RL78MachineFunctionInfo>();
-    const auto mfar_data = DAG.getDataLayout().getPointerSizeInBits() == 32;
-    unsigned Reg = SFI->getSRetReturnReg(), SReg = 0;
+    unsigned Reg = SFI->getSRetReturnReg();
     if (!Reg) {
       Reg = MF.getRegInfo().createVirtualRegister(&RL78::RL78RPRegsRegClass);
       SFI->setSRetReturnReg(Reg);
-      if (mfar_data) {
-        SReg = MF.getRegInfo().createVirtualRegister(&RL78::RL78RegRegClass);
-        SFI->setSRetReturnReg(SReg, 1);
-      }
     }
     SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), DL, Reg, InVals[0]);
-    if (mfar_data) {
-      Copy = DAG.getCopyToReg(
-          Copy, DL, SReg, DAG.getNode(ISD::TRUNCATE, DL, MVT::i8, InVals[1]));
-    }
     Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, Copy, Chain);
   }
   // If the function takes variable number of arguments, make a frame index for
@@ -402,9 +375,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<std::pair<unsigned, SDValue>, 16> RegsToPass;
   SmallVector<SDValue, 8> MemOpChains;
 
-  // Keep the stack addresses near, even if -mfar-data
-  auto StackAS = DAG.getDataLayout().getAllocaAddrSpace();
-  auto FIPtrTy = getPointerTy(DAG.getDataLayout(), StackAS);
+  auto FIPtrTy = getPointerTy(DAG.getDataLayout());
 
   // Create local copies for byval args.
   SmallVector<SDValue, 8> ByValArgs;
@@ -426,7 +397,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                             false,       // isVolatile,
                             (Size <= 2), // AlwaysInline if size <= 2,
                             /*CI=*/nullptr, std::nullopt,
-                            MachinePointerInfo(StackAS), MachinePointerInfo(StackAS));
+                            MachinePointerInfo(), MachinePointerInfo());
       ByValArgs.push_back(FIPtr);
     } else {
       SDValue nullVal;
@@ -503,7 +474,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                           false, // isVolatile,
                           false, // AlwaysInline
                           /*CI=*/nullptr, std::nullopt,
-                          MachinePointerInfo(StackAS), MachinePointerInfo(StackAS));
+                          MachinePointerInfo(), MachinePointerInfo());
         i += PartNum - 1;
         MemOpChains.push_back(MemCpyChain);
       } else {
@@ -513,7 +484,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
         SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
         MemOpChains.push_back(
-            DAG.getStore(Chain, dl, Arg, FIPtr, MachinePointerInfo(StackAS)));
+            DAG.getStore(Chain, dl, Arg, FIPtr, MachinePointerInfo()));
       }
     }
   }
@@ -763,8 +734,7 @@ static void AllocateMultiPartArgument(unsigned ValNo, MVT ValVT, MVT LocVT,
   // Handle far pointers.
   if (ArgFlags.isPointer() &&
       (ArgFlags.getPointerAddrSpace() == RL78AS::FarData ||
-       ArgFlags.getPointerAddrSpace() == RL78AS::FarCode ||
-       (ArgFlags.getPointerAddrSpace() == RL78AS::Default && partCount == 2))) {
+       ArgFlags.getPointerAddrSpace() == RL78AS::FarCode)) {
     AllocateFarPointer(ValNo, ValVT, State, partCount, false, isVarArg);
     return;
   }
@@ -902,8 +872,7 @@ static void AllocateMultiPartReturn(MVT ValVT, MVT LocVT,
   // Handle far pointers.
   if (ArgFlags.isPointer() &&
       (ArgFlags.getPointerAddrSpace() == RL78AS::FarData ||
-       ArgFlags.getPointerAddrSpace() == RL78AS::FarCode ||
-       (ArgFlags.getPointerAddrSpace() == RL78AS::Default && partCount == 2))) {
+       ArgFlags.getPointerAddrSpace() == RL78AS::FarCode)) {
     AllocateFarPointer(0, ValVT, State, partCount, true);
     return;
   }
@@ -1586,7 +1555,7 @@ SDValue RL78TargetLowering::withTargetFlags(SDValue Op, unsigned TF,
 SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   SDLoc DL(Op);
   // Op.dump();
-  EVT VT = getPointerTy(DAG.getDataLayout(), RL78AS::Near); // i16 also with -mfar-data
+  EVT VT = getPointerTy(DAG.getDataLayout());
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
   int64_t Offset = cast<GlobalAddressSDNode>(Op)->getOffset();
 
@@ -1652,7 +1621,7 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
 SDValue RL78TargetLowering::LowerExternalSymbol(SDValue Op,
                                                 SelectionDAG &DAG) const {
   ExternalSymbolSDNode *S = cast<ExternalSymbolSDNode>(Op);
-  EVT VT = getPointerTy(DAG.getDataLayout(), RL78AS::Near); // i16 also with -mfar-data
+  EVT VT = getPointerTy(DAG.getDataLayout());
   if (Op.getValueType() == MVT::i16) {
     SDValue Result = DAG.getTargetExternalSymbol(S->getSymbol(), VT);
     return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
@@ -1684,7 +1653,7 @@ SDValue RL78TargetLowering::LowerBlockAddress(SDValue Op,
                                               SelectionDAG &DAG) const {
   const BlockAddress *BA = cast<BlockAddressSDNode>(Op)->getBlockAddress();
   int64_t Offset = cast<BlockAddressSDNode>(Op)->getOffset();
-  EVT VT = getPointerTy(DAG.getDataLayout(), RL78AS::Near); // i16 also with -mfar-data
+  EVT VT = getPointerTy(DAG.getDataLayout());
   SDValue Result = DAG.getTargetBlockAddress(BA, VT, Offset);
   return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
 }
@@ -1692,7 +1661,7 @@ SDValue RL78TargetLowering::LowerBlockAddress(SDValue Op,
 SDValue RL78TargetLowering::LowerJumpTable(SDValue Op,
                                            SelectionDAG &DAG) const {
   const JumpTableSDNode *JT = cast<JumpTableSDNode>(Op);
-  EVT VT = getPointerTy(DAG.getDataLayout(), RL78AS::Near); // i16 also with -mfar-data
+  EVT VT = getPointerTy(DAG.getDataLayout());
   //
   SDValue Result = DAG.getTargetJumpTable(JT->getIndex(), VT);
   return DAG.getNode(RL78ISD::LOW16, SDLoc(Op), VT, Result);
@@ -1902,7 +1871,7 @@ static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) {
   SDValue TargetCC = DAG.getConstant(cc, dl, MVT::i8);
   unsigned cmpSign = IntCondCCodeSign(CC);
   SDValue CCSign = DAG.getConstant(cmpSign, dl, MVT::i8);
-  // A select between far addresses (-mfar-data) must stay a SELECTCC: only
+  // A select between far addresses must stay a SELECTCC: only
   // that form becomes LOAD_SELECTCC when a load uses it; a load from a
   // SELECTCCBTBF of HI16 halves loses the segment (a near load).
   bool FarAddr =
@@ -1974,9 +1943,7 @@ static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
   MachineFunction &MF = DAG.getMachineFunction();
   RL78MachineFunctionInfo *FuncInfo = MF.getInfo<RL78MachineFunctionInfo>();
 
-  // use a 16-bit ptr also for -mfar-data
-  auto PtrVT = TLI.getPointerTy(DAG.getDataLayout(),
-                                DAG.getDataLayout().getAllocaAddrSpace());
+  auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
 
   // Need frame address to find the address of VarArgsFrameIndex.
   // MF.getFrameInfo().setFrameAddressIsTaken(true);
@@ -2017,8 +1984,7 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
                      llvm::MaybeAlign(AlignInBytes));
 }
 
-// this is basically a copy of SelectionDAG::expandVACopy(),
-// but with 16-bit ptr type with or without -mfar-data
+// this is basically a copy of SelectionDAG::expandVACopy()
 static SDValue LowerVACOPY(SDValue Op, SelectionDAG &DAG,
                            const RL78TargetLowering &TLI) {
   SDLoc dl(Op);
@@ -2026,8 +1992,7 @@ static SDValue LowerVACOPY(SDValue Op, SelectionDAG &DAG,
   const Value *VD = cast<SrcValueSDNode>(Op->getOperand(3))->getValue();
   const Value *VS = cast<SrcValueSDNode>(Op->getOperand(4))->getValue();
 
-  auto PtrVT = TLI.getPointerTy(DAG.getDataLayout(),
-                                DAG.getDataLayout().getAllocaAddrSpace());
+  auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
 
   SDValue Tmp1 = DAG.getLoad(PtrVT, dl, Op->getOperand(0), Op->getOperand(2),
                              MachinePointerInfo(VS));
@@ -4895,7 +4860,7 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     } else {
       SDValue NonNullPrefix = DAG.getConstant(0x0f, dl, MVT::i16);
       // NOTE: we can assume that the frame indexes are nonnull as eliding
-      // the null check for these makes a big difference for -mfar-data...
+      // the null check for these makes a big difference.
       const auto LowOpcode = LowValue.getOpcode();
       HighValue =
           (LowOpcode == ISD::FrameIndex || LowOpcode == ISD::TargetFrameIndex)

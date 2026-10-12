@@ -28,8 +28,6 @@ using namespace llvm;
 
 TTI::MemCmpExpansionOptions
 RL78TTIImpl::enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const {
-  // Not sure if this expansion ever pays off when opt for size and -mfar-data...
-  
   TTI::MemCmpExpansionOptions Options;
   Options.LoadSizes = { 2, 1 };
   Options.MaxNumLoads = TLI->getMaxExpandSizeMemcmp(OptSize);

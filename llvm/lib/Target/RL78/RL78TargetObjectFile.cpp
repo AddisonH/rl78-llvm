@@ -26,7 +26,6 @@ std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
     const Function *GF = dyn_cast<Function>(GO);
     if (GV) {
       isSaddr = GV->getAttributes().hasAttribute("saddr");
-      // this works also for the default AS which is far with -mfar-data
       isFar = GV->getParent()->getDataLayout().getPointerSizeInBits(
                   GV->getAddressSpace()) == 32;
     } else if (GF && Kind.isText()) {

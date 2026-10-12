@@ -861,9 +861,9 @@ void RL78DAGToDAGISel::MatchSET1CLR1(SDNode *&N) {
 
 // Replace loads from SELECTCC between far addresses with LOAD_SELECTCC.
 // Needed for allowing the optimization from DAGCombiner::SimplifySelectOps()
-// when -mfar-data (i.e. the ptrs in the default address space are far), as
-// otherwise the load generates incorrect code (a near-address load from the
-// HI16 part of the selected far address). Returns true on success.
+// on far pointers, as otherwise the load generates incorrect code (a
+// near-address load from the HI16 part of the selected far address). Returns
+// true on success.
 bool RL78DAGToDAGISel::MatchLOAD_SELECTCC(SDNode*& N) {
   LoadSDNode *LD = cast<LoadSDNode>(N);
   SDValue Ptr = LD->getBasePtr();
