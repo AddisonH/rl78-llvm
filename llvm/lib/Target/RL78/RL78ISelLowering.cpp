@@ -5101,6 +5101,11 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
           (N->getOperand(1)->getOpcode() == ISD::SIGN_EXTEND)))) {
       return;
     }
+    // For speed the generic expansion: one MULHU for the low words and two
+    // for the cross products, against a call with both operands on the way.
+    if (Subtarget->isRL78S3CoreType() &&
+        !DAG.getMachineFunction().getFunction().hasOptSize())
+      return;
     Results.push_back(
         LowerLibCall(SDValue(N, 0), DAG, getLibcallName(RTLIB::MUL_I32),
                      N->getOperand(0)->getOpcode() == ISD::SIGN_EXTEND));

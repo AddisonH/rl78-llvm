@@ -3,7 +3,8 @@
 ; This is CoreMark's matrix_add_const index computation. The i32 multiply feeds
 ; an i32 add whose only use is a trunc to i16, so DemandedBits reports 0xffff
 ; for the multiply. Without narrowing it becomes an out-of-line call to
-; __COM_lmul; with it, a single MULHU_cg.
+; __COM_lmul (for size; three MULHU for speed, of which the legalizer drops the
+; two with a zero operand here); with it, a single MULHU_cg.
 ;
 ; InstCombine and AggressiveInstCombine both decline this case -- verified with
 ; opt on this function -- hence the dedicated pass. Note TruncInstCombine does
@@ -28,7 +29,7 @@ target triple = "rl78-unknown-unknown-elf"
 ; NARROW-NOT: __COM_lmul
 ; NARROW: mulhu
 
-define dso_local void @matrix_add_const(i32 noundef %n, ptr nocapture noundef %a, i16 noundef %val) local_unnamed_addr {
+define dso_local void @matrix_add_const(i32 noundef %n, ptr nocapture noundef %a, i16 noundef %val) local_unnamed_addr optsize {
 entry:
   %isz = icmp eq i32 %n, 0
   br i1 %isz, label %done, label %outer
