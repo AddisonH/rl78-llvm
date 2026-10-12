@@ -44,6 +44,7 @@ add_llvm_target(RL78CodeGen
   RL78MACRLoopPromote.cpp
   RL78SinkToAccumulator.cpp
   RL78SplitConstrainedValues.cpp
+  RL78SlotOperands.cpp
 
   LINK_COMPONENTS
   Analysis

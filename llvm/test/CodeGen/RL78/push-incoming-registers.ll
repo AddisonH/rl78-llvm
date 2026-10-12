@@ -29,19 +29,11 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+2]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, [hl+2]
+; CHECK-NEXT:    addw ax, [hl+4]
+; CHECK-NEXT:    addw ax, [hl+6]
 ; CHECK-NEXT:    addw sp, #8
 ; CHECK-NEXT:    ret
 ;
@@ -67,19 +59,11 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw bc, ax
 ; STORE-NEXT:    movw ax, [sp+6]
+; STORE-NEXT:    movw hl, sp
 ; STORE-NEXT:    addw ax, bc
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw ax, [sp+4]
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    addw ax, bc
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw ax, [sp+2]
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    addw ax, bc
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw ax, [sp+0]
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    addw ax, bc
+; STORE-NEXT:    addw ax, [hl+4]
+; STORE-NEXT:    addw ax, [hl+2]
+; STORE-NEXT:    addw ax, [hl+0]
 ; STORE-NEXT:    addw sp, #8
 ; STORE-NEXT:    ret
   %x = call i16 @g(i16 %a)
@@ -99,10 +83,8 @@ define i16 @one(i16 %a) {
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    call !_g
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    movw hl, sp
+; CHECK-NEXT:    addw ax, [hl+0]
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
 ;
@@ -110,10 +92,8 @@ define i16 @one(i16 %a) {
 ; STORE:       ; %bb.0:
 ; STORE-NEXT:    push ax
 ; STORE-NEXT:    call !_g
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw ax, [sp+0]
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    addw ax, bc
+; STORE-NEXT:    movw hl, sp
+; STORE-NEXT:    addw ax, [hl+0]
 ; STORE-NEXT:    pop hl
 ; STORE-NEXT:    ret
   %x = call i16 @g(i16 %a)
@@ -134,10 +114,8 @@ define i16 @large(i16 %a) {
 ; CHECK-NEXT:    call !_h
 ; CHECK-NEXT:    movw ax, [sp+0]
 ; CHECK-NEXT:    call !_g
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    movw hl, sp
+; CHECK-NEXT:    addw ax, [hl+0]
 ; CHECK-NEXT:    addw sp, #254
 ; CHECK-NEXT:    addw sp, #48
 ; CHECK-NEXT:    ret
@@ -152,10 +130,8 @@ define i16 @large(i16 %a) {
 ; STORE-NEXT:    call !_h
 ; STORE-NEXT:    movw ax, [sp+0]
 ; STORE-NEXT:    call !_g
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw ax, [sp+0]
-; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    addw ax, bc
+; STORE-NEXT:    movw hl, sp
+; STORE-NEXT:    addw ax, [hl+0]
 ; STORE-NEXT:    addw sp, #254
 ; STORE-NEXT:    addw sp, #48
 ; STORE-NEXT:    ret

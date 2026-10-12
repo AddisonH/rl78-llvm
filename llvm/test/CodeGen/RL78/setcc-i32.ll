@@ -16,13 +16,11 @@ define i16 @sgt(i32 %a, i32 %b) {
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, [hl+4]
 ; CHECK-NEXT:    bh $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    clrw ax
@@ -38,17 +36,13 @@ define i16 @sgt(i32 %a, i32 %b) {
 define i16 @ule(i32 %a, i32 %b) {
 ; CHECK-LABEL: ule:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    cmpw ax, [hl+6]
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, [hl+4]
 ; CHECK-NEXT:    bnh $.LBB1_1
 ; CHECK-NEXT:  ; %bb.2:
 ; CHECK-NEXT:    clrw ax

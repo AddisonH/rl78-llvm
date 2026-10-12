@@ -151,11 +151,10 @@ define void @br_rel16_bh_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    call !_padding_function
 ; CHECK-NEXT:    movw ax, [sp+32]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+34]
-; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    decw de
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, [hl+34]
 ; CHECK-NEXT:    sknh
 ; CHECK-NEXT:    br $!.LBB2_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
@@ -426,11 +425,10 @@ define void @br_rel16_bnh_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    call !_padding_function
 ; CHECK-NEXT:    movw ax, [sp+32]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+34]
-; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    decw de
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, [hl+34]
 ; CHECK-NEXT:    skh
 ; CHECK-NEXT:    br $!.LBB6_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end

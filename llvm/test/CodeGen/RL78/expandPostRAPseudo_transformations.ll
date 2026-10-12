@@ -446,16 +446,14 @@ define i32 @ADDE_Test(i32 %a, i32 %b){
 ; O2-NEXT:    xchw ax, de
 ; O2-NEXT:    movw ax, [sp+4]
 ; O2-NEXT:    xchw ax, de
-; O2-NEXT:    xchw ax, hl
-; O2-NEXT:    movw ax, [sp+6]
-; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    addw ax, de
 ; O2-NEXT:    movw de, ax
 ; O2-NEXT:    movw ax, bc
+; O2-NEXT:    movw hl, sp
 ; O2-NEXT:    xch a, x
-; O2-NEXT:    addc a, l
+; O2-NEXT:    addc a, [hl+6]
 ; O2-NEXT:    xch a, x
-; O2-NEXT:    addc a, h
+; O2-NEXT:    addc a, [hl+7]
 ; O2-NEXT:    movw bc, ax
 ; O2-NEXT:    movw ax, de
 ; O2-NEXT:    ret
@@ -487,16 +485,14 @@ define i32 @SUBE_test(i32 %a, i32 %b){
 ; O2-NEXT:    xchw ax, de
 ; O2-NEXT:    movw ax, [sp+4]
 ; O2-NEXT:    xchw ax, de
-; O2-NEXT:    xchw ax, hl
-; O2-NEXT:    movw ax, [sp+6]
-; O2-NEXT:    xchw ax, hl
 ; O2-NEXT:    subw ax, de
 ; O2-NEXT:    movw de, ax
 ; O2-NEXT:    movw ax, bc
+; O2-NEXT:    movw hl, sp
 ; O2-NEXT:    xch a, x
-; O2-NEXT:    subc a, l
+; O2-NEXT:    subc a, [hl+6]
 ; O2-NEXT:    xch a, x
-; O2-NEXT:    subc a, h
+; O2-NEXT:    subc a, [hl+7]
 ; O2-NEXT:    movw bc, ax
 ; O2-NEXT:    movw ax, de
 ; O2-NEXT:    ret

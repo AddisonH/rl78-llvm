@@ -37,10 +37,9 @@ define dso_local i16 @_test_rp_rp(i16 noundef %0, i16 noundef %1, i16 noundef %2
 ; CHECK-NEXT:    push hl
 ; CHECK-NEXT:    pop bc
 ; CHECK-NEXT:    call !_callee1
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, [sp+0]
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, [hl+6]
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   tail call void @callee1(i16 noundef %1, i16 noundef %2, i16 noundef %3)

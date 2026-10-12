@@ -71,16 +71,14 @@ define dso_local i32 @ad(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    addw ax, de
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    addc a, l
+; CHECK-NEXT:    addc a, [hl+6]
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    addc a, h
+; CHECK-NEXT:    addc a, [hl+7]
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret

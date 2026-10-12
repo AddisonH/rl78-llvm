@@ -45,6 +45,7 @@ FunctionPass *createRL78CMPWithZeroElimPass(bool Late = false);
 FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
+FunctionPass *createRL78SlotOperandsPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 FunctionPass *createRL78NarrowDemandedOpsPass();
 FunctionPass *createRL78NarrowLoopCountersPass();

@@ -19,15 +19,10 @@ define i16 @f(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, [hl+6]
+; CHECK-NEXT:    addw ax, [hl+8]
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
 ;
@@ -43,15 +38,10 @@ define i16 @f(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; COPY-NEXT:    call !_g
 ; COPY-NEXT:    movw bc, ax
 ; COPY-NEXT:    movw ax, [sp+4]
+; COPY-NEXT:    movw hl, sp
 ; COPY-NEXT:    addw ax, bc
-; COPY-NEXT:    xchw ax, bc
-; COPY-NEXT:    movw ax, [sp+0]
-; COPY-NEXT:    xchw ax, bc
-; COPY-NEXT:    addw ax, bc
-; COPY-NEXT:    xchw ax, bc
-; COPY-NEXT:    movw ax, [sp+2]
-; COPY-NEXT:    xchw ax, bc
-; COPY-NEXT:    addw ax, bc
+; COPY-NEXT:    addw ax, [hl+0]
+; COPY-NEXT:    addw ax, [hl+2]
 ; COPY-NEXT:    addw sp, #6
 ; COPY-NEXT:    ret
   %x = call i16 @g(i16 %d)

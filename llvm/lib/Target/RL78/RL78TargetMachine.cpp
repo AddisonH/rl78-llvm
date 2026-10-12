@@ -281,6 +281,7 @@ bool RL78PassConfig::addInstSelector() {
 }
 
 void RL78PassConfig::addPreEmitPass() {
+  addPass(createRL78SlotOperandsPass());
   addPass(createRL78InsertExchangeInstructionsPass());
   // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
   addPass(createMachineCopyPropagationPass(true));

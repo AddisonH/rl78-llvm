@@ -16,13 +16,11 @@ define void @test_DAGCombine_BRCOND(i32 %x, i32 %y) {
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    cmpw ax, [hl+4]
 ; CHECK-NEXT:    skc
 ; CHECK-NEXT:    br $!.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %t
