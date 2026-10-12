@@ -2044,10 +2044,6 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-join-splitedges");
 
-  // Enables conversions between different address spaces at compile time.
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-addrspacecast-simplification");
-
   // The optimizer is getting smarter at finding undefined behavior/poison;
   // trap instead of eliminating everything (including the return).
   CmdArgs.push_back("-mllvm");

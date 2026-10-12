@@ -57,11 +57,6 @@ static cl::opt<bool> DisableI2pP2iOpt(
     "disable-i2p-p2i-opt", cl::init(false),
     cl::desc("Disables inttoptr/ptrtoint roundtrip optimization"));
 
-static cl::opt<bool> DisableAddrSpaceCastSimplification(
-    "disable-addrspacecast-simplification", cl::init(false),
-    cl::desc("Disables simplification of addrspacecast(addrspacecast) and bitcast(addrspacecast)"));
-
-
 //===----------------------------------------------------------------------===//
 //                            AllocaInst Class
 //===----------------------------------------------------------------------===//
@@ -3046,26 +3041,13 @@ unsigned CastInst::isEliminableCastPair(Instruction::CastOps firstOp,
     case 12:
       // addrspacecast, addrspacecast -> bitcast,       if SrcAS == DstAS
       // addrspacecast, addrspacecast -> addrspacecast, if SrcAS != DstAS
-      // For RL78 we must completely disable this, due to different prefixing when casting
-      // from near to far code or far data and then casting to the other far type.
-      if (SrcTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace()) {
-        if (DisableAddrSpaceCastSimplification)
-          return 0;
-        else
-          return Instruction::AddrSpaceCast;
-      }
+      if (SrcTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace())
+        return Instruction::AddrSpaceCast;
       return Instruction::BitCast;
     case 13:
       // FIXME: this state can be merged with (1), but the following assert
       // is useful to check the correcteness of the sequence due to semantic
       // change of bitcast.
-      // For RL78 bitcast (addrspacecast data_pointer) to function pointer and
-      //          bitcast (addrspacecast function_pointer) to data pointer
-      // can't be merged. See InstCombiner::visitAddrSpaceCast.
-      if (SrcTy->isPointerTy() && DstTy->isPointerTy() &&
-          MidTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace() &&
-          DisableAddrSpaceCastSimplification)
-        return 0;
       // addrspacecast can only fold through a bitcast if the result remains a
       // pointer. A pointer-to-byte bitcast must stay as a separate bitcast.
       if (!DstTy->isPtrOrPtrVectorTy())
