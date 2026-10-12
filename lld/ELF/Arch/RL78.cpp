@@ -234,8 +234,6 @@ RelExpr RL78::getRelExpr(RelType type, const Symbol &s,
 // entry here; RL78PltSection::updateAllocSize drops the unneeded ones once
 // addresses are known.
 bool RL78::needsPltEntry(const Symbol &sym, RelType type) const {
-  if (ctx.arg.rl78FarCode)
-    return false;
   if (!(sym.hasNoType() || sym.isFunc() || sym.isSection()))
     return false;
   OutputSection *osec = sym.getOutputSection();
@@ -243,6 +241,10 @@ bool RL78::needsPltEntry(const Symbol &sym, RelType type) const {
     return false;
   if (type == R_RL78_DIR16U)
     return true;
+  // With far code, LOWW() of a function is one half of its far address;
+  // only the plain 16-bit reference is a near pointer to it.
+  if (ctx.arg.rl78FarCode)
+    return false;
   // FIXME: Is there a better way to handle test in ticket_2677?
   return type == R_RL78_OPlowW &&
          (!sym.isDefined() ||
@@ -908,7 +910,8 @@ void RL78::relocateAlloc(InputSection &sec, uint8_t *buf) const {
     //       -mfar-data and -mfar-code.
     if (rel.sym->isInPlt(ctx) &&
         (rel.type == R_RL78_DIR16U ||
-         (!(sec.getOutputSection()->flags & SHF_EXECINSTR) &&
+         (!ctx.arg.rl78FarCode &&
+          !(sec.getOutputSection()->flags & SHF_EXECINSTR) &&
           (rel.type == R_RL78_OPlowW || rel.type == R_RL78_OPhighW)))) {
       relocate(loc, rel, rel.sym->getPltVA(ctx));
       continue;

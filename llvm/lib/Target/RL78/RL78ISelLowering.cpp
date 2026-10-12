@@ -576,6 +576,12 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     Callee = LowerExternalSymbol(Callee, DAG);
   }
+  // CALL rp goes to CS:rp. A program with far code changes CS in its far
+  // indirect calls, so a call through a near code pointer (a C++ vtable
+  // slot, which holds 16-bit addresses) is made as a far call to page 0.
+  else if (Callee.getValueType() == MVT::i16 && Subtarget->HasFarCodeModel()) {
+    Callee = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Callee);
+  }
 
   // Callee.dump();
   // if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -3186,6 +3192,18 @@ SDValue RL78TargetLowering::PerformSUBCombine(SDNode *N,
 SDValue RL78TargetLowering::PerformTruncateCombine(SDNode *N,
                                                    DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
+  // A far function's address truncated to 16 bits (a pointer to member
+  // function): a plain reference, as for an address space cast to near.
+  if (N->getValueType(0) == MVT::i16)
+    if (auto *G = dyn_cast<GlobalAddressSDNode>(N->getOperand(0)))
+      if (G->getValueType(0) == MVT::i32 &&
+          G->getGlobal()->getValueType()->isFunctionTy())
+        return DCI.DAG.getNode(
+            RL78ISD::LOW16, dl, MVT::i16,
+            DCI.DAG.getTargetGlobalAddress(G->getGlobal(), dl, MVT::i16,
+                                           G->getOffset(),
+                                           RL78MCExpr::VK_RL78_FUNCTION));
+
   // Trunc (i32 >> 16) to i16 => extract high(i32).
   if (N->getOpcode() == ISD::TRUNCATE && N->getValueType(0) == MVT::i16 &&
       N->getOperand(0)->getOpcode() == ISD::SRL &&
@@ -5168,7 +5186,12 @@ void RL78TargetLowering::LowerOperationWrapper(
               cast<GlobalAddressSDNode>(N->getOperand(0))->getGlobal();
           int64_t Offset =
               cast<GlobalAddressSDNode>(N->getOperand(0))->getOffset();
-          SDValue TGA = DAG.getTargetGlobalAddress(GV, dl, MVT::i16, Offset);
+          // A far function's address in 16 bits is a plain reference: the
+          // linker makes a near trampoline if the function is above 64 KiB.
+          SDValue TGA = DAG.getTargetGlobalAddress(
+              GV, dl, MVT::i16, Offset,
+              GV->getValueType()->isFunctionTy() ? RL78MCExpr::VK_RL78_FUNCTION
+                                                 : 0);
           SDValue Low16 = DAG.getNode(RL78ISD::LOW16, dl, MVT::i16, TGA);
           Results.push_back(Low16);
         }

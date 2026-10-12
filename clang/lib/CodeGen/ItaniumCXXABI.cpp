@@ -2965,6 +2965,14 @@ static void emitGlobalDtorWithCXAAtExit(CodeGenFunction &CGF,
   // We're assuming that the destructor function is something we can
   // reasonably call with the default CC.
   llvm::Type *dtorTy = CGF.DefaultPtrTy;
+  // Where a function pointer is wider than a data pointer, the destructor
+  // is passed as what it is, a pointer in the program address space.
+  const llvm::DataLayout &DL = CGF.CGM.getDataLayout();
+  bool WideFnPtr = DL.getPointerSize(DL.getProgramAddressSpace()) !=
+                   DL.getPointerSize(0);
+  if (WideFnPtr)
+    dtorTy = llvm::PointerType::get(CGF.getLLVMContext(),
+                                    DL.getProgramAddressSpace());
 
   // Preserve address space of addr.
   auto AddrAS = addr ? addr->getType()->getPointerAddressSpace() : 0;
@@ -2996,7 +3004,7 @@ static void emitGlobalDtorWithCXAAtExit(CodeGenFunction &CGF,
   dtorCallee =
       CGF.CGM.getFunctionPointer(cast<llvm::Constant>(dtorCallee), fnType);
 
-  if (dtorCallee->getType()->getPointerAddressSpace() != AddrAS)
+  if (!WideFnPtr && dtorCallee->getType()->getPointerAddressSpace() != AddrAS)
     dtorCallee = CGF.performAddrSpaceCast(dtorCallee, AddrPtrTy);
 
   if (!addr)

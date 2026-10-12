@@ -375,6 +375,12 @@ const MCExpr *RL78AsmPrinter::lowerConstantGV(const GlobalValue *GV, int DstAS,
                                 ? RL78MCExpr::VK_RL78_SMRLW
                                 : RL78MCExpr::VK_RL78_LOWW,
                             BaseExpr, Ctx);
+  // A far function's address in 16 bits (a C++ vtable slot, a pointer to
+  // member): a plain 16-bit reference, for which the linker makes a
+  // trampoline in near code when the function is above 64 KiB. LOWW() would
+  // silently drop the high part.
+  if (DstSize == 2 && SrcSize == 4 && GVType == ConstType::CODE)
+    return BaseExpr;
   if (DstSize == 2)
     return lowPart;
 
