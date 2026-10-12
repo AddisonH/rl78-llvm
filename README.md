@@ -60,6 +60,24 @@ What is different from the Renesas 17.0.1 releases:
 - **Upstream behaviour where the Renesas fork differed for compatibility with
   the CC-RL compiler**, for example incompatible pointer types are an error,
   as in upstream Clang.
+- **No CC-RL source compatibility layer.** The Renesas releases accept
+  sources written for the CC-RL compiler (`-frenesas-extensions`); this fork
+  does not. What replaces each piece:
+
+  | CC-RL form | Here |
+  | --- | --- |
+  | `#pragma interrupt f(vect=..)`, `#pragma interrupt_brk` | `__attribute__((interrupt(vect=..)))`, `__attribute__((brk_interrupt))` |
+  | `#pragma saddr`, `__saddr` | `__attribute__((saddr))` |
+  | `#pragma callt`, `__callt` | `__attribute__((callt))`; the linker also fills the table by itself (`--relax-callt`) |
+  | `#pragma near` / `far` | `__near` / `__far` |
+  | `#pragma inline` / `noinline` | `__attribute__((always_inline))` / `((noinline))` |
+  | `#pragma section` | `#pragma clang section`, `__attribute__((section(..)))` |
+  | `#pragma pack` / `unpack` | `__attribute__((packed))`, `#pragma pack(n)` |
+  | `#pragma address`, `__attribute__((address(..)))` | `(*(volatile T *)0xFFF00)` for registers; a section and the linker script for variables |
+  | `#pragma inline_asm` | a naked function or file-scope `asm` |
+  | `__sectop("s")`, `__secend("s")` | the linker's `__start_s` / `__stop_s` symbols |
+  | `__nop()`, `__mulu()`, `__set1()`, ... | `#include <rl78intrin.h>`, or `__builtin_rl78_nop()` etc. |
+  | CC-RL assembler directives (`.SECTION`, `.DB`, `name .EQU v`, `$IF`) | GNU directives; instructions and operands keep the Renesas syntax (`!addr16`, `ES:`, `LOWW(sym)`, `sym.3`) |
 
 ## Branches
 
