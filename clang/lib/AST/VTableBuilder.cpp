@@ -1345,10 +1345,7 @@ void ItaniumVTableBuilder::AddMethod(const CXXMethodDecl *MD,
     Components.push_back(VTableComponent::MakeDeletingDtor(DD));
   } else {
     // Add the return adjustment if necessary.
-    // RL78: also create thunks for far methods, even if no adjustment.
-    if (!ReturnAdjustment.isEmpty() ||
-        (Context.getLangOpts().RenesasRL78 &&
-          MD->getType()->castAs<FunctionType>()->getExtInfo().getFar()))
+    if (!ReturnAdjustment.isEmpty())
       VTableThunks[Components.size()].Return = ReturnAdjustment;
 
     // Add the function.
@@ -1653,12 +1650,7 @@ void ItaniumVTableBuilder::AddMethods(
     // vtable entry. We need to record the method because we cannot call
     // findOriginalMethod to find the method that created the entry if the
     // method in the entry requires adjustment.
-    // RL78: AddMethod also creates a thunk for every far method; it needs the
-    // same record.
-    if (!ReturnAdjustment.isEmpty() ||
-        (Context.getLangOpts().RenesasRL78 &&
-         Overrider.Method->getType()->castAs<FunctionType>()->getExtInfo()
-             .getFar())) {
+    if (!ReturnAdjustment.isEmpty()) {
       auto &VTT = VTableThunks[Components.size()];
       VTT.Method = MD;
       VTT.ThisType = MD->getThisType().getTypePtr();

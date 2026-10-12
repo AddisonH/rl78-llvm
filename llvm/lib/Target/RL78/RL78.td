@@ -33,14 +33,8 @@ def FeatureMirrorSourceCommon : SubtargetFeature<"mirror-source-common", "mirror
 def FeatureFarCode : SubtargetFeature<"far-code", "hasFarCodeModel", "true",
                                       "Default function pointers are far.">;
 
-def FeatureFarData : SubtargetFeature<"far-data", "hasFarDataModel", "true",
-                                      "Default data pointers are far.">;
-
 def FeatureNearRom : SubtargetFeature<"near-rom", "romModel", "0",
                                       "Default constant data pointers are near.">;
-
-def FeatureFarRom : SubtargetFeature<"far-rom", "romModel", "1",
-                                      "Default constant data pointers are far.">;
 
 def FeatureCommonRom : SubtargetFeature<"common-rom", "romModel", "2",
                                       "Common constant mode.">;

@@ -5658,16 +5658,6 @@ void clang::FixedPointValueToString(SmallVectorImpl<char> &Str,
   llvm::APFixedPoint(Val, FXSema).toString(Str);
 }
 
-LangAS clang::getAddressSpace(QualType QT, const ASTContext &Ctx) {
-  // RL78: a far function without an explicit address space is in __far_code.
-  if (Ctx.getTargetInfo().getTriple().isRL78() && !QT.hasAddressSpace()) {
-    const Type *T = QT.getTypePtr()->getUnqualifiedDesugaredType();
-    if (isa<FunctionType>(T) && cast<FunctionType>(T)->getFar())
-      return LangAS::__far_code;
-  }
-  return QT.getAddressSpace();
-}
-
 DeducedType::DeducedType(TypeClass TC, DeducedKind DK,
                          QualType DeducedAsTypeOrCanon)
     : Type(TC, /*canon=*/DK == DeducedKind::Deduced

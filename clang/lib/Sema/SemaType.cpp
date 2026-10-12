@@ -2213,9 +2213,6 @@ QualType Sema::BuildArrayType(QualType T, ArraySizeModifier ASM,
     // OpenCL v1.2 s6.9.d: variable length arrays are not supported.
     VLADiag = diag::err_opencl_vla;
     VLAIsError = true;
-  } else if (getLangOpts().RenesasRL78) {
-    VLADiag = diag::err_rl78_vla_unsupported;
-    VLAIsError = true;
   } else if (getLangOpts().C99) {
     VLADiag = diag::warn_vla_used;
     VLAIsError = false;
@@ -4773,24 +4770,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         }
       }
 
-      // RL78 -mfar-rom: pointers to const data are far. (With -mfar-data the
-      // default address space is already far.)
-      if (!T->isFunctionType() && !T.hasAddressSpace() &&
-          T.isConstQualified() && S.getLangOpts().RenesasRL78RomModelFar)
-        T = S.getASTContext().getAddrSpaceQualType(T, LangAS::__far_data);
-
-      // RL78 -mfar-code: a pointer to a function typedef points to a far
-      // function.
-      if (e == 1 && T->isTypedefNameType() && T->isFunctionType() &&
-          T.getCanonicalType().getAddressSpace() == LangAS::Default &&
-          S.getLangOpts().RenesasRL78CodeModel) {
-        const auto *FPT = T->castAs<FunctionProtoType>();
-        FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-        EPI.ExtInfo = EPI.ExtInfo.withFar(true);
-        T = Context.getFunctionType(FPT->getReturnType(), FPT->getParamTypes(),
-                                    EPI);
-      }
-
       T = S.BuildPointerType(T, DeclType.Loc, Name);
       if (DeclType.Ptr.TypeQuals)
         T = S.BuildQualifiedType(T, DeclType.Loc, DeclType.Ptr.TypeQuals);
@@ -5111,80 +5090,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         }
       }
 
-      bool IsFar = false;
-      bool IsDefault = true;
-      // when we have function typedef, we don't want to apply implicit __far
-      bool FunctionTypedef =
-          D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS_typedef;
-      // When we have function pointers, the last __far or __near attribute
-      // before the * decides if it's a pointer to a far function.
-      if (chunkIndex >= 2 &&
-          D.getTypeObject(chunkIndex - 1).Kind == DeclaratorChunk::Paren &&
-          D.getTypeObject(chunkIndex - 2).Kind == DeclaratorChunk::Pointer) {
-          DeclaratorChunk &DeclT = D.getTypeObject(chunkIndex - 1);
-          ParsedAttr *lastAttr;
-          // when we have function pointer typedef, we can apply implicit __far
-          FunctionTypedef = false;
-          for (ParsedAttr &attr : DeclT.getAttrs()) {
-            switch (auto kind = attr.getKind()) {
-            case ParsedAttr::AT_RL78Far:
-            case ParsedAttr::AT_RL78Near:
-              IsFar = kind == ParsedAttr::AT_RL78Far;
-              IsDefault = false;
-              lastAttr = &attr;
-              break;
-            default:
-              break;
-            }
-          }
-          if (!IsDefault)
-            DeclT.getAttrs().remove(lastAttr);
-      } else {
-        // When we have functions, the address space qualifier on the return
-        // type refers to the function itself, we should add it as a method
-        // qualifier.
-        IsFar = T.getAddressSpace() == LangAS::__far_data;
-        IsDefault = !T.hasAddressSpace();
-
-        // allow alternative position of the near/far attribute for functions
-        // e.g. void (__far f)(void);
-        if (chunkIndex >= 1 &&
-            D.getTypeObject(chunkIndex - 1).Kind == DeclaratorChunk::Paren &&
-            D.getTypeObject(chunkIndex).Kind == DeclaratorChunk::Function) {
-          DeclaratorChunk &DeclT = D.getTypeObject(chunkIndex - 1);
-          ParsedAttr *lastAttr = nullptr;
-          for (ParsedAttr &attr : DeclT.getAttrs()) {
-            switch (attr.getKind()) {
-            case ParsedAttr::AT_RL78Far:
-            case ParsedAttr::AT_RL78Near:
-              lastAttr = &attr;
-              break;
-            default:
-              break;
-            }
-          }
-          // ...but make it an error if both are specified (even if it's the
-          // same attr) e.g. void __far (__far f)(void);
-          if (!IsDefault && lastAttr)
-            S.Diag(D.getIdentifierLoc(), diag::error_rl78_storage_attribute)
-                << (IsFar ? "__far" : "__near");
-          if (lastAttr) {
-            IsFar = lastAttr->getKind() == ParsedAttr::AT_RL78Far;
-            IsDefault = false;
-            DeclT.getAttrs().remove(lastAttr);
-          }
-        }
-      }
-
-      // We need to make the function far if it was declared as __far or if
-      // -mfar-code was used and it wasn't marked explicitly as __near.
-      IsFar = IsFar || (IsDefault && !FunctionTypedef && LangOpts.RenesasRL78CodeModel);
-
-      // The return type can't have an address space qualifier, we should remove
-      // it.
-      if (LangOpts.RenesasRL78 && T.hasAddressSpace())
-        T = Context.removeAddrSpaceQualType(T);
-
       // Methods cannot return interface types. All ObjC objects are
       // passed by reference.
       if (T->isObjCObjectType()) {
@@ -5297,9 +5202,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
 
       FunctionType::ExtInfo EI(
           getCCForDeclaratorChunk(S, D, DeclType.getAttrs(), FTI, chunkIndex));
-
-      EI = EI.withFar(IsFar);
-      EI = EI.withNonDefaultAS(!IsDefault);
 
       // OpenCL disallows functions without a prototype, but it doesn't enforce
       // strict prototypes as in C23 because it allows a function definition to
@@ -9191,38 +9093,6 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
     case ParsedAttr::AT_BTFTypeTag:
       HandleBTFTypeTagAttribute(type, attr, state);
       attr.setUsedAsTypeAttr();
-      break;
-
-    case ParsedAttr::AT_RL78Far:
-      if (type.hasAddressSpace()) {
-        state.getSema().Diag(attr.getLoc(), diag::error_rl78_storage_attribute)
-            << (getAddressSpace(type, state.getSema().Context) == LangAS::__far_code
-                    ? "__far_code"
-                    : ((getAddressSpace(type, state.getSema().Context) == LangAS::__far_data)
-                           ? "__far_data"
-                           : "__near"));
-      } else {
-        type = state.getSema().Context.getAddrSpaceQualType(
-            type,
-            type->isFunctionType() ? LangAS::__far_code : LangAS::__far_data);
-        attr.setUsedAsTypeAttr();
-      }
-
-      break;
-
-    case ParsedAttr::AT_RL78Near:
-      if (type.hasAddressSpace()) {
-        state.getSema().Diag(attr.getLoc(), diag::error_rl78_storage_attribute)
-            << (getAddressSpace(type, state.getSema().Context) == LangAS::__far_code
-                    ? "__far_code"
-                    : ((getAddressSpace(type, state.getSema().Context) == LangAS::__far_data)
-                           ? "__far_data"
-                           : "__near"));
-      } else {
-        type =
-            state.getSema().Context.getAddrSpaceQualType(type, LangAS::__near);
-        attr.setUsedAsTypeAttr();
-      }
       break;
 
     case ParsedAttr::AT_MayAlias:

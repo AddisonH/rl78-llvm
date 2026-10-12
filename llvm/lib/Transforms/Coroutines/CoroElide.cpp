@@ -230,10 +230,8 @@ void CoroIdElider::elideHeapAllocations(uint64_t FrameSize, Align FrameAlign) {
   auto FrameTy = ArrayType::get(Type::getInt8Ty(C), FrameSize);
   auto *Frame = new AllocaInst(FrameTy, DL.getAllocaAddrSpace(), "", InsertPt);
   Frame->setAlignment(FrameAlign);
-  // The alloca may live in a different address space than the coro.begin
-  // result (e.g. RL78 with -mfar-data), so a plain bitcast is not enough.
-  auto *FrameVoidPtr = CastInst::CreatePointerBitCastOrAddrSpaceCast(
-      Frame, PointerType::getUnqual(C), "vFrame", InsertPt);
+  auto *FrameVoidPtr =
+      new BitCastInst(Frame, PointerType::getUnqual(C), "vFrame", InsertPt);
 
   for (auto *CB : CoroBegins) {
     coro::elideCoroFree(CB);

@@ -23,12 +23,11 @@ class RL78TargetInfo : public TargetInfo {
 
   static const TargetInfo::GCCRegAlias GCCRegAliases[];
   static const char *const GCCRegNames[];
-  static const LangASMap RL78AddrSpaceMap;
   // TODO: optimize this we are comparing the string twice
   std::string CPUName;
   bool has64BitDoubles;
   bool farCodeModel;
-  bool farDataModel;
+  bool commonRom;
   bool isMDADisabled;
   std::string ABI;
 
@@ -71,24 +70,38 @@ public:
     else
       Builder.defineMacro("__RL78_32BIT_DOUBLES__");
 
-    if (Opts.RenesasRL78DataModel)
-      Builder.defineMacro("__FAR_DATA__");
-
-    if(Opts.RenesasRL78RomModelFar)
-      Builder.defineMacro("__FAR_ROM__");
-    else if(Opts.RenesasRL78RomModelCommon)
+    if (commonRom)
       Builder.defineMacro("__COMMON_ROM__");
-    
-    if(Opts.RenesasRL78CodeModel)
+
+    if (farCodeModel)
       Builder.defineMacro("__RL78_MEDIUM__");
-    else 
+    else
       Builder.defineMacro("__RL78_SMALL__");
 
+    // Data is near unless a pointer or an object says otherwise. A far
+    // pointer holds a 20-bit address in 32 bits.
+    Builder.defineMacro("__far", "__attribute__((__address_space__(" +
+                                     Twine(FarDataAS) + ")))");
+    Builder.defineMacro("__near", "");
+  }
 
+  /// Target address spaces: data is near (16-bit pointers into FxxxxH)
+  /// by default; far data and far code pointers are 32 bits wide.
+  enum : unsigned { FarDataAS = 2, FarCodeAS = 3 };
+
+  static bool isFarAddressSpace(LangAS AS) {
+    return isTargetAddressSpace(AS) && (toTargetAddressSpace(AS) == FarDataAS ||
+                                        toTargetAddressSpace(AS) == FarCodeAS);
   }
 
   uint64_t getPointerWidthV(LangAS AddrSpace) const override {
-    return (AddrSpace == LangAS::__near)? 16 : 32;
+    return isFarAddressSpace(AddrSpace) ? 32 : 16;
+  }
+
+  uint64_t getPointerAlignV(LangAS AddrSpace) const override { return 16; }
+
+  unsigned getProgramAddressSpace() const override {
+    return farCodeModel ? FarCodeAS : 0;
   }
 
   bool setCPU(StringRef Name) override {
@@ -150,19 +163,11 @@ public:
 
   bool allowsLargerPreferedTypeAlignment() const override { return false; }
 
-  /// Default (near or far, depending on the data model), __near, __far_data
-  /// and __far_code convert into each other as the vendor compiler allowed:
-  /// Default <-> __near, and __far_data/__far_code are supersets of both and
-  /// of each other.
+  /// A near pointer converts to a far one; the far spaces convert into each
+  /// other (one 20-bit address).
   bool isAddressSpaceSupersetOf(LangAS A, LangAS B) const override {
-    auto IsNearOrDefault = [](LangAS AS) {
-      return AS == LangAS::Default || AS == LangAS::__near;
-    };
-    auto IsFar = [](LangAS AS) {
-      return AS == LangAS::__far_data || AS == LangAS::__far_code;
-    };
-    return A == B || (IsNearOrDefault(A) && IsNearOrDefault(B)) ||
-           (IsFar(A) && (IsNearOrDefault(B) || IsFar(B)));
+    return A == B || (isFarAddressSpace(A) &&
+                      (B == LangAS::Default || isFarAddressSpace(B)));
   }
 
   BuiltinVaListKind getBuiltinVaListKind() const override {

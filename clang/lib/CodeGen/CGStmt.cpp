@@ -2772,9 +2772,7 @@ void AsmConstraintsInfo::EmitAsmStmt() {
   // to the return value slot. Only do this when returning in registers.
   HandleMSStyleAsmBlob();
 
-  // Handle input constraints. RL78 -mfar-data: inputs are not converted to far
-  // pointers (see ScalarExprEmitter::EmitLoadOfLValue).
-  SaveAndRestore InAsm(CGF.InEmitAsmStmt, true);
+  // Handle input constraints.
   HandleInputConstraints();
 
   // Handle 'asm goto' labels.

@@ -4242,15 +4242,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   if (Args.hasArg(OPT_fwrapv_pointer))
     Opts.PointerOverflowDefined = true;
 
-  // RL78 language options. -mfar-code/-mfar-data/-m*-rom are marshalled;
-  // near ROM is the default when no ROM model is given.
-  if (T.isRL78()) {
-    Opts.RenesasRL78 = 1;
-    if (!Opts.RenesasRL78RomModelNear && !Opts.RenesasRL78RomModelFar &&
-        !Opts.RenesasRL78RomModelCommon)
-      Opts.RenesasRL78RomModelNear = true;
-  }
-
   Opts.MSCompatibilityVersion = 0;
   if (const Arg *A = Args.getLastArg(OPT_fms_compatibility_version)) {
     VersionTuple VT;

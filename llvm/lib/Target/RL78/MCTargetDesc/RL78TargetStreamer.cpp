@@ -82,14 +82,9 @@ RL78TargetELFStreamer::RL78TargetELFStreamer(MCStreamer &S,
   EFlags |= Features[RL78::FeatureFarCode] ? ELF::EF_RL78_TEXT_FAR
                                            : ELF::EF_RL78_TEXT_NEAR;
 
-  EFlags |= Features[RL78::FeatureFarData] ? ELF::EF_RL78_DATA_FAR
-                                           : ELF::EF_RL78_DATA_NEAR;
+  EFlags |= ELF::EF_RL78_DATA_NEAR;
 
-  if (Features[RL78::FeatureCommonRom])
-    EFlags |= 0;
-  else if (Features[RL78::FeatureFarRom] || Features[RL78::FeatureFarData])
-    EFlags |= ELF::EF_RL78_RODATA_FAR;
-  else
+  if (!Features[RL78::FeatureCommonRom])
     EFlags |= ELF::EF_RL78_RODATA_NEAR;
 
   W.setELFHeaderEFlags(EFlags);

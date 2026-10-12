@@ -3928,38 +3928,13 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD, Scope *S,
     }
   }
 
-   if (OldTypeInfo.getFar() != NewTypeInfo.getFar()) {
-    if ((Old->hasAttr<RL78InterruptAttr>() &&
-         !Old->getAttr<RL78InterruptAttr>()->vects().empty()) ||
-        Old->hasAttr<RL78BRKInterruptAttr>()) {
-      // If the old decl is a vectored interrupt or a brk interrupt, it
-      // should've been forced to __near.
-      assert(!OldTypeInfo.getFar());
-
-      // We will silently force the new decl to __near too.
-      NewTypeInfo = NewTypeInfo.withFar(false);
-      RequiresAdjustment = true;
-    } else {
-      if (OldTypeInfo.getNonDefaultAS())
-        Diag(New->getLocation(), diag::error_rl78_storage_attribute)
-            << (OldTypeInfo.getFar() ? "__far_code" : "__near");
-      else
-        Diag(New->getLocation(), diag::error_rl78_storage_attribute)
-            << (OldTypeInfo.getFar() ? "implicit __far_code" : "implicit __near");
-      Diag(OldLocation, diag::note_previous_declaration);
-      return true;
-    }
-  }
-
   // FIXME: diagnose the other way around?
   if (OldTypeInfo.getNoReturn() && !NewTypeInfo.getNoReturn()) {
     NewTypeInfo = NewTypeInfo.withNoReturn(true);
     RequiresAdjustment = true;
   }
 
-  if (getLangOpts().RenesasRL78 &&
-      ((New->hasAttr<RL78CalltAttr>() && !Old->hasAttr<RL78CalltAttr>()) ||
-       (!New->hasAttr<RL78CalltAttr>() && Old->hasAttr<RL78CalltAttr>()))) {
+  if (New->hasAttr<RL78CalltAttr>() != Old->hasAttr<RL78CalltAttr>()) {
     Diag(New->getLocation(), diag::error_rl78_callt_change)
         << New->hasAttr<RL78CalltAttr>();
     Diag(OldLocation, diag::note_previous_declaration);
@@ -7147,101 +7122,6 @@ void Sema::deduceOpenCLAddressSpace(VarDecl *Var) {
   Var->assignAddressSpace(Context, ImplAS);
 }
 
-static QualType rebuildArrayWithNewElementType(ASTContext &Context, QualType ArrayQTy, QualType NewElementQTy) {
-  
-    if (ArrayQTy.getTypePtr()->isArrayType()) {
-    const Type *ArrayTy = ArrayQTy.getTypePtr();
-    const ArrayType *AT = ArrayTy->getAsArrayTypeUnsafe();
-    QualType OldElementTy = AT->getElementType();
-    if (OldElementTy != NewElementQTy) {
-      if (ArrayTy->isIncompleteArrayType()) {
-        ArrayQTy =
-            Context.getIncompleteArrayType(NewElementQTy, AT->getSizeModifier(),
-                                           AT->getIndexTypeCVRQualifiers());
-      } else if (ArrayTy->isConstantArrayType()) {
-        const ConstantArrayType *AC = cast<ConstantArrayType>(AT);
-        ArrayQTy = Context.getConstantArrayType(
-            NewElementQTy, AC->getSize(), AC->getSizeExpr(),
-            AC->getSizeModifier(), AC->getIndexTypeCVRQualifiers());
-      } else if (ArrayTy->isVariableArrayType()) {
-        const VariableArrayType *AV = cast<VariableArrayType>(AT);
-        ArrayQTy = Context.getVariableArrayType(
-            NewElementQTy, AV->getSizeExpr(), AV->getSizeModifier(),
-            AV->getIndexTypeCVRQualifiers());
-      } else {
-        const DependentSizedArrayType *AD = cast<DependentSizedArrayType>(AT);
-        ArrayQTy = Context.getDependentSizedArrayType(
-            NewElementQTy, AD->getSizeExpr(), AD->getSizeModifier(),
-            AD->getIndexTypeCVRQualifiers());
-      }
-    }
-  }
-  return ArrayQTy;
-}
-
-void Sema::handleRL78AddressSpace(ValueDecl *Decl, bool IsParameter) {
-  if (VarDecl *Var = dyn_cast<VarDecl>(Decl)) {
-    QualType NewVarType = Var->getType();
-    // Handle automatic variables with address space
-    if (Decl->getType().hasAddressSpace() && Var->hasLocalStorage()) {
-      if (NewVarType->isArrayType()) {
-        NewVarType = rebuildArrayWithNewElementType(
-            Context, NewVarType,
-            Context.removeAddrSpaceQualType(
-                NewVarType->getAsArrayTypeUnsafe()->getElementType()));
-      } else if (const TypeOfExprType *TypeOfType =
-                     dyn_cast<TypeOfExprType>(NewVarType)) {
-        // Handle the following case:
-        // const _far int b;
-        // void foo() {
-        //  typeof(b) c;
-        //}
-        NewVarType = Context.removeAddrSpaceQualType(TypeOfType->desugar());
-      } else {
-        NewVarType = Context.removeAddrSpaceQualType(NewVarType);
-      }
-      // CC-RL emits a warning and ignores __far/__near when used on automatic
-      // variables
-      Diag(Decl->getLocation(), diag::warn_ignored_as_qualifier);
-    } else if(!NewVarType->isPointerType()) {
-      // Pointers are already handled in GetFullTypeForDeclarator
-
-      // If -mfar-rom is specified make all global constants __far except the
-      // ones explictly marked as __near.
-      // NOTE: for -mfar-data the default AS is far => we don't need to change the AS
-      if ((NewVarType.getQualifiers().hasConst()) &&
-          NewVarType.getQualifiers().getAddressSpace() == LangAS::Default) {
-          if (!Var->hasLocalStorage()) {
-          if (NewVarType->isArrayType()) {
-            // If it's an array type, set the element type to far then recreate
-            // the array.
-            QualType NewElementType =
-                NewVarType->getAsArrayTypeUnsafe()->getElementType();
-            if (!NewElementType->isPointerType() ||
-                (NewElementType->isPointerType() &&
-                    !NewElementType->getPointeeType()->isFunctionType())) {
-              if (getLangOpts().RenesasRL78RomModelFar)
-              NewElementType =
-                  Context.getAddrSpaceQualType(NewElementType,
-                                               LangAS::__far_data);
-              NewVarType = rebuildArrayWithNewElementType(Context, NewVarType,
-                                                          NewElementType);
-            }
-          } else {
-            // Assume it's a simple global variable and set the address space
-            // directly.
-            if (getLangOpts().RenesasRL78RomModelFar)
-              NewVarType =
-                  Context.getAddrSpaceQualType(NewVarType, LangAS::__far_data);
-          }
-        }
-      }
-    }
-    if (NewVarType != Var->getType())
-      Var->setType(NewVarType);
-  }
-}
-
 static void checkWeakAttr(Sema &S, NamedDecl &ND) {
   // 'weak' only applies to declarations with external linkage.
   if (WeakAttr *Attr = ND.getAttr<WeakAttr>()) {
@@ -8399,10 +8279,6 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   // Handle attributes prior to checking for duplicates in MergeVarDecl
   ProcessDeclAttributes(S, NewVD, D);
 
-  // RL78: default address spaces for -mfar-rom/-mfar-data.
-  if (Context.getTargetInfo().getTriple().isRL78())
-    handleRL78AddressSpace(NewVD, false);
-
   if (getLangOpts().HLSL)
     HLSL().ActOnVariableDeclarator(NewVD);
 
@@ -9083,7 +8959,7 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
   // This includes arrays of objects with address space qualifiers, but not
   // automatic variables that point to other address spaces.
   // ISO/IEC TR 18037 S5.1.2
-  if (!getLangOpts().OpenCL && !getLangOpts().RenesasRL78 && NewVD->hasLocalStorage() &&
+  if (!getLangOpts().OpenCL && NewVD->hasLocalStorage() &&
       T.getAddressSpace() != LangAS::Default) {
     Diag(NewVD->getLocation(), diag::err_as_qualified_auto_decl) << 0;
     NewVD->setInvalidDecl();
@@ -10815,25 +10691,6 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   if (D.getDeclSpec().isNoreturnSpecified())
     NewFD->addAttr(
         C11NoReturnAttr::Create(Context, D.getDeclSpec().getNoreturnSpecLoc()));
-
-  // When dealing with RL78, we should also apply any implicit address spaces
-  // since we didn't add them when we created the typedef
-  // @code
-  // typedef void fn(int);
-  // fn f;
-  // @endcode
-  if (getLangOpts().RenesasRL78CodeModel &&
-      NewFD->getType().getAddressSpace() == LangAS::Default &&
-      !D.isFunctionDeclarator(FTIIdx)) {
-    if (const FunctionProtoType *FT = R->getAs<FunctionProtoType>()) {
-      const FunctionProtoType *FPT =
-          NewFD->getType()->castAs<FunctionProtoType>();
-      FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-      EPI.ExtInfo = EPI.ExtInfo.withFar(true);
-      NewFD->setType(Context.getFunctionType(FPT->getReturnType(),
-                                             FPT->getParamTypes(), EPI));
-    }
-  }
 
   // Functions returning a variably modified type violate C99 6.7.5.2p2
   // because all functions have linkage.
@@ -16023,9 +15880,6 @@ Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D,
 
   New->deduceParmAddressSpace(Context);
 
-  if(getLangOpts().RenesasRL78)
-    handleRL78AddressSpace(New, true);
-
   return New;
 }
 
@@ -16169,10 +16023,6 @@ ParmVarDecl *Sema::CheckParameter(DeclContext *DC, SourceLocation StartLoc,
   // Since all parameters have automatic store duration, they can not have
   // an address space.
   if (T.getAddressSpace() != LangAS::Default &&
-      !getLangOpts().RenesasRL78 &&
-      // Allow address spaces for function parameters, since they decay to
-      // pointers.
-      !T->isFunctionType() && 
       // OpenCL allows function arguments declared to be an array of a type
       // to be qualified with an address space.
       !(getLangOpts().OpenCL &&

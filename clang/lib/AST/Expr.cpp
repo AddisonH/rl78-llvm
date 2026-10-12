@@ -1881,15 +1881,9 @@ bool CastExpr::CastConsistency() const {
       Ty = Ty->getPointeeType();
       SETy = SETy->getPointeeType();
     }
-    // RL78: near and far function pointers differ in the function type's far
-    // bit rather than in an address space qualifier.
     assert((Ty->isDependentType() || SETy->isDependentType()) ||
            (!Ty.isNull() && !SETy.isNull() &&
-            Ty.getAddressSpace() != SETy.getAddressSpace()) ||
-           (!Ty.isNull() && !SETy.isNull() && Ty->isFunctionType() &&
-            SETy->isFunctionType() &&
-            Ty->castAs<FunctionType>()->getExtInfo().getFar() !=
-                SETy->castAs<FunctionType>()->getExtInfo().getFar()));
+            Ty.getAddressSpace() != SETy.getAddressSpace()));
     goto CheckNoBasePath;
   }
   // These should not have an inheritance path.

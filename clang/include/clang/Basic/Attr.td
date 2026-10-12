@@ -5434,16 +5434,6 @@ def RL78Saddr : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Documentation = [RL78SaddrDocs];
 }
 
-def RL78Near : TypeAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [CustomKeyword<"__near">];
-  let Documentation = [RL78NearFarDocs];
-}
-
-def RL78Far : TypeAttr, TargetSpecificAttr<TargetRL78> {
-  let Spellings = [CustomKeyword<"__far">];
-  let Documentation = [RL78NearFarDocs];
-}
-
 def RL78Callt : InheritableAttr, TargetSpecificAttr<TargetRL78> {
   let Spellings = [GCC<"callt">];
   let Subjects = SubjectList<[Function], ErrorDiag>;

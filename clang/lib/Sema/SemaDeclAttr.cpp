@@ -3633,7 +3633,6 @@ CodeSegAttr *Sema::mergeCodeSegAttr(Decl *D, const AttributeCommonInfo &CI,
   return ::new (Context) CodeSegAttr(Context, CI, Name);
 }
 
-
 static void handleCodeSegAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   StringRef Str;
   SourceLocation LiteralLoc;
@@ -6725,24 +6724,7 @@ static void handleRL78InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL,
     return;
   }
 
-  // Silently drop the __far attribute
   FunctionDecl *FD = cast<FunctionDecl>(D);
-  if (getAddressSpace(FD->getType(), S.Context) == LangAS::__far_code &&
-      (brk || !ExtraDataVects.empty())) {
-    if (const FunctionProtoType *FPT =
-            FD->getType()->getAs<FunctionProtoType>()) {
-      FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-      EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-      FD->setType(S.Context.getFunctionType(FPT->getReturnType(),
-                                            FPT->getParamTypes(), EPI));
-    }
-    else {
-      const auto *FNT = FD->getType()->castAs<FunctionNoProtoType>();
-      FD->setType(S.Context.getFunctionNoProtoType(
-          FNT->getReturnType(), FNT->getExtInfo().withFar(false)));
-    }
-  }
-
   if (!brk) {
     SmallVector<unsigned, 4> FinalVects;
     llvm::SmallSet<unsigned, 8> Seen;
@@ -7830,35 +7812,14 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
     S.Diag(AL.getLoc(), diag::err_attribute_invalid_on_decl)
         << AL << AL.isRegularKeywordAttribute() << D->getLocation();
     break;
-  //TODO: add proper checks
-  //TODO: add check for typedef
   case ParsedAttr::AT_Saddr:
-      //Renesas CCRL specification:
-      //if __saddr is specified for a const type variable, a compilation error will occur
-      if (cast<VarDecl>(D)->getType().isConstQualified()) {
-        S.Diag(AL.getLoc(), diag::err_rl78_saddr_not_applicable);
-        break;
-      }
-      //Renesas CCRL specification:
-      // -If __saddr and __near or __far are specified together, a compilation error will occur.
-      if(cast<VarDecl>(D)->getType().hasAddressSpace()) {
-		S.Diag(AL.getLoc(), diag::err_expected) << "only one keyword or attribute. Also found near or far keywords or attributes.";
-        break;
-      }
-      // For -mfar-data, set the near AS internally; otherwise saddr var ptrs will be far.
-      if (S.getLangOpts().RenesasRL78DataModel)
-        cast<VarDecl>(D)->setType(S.Context.getAddrSpaceQualType(cast<VarDecl>(D)->getType(), LangAS::__near));
-      D->addAttr(::new (S.Context) RL78SaddrAttr(S.Context, AL));
+    // The short direct area is RAM: not for const or far variables.
+    if (cast<VarDecl>(D)->getType().isConstQualified() ||
+        cast<VarDecl>(D)->getType().hasAddressSpace()) {
+      S.Diag(AL.getLoc(), diag::err_rl78_saddr_not_applicable);
       break;
-  case ParsedAttr::AT_RL78Far:
-    if (isa<FunctionDecl>(D) &&
-        getAddressSpace(cast<FunctionDecl>(D)->getType(), S.Context) == LangAS::__far_code) {
-      if (D->hasAttr<RL78CalltAttr>()) {
-        S.Diag(AL.getLoc(), diag::err_attributes_are_not_compatible)
-            << AL << "'__callt'" <<true;
-        AL.setInvalid();
-      }
     }
+    D->addAttr(::new (S.Context) RL78SaddrAttr(S.Context, AL));
     break;
   case ParsedAttr::AT_RL78Callt:
     if(cast<FunctionDecl>(D)->isInlined()) {
@@ -8836,34 +8797,6 @@ void Sema::ProcessDeclAttributeList(
     Diag(D->getLocation(), diag::err_designated_init_attr_non_init);
     D->dropAttr<ObjCDesignatedInitializerAttr>();
   }
-   if (D->hasAttr<RL78CalltAttr>() && isa<FunctionDecl>(D)) {
-    QualType FnType = cast<FunctionDecl>(D)->getType();
-    if (getAddressSpace(FnType, Context) == LangAS::__far_code) {
-      bool HasExplicitFar = false;
-      for (const ParsedAttr &AL : AttrList) {
-        if (AL.getKind() == ParsedAttr::AT_RL78Far) {
-          HasExplicitFar = true;
-          Diag(AL.getLoc(), diag::err_attributes_are_not_compatible)
-              << AL << "'__callt'" <<true;
-          AL.setInvalid();
-        }
-      }
-      if (!HasExplicitFar) {
-        if (isa<FunctionProtoType>(FnType)) {
-          const FunctionProtoType *FPT = FnType->castAs<FunctionProtoType>();
-          FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-          EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-          cast<FunctionDecl>(D)->setType(Context.getFunctionType(
-              FPT->getReturnType(), FPT->getParamTypes(), EPI));
-        } else if (isa<FunctionNoProtoType>(FnType)) {
-          const FunctionNoProtoType *FNPT =
-              FnType->castAs<FunctionNoProtoType>();
-          cast<FunctionDecl>(D)->setType(Context.getFunctionNoProtoType(
-              FNPT->getReturnType(), FNPT->getExtInfo().withFar(false)));
-        }
-      }
-    }
-   }
 }
 
 void Sema::ProcessDeclAttributeDelayed(Decl *D,

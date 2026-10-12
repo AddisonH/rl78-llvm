@@ -1237,8 +1237,6 @@ void TypePrinter::printFunctionAfter(const FunctionType::ExtInfo &Info,
     OS << " __attribute__((no_caller_saved_registers))";
   if (Info.getNoCfCheck())
     OS << " __attribute__((nocf_check))";
-  if (Info.getFar())
-    OS << " __far_code";
 }
 
 void TypePrinter::printFunctionNoProtoBefore(const FunctionNoProtoType *T,
@@ -2134,12 +2132,6 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
   case attr::ArmMveStrictPolymorphism:
     OS << "__clang_arm_mve_strict_polymorphism";
     break;
-  case attr::RL78Far:
-    OS << "__far";
-    break;
-  case attr::RL78Near:
-    OS << "__near";
-    break;
   case attr::ExtVectorType:
     OS << "ext_vector_type";
     break;
@@ -2742,12 +2734,6 @@ std::string Qualifiers::getAddrSpaceAsString(LangAS AS) {
     return "__ptr64";
   case LangAS::hlsl_groupshared:
     return "groupshared";
-  case LangAS::__near:
-    return "__near";
-  case LangAS::__far_code:
-    return "__far_code";
-  case LangAS::__far_data:
-    return "__far_data";
   case LangAS::hlsl_constant:
     return "hlsl_constant";
   case LangAS::hlsl_private:

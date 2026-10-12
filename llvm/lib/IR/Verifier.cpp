@@ -6071,11 +6071,7 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     Check(isa<ConstantInt>(Call.getArgOperand(0)),
           "align argument only accepts constants");
     auto *Promise = Call.getArgOperand(1);
-    // An address-space cast of the alloca is accepted (CoroIdInst::getPromise
-    // strips it): RL78 -mfar-data passes its near promise to coro.id's
-    // default address space parameter.
-    Check(isa<ConstantPointerNull>(Promise) ||
-              isa<AllocaInst>(Promise->stripPointerCasts()),
+    Check(isa<ConstantPointerNull>(Promise) || isa<AllocaInst>(Promise),
           "promise argument must refer to an alloca");
 
     auto *CoroAddr = Call.getArgOperand(2)->stripPointerCastsAndAliases();

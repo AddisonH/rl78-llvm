@@ -508,6 +508,11 @@ public:
   /// \param AddrSpace address space of pointee in source language.
   virtual uint64_t getNullPointerValue(LangAS AddrSpace) const { return 0; }
 
+  /// The target address space of functions (the data layout's program
+  /// address space). A pointer to a function has the width of a pointer in
+  /// this address space.
+  virtual unsigned getProgramAddressSpace() const { return 0; }
+
   /// Returns true if an address space can be safely converted to another.
   /// \param A address space of target in source language.
   /// \param B address space of source in source language.

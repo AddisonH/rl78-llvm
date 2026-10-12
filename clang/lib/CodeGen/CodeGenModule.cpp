@@ -524,12 +524,8 @@ CodeGenModule::CodeGenModule(ASTContext &C,
   PointerAlignInBytes =
       C.toCharUnitsFromBits(C.getTargetInfo().getPointerAlign(LangAS::Default))
           .getQuantity();
-  // RL78 -mfar-data: sizeof(size_t) stays sizeof(int) (2); only intptr_t is 4.
   SizeSizeInBytes =
-      C.toCharUnitsFromBits(C.getLangOpts().RenesasRL78DataModel
-                                ? C.getTargetInfo().getIntWidth()
-                                : C.getTargetInfo().getMaxPointerWidth())
-          .getQuantity();
+    C.toCharUnitsFromBits(C.getTargetInfo().getMaxPointerWidth()).getQuantity();
   IntAlignInBytes =
     C.toCharUnitsFromBits(C.getTargetInfo().getIntAlign()).getQuantity();
   CharTy =
@@ -537,9 +533,6 @@ CodeGenModule::CodeGenModule(ASTContext &C,
   IntTy = llvm::IntegerType::get(LLVMContext, C.getTargetInfo().getIntWidth());
   IntPtrTy = llvm::IntegerType::get(LLVMContext,
     C.getTargetInfo().getMaxPointerWidth());
-  // RL78 -mfar-data: intptr_t is 32-bit but size_t/ptrdiff_t stay int-sized
-  // (see CodeGenTypeCache).
-  SizeTy = C.getLangOpts().RenesasRL78DataModel ? IntTy : IntPtrTy;
   Int8PtrTy = llvm::PointerType::get(LLVMContext,
                                      C.getTargetAddressSpace(LangAS::Default));
   const llvm::DataLayout &DL = M.getDataLayout();
@@ -5616,27 +5609,8 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     IsIncompleteFunction = true;
   }
 
-  // RL78: far functions (explicit __far, or -mfar-code by default) live in the
-  // far code address space; thunks used in vtables stay in the default one.
-  unsigned FnAddrSpace = getDataLayout().getProgramAddressSpace();
-  if (getLangOpts().RenesasRL78) {
-    LangAS AS = getLangOpts().RenesasRL78CodeModel ? LangAS::__far_code
-                                                   : LangAS::Default;
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D)) {
-      QualType FDTy = FD->getType();
-      if (FDTy.hasAddressSpace())
-        AS = FDTy.getAddressSpace();
-      else
-        AS = cast<FunctionType>(FDTy->getUnqualifiedDesugaredType())->getFar()
-                 ? LangAS::__far_code
-                 : LangAS::Default;
-    }
-    if (IsThunk && ForVTable)
-      AS = LangAS::Default;
-    FnAddrSpace = getContext().getTargetAddressSpace(AS);
-  }
   llvm::Function *F =
-      llvm::Function::Create(FTy, llvm::Function::ExternalLinkage, FnAddrSpace,
+      llvm::Function::Create(FTy, llvm::Function::ExternalLinkage,
                              Entry ? StringRef() : MangledName, &getModule());
 
   // Store the declaration associated with this function so it is potentially
@@ -6304,9 +6278,6 @@ LangAS CodeGenModule::GetGlobalConstantAddressSpace() const {
   // OpenCL v1.2 s6.5.3: a string literal is in the constant address space.
   if (LangOpts.OpenCL)
     return LangAS::opencl_constant;
-  // RL78 -mfar-rom: constants (string literals) are far.
-  if (LangOpts.RenesasRL78RomModelFar)
-    return LangAS::__far_data;
   if (LangOpts.SYCLIsDevice)
     return LangAS::sycl_global;
   if (LangOpts.HIP && LangOpts.CUDAIsDevice && getTriple().isSPIRV())
@@ -6334,8 +6305,7 @@ static llvm::Constant *
 castStringLiteralToDefaultAddressSpace(CodeGenModule &CGM,
                                        llvm::GlobalVariable *GV) {
   llvm::Constant *Cast = GV;
-  // RL78: string literals keep their (far ROM) address space.
-  if (!CGM.getLangOpts().OpenCL && !CGM.getLangOpts().RenesasRL78) {
+  if (!CGM.getLangOpts().OpenCL) {
     auto AS = CGM.GetGlobalConstantAddressSpace();
     if (AS != LangAS::Default)
       Cast = CGM.performAddrSpaceCast(

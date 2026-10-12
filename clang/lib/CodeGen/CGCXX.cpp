@@ -176,12 +176,8 @@ bool CodeGenModule::TryEmitBaseDestructorAsAlias(const CXXDestructorDecl *D) {
   // requires explicit comdat support in the IL.
   if (llvm::GlobalValue::isWeakForLinker(TargetLinkage))
     return true;
-
-  auto AddrSpace = getLangOpts().RenesasRL78CodeModel ?
-      Aliasee->getType()->getAddressSpace() : 0;
-
   // Create the alias with no name.
-  auto *Alias = llvm::GlobalAlias::create(AliasValueType, AddrSpace, Linkage, "",
+  auto *Alias = llvm::GlobalAlias::create(AliasValueType, 0, Linkage, "",
                                           Aliasee, &getModule());
 
   // Destructors are always unnamed_addr.

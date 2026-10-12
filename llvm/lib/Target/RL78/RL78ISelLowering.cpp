@@ -1367,8 +1367,7 @@ unsigned RL78TargetLowering::getJumpTableEncoding() const {
 // goes to CS:AX: that reaches the cases only when all code is in the first
 // 64 KiB, with CS left at 0. The table itself is read as near data.
 bool RL78TargetLowering::areJTsAllowed(const Function *Fn) const {
-  if (Subtarget->HasFarCodeModel() || Subtarget->HasFarDataModel() ||
-      Fn->getAddressSpace() == RL78AS::FarCode)
+  if (Subtarget->HasFarCodeModel() || Fn->getAddressSpace() == RL78AS::FarCode)
     return false;
   return TargetLowering::areJTsAllowed(Fn);
 }

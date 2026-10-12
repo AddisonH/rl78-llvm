@@ -720,20 +720,7 @@ public:
     if (isa<MemberPointerType>(E->getType())) // never sugared
       return CGF.CGM.getMemberPointerConstant(E);
 
-    LValue LV = EmitLValue(E->getSubExpr());
-    llvm::Value *Ptr = LV.getPointer(CGF);
-    // RL78 -mfar-data: the address of a local variable is near; cast it to the
-    // default (far) address space. Not for inline asm inputs.
-    const ASTContext &Ctx = CGF.getContext();
-    if (!CGF.InEmitAsmStmt && CGF.getLangOpts().RenesasRL78DataModel &&
-        LV.getAddressSpace() == LangAS::Default &&
-        Ptr->getType()->getPointerAddressSpace() ==
-            Ctx.getTargetAddressSpace(LangAS::__near))
-      Ptr = Builder.CreateAddrSpaceCast(
-          Ptr, llvm::PointerType::get(
-                   Ptr->getContext(),
-                   Ctx.getTargetAddressSpace(LangAS::Default)));
-    return Ptr;
+    return EmitLValue(E->getSubExpr()).getPointer(CGF);
   }
   Value *VisitUnaryDeref(const UnaryOperator *E) {
     if (E->getType()->isVoidType())
@@ -2878,24 +2865,6 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         Visit(E);
       return CGF.CGM.getNullPointer(cast<llvm::PointerType>(DestLTy), DestTy);
     }
-    // RL78: between near data and far code pointers (either way), go through
-    // the other far address space first, so that the backend's near -> far
-    // conversion (which sets the 0x0F high byte) applies.
-    if (CGF.getLangOpts().RenesasRL78 &&
-        E->getType()->getPointeeType()->isFunctionType() !=
-            DestTy->getPointeeType()->isFunctionType() &&
-        (getAddressSpace(DestTy->getPointeeType(), CGF.getContext()) ==
-             LangAS::__far_code ||
-         DestTy->getPointeeType().getAddressSpace() == LangAS::__far_data)) {
-      LangAS FirstAS =
-          DestTy->getPointeeType().getAddressSpace() == LangAS::__far_data
-              ? LangAS::__far_code
-              : LangAS::__far_data;
-      llvm::Type *FirstTy = llvm::PointerType::get(
-          CGF.getLLVMContext(), CGF.getContext().getTargetAddressSpace(FirstAS));
-      return CGF.performAddrSpaceCast(
-          CGF.performAddrSpaceCast(Visit(E), FirstTy), DestLTy);
-    }
     // Since target may map different address spaces in AST to the same address
     // space, an address space conversion may end up as a bitcast.
     return CGF.performAddrSpaceCast(Visit(E), DestLTy);
@@ -2906,18 +2875,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     return Visit(E);
 
   case CK_NoOp: {
-    if (CE->changesVolatileQualification())
-      return EmitLoadOfLValue(CE);
-    llvm::Value *V = Visit(E);
-    // RL78 -mfar-data: a qualification conversion can also convert a __near
-    // pointer to the default (far) address space.
-    if (V && CGF.getLangOpts().RenesasRL78DataModel &&
-        V->getType()->isPointerTy()) {
-      llvm::Type *T = ConvertType(DestTy);
-      if (T != V->getType() && T->isPointerTy())
-        V = CGF.performAddrSpaceCast(V, T);
-    }
-    return V;
+    return CE->changesVolatileQualification() ? EmitLoadOfLValue(CE) : Visit(E);
   }
 
   case CK_BaseToDerived: {
@@ -3032,23 +2990,6 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     llvm::Value* IntResult =
       Builder.CreateIntCast(Src, MiddleTy, InputSigned, "conv");
 
-    if (CGF.CGM.getLangOpts().RenesasRL78) {
-      unsigned DestBitSize =
-          CGF.CGM.getDataLayout().getPointerTypeSizeInBits(DestLLVMTy);
-
-      // A constant 0 becomes a null pointer.
-      Expr::EvalResult Result;
-      if (E->EvaluateAsRValue(Result, CGF.getContext()) &&
-          Result.Val.isInt() && Result.Val.getInt() == 0)
-        return Builder.CreateIntToPtr(Builder.getIntN(DestBitSize, 0),
-                                      DestLLVMTy);
-
-      // RL78 far pointers are 32 bits in LLVM but only 24 bits are an
-      // address: clear the rest.
-      if (DestBitSize > 24)
-        IntResult = Builder.CreateAnd(IntResult, 0xFF'FFFF);
-    }
-
     auto *IntToPtr = Builder.CreateIntToPtr(IntResult, DestLLVMTy);
 
     if (CGF.CGM.getCodeGenOpts().StrictVTablePointers) {
@@ -3075,26 +3016,6 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     }
 
     PtrExpr = CGF.authPointerToPointerCast(PtrExpr, E->getType(), DestTy);
-
-    // RL78: a near data pointer converted to an integer wider than 16 bits
-    // gets the 0x0F high byte (the near window is 0xF0000-0xFFFFF), unless it
-    // is null.
-    if (CGF.getLangOpts().RenesasRL78 && !E->getType()->isNullPtrType()) {
-      QualType SrcPointeeType =
-          E->getType()->getPointeeType().getDesugaredType(CGF.getContext());
-      llvm::Type *IntTy = ConvertType(DestTy);
-      if (!SrcPointeeType->isFunctionType() &&
-          SrcPointeeType.getAddressSpace() != LangAS::__far_data &&
-          IntTy->getIntegerBitWidth() > 16) {
-        unsigned Width = IntTy->getIntegerBitWidth();
-        Value *Low = Builder.CreatePtrToInt(PtrExpr, Builder.getInt16Ty());
-        Value *IsNull = Builder.CreateICmpEQ(Builder.getIntN(16, 0), Low);
-        Value *Prefix = Builder.CreateSelect(IsNull, Builder.getIntN(Width, 0),
-                                             Builder.getIntN(Width, 0x0f0000));
-        return Builder.CreateOr(Builder.CreateIntCast(Low, IntTy, false),
-                                Prefix);
-      }
-    }
     return Builder.CreatePtrToInt(PtrExpr, ConvertType(DestTy));
   }
   case CK_ToVoid: {
@@ -5421,37 +5342,6 @@ Value *ScalarExprEmitter::EmitCompare(const BinaryOperator *E,
           RHS = Builder.CreateStripInvariantGroup(RHS);
       }
 
-      // RL78 far pointers: equality compares the low 3 bytes (the backend),
-      // <, >, <=, >= only the low 2 bytes (the offset within the 64 KiB page).
-      if (CGF.getLangOpts().RenesasRL78 && LHS->getType()->isPointerTy() &&
-          RHS->getType()->isPointerTy()) {
-        const ASTContext &Ctx = CGF.getContext();
-        unsigned NearAS = Ctx.getTargetAddressSpace(LangAS::__near);
-        unsigned FarCodeAS = Ctx.getTargetAddressSpace(LangAS::__far_code);
-        unsigned FarDataAS = Ctx.getTargetAddressSpace(LangAS::__far_data);
-        unsigned LHSAS = LHS->getType()->getPointerAddressSpace();
-        unsigned RHSAS = RHS->getType()->getPointerAddressSpace();
-        bool FarPtrs;
-        // With -mfar-data the default pointers are far too.
-        if (CGF.getLangOpts().RenesasRL78DataModel &&
-            (LHSAS != NearAS || RHSAS != NearAS)) {
-          // Make both pointers far first.
-          if ((LHSAS != NearAS) != (RHSAS != NearAS)) {
-            LHS = Builder.CreateAddrSpaceCast(
-                LHS, llvm::PointerType::get(LHS->getContext(), 0));
-            RHS = Builder.CreateAddrSpaceCast(
-                RHS, llvm::PointerType::get(RHS->getContext(), 0));
-          }
-          FarPtrs = true;
-        } else {
-          FarPtrs = LHSAS == FarCodeAS || LHSAS == FarDataAS;
-        }
-        if (FarPtrs && E->isRelationalOp()) {
-          LHS = Builder.CreatePtrToInt(LHS, Builder.getInt16Ty());
-          RHS = Builder.CreatePtrToInt(RHS, Builder.getInt16Ty());
-        }
-      }
-
       Result = Builder.CreateICmp(UICmpOpc, LHS, RHS, "cmp");
     }
 
@@ -6154,23 +6044,6 @@ VisitAbstractConditionalOperator(const AbstractConditionalOperator *E) {
     return RHS;
   if (!RHS)
     return LHS;
-
-  // RL78 -mfar-data: near and far pointers may mix; the result is far.
-  if (CGF.getLangOpts().RenesasRL78DataModel && LHS->getType()->isPointerTy()) {
-    const ASTContext &Ctx = CGF.getContext();
-    unsigned DefAS = Ctx.getTargetAddressSpace(LangAS::Default);
-    unsigned NearAS = Ctx.getTargetAddressSpace(LangAS::__near);
-    bool LHSFar = LHS->getType()->getPointerAddressSpace() != NearAS;
-    bool RHSFar = RHS->getType()->getPointerAddressSpace() != NearAS;
-    if (LHSFar != RHSFar) {
-      llvm::Type *FarTy = llvm::PointerType::get(LHS->getContext(), DefAS);
-      Builder.SetInsertPoint(LHSBlock->getTerminator());
-      LHS = Builder.CreateAddrSpaceCast(LHS, FarTy);
-      Builder.SetInsertPoint(RHSBlock->getTerminator());
-      RHS = Builder.CreateAddrSpaceCast(RHS, FarTy);
-      Builder.SetInsertPoint(ContBlock);
-    }
-  }
 
   // Create a PHI node for the real part.
   llvm::PHINode *PN = Builder.CreatePHI(LHS->getType(), 2, "cond");

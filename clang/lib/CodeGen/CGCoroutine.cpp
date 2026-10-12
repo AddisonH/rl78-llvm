@@ -280,18 +280,6 @@ static LValueOrRValue emitSuspendExpression(CodeGenFunction &CGF, CGCoroData &Co
 
   llvm::Function *AwaitSuspendIntrinsic = CGF.CGM.getIntrinsic(AwaitSuspendIID);
 
-  // RL78 -mfar-data: the awaiter is a (near) local, the intrinsic takes
-  // default address space pointers.
-  if (CGF.getLangOpts().RenesasRL78)
-    for (unsigned I = 0; I != SuspendIntrinsicCallArgs.size(); ++I) {
-      llvm::Type *ParamTy =
-          AwaitSuspendIntrinsic->getFunctionType()->getParamType(I);
-      llvm::Value *&Arg = SuspendIntrinsicCallArgs[I];
-      if (Arg->getType() != ParamTy && ParamTy->isPointerTy() &&
-          Arg->getType()->isPointerTy())
-        Arg = CGF.Builder.CreateAddrSpaceCast(Arg, ParamTy);
-    }
-
   // SuspendHandle might throw since it also resumes the returned handle.
   const bool AwaitSuspendCanThrow =
       SuspendReturnType ==
@@ -1026,15 +1014,7 @@ void CodeGenFunction::EmitCoroutineBody(const CoroutineBodyStmt &S) {
     Address PromiseAddr = GetAddrOfLocalVar(S.getPromiseDecl());
     // Update CoroId to refer to the promise. We could not do it earlier because
     // promise local variable was not emitted yet.
-    llvm::Value *Promise = PromiseAddr.emitRawPointer(*this);
-    // RL78 -mfar-data: the promise is in the (near) alloca address space but
-    // coro.id takes a default address space pointer. The cast must precede
-    // coro.id.
-    if (Promise->getType() != CoroId->getArgOperand(1)->getType())
-      Promise = new llvm::AddrSpaceCastInst(
-          Promise, CoroId->getArgOperand(1)->getType(), "",
-          CoroId->getIterator());
-    CoroId->setArgOperand(1, Promise);
+    CoroId->setArgOperand(1, PromiseAddr.emitRawPointer(*this));
 
     // Now we have the promise, initialize the GRO
     GroManager.EmitGroAlloca();
@@ -1194,9 +1174,9 @@ RValue CodeGenFunction::EmitCoroutineIntrinsic(const CallExpr *E,
     Args.push_back(llvm::ConstantTokenNone::get(getLLVMContext()));
 
   llvm::Function *F = CGM.getIntrinsic(IID);
-  // RL78's int is 16-bit but the coroutine intrinsics take i32 (e.g. the
-  // second argument of __builtin_coro_promise): zero-extend.
-  if (getLangOpts().RenesasRL78)
+  // The coroutine intrinsics take i32 (e.g. the second argument of
+  // __builtin_coro_promise): zero-extend a 16-bit int.
+  if (getContext().getTargetInfo().getIntWidth() == 16)
     for (unsigned I = 0; I != Args.size(); ++I)
       if (F->getFunctionType()->getParamType(I) == Builder.getInt32Ty() &&
           Args[I]->getType() == Builder.getInt16Ty())

@@ -54,10 +54,6 @@ static const unsigned ARM64AddrSpaceMap[] = {
     // Wasm address space values for this target are dummy values,
     // as it is only enabled for Wasm targets.
     20, // wasm_funcref
-    // RL78 address spaces.
-    0, // __near
-    0, // __far_data
-    0, // __far_code
 };
 
 using AArch64FeatureSet = llvm::SmallDenseSet<StringRef, 32>;

@@ -28,7 +28,6 @@ struct RL78Multilib {
   StringRef cpu;
   StringRef opt;
   StringRef code;
-  StringRef data;
   bool fullDoubles = false;
   bool disableMDA = false;
 };
@@ -37,7 +36,7 @@ static std::string buildMultilibPath(RL78Multilib flags) {
     // Naming rule is {cpu}_{opt}_{short code model}_{short data model}_{short double size}_{short mda usage for S2}
     std::string folderName = (flags.cpu + "_" + flags.opt +
                  "_" + (flags.code.equals_insensitive("mfar-code") ? "fc" : "nc") +
-                 "_" + (flags.data.equals_insensitive("mfar-data") ? "fd" : "nd") +
+                 "_nd" +
                  "_" + (flags.fullDoubles ? "d64" : "d32")).str();
     if(flags.cpu.equals_insensitive("s2")) {
         folderName = folderName + (flags.disableMDA ? "_nomda" : "_mda");
@@ -48,8 +47,7 @@ static std::string buildMultilibPath(RL78Multilib flags) {
 static void addMultilibFlags(MultilibBuilder& lib, RL78Multilib flags) {
     lib.flag(Twine("-mcpu=" + flags.cpu).str())
         .flag(Twine("-" + flags.opt).str())
-        .flag(Twine("-" + flags.code).str())
-        .flag(Twine("-" + flags.data).str());
+        .flag(Twine("-" + flags.code).str());
     if(flags.fullDoubles)
         lib.flag("-m64bit-doubles");
     if(flags.disableMDA)
@@ -61,75 +59,43 @@ static bool findRL78Multilibs(const Driver &D, const llvm::Triple &TargetTriple,
 
     constexpr RL78Multilib RL78MultilibSet[] = {
         // S1 core.
-        {"s1", "O2", "mnear-code", "mnear-data"},
-        {"s1", "O2", "mnear-code", "mfar-data"},
-        {"s1", "O2", "mfar-code",  "mnear-data"},
-        {"s1", "O2", "mfar-code",  "mfar-data"},
-        {"s1", "Oz", "mnear-code", "mnear-data"},
-        {"s1", "Oz", "mnear-code", "mfar-data"},
-        {"s1", "Oz", "mfar-code",  "mnear-data"},
-        {"s1", "Oz", "mfar-code",  "mfar-data"},
-        {"s1", "O2", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s1", "O2", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s1", "O2", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s1", "O2", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
-        {"s1", "Oz", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s1", "Oz", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s1", "Oz", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s1", "Oz", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
+        {"s1", "O2", "mnear-code"},
+        {"s1", "O2", "mfar-code"},
+        {"s1", "Oz", "mnear-code"},
+        {"s1", "Oz", "mfar-code"},
+        {"s1", "O2", "mnear-code", /* fullDoubles */ true},
+        {"s1", "O2", "mfar-code", /* fullDoubles */ true},
+        {"s1", "Oz", "mnear-code", /* fullDoubles */ true},
+        {"s1", "Oz", "mfar-code", /* fullDoubles */ true},
 
         // S2 core.
-        {"s2", "O2", "mnear-code", "mnear-data"},
-        {"s2", "O2", "mnear-code", "mfar-data"},
-        {"s2", "O2", "mfar-code",  "mnear-data"},
-        {"s2", "O2", "mfar-code",  "mfar-data"},
-        {"s2", "Oz", "mnear-code", "mnear-data"},
-        {"s2", "Oz", "mnear-code", "mfar-data"},
-        {"s2", "Oz", "mfar-code",  "mnear-data"},
-        {"s2", "Oz", "mfar-code",  "mfar-data"},
-        {"s2", "O2", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s2", "O2", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s2", "O2", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s2", "O2", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
-        {"s2", "Oz", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s2", "Oz", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s2", "Oz", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s2", "Oz", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
+        {"s2", "O2", "mnear-code"},
+        {"s2", "O2", "mfar-code"},
+        {"s2", "Oz", "mnear-code"},
+        {"s2", "Oz", "mfar-code"},
+        {"s2", "O2", "mnear-code", /* fullDoubles */ true},
+        {"s2", "O2", "mfar-code", /* fullDoubles */ true},
+        {"s2", "Oz", "mnear-code", /* fullDoubles */ true},
+        {"s2", "Oz", "mfar-code", /* fullDoubles */ true},
 
-        {"s2", "O2", "mnear-code", "mnear-data", /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "O2", "mnear-code", "mfar-data",  /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "O2", "mfar-code",  "mnear-data", /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "O2", "mfar-code",  "mfar-data",  /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "Oz", "mnear-code", "mnear-data", /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "Oz", "mnear-code", "mfar-data",  /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "Oz", "mfar-code",  "mnear-data", /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "Oz", "mfar-code",  "mfar-data",  /* fullDoubles */ false, /* disableMDA */ true},
-        {"s2", "O2", "mnear-code", "mnear-data", /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "O2", "mnear-code", "mfar-data",  /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "O2", "mfar-code",  "mnear-data", /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "O2", "mfar-code",  "mfar-data",  /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "Oz", "mnear-code", "mnear-data", /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "Oz", "mnear-code", "mfar-data",  /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "Oz", "mfar-code",  "mnear-data", /* fullDoubles */ true,  /* disableMDA */ true},
-        {"s2", "Oz", "mfar-code",  "mfar-data",  /* fullDoubles */ true,  /* disableMDA */ true},
+        {"s2", "O2", "mnear-code", /* fullDoubles */ false, /* disableMDA */ true},
+        {"s2", "O2", "mfar-code", /* fullDoubles */ false, /* disableMDA */ true},
+        {"s2", "Oz", "mnear-code", /* fullDoubles */ false, /* disableMDA */ true},
+        {"s2", "Oz", "mfar-code", /* fullDoubles */ false, /* disableMDA */ true},
+        {"s2", "O2", "mnear-code", /* fullDoubles */ true,  /* disableMDA */ true},
+        {"s2", "O2", "mfar-code", /* fullDoubles */ true,  /* disableMDA */ true},
+        {"s2", "Oz", "mnear-code", /* fullDoubles */ true,  /* disableMDA */ true},
+        {"s2", "Oz", "mfar-code", /* fullDoubles */ true,  /* disableMDA */ true},
 
         // S3 core.
-        {"s3", "O2", "mnear-code", "mnear-data"},
-        {"s3", "O2", "mnear-code", "mfar-data"},
-        {"s3", "O2", "mfar-code",  "mnear-data"},
-        {"s3", "O2", "mfar-code",  "mfar-data"},
-        {"s3", "Oz", "mnear-code", "mnear-data"},
-        {"s3", "Oz", "mnear-code", "mfar-data"},
-        {"s3", "Oz", "mfar-code",  "mnear-data"},
-        {"s3", "Oz", "mfar-code",  "mfar-data"},
-        {"s3", "O2", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s3", "O2", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s3", "O2", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s3", "O2", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
-        {"s3", "Oz", "mnear-code", "mnear-data", /* fullDoubles */ true},
-        {"s3", "Oz", "mnear-code", "mfar-data",  /* fullDoubles */ true},
-        {"s3", "Oz", "mfar-code",  "mnear-data", /* fullDoubles */ true},
-        {"s3", "Oz", "mfar-code",  "mfar-data",  /* fullDoubles */ true},
+        {"s3", "O2", "mnear-code"},
+        {"s3", "O2", "mfar-code"},
+        {"s3", "Oz", "mnear-code"},
+        {"s3", "Oz", "mfar-code"},
+        {"s3", "O2", "mnear-code", /* fullDoubles */ true},
+        {"s3", "O2", "mfar-code", /* fullDoubles */ true},
+        {"s3", "Oz", "mnear-code", /* fullDoubles */ true},
+        {"s3", "Oz", "mfar-code", /* fullDoubles */ true},
     };
 
     std::vector<MultilibBuilder> libs;
@@ -143,7 +109,6 @@ static bool findRL78Multilibs(const Driver &D, const llvm::Triple &TargetTriple,
     StringRef Cpu = rl78::getRL78Cpu(Args, TargetTriple);
     bool IsOptFotSize = rl78::getRL78OptSize(Args, TargetTriple);
     StringRef CodeModel = rl78::getRL78CodeModel(Args, TargetTriple);
-    StringRef DataModel = rl78::getRL78DataModel(Args, TargetTriple);
     StringRef DoubleSize = rl78::getRL78DoubleSize(Args, TargetTriple);
     StringRef disableMDA = rl78::getRL78DisableMDA(Args, TargetTriple);
 
@@ -156,10 +121,6 @@ static bool findRL78Multilibs(const Driver &D, const llvm::Triple &TargetTriple,
     addMultilibFlag(CodeModel.equals_insensitive("mfar-code"), "-mfar-code",
                     Flags);
     addMultilibFlag(!CodeModel.equals_insensitive("mfar-code"), "-mnear-code",
-                    Flags);
-    addMultilibFlag(DataModel.equals_insensitive("mfar-data"), "-mfar-data",
-                    Flags);
-    addMultilibFlag(!DataModel.equals_insensitive("mfar-data"), "-mnear-data",
                     Flags);
     addMultilibFlag(DoubleSize.equals_insensitive("m64bit-doubles"),
                     "-m64bit-doubles", Flags);
@@ -303,22 +264,6 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   handleTargetFeaturesGroup(TC.getDriver(), TC.getTriple(), Args, Features,
                             options::OPT_m_rl78_Features_Group);
 
-  // -mfar-data includes and replaces -mfar-rom
-  const Arg *mData =
-      Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
-  if (mData) {
-    if (mData->getOption().getID() == options::OPT_mfar_data) {
-      const Arg *mRom =
-          Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
-                          options::OPT_mfar_rom);
-      if (mRom && mRom->getOption().getID() == options::OPT_mfar_rom) {
-        Features.erase(
-            std::remove(Features.begin(), Features.end(), "+far-rom"),
-            Features.end());
-      }
-    }
-  }
-
   bool hasExplicitMirrorFlag =
     Args.getLastArg(options::OPT_mirror_source_0) ||
     Args.getLastArg(options::OPT_mirror_source_1) ||
@@ -390,14 +335,11 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Adding default linker script if -T option not specified
   if (!Args.hasArg(options::OPT_T)) {
-    // Handling -fsim and -mfar-data options for
+    // Handling the -fsim option for
     // default linker script usage.
-    const auto Mdata = Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
-    const auto FarData = Mdata && Mdata->getOption().getID() == options::OPT_mfar_data;
-
-    std::string linkerscript = FarData ? "rl78-far-data.ld" : "rl78.ld";
+    std::string linkerscript = "rl78.ld";
     if (const Arg *Msim = Args.getLastArg(options::OPT_fsim))
-      linkerscript = FarData ? "rl78-sim-far-data.ld" : "rl78-sim.ld";
+      linkerscript = "rl78-sim.ld";
     CmdArgs.push_back(
         Args.MakeArgString("-T" + GetStartObjectPath(TC, linkerscript)));
 

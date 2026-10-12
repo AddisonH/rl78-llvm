@@ -2466,12 +2466,12 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
   case Type::RValueReference:
     // alignof and sizeof should never enter this code path here, so we go
     // the pointer route.
-    AS = getAddressSpace(cast<ReferenceType>(T)->getPointeeType(), *this);
+    AS = getPointerAddressSpace(cast<ReferenceType>(T)->getPointeeType());
     Width = Target->getPointerWidth(AS);
     Align = Target->getPointerAlign(AS);
     break;
   case Type::Pointer:
-    AS = getAddressSpace(cast<PointerType>(T)->getPointeeType(), *this);
+    AS = getPointerAddressSpace(cast<PointerType>(T)->getPointeeType());
     Width = Target->getPointerWidth(AS);
     Align = Target->getPointerAlign(AS);
     break;
@@ -3327,15 +3327,6 @@ QualType ASTContext::removeAddrSpaceQualType(QualType T) const {
   // immediately.
   if (!T.hasAddressSpace())
     return T;
-
-  // RL78: a function's (far code) address space is kept in its ExtInfo.
-  if (T->getAs<FunctionType>())
-    if (const auto *FPT =
-            T.getDesugaredType(*this)->getAs<FunctionProtoType>()) {
-      FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
-      EPI.ExtInfo = EPI.ExtInfo.withFar(false);
-      return getFunctionType(FPT->getReturnType(), FPT->getParamTypes(), EPI);
-    }
 
   QualifierCollector Quals;
   const Type *TypeNode;
@@ -4275,12 +4266,8 @@ QualType ASTContext::getConstantArrayType(QualType EltTy,
 
   // Convert the array size into a canonical width matching the pointer size for
   // the target.
-  // RL78: keep the array size as wide as int with -mfar-data.
   llvm::APInt ArySize(ArySizeIn);
-  ArySize = ArySize.zextOrTrunc(Target->getTriple().isRL78() &&
-                                        getLangOpts().RenesasRL78DataModel
-                                    ? Target->getIntWidth()
-                                    : Target->getMaxPointerWidth());
+  ArySize = ArySize.zextOrTrunc(Target->getMaxPointerWidth());
 
   llvm::FoldingSetNodeID ID;
   ConstantArrayType::Profile(ID, *this, EltTy, ArySize.getZExtValue(), SizeExpr,
@@ -10019,11 +10006,7 @@ PointerAuthQualifier ASTContext::getObjCMemberSelTypePtrAuth() {
 static TypedefDecl *CreateCharPtrNamedVaListDecl(const ASTContext *Context,
                                                  StringRef Name) {
   // typedef char* __builtin[_ms]_va_list;
-  // RL78 -mfar-data: the va_list is a near pointer (the stack is near).
-  QualType T = Context->getPointerType(Context->getAddrSpaceQualType(
-      Context->CharTy, Context->getLangOpts().RenesasRL78DataModel
-                           ? LangAS::__near
-                           : LangAS::Default));
+  QualType T = Context->getPointerType(Context->CharTy);
   return Context->buildImplicitTypedef(T, Name);
 }
 
@@ -10046,11 +10029,7 @@ static TypedefDecl *CreateCharPtrBuiltinVaListDecl(const ASTContext *Context) {
 
 static TypedefDecl *CreateVoidPtrBuiltinVaListDecl(const ASTContext *Context) {
   // typedef void* __builtin_va_list;
-  // RL78 -mfar-data: the va_list is a near pointer (the stack is near).
-  QualType T = Context->getPointerType(Context->getAddrSpaceQualType(
-      Context->VoidTy, Context->getLangOpts().RenesasRL78DataModel
-                           ? LangAS::__near
-                           : LangAS::Default));
+  QualType T = Context->getPointerType(Context->VoidTy);
   return Context->buildImplicitTypedef(T, "__builtin_va_list");
 }
 
@@ -11669,8 +11648,6 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
     return {};
   if (lbaseInfo.getNoCfCheck() != rbaseInfo.getNoCfCheck())
     return {};
-  if (lbaseInfo.getFar() != rbaseInfo.getFar())
-    return {};
 
   // When merging declarations, it's common for supplemental information like
   // attributes to only be present in one of the declarations, and we generally
@@ -12079,33 +12056,14 @@ QualType ASTContext::mergeTypes(QualType LHS, QualType RHS, bool OfBlockPointer,
       LHSPointee = LHSPointee.getUnqualifiedType();
       RHSPointee = RHSPointee.getUnqualifiedType();
     }
-    // RL78: merge nested pointers into the wider address space, e.g.
-    // char ** with char __near * __near *.
-    bool ModifiedPointee = false;
-    if (getLangOpts().RenesasRL78 &&
-        LHSPointee.getAddressSpace() != RHSPointee.getAddressSpace()) {
-      if (LHSPointee.getQualifiers().isAddressSpaceSupersetOf(
-              RHSPointee.getQualifiers(), *this)) {
-        RHSPointee = getAddrSpaceQualType(removeAddrSpaceQualType(RHSPointee),
-                                          LHSPointee.getAddressSpace());
-        ModifiedPointee = true;
-      } else if (RHSPointee.getQualifiers().isAddressSpaceSupersetOf(
-                     LHSPointee.getQualifiers(), *this)) {
-        LHSPointee = getAddrSpaceQualType(removeAddrSpaceQualType(LHSPointee),
-                                          RHSPointee.getAddressSpace());
-        ModifiedPointee = true;
-      }
-    }
     QualType ResultType = mergeTypes(LHSPointee, RHSPointee, false,
                                      Unqualified);
     if (ResultType.isNull())
       return {};
-    if (!ModifiedPointee) {
-      if (getCanonicalType(LHSPointee) == getCanonicalType(ResultType))
-        return LHS;
-      if (getCanonicalType(RHSPointee) == getCanonicalType(ResultType))
-        return RHS;
-    }
+    if (getCanonicalType(LHSPointee) == getCanonicalType(ResultType))
+      return LHS;
+    if (getCanonicalType(RHSPointee) == getCanonicalType(ResultType))
+      return RHS;
     return getPointerType(ResultType);
   }
   case Type::BlockPointer:
@@ -13055,36 +13013,6 @@ QualType ASTContext::DecodeTypeStr(const char *&Str, const ASTContext &Context,
   return DecodeTypeFromStr(Str, Context, Error, RequireICE, AllowTypeModifiers);
 }
 
-/// RL78: builtins are far functions with -mfar-code, and with -mfar-rom the
-/// string/memory builtins (and any builtin taking a const pointer) take far
-/// data pointers.
-static void HandleRL78BuiltinPrototypes(const ASTContext *Context,
-                                        StringRef Name, QualType &ResType,
-                                        SmallVectorImpl<QualType> &ArgTypes,
-                                        FunctionType::ExtInfo &EI) {
-  if (Context->getLangOpts().RenesasRL78CodeModel)
-    EI = EI.withFar(true);
-
-  bool IsFarRom = Context->getLangOpts().RenesasRL78RomModelFar;
-  bool NeedsFarDataPointers =
-      IsFarRom &&
-      llvm::is_contained({"memcpy", "memmove", "memset", "memcmp", "memchr",
-                          "strcpy", "strncpy", "strcat", "strncat", "strcmp",
-                          "strncmp", "strchr", "strcspn", "strpbrk",
-                          "strrchr", "strspn", "strstr", "strlen"},
-                         Name);
-  auto MakeFar = [&](QualType &T) {
-    if (T->isPointerType() &&
-        (NeedsFarDataPointers ||
-         (T->getPointeeType().getQualifiers().hasConst() && IsFarRom)))
-      T = Context->getPointerType(Context->getAddrSpaceQualType(
-          T->getPointeeType(), LangAS::__far_data));
-  };
-  MakeFar(ResType);
-  for (QualType &T : ArgTypes)
-    MakeFar(T);
-}
-
 /// GetBuiltinType - Return the type for the specified builtin.
 QualType ASTContext::GetBuiltinType(unsigned Id,
                                     GetBuiltinTypeError &Error,
@@ -13134,9 +13062,6 @@ QualType ASTContext::GetBuiltinType(unsigned Id,
   FunctionType::ExtInfo EI(Target->getDefaultCallingConv());
   if (BuiltinInfo.isNoReturn(Id))
     EI = EI.withNoReturn(true);
-  if (Target->getTriple().isRL78())
-    HandleRL78BuiltinPrototypes(this, BuiltinInfo.getName(Id), ResType,
-                                ArgTypes, EI);
 
   // We really shouldn't be making a no-proto type here.
   if (ArgTypes.empty() && Variadic && !getLangOpts().requiresStrictPrototypes())
@@ -13441,14 +13366,6 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
 
     // Constructors and destructors are required.
     if (FD->hasAttr<ConstructorAttr>() || FD->hasAttr<DestructorAttr>())
-      return true;
-
-    // RL78: always emit far virtual methods; they are not emitted at all if
-    // used only through pointers to member functions.
-    // FIXME: find a better solution for this.
-    if (getTargetInfo().getTriple().isRL78() &&
-        FD->getType()->castAs<FunctionType>()->getFar() &&
-        isa<CXXMethodDecl>(FD) && cast<CXXMethodDecl>(FD)->isVirtual())
       return true;
 
     // The key function for a class is required.  This rule only comes
@@ -14067,6 +13984,15 @@ uint64_t ASTContext::getTargetNullPointerValue(QualType QT) const {
     AS = QT->getPointeeType().getAddressSpace();
 
   return getTargetInfo().getNullPointerValue(AS);
+}
+
+LangAS ASTContext::getPointerAddressSpace(QualType Pointee) const {
+  // A function is in the program address space, where a pointer can have
+  // another width than in the default one.
+  if (Pointee->isFunctionType() && !Pointee.hasAddressSpace())
+    if (unsigned ProgramAS = getTargetInfo().getProgramAddressSpace())
+      return getLangASFromTargetAS(ProgramAS);
+  return Pointee.getAddressSpace();
 }
 
 unsigned ASTContext::getTargetAddressSpace(LangAS AS) const {

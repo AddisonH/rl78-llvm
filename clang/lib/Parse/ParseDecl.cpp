@@ -4186,15 +4186,7 @@ void Parser::ParseDeclarationSpecifiers(
       AnnotateTemplateIdTokenAsType(SS, AllowImplicitTypename);
       continue;
     }
-    case tok::kw___near:
-    case tok::kw___far: {
-      IdentifierInfo *AttrName = Tok.getIdentifierInfo();
-      tok::TokenKind Kind = Tok.getKind();
-      SourceLocation AttrNameLoc = ConsumeToken();
-      DS.getAttributes().addNew(AttrName, AttrNameLoc, AttributeScopeInfo(),
-                                nullptr, 0, Kind);
-      continue;
-    }
+
     // Attributes support.
     case tok::kw___attribute:
     case tok::kw___declspec:
@@ -5950,9 +5942,7 @@ bool Parser::isTypeSpecifierQualifier(const Token &Tok) {
 
   case tok::kw_private:
     return getLangOpts().OpenCL;
-  case tok::kw___far:
-  case tok::kw___near:
-    return getLangOpts().RenesasRL78;
+
   // C11 _Atomic
   case tok::kw__Atomic:
     return true;
@@ -6248,9 +6238,6 @@ bool Parser::isDeclarationSpecifier(
 
   case tok::kw_private:
     return getLangOpts().OpenCL;
-  case tok::kw___far:
-  case tok::kw___near:
-    return getLangOpts().RenesasRL78;
   }
 }
 
@@ -6470,15 +6457,7 @@ void Parser::ParseTypeQualifierListOpt(
       isInvalid = DS.SetTypeQual(DeclSpec::TQ_atomic, Loc, PrevSpec, DiagID,
                                  getLangOpts());
       break;
-    case tok::kw___near:
-    case tok::kw___far: {
-      IdentifierInfo *AttrName = Tok.getIdentifierInfo();
-      tok::TokenKind Kind = Tok.getKind();
-      SourceLocation AttrNameLoc = ConsumeToken();
-      DS.getAttributes().addNew(AttrName, AttrNameLoc, AttributeScopeInfo(),
-                                nullptr, 0, Kind);
-      continue;
-    }
+
     // OpenCL qualifiers:
     case tok::kw_private:
       if (!getLangOpts().OpenCL)
@@ -7349,16 +7328,6 @@ void Parser::ParseParenDeclarator(Declarator &D) {
     // We require that the argument list (if this is a non-grouping paren) be
     // present even if the attribute list was empty.
     RequiresArg = true;
-  }
-
-  // In case of Renesas RL78 function pointers can be qualified
-  // by address-space qualifiers, i.e. for example we can have int (__far *fp)();
-  if(Tok.is(tok::kw___near) || Tok.is(tok::kw___far)) {
-    IdentifierInfo *AttrName = Tok.getIdentifierInfo();
-    tok::TokenKind Kind = Tok.getKind();
-    SourceLocation AttrNameLoc = ConsumeToken();
-    attrs.addNew(AttrName, AttrNameLoc, AttributeScopeInfo(), nullptr, 0,
-                 Kind);
   }
 
   // Eat any Microsoft extensions.

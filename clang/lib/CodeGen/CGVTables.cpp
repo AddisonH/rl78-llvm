@@ -744,11 +744,7 @@ static void AddPointerLayoutOffset(const CodeGenModule &CGM,
                                    ConstantArrayBuilder &builder,
                                    CharUnits offset) {
   builder.add(llvm::ConstantExpr::getIntToPtr(
-      // RL78 -mfar-data: only intptr_t is 32-bit, ptrdiff_t stays 16-bit.
-      llvm::ConstantInt::getSigned(CGM.getLangOpts().RenesasRL78DataModel
-                                       ? CGM.IntPtrTy
-                                       : CGM.PtrDiffTy,
-                                   offset.getQuantity()),
+      llvm::ConstantInt::getSigned(CGM.PtrDiffTy, offset.getQuantity()),
       CGM.GlobalsInt8PtrTy));
 }
 

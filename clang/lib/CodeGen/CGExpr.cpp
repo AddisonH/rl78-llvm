@@ -130,13 +130,7 @@ RawAddress CodeGenFunction::MaybeCastStackAddressSpace(RawAddress Alloca,
   // cast alloca to the default address space when necessary.
 
   unsigned DestAddrSpace = getContext().getTargetAddressSpace(DestLangAS);
-  // RL78 -mfar-data: locals stay near (the stack is in near RAM; alloca AS 1),
-  // as in LLVM 17; a far pointer is made only where an address escapes.
-  // Casting every local to the far default AS turns all stack accesses into
-  // ES-relative far accesses.
-  bool KeepNearStack =
-      getLangOpts().RenesasRL78DataModel && DestLangAS == LangAS::Default;
-  if (DestAddrSpace != Alloca.getAddressSpace() && !KeepNearStack) {
+  if (DestAddrSpace != Alloca.getAddressSpace()) {
     llvm::IRBuilderBase::InsertPointGuard IPG(Builder);
     // When ArraySize is nullptr, alloca is inserted at AllocaInsertPt,
     // otherwise alloca is inserted at the current insertion point of the
@@ -3054,18 +3048,6 @@ void CodeGenFunction::EmitStoreThroughLValue(RValue Src, LValue Dst,
   }
 
   assert(Src.isScalar() && "Can't emit an agg store with this method");
-  // RL78 -mfar-data: a near pointer stored into a default (far) pointer
-  // object is converted to the default address space.
-  if (getLangOpts().RenesasRL78DataModel &&
-      Src.getScalarVal()->getType()->isPointerTy() &&
-      Src.getScalarVal()->getType()->getPointerAddressSpace() ==
-          getContext().getTargetAddressSpace(LangAS::__near) &&
-      Dst.getType().getAddressSpace() == LangAS::Default)
-    Src = RValue::get(Builder.CreateAddrSpaceCast(
-        Src.getScalarVal(),
-        llvm::PointerType::get(
-            getLLVMContext(),
-            getContext().getTargetAddressSpace(LangAS::Default))));
   EmitStoreOfScalar(Src.getScalarVal(), Dst, isInit);
 }
 
@@ -6174,24 +6156,6 @@ LValue CodeGenFunction::EmitConditionalOperatorLValue(
   if (Info.LHS && Info.RHS) {
     Address lhsAddr = Info.LHS->getAddress();
     Address rhsAddr = Info.RHS->getAddress();
-    // RL78 -mfar-data: the arms may be in different address spaces; cast the
-    // non-default one to the default (far) address space in its incoming
-    // block.
-    if (getLangOpts().RenesasRL78DataModel &&
-        lhsAddr.getAddressSpace() != rhsAddr.getAddressSpace()) {
-      CGBuilderTy::InsertPoint IP = Builder.saveIP();
-      auto ToDefaultAS = [&](Address A, llvm::BasicBlock *BB) {
-        Builder.SetInsertPoint(BB->getTerminator());
-        return Builder.CreateAddrSpaceCast(
-            A, llvm::PointerType::get(getLLVMContext(), 0),
-            A.getElementType());
-      };
-      if (lhsAddr.getAddressSpace())
-        lhsAddr = ToDefaultAS(lhsAddr, Info.lhsBlock);
-      if (rhsAddr.getAddressSpace())
-        rhsAddr = ToDefaultAS(rhsAddr, Info.rhsBlock);
-      Builder.restoreIP(IP);
-    }
     Address result = mergeAddressesInConditionalExpr(
         lhsAddr, rhsAddr, Info.lhsBlock, Info.rhsBlock,
         Builder.GetInsertBlock(), expr->getType());

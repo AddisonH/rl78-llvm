@@ -1,5 +1,4 @@
 ; RUN: llc < %s -mtriple=rl78 | FileCheck %s
-; RUN: llc < %s -mtriple=rl78 -mattr=+far-data | FileCheck %s  --check-prefix=FAR
 
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"

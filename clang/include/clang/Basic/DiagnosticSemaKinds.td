@@ -444,13 +444,9 @@ def warn_rl78_interrupt_attribute_parameters : Warning<
 def warn_rl78_interrupt_attribute_return_type : Warning<
     "the return value of an interrupt handler should be declared as void">,
     InGroup<IgnoredAttributes>;
-def error_rl78_storage_attribute : Error<
-   "variable/function was already qualified with %0">;
 def error_rl78_callt_change : Error<
    "incompatible declaration: function was previously declared %select{with | without}0 callt">;
 def err_rl78_saddr_not_applicable: Error<"saddr attribute only applies to non-constant, static storage duration variables">;
-def err_rl78_vla_unsupported : Error<
-   "variable length arrays are not supported for the current target">;
 def err_rl78_dynamic_alloca_unsupported : Error<
    "dynamic stack allocation is not supported for the current target">;
 def warn_unused_parameter : Warning<"unused parameter %0">,
@@ -3650,8 +3646,6 @@ def err_attribute_address_function_type : Error<
   "function type may not be qualified with an address space">;
 def err_as_qualified_auto_decl : Error<
   "automatic variable qualified with an%select{| invalid}0 address space">;
-def warn_ignored_as_qualifier : Warning<
-  "ignoring address space qualifier">, InGroup<IgnoredQualifiers>;
 def err_arg_with_address_space : Error<
   "parameter may not be qualified with an address space">;
 def err_field_with_address_space : Error<

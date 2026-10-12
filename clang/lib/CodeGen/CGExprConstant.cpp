@@ -1257,21 +1257,6 @@ public:
       if (!C)
         return nullptr;
       llvm::Type *destTy = ConvertType(E->getType());
-      // RL78: an integer cast to a function pointer converted to __far_data is
-      // a far code address.
-      if (CGM.getLangOpts().RenesasRL78 &&
-          subExpr->getType()->getPointeeType()->isFunctionType() &&
-          subExpr->getType()->getPointeeType().getAddressSpace() ==
-              LangAS::Default &&
-          E->getType()->getPointeeType().getAddressSpace() ==
-              LangAS::__far_data)
-        if (const auto *CE = dyn_cast<llvm::ConstantExpr>(C);
-            CE && CE->getOpcode() == llvm::Instruction::IntToPtr &&
-            isa<llvm::ConstantInt>(CE->getOperand(0)))
-          C = llvm::ConstantExpr::getPointerCast(
-              C, llvm::PointerType::get(
-                     VMContext, CGM.getContext().getTargetAddressSpace(
-                                    LangAS::__far_code)));
       return CGM.performAddrSpaceCast(C, destTy);
     }
 

@@ -28,8 +28,6 @@ bool getRL78OptSize(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
 StringRef getRL78CodeModel(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
-StringRef getRL78DataModel(const llvm::opt::ArgList &Args,
-                           const llvm::Triple &Triple);
 StringRef getRL78DoubleSize(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
 StringRef getRL78DisableMDA(const llvm::opt::ArgList &Args,

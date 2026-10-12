@@ -66,27 +66,12 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
   case RL78::BI__builtin_rl78_or1:
   case RL78::BI__builtin_rl78_xor1: {
     const Expr *Culprit;
-    if (!E->getArg(0)->getType()->isPointerType() ||
-        E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-            LangAS::__far_data ||
-        (getLangOpts().RenesasRL78DataModel &&
-         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-             LangAS::Default))
-      CGM.Error(E->getArg(0)->getExprLoc(), "argument is not a near pointer");
     if (!E->getArg(1)->isConstantInitializer(getContext(), false, &Culprit))
       CGM.Error(E->getArg(1)->getExprLoc(), "argument is not a compile-time constant");
     if (!E->getArg(3)->isConstantInitializer(getContext(), false, &Culprit))
       CGM.Error(E->getArg(3)->getExprLoc(), "argument is not a compile-time constant");
 
-    // If the pointer has an an explicit near qualifier, we discard it so we
-    // don't get parameter type matching errors
-    // Later edit: For -mfar-data, as the pointer in the default AS is far,
-    // don't remove the near address space
     Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
-    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
-        !getLangOpts().RenesasRL78DataModel)
-      ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-          ArgValue0, llvm::PointerType::get(getLLVMContext(), /*AddrSpace=*/0));
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
     Value *ArgValue2 = EmitScalarExpr(E->getArg(2));
     Value *ArgValue3 = EmitScalarExpr(E->getArg(3));
@@ -116,25 +101,8 @@ Value *CodeGenFunction::EmitRL78BuiltinExpr(unsigned BuiltinID,
     if (!E->getArg(1)->isConstantInitializer(getContext(), false, &Culprit))
       CGM.Error(E->getArg(1)->getExprLoc(),
                 "argument is not a compile-time constant");
-    if (!E->getArg(0)->getType()->isPointerType() ||
-        E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-            LangAS::__far_data ||
-        E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-            LangAS::__far_code ||
-        (getLangOpts().RenesasRL78DataModel &&
-         E->getArg(0)->getType()->getPointeeType().getAddressSpace() ==
-             LangAS::Default))
-      CGM.Error(E->getArg(0)->getExprLoc(), "argument is not a near pointer");
 
-    // If the pointer has an an explicit near qualifier, we discard it so we
-    // don't get parameter type matching errors
-    // Later edit: For -mfar-data, as the pointer in the default AS is far,
-    // don't remove the near address space
     Value *ArgValue0 = EmitScalarExpr(E->getArg(0));
-    if (E->getArg(0)->getType()->getPointeeType().hasAddressSpace() &&
-        !getLangOpts().RenesasRL78DataModel)
-        ArgValue0 = Builder.CreatePointerBitCastOrAddrSpaceCast(
-          ArgValue0, llvm::PointerType::get(getLLVMContext(), /*AddrSpace=*/0));
     Value *ArgValue1 = EmitScalarExpr(E->getArg(1));
 
     auto PtrTy = ArgValue0->getType();

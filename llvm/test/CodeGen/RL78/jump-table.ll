@@ -1,6 +1,5 @@
 ; RUN: llc -mtriple=rl78 < %s | FileCheck %s --check-prefix=NEAR
 ; RUN: llc -mtriple=rl78 -mattr=+far-code < %s | FileCheck %s --check-prefix=FAR
-; RUN: llc -mtriple=rl78 -mattr=+far-data < %s | FileCheck %s --check-prefix=FAR
 
 ; A jump table holds 16-bit addresses and BR AX jumps to CS:AX, so a switch
 ; becomes a table only when all code is in the first 64 KiB and the table is

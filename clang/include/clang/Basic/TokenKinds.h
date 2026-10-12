@@ -53,8 +53,6 @@ enum TokenKey : unsigned {
   KEYFIXEDPOINT = 0x8000000,
   KEYDEFERTS = 0x10000000,
   KEYNOHLSL = 0x20000000,
-  // KEYRL78 is above KEYMAX so that KEYALL does not include it.
-  KEYRL78 = 0x40000000,
   KEYMAX = KEYNOHLSL, // The maximum key
   KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX20,
   KEYALL = (KEYMAX | (KEYMAX - 1)) & ~KEYNOMS18 & ~KEYNOOPENCL &

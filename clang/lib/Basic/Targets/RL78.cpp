@@ -40,43 +40,6 @@ const char *const RL78TargetInfo::GCCRegNames[] = {
     "ax", "bc", "de", "hl", "x", "a",  "c", "b", "e",
     "d",  "l",  "h",  "sp",  "ap", "psw", "es", "cs"};
 
-// Positional: one entry per LangAS before FirstTargetAddressSpace.
-static_assert((unsigned)LangAS::__near == 27 &&
-                  (unsigned)LangAS::FirstTargetAddressSpace == 30,
-              "LangAS changed: update RL78AddrSpaceMap");
-const LangASMap RL78TargetInfo::RL78AddrSpaceMap = {
-    0, // Default
-    0, // opencl_global
-    0, // opencl_local
-    0, // opencl_constant
-    0, // opencl_private
-    0, // opencl_generic
-    0, // opencl_global_device
-    0, // opencl_global_host
-    0, // cuda_device
-    0, // cuda_constant
-    0, // cuda_shared
-    0, // sycl_global
-    0, // sycl_global_device
-    0, // sycl_global_host
-    0, // sycl_local
-    0, // sycl_private
-    0, // ptr32_sptr
-    0, // ptr32_uptr
-    0, // ptr64
-    0, // hlsl_groupshared
-    0, // hlsl_constant
-    0, // hlsl_private
-    0, // hlsl_device
-    0, // hlsl_input
-    0, // hlsl_output
-    0, // hlsl_push_constant
-    0, // wasm_funcref
-    1, // __near
-    2, // __far_data
-    3, // __far_code
-};
-
 ArrayRef<const char *> RL78TargetInfo::getGCCRegNames() const {
   return llvm::ArrayRef(GCCRegNames);
 }
@@ -96,7 +59,7 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
 
   has64BitDoubles = false;
   farCodeModel = false;
-  farDataModel = false;
+  commonRom = false;
   isMDADisabled = false;
   for (auto &I : Opts.FeaturesAsWritten) {
     if (I == "+64bit-doubles")
@@ -107,20 +70,20 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
       farCodeModel = true;
     if (I == "+near-code")
       farCodeModel = false;
-    if (I == "+far-data")
-      farDataModel = true;
-    if (I == "+near-data")
-      farDataModel = false;
+    if (I == "+common-rom")
+      commonRom = true;
   }
 
   std::string ABI{farCodeModel ? "fc" : "nc"};
-  ABI += (farDataModel ? "_fd" : "_nd");
+  ABI += "_nd";
   ABI += (has64BitDoubles ? "_d64" : "_d32");
   if (Opts.CPU == "RL78_S2")
     ABI += ((isMDADisabled ? "_nomda" : "_mda"));
   setABI(ABI);
 
   TLSSupported = false;
+  // The frame has a fixed size: no dynamic stack allocation.
+  VLASupported = false;
   IntWidth = 16;
   IntAlign = 16;
   LongWidth = 32;
@@ -143,13 +106,13 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
   FloatAlign = 16;
   DoubleAlign = 16;
   LongDoubleAlign = 16;
-  PointerWidth = farDataModel ? 32 : 16;
+  PointerWidth = 16;
   PointerAlign = 16;
   SuitableAlign = 16;
   DefaultAlignForAttributeAligned = 16;
   SizeType = UnsignedInt;
   IntMaxType = SignedLongLong;
-  IntPtrType = farDataModel ? SignedLong : SignedInt;
+  IntPtrType = SignedInt;
   PtrDiffType = SignedInt;
   SigAtomicType = SignedLong;
 
@@ -160,12 +123,7 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
   SS << "e"               // little endian
         "-m:o";           // Mach-O mangling: Private symbols get L prefix.
                           // Other symbols get a _ prefix.
-  if (farDataModel) {
-    SS << "-p0:32:16:16"  // default: 32 bit width, 16 bit aligned
-          "-A1";          // near allocas
-  } else {
-    SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
-  }
+  SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
 
   SS << "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
         "-p2:32:16:16:16" // Far data pointers: 32 bit width, 16 bit aligned.
@@ -182,8 +140,6 @@ RL78TargetInfo::RL78TargetInfo(const llvm::Triple &Triple,
 
   resetDataLayout(DL);
   UserLabelPrefix = "_"; // Consistent with the Mach-O mangling above.
-
-  AddrSpaceMap = &RL78AddrSpaceMap;
 }
 
 void RL78TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts,

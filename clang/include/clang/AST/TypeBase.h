@@ -4685,9 +4685,6 @@ public:
     // |  CC  |noreturn|produces|nocallersavedregs|regparm|nocfcheck|cmsenscall|
     // |0 .. 5|   6    |    7   |       8         |9 .. 11|    12   |    13    |
     //
-    // | far |nondefaultas|  RL78; not in FunctionTypeBitfields::ExtInfo (full),
-    // | 14  |     15     |  kept in FunctionType::Far/NonDefaultAS instead.
-    //
     // regparm is either 0 (no regparm attribute) or the regparm value+1.
     enum { CallConvMask = 0x3F };
     enum { NoReturnMask = 0x40 };
@@ -4696,8 +4693,6 @@ public:
     enum { RegParmMask = 0xe00, RegParmOffset = 9 };
     enum { NoCfCheckMask = 0x1000 };
     enum { CmseNSCallMask = 0x2000 };
-    enum { FarMask = 0x4000 };
-    enum { NonDefaultASMask = 0x8000 };
     uint16_t Bits = CC_C;
 
     ExtInfo(unsigned Bits) : Bits(static_cast<uint16_t>(Bits)) {}
@@ -4707,15 +4702,14 @@ public:
     // have all the elements (when reading an AST file for example).
     ExtInfo(bool noReturn, bool hasRegParm, unsigned regParm, CallingConv cc,
             bool producesResult, bool noCallerSavedRegs, bool NoCfCheck,
-            bool cmseNSCall, bool Far = false, bool NonDefaultAS = false) {
+            bool cmseNSCall) {
       assert((!hasRegParm || regParm < 7) && "Invalid regparm value");
       Bits = ((unsigned)cc) | (noReturn ? NoReturnMask : 0) |
              (producesResult ? ProducesResultMask : 0) |
              (noCallerSavedRegs ? NoCallerSavedRegsMask : 0) |
              (hasRegParm ? ((regParm + 1) << RegParmOffset) : 0) |
              (NoCfCheck ? NoCfCheckMask : 0) |
-             (cmseNSCall ? CmseNSCallMask : 0) | (Far ? FarMask : 0) |
-             (NonDefaultAS ? NonDefaultASMask : 0);
+             (cmseNSCall ? CmseNSCallMask : 0);
     }
 
     // Constructor with all defaults. Use when for example creating a
@@ -4731,8 +4725,6 @@ public:
     bool getCmseNSCall() const { return Bits & CmseNSCallMask; }
     bool getNoCallerSavedRegs() const { return Bits & NoCallerSavedRegsMask; }
     bool getNoCfCheck() const { return Bits & NoCfCheckMask; }
-    bool getFar() const { return Bits & FarMask; }
-    bool getNonDefaultAS() const { return Bits & NonDefaultASMask; }
     bool getHasRegParm() const { return ((Bits & RegParmMask) >> RegParmOffset) != 0; }
 
     unsigned getRegParm() const {
@@ -4787,20 +4779,6 @@ public:
         return ExtInfo(Bits | NoCfCheckMask);
       else
         return ExtInfo(Bits & ~NoCfCheckMask);
-    }
-
-    ExtInfo withFar(bool Far) const {
-      if (Far)
-        return ExtInfo(Bits | FarMask);
-      else
-        return ExtInfo(Bits & ~FarMask);
-    }
-
-    ExtInfo withNonDefaultAS(bool NonDefaultAS) const {
-      if (NonDefaultAS)
-        return ExtInfo(Bits | NonDefaultASMask);
-      else
-        return ExtInfo(Bits & ~NonDefaultASMask);
     }
 
     ExtInfo withRegParm(unsigned RegParm) const {
@@ -4911,17 +4889,10 @@ public:
     FunctionTypeArmAttributes() : AArch64SMEAttributes(SME_NormalFunction) {}
   };
 
-  /// RL78 function bits that do not fit FunctionTypeBits.ExtInfo.
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned Far : 1;
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned NonDefaultAS : 1;
-
 protected:
   FunctionType(TypeClass tc, QualType res, QualType Canonical,
                TypeDependence Dependence, ExtInfo Info)
-      : Type(tc, Canonical, Dependence), ResultType(res),
-        Far(Info.getFar()), NonDefaultAS(Info.getNonDefaultAS()) {
+      : Type(tc, Canonical, Dependence), ResultType(res) {
     FunctionTypeBits.ExtInfo = Info.Bits;
   }
 
@@ -4948,14 +4919,8 @@ public:
   bool getCFIUncheckedCalleeAttr() const;
 
   bool getCmseNSCallAttr() const { return getExtInfo().getCmseNSCall(); }
-  bool getFar() const { return Far; }
-  bool getNonDefaultAS() const { return NonDefaultAS; }
   CallingConv getCallConv() const { return getExtInfo().getCC(); }
-  ExtInfo getExtInfo() const {
-    return ExtInfo(FunctionTypeBits.ExtInfo)
-        .withFar(Far)
-        .withNonDefaultAS(NonDefaultAS);
-  }
+  ExtInfo getExtInfo() const { return ExtInfo(FunctionTypeBits.ExtInfo); }
 
   static_assert((~Qualifiers::FastMask & Qualifiers::CVRMask) == 0,
                 "Const, volatile and restrict are assumed to be a subset of "
@@ -9413,10 +9378,6 @@ QualType DecayedType::getPointeeType() const {
 // APFixedPoint instead of APSInt and scale.
 void FixedPointValueToString(SmallVectorImpl<char> &Str, llvm::APSInt Val,
                              unsigned Scale);
-
-/// A simple wrapper over QualType::getAddressSpace() to accommodate the RL78
-/// far code AS.
-LangAS getAddressSpace(QualType Type, const ASTContext &Ctx);
 
 inline FunctionEffectsRef FunctionEffectsRef::get(QualType QT) {
   const Type *TypePtr = QT.getTypePtr();

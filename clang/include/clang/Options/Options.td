@@ -7195,30 +7195,13 @@ def mirror_source_common : Joined<["-"], "mmirror-source-common">,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Set the mirror source to common.">;
 def mfar_code : Flag<["-"], "mfar-code">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default function pointers are far.">,
-  MarshallingInfoFlag<LangOpts<"RenesasRL78CodeModel">>;
+  HelpText<"Functions and function pointers are far (20-bit addresses).">;
 def mnear_code : Flag<["-"], "mnear-code">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default function pointers are near.">;
-def mfar_data : Flag<["-"], "mfar-data">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default data pointers are far.">,
-  MarshallingInfoFlag<LangOpts<"RenesasRL78DataModel">>;
-def mnear_data : Flag<["-"], "mnear-data">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default data pointers are near.">;
-def mfar_rom : Flag<["-"], "mfar-rom">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default constant data pointers are far.">,
-  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelFar">>;
+  HelpText<"Functions and function pointers are near (the default).">;
 def mnear_rom : Flag<["-"], "mnear-rom">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Default constant data pointers are near.">,
-  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelNear">>;
+  HelpText<"Constants are read through the mirror area (the default).">;
 def mcommon_rom : Flag<["-"], "mcommon-rom">, Group<m_rl78_Features_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  MarshallingInfoFlag<LangOpts<"RenesasRL78RomModelCommon">>;
+  HelpText<"Mark the object as usable with any ROM model.">;
 def fsim : Flag<["-"], "fsim">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Specifies program will be run on the simulator.">;

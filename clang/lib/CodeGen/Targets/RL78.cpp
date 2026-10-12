@@ -113,11 +113,6 @@ RValue RL78ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
 namespace {
 class RL78TargetCodeGenInfo : public TargetCodeGenInfo {
  
-  bool isFarAddressSpace(unsigned int AS, CodeGen::CodeGenModule &CGM) const {
-    return AS == CGM.getContext().getTargetAddressSpace(LangAS::__far_code) ||
-           AS == CGM.getContext().getTargetAddressSpace(LangAS::__far_data);
-  }
-
   bool isNullOrUndef(const llvm::Constant *C) const {
   // Check that the constant isn't all zeros or undefs.
   if (C->isNullValue() || isa<llvm::UndefValue>(C))
@@ -145,8 +140,6 @@ public:
 
   void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
                            CodeGen::CodeGenModule &CGM) const override {
-    bool isFar = isFarAddressSpace(GV->getAddressSpace(), CGM);
-
     if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D)) {
       auto *Fn = cast<llvm::Function>(GV);
       if (const auto *Attr = FD->getAttr<RL78InterruptAttr>()) {
@@ -177,11 +170,6 @@ public:
     if (const auto *VD = dyn_cast_or_null<VarDecl>(D)) {
       auto *Var = cast<llvm::GlobalVariable>(GV);
 
-      // With -mfar-data, the default address space is far
-      if (CGM.getLangOpts().RenesasRL78DataModel && 
-          GV->getAddressSpace() == CGM.getContext().getTargetAddressSpace(LangAS::Default))
-          isFar = true; 
-      
       if (VD->hasAttr<RL78SaddrAttr>()) {
         if(GV->getLinkage() == llvm::GlobalVariable::CommonLinkage)
           GV->setLinkage(llvm::GlobalVariable::ExternalLinkage);

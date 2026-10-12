@@ -877,10 +877,6 @@ EncompassingIntegerType(ArrayRef<struct WidthAndSignedness> Types) {
 }
 
 Value *CodeGenFunction::EmitVAStartEnd(Value *ArgValue, bool IsStart) {
-  // RL78 -mfar-data: the va_list lives on the (near) stack.
-  if (getLangOpts().RenesasRL78DataModel)
-    ArgValue = Builder.CreatePointerBitCastOrAddrSpaceCast(ArgValue,
-                                                           AllocaInt8PtrTy);
   Intrinsic::ID inst = IsStart ? Intrinsic::vastart : Intrinsic::vaend;
   return Builder.CreateCall(CGM.getIntrinsic(inst, {ArgValue->getType()}),
                             ArgValue);
@@ -3544,13 +3540,6 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_va_copy: {
     Value *DstPtr = EmitVAListRef(E->getArg(0)).emitRawPointer(*this);
     Value *SrcPtr = EmitVAListRef(E->getArg(1)).emitRawPointer(*this);
-    // RL78 -mfar-data: the va_lists live on the (near) stack.
-    if (getLangOpts().RenesasRL78DataModel) {
-      DstPtr = Builder.CreatePointerBitCastOrAddrSpaceCast(DstPtr,
-                                                           AllocaInt8PtrTy);
-      SrcPtr = Builder.CreatePointerBitCastOrAddrSpaceCast(SrcPtr,
-                                                           AllocaInt8PtrTy);
-    }
     Builder.CreateCall(CGM.getIntrinsic(Intrinsic::vacopy, {DstPtr->getType()}),
                        {DstPtr, SrcPtr});
     return RValue::get(nullptr);
@@ -5339,7 +5328,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Function *F =
         CGM.getIntrinsic(Intrinsic::returnaddress, {CGM.ProgramPtrTy});
     // The result is a void *, which need not be in (or the size of) the
-    // program address space (RL78 -mfar-code: 32-bit code, 16-bit data).
+    // program address space.
     return RValue::get(Builder.CreatePointerBitCastOrAddrSpaceCast(
         Builder.CreateCall(F, Depth), ConvertType(E->getType())));
   }
@@ -5354,8 +5343,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                                             getContext().UnsignedIntTy),
         Int32Ty);
     Function *F = CGM.getIntrinsic(Intrinsic::frameaddress, AllocaInt8PtrTy);
-    // As for __builtin_return_address: void * may be in another address
-    // space (RL78 -mfar-data: far void *, near stack).
+    // As for __builtin_return_address.
     return RValue::get(Builder.CreatePointerBitCastOrAddrSpaceCast(
         Builder.CreateCall(F, Depth), ConvertType(E->getType())));
   }
@@ -5457,10 +5445,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
     // Store the stack pointer to the setjmp buffer.
     Value *StackAddr = Builder.CreateStackSave();
-    // RL78 -mfar-data: the buffer is far while the stack pointer is near.
-    assert((Buf.emitRawPointer(*this)->getType() == StackAddr->getType() ||
-            getTarget().getTriple().isRL78()) &&
-           "setjmp buffer and stack pointer types differ");
+    assert(Buf.emitRawPointer(*this)->getType() == StackAddr->getType());
 
     Address StackSaveSlot = Builder.CreateConstInBoundsGEP(Buf, 2);
     Builder.CreateStore(StackAddr, StackSaveSlot);

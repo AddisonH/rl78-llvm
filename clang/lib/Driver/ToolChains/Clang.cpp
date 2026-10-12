@@ -2034,9 +2034,6 @@ void Clang::AddPPCTargetArgs(const ArgList &Args,
 
 void Clang::AddRL78TargetArgs(const ArgList &Args,
                               ArgStringList &CmdArgs) const {
-  // TODO: disable VLAs properly for RL78.
-  CmdArgs.push_back("-Wvla");
-
   // By default, do not replace infinite loops with unreachable.
   if (!Args.getLastArg(options::OPT_ffinite_loops))
     CmdArgs.push_back("-fno-finite-loops");
@@ -7891,25 +7888,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (!C.getDriver().IsCLMode())
     EH = addExceptionArgs(Args, InputType, TC, KernelOrKext,
                           IsDeviceOffloadAction, Runtime, CmdArgs);
-
-  // RL78 memory models.
-  if (RawTriple.isRL78()) {
-    if (Args.hasFlag(options::OPT_mfar_code, options::OPT_mnear_code, false))
-      CmdArgs.push_back("-mfar-code");
-    bool FarData =
-        Args.hasFlag(options::OPT_mfar_data, options::OPT_mnear_data, false);
-    if (FarData)
-      CmdArgs.push_back("-mfar-data");
-    if (const Arg *A = Args.getLastArg(options::OPT_mcommon_rom,
-                                       options::OPT_mnear_rom,
-                                       options::OPT_mfar_rom)) {
-      // -mfar-data includes -mfar-rom.
-      if (A->getOption().matches(options::OPT_mfar_rom) && !FarData)
-        CmdArgs.push_back("-mfar-rom");
-      else if (A->getOption().matches(options::OPT_mcommon_rom))
-        CmdArgs.push_back("-mcommon-rom");
-    }
-  }
 
   // Handle exception personalities
   Arg *A = Args.getLastArg(

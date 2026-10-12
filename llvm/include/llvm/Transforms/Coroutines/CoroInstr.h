@@ -162,8 +162,7 @@ public:
                                   PointerType::getUnqual(getContext())));
     if (isa<AllocaInst>(Arg))
       return;
-    assert((isa<BitCastInst>(Arg) || isa<GetElementPtrInst>(Arg) ||
-            isa<AddrSpaceCastInst>(Arg)) &&
+    assert((isa<BitCastInst>(Arg) || isa<GetElementPtrInst>(Arg)) &&
            "unexpected instruction designating the promise");
     // TODO: Add a check that any remaining users of Inst are after coro.begin
     // or add code to move the users after coro.begin.

@@ -618,9 +618,6 @@ public:
   /// True if the current statement has noinline attribute.
   bool InNoInlineAttributedStmt = false;
 
-  /// RL78: true while emitting the inputs of an inline asm statement.
-  bool InEmitAsmStmt = false;
-
   /// True if the current statement has always_inline attribute.
   bool InAlwaysInlineAttributedStmt = false;
 

@@ -59,14 +59,6 @@ LANGOPT(CPlusPlus23       , 1, 0, NotCompatible, "C++23")
 LANGOPT(CPlusPlus26       , 1, 0, NotCompatible, "C++26")
 LANGOPT(CPlusPlus29       , 1, 0, NotCompatible, "C++29")
 LANGOPT(ObjC              , 1, 0, NotCompatible, "Objective-C")
-
-LANGOPT(RenesasRL78              , 1, 0, NotCompatible, "Renesas RL78 address spaces")
-LANGOPT(RenesasRL78CodeModel     , 1, 0, NotCompatible, "Renesas RL78 memory model")
-LANGOPT(RenesasRL78DataModel     , 1, 0, NotCompatible, "Renesas RL78 data model")
-LANGOPT(RenesasRL78RomModelNear  , 1, 0, NotCompatible, "Renesas RL78 near rom model")
-LANGOPT(RenesasRL78RomModelFar   , 1, 0, NotCompatible, "Renesas RL78 far rom model")
-LANGOPT(RenesasRL78RomModelCommon, 1, 0, NotCompatible, "Renesas RL78 common rom model")
-
 LANGOPT(ObjCDefaultSynthProperties , 1, 0, Benign,
         "Objective-C auto-synthesized properties")
 LANGOPT(EncodeExtendedBlockSig , 1, 0, Benign,

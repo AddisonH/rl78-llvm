@@ -1,7 +1,6 @@
 ; Testing validity of section prefixes for global objects.
 
 ; RUN: llc -mtriple=rl78 < %s | FileCheck %s
-; RUN: llc -mtriple=rl78 -mattr=+far-data < %s | FileCheck %s -check-prefix=FAR
 
 
 define void @foo() {

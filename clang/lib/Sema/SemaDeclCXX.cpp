@@ -14322,8 +14322,6 @@ void Sema::setupImplicitSpecialMemberType(CXXMethodDecl *SpecialMem,
   if (AS != LangAS::Default) {
     EPI.TypeQuals.addAddressSpace(AS);
   }
-  if (getLangOpts().RenesasRL78CodeModel)
-    EPI.ExtInfo = EPI.ExtInfo.withFar(true);
 
   auto QT = Context.getFunctionType(ResultTy, Args, EPI);
   SpecialMem->setType(QT);

@@ -3268,19 +3268,7 @@ static bool HandleSizeof(EvalInfo &Info, SourceLocation Loc, QualType Type,
     return false;
   }
 
-  // RL78: the size of a pointer to function depends on its far/near-ness,
-  // which is kept in the function type's ExtInfo. With -mfar-data, a function
-  // without an explicit address space is far.
-  if (Info.Ctx.getTargetInfo().getTriple().isRL78() &&
-      Type->isPointerType() &&
-      Type->getPointeeType()->getUnqualifiedDesugaredType()->isFunctionType()) {
-    const auto *FT = cast<FunctionType>(
-        Type->getPointeeType()->getUnqualifiedDesugaredType());
-    Size = FT->getFar() || (Info.Ctx.getLangOpts().RenesasRL78DataModel &&
-                            !FT->getNonDefaultAS())
-               ? CharUnits::fromQuantity(4)
-               : CharUnits::fromQuantity(2);
-  } else if (SOT == SizeOfType::SizeOf)
+  if (SOT == SizeOfType::SizeOf)
     Size = Info.Ctx.getTypeSizeInChars(Type);
   else
     Size = Info.Ctx.getTypeInfoDataSizeInChars(Type).Width;
@@ -10254,9 +10242,6 @@ bool PointerExprEvaluator::VisitCastExpr(const CastExpr *E) {
 
     if (Value.isInt()) {
       unsigned Size = Info.Ctx.getTypeSize(E->getType());
-      // RL78 far pointers are 32 bits wide but only the low 24 bits count.
-      if (Info.Ctx.getLangOpts().RenesasRL78)
-        Size = std::min(Size, 24u);
       uint64_t N = Value.getInt().extOrTrunc(Size).getZExtValue();
       if (N == Info.Ctx.getTargetNullPointerValue(E->getType())) {
         Result.setNull(Info.Ctx, E->getType());
@@ -19189,13 +19174,6 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // The comparison here must be unsigned, and performed with the same
     // width as the pointer.
     unsigned PtrSize = Info.Ctx.getTypeSize(LHSTy);
-    if (Info.Ctx.getLangOpts().RenesasRL78) {
-      // RL78 far pointer equality uses 24 bits, other relationals 16 bits.
-      if (IsEquality)
-        PtrSize = std::min(PtrSize, 24u);
-      else if (IsRelational)
-        PtrSize = std::min(PtrSize, 16u);
-    }
     uint64_t CompareLHS = LHSOffset.getQuantity();
     uint64_t CompareRHS = RHSOffset.getQuantity();
     assert(PtrSize <= 64 && "Unexpected pointer width");

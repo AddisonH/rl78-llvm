@@ -51,7 +51,6 @@ static std::string computeDataLayout(const Triple &T, StringRef FS) {
   const auto farCodeModel =
       FarFlagPos != StringRef::npos &&
       (NearFlagPos == StringRef::npos || NearFlagPos < FarFlagPos);
-  const auto farDataModel = FS.rfind("+far-data") != StringRef::npos;
 
   std::string DL;
   llvm::raw_string_ostream SS(DL);
@@ -62,12 +61,7 @@ static std::string computeDataLayout(const Triple &T, StringRef FS) {
   SS << "e"               // little endian
         "-m:o";           // Mach-O mangling: Private symbols get L prefix.
                           // Other symbols get a _ prefix.
-  if (farDataModel) {
-    SS << "-p0:32:16:16"  // default: 32 bit width, 16 bit aligned
-          "-A1";          // near allocas
-  } else {
-    SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
-  }
+  SS << "-p0:16:16:16"; // default: 16 bit width, 16 bit aligned
 
   SS << "-p1:16:16:16" // Near pointers: 16 bit width, 16 bit aligned.
         "-p2:32:16:16:16" // Far data pointers: 32 bit width, 16 bit aligned.

@@ -69,24 +69,6 @@ void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
                    Features.end());
   }
 
-  const Arg *mData = Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
-  if (mData) {
-    if (mData->getOption().getID() == options::OPT_mnear_data) {
-      Features.push_back("-far-data");
-    } else { // -mfar-data includes and replaces -mfar-rom
-      const Arg *mRom =
-          Args.getLastArg(options::OPT_mcommon_rom, options::OPT_mnear_rom,
-                          options::OPT_mfar_rom);
-      if (mRom && mRom->getOption().getID() == options::OPT_mfar_rom) {
-        Features.erase(
-            std::remove(Features.begin(), Features.end(), "+far-rom"),
-            Features.end());
-      }
-    }
-    Features.erase(std::remove(Features.begin(), Features.end(), "+near-data"),
-                   Features.end());
-  }
-
   if (isS1 && (Args.getLastArg(options::OPT_mirror_source_1) ||
                (mirrorSource && mirrorSource->containsValue("1")))) {
     D.Diag(diag::err_drv_argument_not_allowed_with) << "-mirror-source=1"
@@ -156,18 +138,6 @@ StringRef rl78::getRL78CodeModel(const llvm::opt::ArgList &Args,
         return "mfar-code";
     // Default is near-code.
     return "mnear-code";
-}
-
-StringRef rl78::getRL78DataModel(const llvm::opt::ArgList &Args,
-                                 const llvm::Triple &Triple) {
-  assert(Triple.isRL78() && "Unexpected triple");
-
-  const Arg *mData =
-      Args.getLastArg(options::OPT_mnear_data, options::OPT_mfar_data);
-  if (mData && mData->getOption().getID() == options::OPT_mfar_data)
-    return "mfar-data";
-  // Default is near-data.
-  return "mnear-data";
 }
 
 StringRef rl78::getRL78DoubleSize(const llvm::opt::ArgList &Args,

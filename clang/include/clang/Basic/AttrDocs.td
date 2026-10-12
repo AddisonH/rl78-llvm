@@ -10628,21 +10628,3 @@ functions by itself.
   }];
 }
 
-def RL78NearFarDocs : Documentation {
-  let Category = DocCatType;
-  let Heading = "__near, __far (RL78)";
-  let Content = [{
-On RL78 targets the ``__near`` and ``__far`` keywords qualify data and functions
-with an address space. A near address is 16 bits wide and reaches the near
-window (0xF0000-0xFFFFF for data, 0x00000-0x0FFFF for code); a far address is
-20 bits wide (stored in 32 bits) and reaches the whole 1 MB address space.
-Without a qualifier the default follows ``-mnear-data``/``-mfar-data`` and
-``-mnear-code``/``-mfar-code``.
-
-.. code-block:: c
-
-  int __far table[4096];       // far data
-  void __far func(void);       // far function
-  char __near *p;              // near pointer
-  }];
-}

@@ -3287,6 +3287,10 @@ public:
 
   unsigned getTargetAddressSpace(LangAS AS) const;
 
+  /// The address space that decides the representation of a pointer to
+  /// \p Pointee: its own, or the program address space for a function.
+  LangAS getPointerAddressSpace(QualType Pointee) const;
+
   LangAS getLangASForBuiltinAddressSpace(unsigned AS) const;
 
   /// Get target-dependent integer value for null pointer which is used for

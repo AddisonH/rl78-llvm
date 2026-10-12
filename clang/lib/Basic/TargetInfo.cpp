@@ -55,8 +55,6 @@ static const LangASMap FakeAddrSpaceMap = {
     18, // hlsl_output
     19, // hlsl_push_constant
     20, // wasm_funcref
-    14, // __near
-    15  // __far
 };
 
 // TargetInfo Constructor.

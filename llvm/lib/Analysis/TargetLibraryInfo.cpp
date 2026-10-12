@@ -1456,11 +1456,6 @@ unsigned TargetLibraryInfoImpl::getSizeTSize(const Module &M) const {
   // configurations of common targets (i386, x86-64 x32, aarch64 x32, possibly
   // others) have larger-than-size_t index sizes on non-default address spaces,
   // making this the best default.
-  //
-  // RL78 is an exception: size_t is 16 bits in every memory model, but with
-  // -mfar-data the default address space has 32-bit pointers and index.
-  if (M.getTargetTriple().isRL78())
-    return M.getDataLayout().getPointerSizeInBits(/*AddressSpace=*/1);
   return M.getDataLayout().getIndexSizeInBits(/*AddressSpace=*/0);
 }
 

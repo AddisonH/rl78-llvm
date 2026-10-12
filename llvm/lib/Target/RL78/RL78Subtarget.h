@@ -32,7 +32,7 @@ public:
   };
 
   enum class RL78MirrorSource { Zero, One, Common };
-  enum class RL78RomModel { Near, Far, Common };
+  enum class RL78RomModel { Near, Common = 2 };
 
 private:
   Triple TargetTriple;
@@ -43,7 +43,6 @@ private:
   bool has64BitDoubles;
   unsigned char mirrorSource;
   bool hasFarCodeModel;
-  bool hasFarDataModel;
   unsigned char romModel;
   bool disableMDA;
   bool linkerRelax;
@@ -85,7 +84,6 @@ public:
 
   bool Has64BitDoubles() const { return has64BitDoubles; }
   bool HasFarCodeModel() const { return hasFarCodeModel; }
-  bool HasFarDataModel() const { return hasFarDataModel; }
   bool isRL78S1CoreType() const { return !HasRegBanks; }
   bool isRL78S3CoreType() const { return HasMulDiv; }
   /// The multiplier/divider/accumulator peripheral of S2 devices.

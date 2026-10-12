@@ -2258,9 +2258,6 @@ Sema::ActOnStringLiteral(ArrayRef<Token> StringToks, Scope *UDLScope) {
     StringTokLocs.push_back(Tok.getLocation());
 
   QualType CharTy = Context.CharTy;
-  // RL78 -mfar-rom: string literals are far constant data.
-  if (getLangOpts().RenesasRL78RomModelFar)
-    CharTy = Context.getAddrSpaceQualType(CharTy, LangAS::__far_data);
   StringLiteralKind Kind = StringLiteralKind::Ordinary;
   if (Literal.isWide()) {
     CharTy = Context.getWideCharType();
@@ -6525,11 +6522,6 @@ static FunctionDecl *rewriteBuiltinFunctionDecl(Sema *Sema, ASTContext &Context,
                                                 FunctionDecl *FDecl,
                                                 MultiExprArg ArgExprs) {
 
-  // For RL78, standard library function is not a candidate for a rewrite.
-  if (Context.getTargetInfo().getTriple().isRL78() &&
-      Context.BuiltinInfo.isPredefinedLibFunction(FDecl->getBuiltinID()))
-    return nullptr;
-
   QualType DeclType = FDecl->getType();
   const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(DeclType);
 
@@ -7134,9 +7126,7 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
 
   // Functions with 'interrupt' attribute cannot be called directly.
   if (FDecl) {
-    if (FDecl->hasAttr<AnyX86InterruptAttr>() ||
-        FDecl->hasAttr<RL78BRKInterruptAttr>() ||
-        FDecl->hasAttr<RL78InterruptAttr>()) {
+    if (FDecl->hasAttr<AnyX86InterruptAttr>()) {
       Diag(Fn->getExprLoc(), diag::err_anyx86_interrupt_called);
       return ExprError();
     }
@@ -9557,19 +9547,6 @@ static AssignConvertType checkPointerTypesForAssignment(Sema &S,
         !S.IsFunctionConversion(rtrans, ltrans))
       return AssignConvertType::IncompatibleFunctionPointer;
   }
-
-  // RL78: warn about mismatched address spaces at inner pointer levels.
-  if (S.Context.getTargetInfo().getTriple().isRL78()) {
-    while (isa<PointerType>(lhptee) && isa<PointerType>(rhptee)) {
-      std::tie(lhptee, lhq) =
-          cast<PointerType>(lhptee)->getPointeeType().split().asPair();
-      std::tie(rhptee, rhq) =
-          cast<PointerType>(rhptee)->getPointeeType().split().asPair();
-      if (lhq.getAddressSpace() != rhq.getAddressSpace())
-        return AssignConvertType::IncompatiblePointer;
-    }
-  }
-
   return ConvTy;
 }
 
@@ -16594,11 +16571,8 @@ ExprResult Sema::ActOnAddrLabel(SourceLocation OpLoc, SourceLocation LabLoc,
                                 LabelDecl *TheDecl) {
   TheDecl->markUsed(Context);
   // Create the AST node.  The address of a label always has type 'void*'.
-  // RL78: void* in the function's address space.
   auto *Res = new (Context) AddrLabelExpr(
-      OpLoc, LabLoc, TheDecl,
-      Context.getPointerType(Context.getAddrSpaceQualType(
-          Context.VoidTy, getCurFunctionDecl()->getType().getAddressSpace())));
+      OpLoc, LabLoc, TheDecl, Context.getPointerType(Context.VoidTy));
 
   if (getCurFunction())
     getCurFunction()->AddrLabels.push_back(Res);

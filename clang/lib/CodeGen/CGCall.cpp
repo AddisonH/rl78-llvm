@@ -1107,8 +1107,6 @@ CGFunctionInfo *CGFunctionInfo::create(unsigned llvmCC, bool instanceMethod,
   FI->ChainCall = chainCall;
   FI->DelegateCall = delegateCall;
   FI->CmseNSCall = info.getCmseNSCall();
-  FI->Far = info.getFar();
-  FI->NonDefaultAS = info.getNonDefaultAS();
   FI->NoReturn = info.getNoReturn();
   FI->ReturnsRetained = info.getProducesResult();
   FI->NoCallerSavedRegs = info.getNoCallerSavedRegs();
@@ -5039,9 +5037,6 @@ void CodeGenFunction::EmitCallArgs(
 #endif
   }
 
-  // RL78: index of the first variadic argument (if any).
-  const size_t FirstVAIdx = ArgTypes.size();
-
   // If we still have any arguments, emit them using the type of the argument.
   for (auto *A : llvm::drop_begin(ArgRange, ArgTypes.size()))
     ArgTypes.push_back(IsVariadic ? getVarArgType(A) : A->getType());
@@ -5109,19 +5104,6 @@ void CodeGenFunction::EmitCallArgs(
     // non-null argument check for r-value only.
     if (!Args.back().hasLValue()) {
       RValue RVArg = Args.back().getKnownRValue();
-
-      // RL78 -mfar-data: variadic pointer arguments are passed in the default
-      // (far) address space.
-      if (getLangOpts().RenesasRL78DataModel && Idx >= FirstVAIdx &&
-          RVArg.isScalar() && RVArg.getScalarVal()->getType()->isPointerTy()) {
-        llvm::Value *Ptr = RVArg.getScalarVal();
-        unsigned DefAS = getContext().getTargetAddressSpace(LangAS::Default);
-        if (Ptr->getType()->getPointerAddressSpace() != DefAS) {
-          RVArg = RValue::get(Builder.CreateAddrSpaceCast(
-              Ptr, llvm::PointerType::get(Ptr->getContext(), DefAS)));
-          Args.back().setRValue(RVArg);
-        }
-      }
       EmitNonNullArgCheck(RVArg, ArgTypes[Idx], (*Arg)->getExprLoc(), AC,
                           ParamsToSkip + Idx);
       // @llvm.objectsize should never have side-effects and shouldn't need
@@ -6166,26 +6148,6 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   // the call.
   if (!CallArgs.getCleanupsToDeactivate().empty())
     deactivateArgCleanupsBeforeCall(*this, CallArgs);
-
-  // RL78 -mfar-data: locals and temporaries are near (the stack is in near
-  // RAM). Pass them as default (far) pointers where the callee expects that
-  // (sret, direct pointer arguments); indirect arguments are passed in the
-  // (near) alloca address space, so undo a cast of a temporary to far.
-  if (getLangOpts().RenesasRL78DataModel)
-    for (unsigned i = 0; i < IRCallArgs.size() && i < IRFuncTy->getNumParams();
-         ++i) {
-      llvm::Type *ParamTy = IRFuncTy->getParamType(i);
-      llvm::Value *&Arg = IRCallArgs[i];
-      if (Arg->getType() == ParamTy || !ParamTy->isPointerTy() ||
-          !Arg->getType()->isPointerTy())
-        continue;
-      if (auto *ASC = dyn_cast<llvm::AddrSpaceCastOperator>(Arg))
-        if (ASC->getPointerOperand()->getType() == ParamTy) {
-          Arg = ASC->getPointerOperand();
-          continue;
-        }
-      Arg = Builder.CreateAddrSpaceCast(Arg, ParamTy);
-    }
 
   // Update the largest vector width if any arguments have vector types.
   for (unsigned i = 0; i < IRCallArgs.size(); ++i)
