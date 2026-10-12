@@ -14,6 +14,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
@@ -46,33 +47,10 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <set>
-#include <sstream>
-#include <regex>
+#include <optional>
 
 using namespace llvm;
 #define DEBUG_TYPE "rl78-asm-parser"
-
-const llvm::SmallVector<llvm::StringLiteral, 16> sectionNames = {
-    ".callt0",
-    ".text",
-    ".textf",
-    ".textf_unit64kp",
-    ".const",
-    ".constf",
-    ".data",
-    ".dataf",
-    ".sdata",
-    ".bss",
-    ".bssf",
-    ".sbss",
-    ".option_byte",
-    ".security_id",
-    ".flash_security_id"};
-
-namespace llvm {
-    extern cl::opt<bool> EnableRL78CCRLAsmSyntax;
-}
 
 namespace {
 
@@ -101,14 +79,12 @@ class RL78AsmParser : public MCTargetAsmParser {
   bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
 
-  bool ParseDirective(AsmToken DirectiveID) override;
-
   unsigned validateTargetOperandClass(MCParsedAsmOperand &Op,
                                       unsigned Kind) override;
 
-  const MCExpr *createTargetUnaryExpr(const MCExpr *E,
-                                      AsmToken::TokenKind OperatorToken,
-                                      MCContext &Ctx) override;
+  bool parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) override;
+  bool parseBitPositional(const MCExpr *&Res, SMLoc FirstTokenLoc,
+                          std::pair<StringRef, StringRef> Parts);
 
   int64_t getSymbolAliasValue(StringRef name);
 
@@ -154,82 +130,7 @@ class RL78AsmParser : public MCTargetAsmParser {
                                unsigned &RegKind);
 
 private:
-  struct RelocationAttributeDefault {
-    StringRef DefaultSectionName;
-    unsigned Type = ELF::SHT_PROGBITS;
-    unsigned Flags = ELF::SHF_ALLOC | ELF::SHF_EXECINSTR;
-    unsigned DefaultAlign;
-    bool AllowAlignAttribute;
-    StringRef ShortDirective;
-  };
-
-  struct MacroLocalDefinitionRange {
-    size_t Start;
-    size_t End;
-  };
-
-  struct EquOrSetSymbol {
-    SMLoc loc;
-    StringRef name;
-    bool isEqu;
-
-    bool operator==(const EquOrSetSymbol &other) const {
-      return name == other.name && isEqu == other.isEqu;
-    }
-  };
-
-  StringMap<RelocationAttributeDefault> RelocationAttributeMap;
-  StringMap<std::string> MacroBodies;
-  SmallVector<EquOrSetSymbol, 8> EquAndSetSymbols;
-
-  void InitializeRelocationAttributeMap();
-  bool parseDirectiveSymbolAttribute(MCSymbolAttr Attr);
-  bool parseIdentifier(StringRef &Res);
   void eatToEndOfStatement();
-  bool eatSpacesTillEndOfLine();
-  bool ParseSectionName(StringRef &SectionName);
-  void SwitchToSection(StringRef NewSectionName, unsigned Type, unsigned Flags);
-  bool LookupRelocationAttribute(
-      StringRef SectionName, StringRef Attribute,
-      RelocationAttributeDefault **RelocationAttributeDesc);
-  bool ParseSectionArguments(SMLoc loc);
-  bool parseDirectiveSeg(StringRef Name, StringRef Type);
-  bool ParseDirectiveOrg();
-  bool ParseDirectiveOffset();
-  bool EmitSectionDirective(
-      StringRef SectionName, StringRef RelocationAttribute,
-      const RelocationAttributeDefault* RelocationAttributeDesc);
-  bool ParseSectionAddress(std::string SectionName,
-                           std::string &NewSectionName);
-  bool checkForValidSection();
-  bool parseDirectiveValue(StringRef IDVal, unsigned Size);
-  bool parseDSDirective();
-  bool parseDirectiveAlign();
-  bool parseDirectiveMacro(StringRef Name);
-  bool parseMacroLocalSymbols(StringMap<std::string> &MacroLocalSymbols);
-  std::string ReplaceMacroLocalSymbols(
-      std::string MacroBody, StringMap<std::string> &MacroLocalSymbols,
-      SmallVector<MacroLocalDefinitionRange, 10> &MacroLocalSymbolRanges);
-  bool parseDirectiveSet(StringRef Name);
-  bool parseDirectiveEqu(StringRef Name);
-  bool parseDirectiveVector(StringRef Name);
-  bool HasTargetSubExpressionKind(const MCExpr *Expr,
-                                  unsigned TargetExpressionKind);
-  bool isLeftSideOfBitPositionalABitPositional(AsmToken bitPositionalTok,
-                                               MCContext &ctx);
-  EquOrSetSymbol* findEquOrSetSymbol(StringRef name);
-  void updateEquAndSetSymbols(EquOrSetSymbol equOrSetSymbol);
-  bool isNameInReservedNames(
-      StringRef name, const llvm::ArrayRef<llvm::StringLiteral> reservedNames);
-  bool checkSymbolDefinitionExpression(StringRef Name, MCAsmParser &Parser,
-                                       MCSymbol *&Sym, const MCExpr *Value,
-                                       SMLoc EqualLoc, bool isEqu);
-
-  // Parsed, but ignored directives
-  bool parseDirectiveLine();
-  bool parseDirectiveLineTopEnd();
-  bool parseDirectiveStack();
-  bool parseDirectiveType();
 
   RL78TargetStreamer *getTargetStreamerPtr() {
     MCTargetStreamer *TS = getParser().getStreamer().getTargetStreamer();
@@ -242,15 +143,12 @@ public:
       : MCTargetAsmParser(sti, MII), Parser(parser) {
     // Initialize the set of available features.
     setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
-	InitializeRelocationAttributeMap();
   }
 
   ~RL78AsmParser() override;
 };
 
 } // end anonymous namespace
-
-static constexpr const char *BitPositionSymbolPrefix = ".$$$";
 
 namespace {
 
@@ -1475,98 +1373,6 @@ bool RL78AsmParser::tryParseBCCorSCC(OperandVector &Operands, StringRef Name,
   return false;
 }
 
-/// parseIdentifier:
-///   ::= identifier
-///   ::= string
-bool RL78AsmParser::parseIdentifier(StringRef &Res) {
-  auto& Lexer = getLexer();
-  // The assembler has relaxed rules for accepting identifiers, in particular we
-  // allow things like '.globl $foo' and '.def @feat.00', which would normally be
-  // separate tokens. At this level, we have already lexed so we cannot (currently)
-  // handle this as a context dependent token, instead we detect adjacent tokens
-  // and return the combined identifier.
-  if (Lexer.is(AsmToken::Dollar) || Lexer.is(AsmToken::At)) {
-    SMLoc PrefixLoc = Lexer.getLoc();
-
-    // Consume the prefix character, and check for a following identifier.
-
-    AsmToken Buf[1];
-    Lexer.peekTokens(Buf, false);
-
-    if (Buf[0].isNot(AsmToken::Identifier))
-      return true;
-
-    // We have a '$' or '@' followed by an identifier, make sure they are adjacent.
-    if (PrefixLoc.getPointer() + 1 != Buf[0].getLoc().getPointer())
-      return true;
-
-    // eat $ or @
-    Lexer.Lex(); // Lexer's Lex guarantees consecutive token.
-    // Construct the joined identifier and consume the token.
-    Res =
-        StringRef(PrefixLoc.getPointer(), getTok().getIdentifier().size() + 1);
-    Lex(); // Parser Lex to maintain invariants.
-    return false;
-  }
-
-  if (getLexer().isNot(AsmToken::Identifier) && getLexer().isNot(AsmToken::String))
-    return true;
-
-  Res = getTok().getIdentifier();
-
-  Lex(); // Consume the identifier token.
-
-  return false;
-}
-
-/// parseDirectiveSymbolAttribute
-///  ::= { ".globl", ".weak", ... } [ identifier ( , identifier )* ]
-bool RL78AsmParser::parseDirectiveSymbolAttribute(MCSymbolAttr Attr) {
-  auto parseOp = [&]() -> bool {
-    StringRef Name;
-    SMLoc Loc = getTok().getLoc();
-    if (parseIdentifier(Name))
-      return Error(Loc, "expected identifier");
-
-    if (Parser.discardLTOSymbol(Name))
-      return false;
-
-    for (llvm::StringRef section : sectionNames) {
-      if (section.compare_insensitive(Name) == 0)
-        return Error(Loc, "Section name cannot be defined as public/extern.");
-    }
-
-    MCContext &context = getContext();
-
-    const MCAsmMacro *foundMacro = context.lookupMacro(Name);
-
-    if (foundMacro != nullptr) {
-      return Error(Loc, "Symbol already defined as macro.");
-    }
-
-    MCSymbol *foundSymbol = context.lookupSymbol(Name);
-
-    if (foundSymbol != nullptr && foundSymbol->isVariable() && foundSymbol->isRedefinable()) {
-      return Error(Loc, "Symbol already defined as .set.");
-    }
-
-    MCSymbol *Sym = context.getOrCreateSymbol(Name);
-
-    // Assembler local symbols don't make any sense here, except for directives
-    // that the symbol should be tagged.
-    if (Sym->isTemporary() && Attr != MCSA_Memtag)
-      return Error(Loc, "non-local symbol required");
-
-    if (!getStreamer().emitSymbolAttribute(Sym, MCSA_Global))
-      return Error(Loc, "unable to emit symbol attribute");
-
-    return false;
-  };
-
-  return parseMany(parseOp);
-}
-
-
 void RL78AsmParser::eatToEndOfStatement() {
   auto& Lexer = getLexer();
   while (Lexer.isNot(AsmToken::EndOfStatement) && Lexer.isNot(AsmToken::Eof))
@@ -1575,1018 +1381,6 @@ void RL78AsmParser::eatToEndOfStatement() {
   // Eat EOL.
   if (Lexer.is(AsmToken::EndOfStatement))
     Lexer.Lex();
-}
-
-bool RL78AsmParser::eatSpacesTillEndOfLine() {
-  auto &Lexer = getLexer();
-  while (Lexer.is(AsmToken::Space) || Lexer.is(AsmToken::Comment)) {
-    Lexer.Lex();
-  }
-  if (Lexer.isNot(AsmToken::EndOfStatement))
-    return true;
-  return false;
-}
-
-bool RL78AsmParser::ParseSectionName(StringRef &SectionName) {
-  // A section name can contain -, so we cannot just use
-  // parseIdentifier.
-  SMLoc FirstLoc = getLexer().getLoc();
-  unsigned Size = 0;
-
-  if (getLexer().is(AsmToken::String)) {
-    SectionName = getTok().getIdentifier();
-    Lex();
-    return false;
-  }
-
-  while (!getParser().hasPendingError()) {
-    SMLoc PrevLoc = getLexer().getLoc();
-    if (getLexer().is(AsmToken::Comma) ||
-      getLexer().is(AsmToken::EndOfStatement))
-      break;
-
-    unsigned CurSize;
-    if (getLexer().is(AsmToken::String)) {
-      CurSize = getTok().getIdentifier().size() + 2;
-      Lex();
-    } else if (getLexer().is(AsmToken::Identifier)) {
-      CurSize = getTok().getIdentifier().size();
-      Lex();
-    } else {
-      CurSize = getTok().getString().size();
-      Lex();
-    }
-    Size += CurSize;
-    SectionName = StringRef(FirstLoc.getPointer(), Size);
-
-    // Make sure the following token is adjacent.
-    if (PrevLoc.getPointer() + CurSize != getTok().getLoc().getPointer())
-      break;
-  }
-  if (Size == 0)
-    return true;
-
-  return false;
-}
-
-void RL78AsmParser::InitializeRelocationAttributeMap() {
-  // clang-format off
-  RelocationAttributeMap["CALLT0"] =         {".callt0", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 2, true, ".CSEG"};
-  RelocationAttributeMap["TEXT"] =           {".text", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_EXECINSTR, 1, true, ".CSEG"};
-  RelocationAttributeMap["TEXTF"] =          {".textf", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_EXECINSTR, 1, true, ".CSEG"};
-  RelocationAttributeMap["TEXTF_UNIT64KP"] = {".textf_unit64kp", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_EXECINSTR, 2, true, ".CSEG"};
-  RelocationAttributeMap["CONST"] =          {".const", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 2, true, ".CSEG"};
-  RelocationAttributeMap["CONSTF"] =         {".constf", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 2, true, ".CSEG"};
-  RelocationAttributeMap["SDATA"] =          {".sdata", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 2, true, ".DSEG"};
-  RelocationAttributeMap["SBSS"] =           {".sbss", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE, 2, true, ".DSEG"};
-  RelocationAttributeMap["SBSS_BIT"] =       {".sbss_bit", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE, 2, true, ".BSEG"};
-  RelocationAttributeMap["DATA"] =           {".data", ELF::SHT_PROGBITS, ELF::SHF_ALLOC,2, true, ".DSEG"};
-  RelocationAttributeMap["BSS"] =            {".bss", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE, 2, true, ".DSEG"};
-  RelocationAttributeMap["BSS_BIT"] =        {".bss_bit", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE, 2, true, ".BSEG"};
-  RelocationAttributeMap["DATAF"] =          {".dataf", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 2, true, ".DSEG"};
-  RelocationAttributeMap["BSSF"] =           {".bssf", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE, 2, true, ".DSEG"};
-  RelocationAttributeMap["AT"] =             {".text_AT", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_EXECINSTR | ELF::SHF_RENESAS_ABS, 1, false, ".CSEG"};
-  RelocationAttributeMap["DATA_AT"] =        {".data_AT", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_RENESAS_ABS, 1, false, ".DSEG"};
-  RelocationAttributeMap["BSS_AT"] =         {".bss_AT", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE | ELF::SHF_RENESAS_ABS, 1, false, ".DSEG"};
-  RelocationAttributeMap["BIT_AT"] =         {"", ELF::SHT_NOBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE | ELF::SHF_RENESAS_ABS, 1, false, ".BSEG"};
-  RelocationAttributeMap["OPT_BYTE"] =       {".option_byte", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 1, false, ".CSEG"};
-  RelocationAttributeMap["SECUR_ID"] =       {".security_id", ELF::SHT_PROGBITS, ELF::SHF_ALLOC, 1, false, ".CSEG"};
-  // clang-format on
-}
-
-bool RL78AsmParser::ParseSectionAddress(std::string SectionName,
-                                        std::string &NewSectionName) {
-  const MCExpr *Value;
-  uint64_t SectionAddress;
-  SMLoc ExprLoc = getLexer().getLoc();
-  if (getParser().parseExpression(Value))
-    return true;
-  if (const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(Value)) {
-    SectionAddress = MCE->getValue();
-    if (!isUIntN(20, SectionAddress))
-      return Error(ExprLoc, "out of range literal value");
-  } else
-    return Error(ExprLoc, "out of range literal value");
-
-  std::ostringstream ss;
-  ss << "_AT" << std::uppercase << std::hex << SectionAddress;
-  NewSectionName = SectionName + ss.str();
-  return false;
-}
-
-void RL78AsmParser::SwitchToSection(StringRef NewSectionName, unsigned Type,
-                                    unsigned Flags) {
-  int64_t Size = 0;
-  const MCExpr *Subsection = nullptr;
-  MCSection *ELFSection = getParser().getContext().getELFSection(
-      NewSectionName, Type, Flags, Size);
-
-  getStreamer().switchSection(ELFSection, Subsection);
-}
-
-bool RL78AsmParser::EmitSectionDirective(
-    StringRef SectionName, StringRef RelocationAttribute,
-    const RelocationAttributeDefault* RelocationAttributeDesc) {
-  // Parse and handle absolute section address.
-  std::string NewSectionName = SectionName.str();
-  if (RelocationAttribute.compare_insensitive("AT") == 0 ||
-      RelocationAttribute.compare_insensitive("DATA_AT") == 0 ||
-      RelocationAttribute.compare_insensitive("BSS_AT") == 0 ||
-      RelocationAttribute.compare_insensitive("BIT_AT") == 0) {
-
-    if (ParseSectionAddress(SectionName.str(), NewSectionName))
-      return true;
-  }
-
-  // We expect spaces, comments, EOF/EOL only after this on this line.
-  if (eatSpacesTillEndOfLine())
-    return TokError("unexpected token in directive");
-
-  unsigned Flags = RelocationAttributeDesc->Flags;
-  // If .ORG is written immediately after a section definition directive, the
-  // section is only generated from the absolute address.
-  AsmToken NextToken = getLexer().peekTok();
-  if (NextToken.is(AsmToken::Identifier) &&
-      (NextToken.getString().compare_insensitive(".ORG") == 0)) {
-    // Eat EndOfStatement.
-    Lex();
-    // Eat .ORG.
-    Lex();
-    if (ParseSectionAddress(SectionName.str(), NewSectionName))
-      return true;
-    Flags = Flags | ELF::SHF_RENESAS_ABS;
-  }
-
-  SwitchToSection(NewSectionName, RelocationAttributeDesc->Type, Flags);
-
-  // Apply the default section align
-  if (RelocationAttribute.compare_insensitive("TEXT") == 0 ||
-      RelocationAttribute.compare_insensitive("TEXT") == 0 ||
-      RelocationAttribute.compare_insensitive("TEXTF") == 0 ||
-      RelocationAttribute.compare_insensitive("TEXTF_UNIT64KP") == 0) {
-    getStreamer().emitCodeAlignment(
-        Align(RelocationAttributeDesc->DefaultAlign), *STI);
-  } else {
-    getStreamer().emitValueToAlignment(
-        Align(RelocationAttributeDesc->DefaultAlign), 0, 1);
-  }
-
-  return false;
-}
-
-bool RL78AsmParser::LookupRelocationAttribute(
-    StringRef SectionName, StringRef Attribute,
-    RelocationAttributeDefault **RelocationAttributeDesc) {
-  auto RelocationAttributeMatch = RelocationAttributeMap.find(Attribute);
-
-  if (RelocationAttributeMatch == RelocationAttributeMap.end())
-    return TokError("unexpected relocation-attribute in directive");
-
-  if ((Attribute.compare_insensitive("OPT_BYTE") == 0 && SectionName.compare("") != 0 && SectionName.compare(".option_byte") != 0) ||
-      (Attribute.compare_insensitive("SECUR_ID") == 0 && SectionName.compare("") != 0 && SectionName.compare(".security_id") != 0))
-	return TokError("special section name cannot be changed");
-
-  // Not exactly an appropriate place, but check for section name correctness
-  // too.
-  if (SectionName.compare("") != 0 &&
-      !std::regex_match(SectionName.str(), std::regex("[A-Za-z0-9\\._@]+")))
-    return TokError("invalid characters in section name");
-
-  *RelocationAttributeDesc = &RelocationAttributeMatch->second;
-  return false;
-}
-
-bool RL78AsmParser::ParseSectionArguments(SMLoc loc) {
-  StringRef SectionName;
-
-  if (ParseSectionName(SectionName))
-    return TokError("expected identifier in directive");
-
-  if (getLexer().is(AsmToken::Comma)) {
-    Lex();
-    if (getLexer().isNot(AsmToken::Identifier)) {
-      return TokError("expected relocation-attribute in directive");
-    } else {
-      StringRef RelocationAttribute = getTok().getIdentifier();
-      Lex();
-      RelocationAttributeDefault *RelocationAttributeDesc;
-      if (LookupRelocationAttribute(SectionName, RelocationAttribute, &RelocationAttributeDesc))
-        return true;
-
-      return EmitSectionDirective(SectionName, RelocationAttribute,
-                                  RelocationAttributeDesc);
-    }
-  } else {
-    return TokError("unexpected relocation-attribute in directive");
-  }
-}
-
-bool RL78AsmParser::parseDirectiveSeg(StringRef Name, StringRef Type) {
-
-  StringRef RelocationAttribute;
-  if (Type.compare_insensitive(".CSEG") == 0)
-    RelocationAttribute = "TEXT";
-  else if (Type.compare_insensitive(".DSEG") == 0)
-    RelocationAttribute = "DATA";
-  else if (Type.compare_insensitive(".BSEG") == 0)
-    RelocationAttribute = "SBSS_BIT";
-  else
-    return TokError("unexpected directive kind");
-
-  // See if a relocation attribute is present
-  if (getLexer().is(AsmToken::Identifier)) {
-    RelocationAttribute = getLexer().getTok().getIdentifier();
-    Lex();
-  }
-  RelocationAttributeDefault *RelocationAttributeDesc;
-  if (LookupRelocationAttribute(Name, RelocationAttribute, &RelocationAttributeDesc))
-    return true;
-  return EmitSectionDirective(Name.compare("") == 0
-                                  ? RelocationAttributeDesc->DefaultSectionName
-                                  : Name,
-                              RelocationAttribute, RelocationAttributeDesc);
-}
-
-bool RL78AsmParser::ParseDirectiveOrg() {
-  std::string NewSectionName;
-  MCSectionELF *CurrentSection =
-      static_cast<MCSectionELF *>(getStreamer().getCurrentSectionOnly());
-  std::string SectionNamePrefix = CurrentSection->getName().str();
-
-  // If the section name already has the _AT<address> suffix, drop it
-  SectionNamePrefix =
-      std::regex_replace(SectionNamePrefix, std::regex("_AT[0-9a-fA-F]*$"), "");
-
-  if (ParseSectionAddress(SectionNamePrefix, NewSectionName))
-    return true;
-
-  SwitchToSection(NewSectionName, CurrentSection->getType(),
-                  CurrentSection->getFlags() | ELF::SHF_RENESAS_ABS);
-
-  return false;
-}
-
-bool RL78AsmParser::ParseDirectiveOffset() {
-  const MCExpr *Offset;
-  SMLoc OffsetLoc = getLexer().getLoc();
-  if (checkForValidSection() || getParser().parseExpression(Offset))
-    return true;
-  int64_t FillExpr = 0;
-  if (parseToken(AsmToken::EndOfStatement))
-    return addErrorSuffix(" in '.OFFSET' directive");
-
-  getStreamer().emitValueToOffset(Offset, FillExpr, OffsetLoc);
-  return false;
-}
-
-bool RL78AsmParser::checkForValidSection() {
-  if (!isParsingMSInlineAsm() && !getStreamer().getCurrentSectionOnly()) {
-    getStreamer().initSections(*STI);
-    return Error(getTok().getLoc(),
-                 "expected section directive before assembly directive");
-  }
-  return false;
-}
-
-bool RL78AsmParser::parseDirectiveValue(StringRef IDVal, unsigned Size) {
-  auto parseOp = [&]() -> bool {
-    const MCExpr *Value;
-    SMLoc ExprLoc = getLexer().getLoc();
-
-    if (getLexer().getTok().is(AsmToken::String)) {
-      if (Size != 1)
-        return Error(ExprLoc, "Illegal string.");
-      getStreamer().emitBytes(getLexer().getTok().getStringContents());
-      Lex();
-      return false;
-    }
-
-    if (checkForValidSection() || getParser().parseExpression(Value))
-      return true;
-
-    if (const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(Value)) {
-      assert(Size <= 8 && "Invalid size");
-      uint64_t IntValue = MCE->getValue();
-      if (!isUIntN(8 * Size, IntValue) && !isIntN(8 * Size, IntValue))
-        return Error(ExprLoc, "out of range literal value");
-      getStreamer().emitIntValue(IntValue, Size);
-    } else {
-      getStreamer().emitValue(Value, Size, ExprLoc);
-    }
-    return false;
-  };
-
-  if (parseMany(parseOp))
-    return addErrorSuffix(" in '" + Twine(IDVal) + "' directive");
-  return false;
-}
-
-bool RL78AsmParser::parseDSDirective() {
-  const MCExpr *Value;
-  SMLoc ExprLoc = getLexer().getLoc();
-  if (checkForValidSection() || getParser().parseExpression(Value))
-    return true;
-  // Special case constant expressions to match code generator.
-  if (const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(Value)) {
-    uint64_t AllocationSize = MCE->getValue();
-    if (AllocationSize > 0xFFFFF)
-      return Error(ExprLoc, "out of range literal value");
-    for (uint32_t i = 1; i <= AllocationSize / 8; i++)
-      getStreamer().emitIntValue(0, 8);
-    if(AllocationSize % 8 > 0)
-        getStreamer().emitIntValue(0, AllocationSize % 8);
-  } else
-    return Error(ExprLoc, "invalid absolute-expression");
-  return false;
-}
-
-bool RL78AsmParser::parseDirectiveAlign() {
-  int64_t Alignment;
-  SMLoc MaxBytesLoc;
-  bool HasFillExpr = false;
-  int64_t FillExpr = 0;
-  int64_t MaxBytesToFill = 0;
-
-  if (checkForValidSection())
-    return addErrorSuffix(" in directive");
-
-  const MCExpr *Value;
-  SMLoc ExprLoc = getLexer().getLoc();
-  if (checkForValidSection() || getParser().parseExpression(Value))
-    return true;
-
-  if (const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(Value)) {
-    uint64_t IntValue = MCE->getValue();
-    if (IntValue < 2 || !llvm::isPowerOf2_64(IntValue))
-      return Error(ExprLoc, "out of range literal value");
-    Alignment = IntValue;
-  } else {
-    return Error(ExprLoc, "expected constant expression");
-  }
-  // Always emit an alignment here even if we thrown an error.
-  bool ReturnVal = false;
-
-  // Diagnose non-sensical max bytes to align.
-  if (MaxBytesLoc.isValid()) {
-    if (MaxBytesToFill < 1) {
-      ReturnVal |= Error(MaxBytesLoc,
-                         "alignment directive can never be satisfied in this "
-                         "many bytes, ignoring maximum bytes expression");
-      MaxBytesToFill = 0;
-    }
-
-    if (MaxBytesToFill >= Alignment) {
-      Warning(MaxBytesLoc, "maximum bytes expression exceeds alignment and "
-                           "has no effect");
-      MaxBytesToFill = 0;
-    }
-  }
-
-  // Check whether we should use optimal code alignment for this .align
-  // directive.
-  const MCSection *Section = getStreamer().getCurrentSectionOnly();
-  assert(Section && "must have section to emit alignment");
-  bool UseCodeAlign = getContext().getAsmInfo().useCodeAlign(*Section);
-  if (!HasFillExpr && UseCodeAlign) {
-    getStreamer().emitCodeAlignment(Align(Alignment), *STI, MaxBytesToFill);
-  } else {
-    getStreamer().emitValueToAlignment(Align(Alignment), FillExpr, 1, MaxBytesToFill);
-  }
-  return ReturnVal;
-}
-
-std::string RL78AsmParser::ReplaceMacroLocalSymbols(
-    std::string MacroBody, StringMap<std::string> &MacroLocalSymbols,
-    SmallVector<MacroLocalDefinitionRange, 10> &MacroLocalSymbolRanges) {
-
-  // Delete .LOCAL definitions from the macro body
-  size_t Offset = 0;
-  for (const MacroLocalDefinitionRange &Range : MacroLocalSymbolRanges) {
-    size_t Length = Range.End - Range.Start;
-    MacroBody.erase(Range.Start - Offset, Length);
-    Offset += Length;
-  }
-
-  // Replace .LOCAL symbols from the macro definition
-  // with unique local file level symbols
-  for (const StringMapEntry<std::string> &LocalSymbol : MacroLocalSymbols)
-    MacroBody =
-        std::regex_replace(MacroBody, std::regex(LocalSymbol.getKey().str()),
-                           LocalSymbol.getValue());
-
-  return MacroBody;
-}
-
-bool RL78AsmParser::parseMacroLocalSymbols(
-    StringMap<std::string> &MacroLocalSymbols) {
-  auto parseOp = [&]() -> bool {
-    StringRef Name;
-    SMLoc Loc = getTok().getLoc();
-    if (parseIdentifier(Name))
-      return Error(Loc, "expected identifier");
-    std::string LocalSymbolName = ".LL_" + Name.str() + "_\\@";
-    MacroLocalSymbols[Name] = LocalSymbolName;
-    /*MCSymbol *Sym = getContext().getOrCreateSymbol(LocalSymbolName);
-
-    if (!getStreamer().emitSymbolAttribute(Sym, MCSA_Local))
-      return Error(Loc, "unable to emit symbol attribute");*/
-    return false;
-  };
-
-  if (parseMany(parseOp))
-    return addErrorSuffix(" in directive");
-  return false;
-}
-
-static bool isGlobalElfSymbol(MCSymbol *symbol) {
-  // RL78 is ELF-only; MCSymbol no longer records its object format.
-  return static_cast<MCSymbolELF *>(symbol)->getBinding() == ELF::STB_GLOBAL;
-}
-
-bool RL78AsmParser::parseDirectiveMacro(StringRef Name) {
-
-  SMLoc DirectiveLoc = getLexer().getLoc();
-
-  // Eat the .MACRO
-  Lex();
-
-  MCAsmMacroParameters Parameters;
-  while (getLexer().isNot(AsmToken::EndOfStatement)) {
-
-    MCAsmMacroParameter Parameter;
-    if (parseIdentifier(Parameter.Name))
-      return TokError("expected identifier in '.macro' directive");
-
-    // Emit an error if two (or more) named parameters share the same name
-    for (const MCAsmMacroParameter &CurrParam : Parameters)
-      if (CurrParam.Name == Parameter.Name)
-        return TokError("macro '" + Name +
-                        "' has multiple parameters"
-                        " named '" +
-                        Parameter.Name + "'");
-    // CC-RL has only required parameters
-    Parameter.Required = true;
-    Parameters.push_back(std::move(Parameter));
-
-    if (getLexer().is(AsmToken::Comma))
-      Lex();
-  }
-
-  // Eat just the end of statement.
-  getLexer().Lex();
-
-  // Consuming deferred text, so use Lexer.Lex to ignore Lexing Errors
-  AsmToken EndToken, StartToken = getTok();
-  StringMap<std::string> MacroLocalSymbolMap;
-  SmallVector<MacroLocalDefinitionRange, 10> MacroLocalSymbolRanges;
-  // Lex the macro definition.
-  while (true) {
-    // Ignore Lexing errors in macros.
-    while (getLexer().is(AsmToken::Error)) {
-      getLexer().Lex();
-    }
-
-    // Check whether we have reached the end of the file.
-    if (getLexer().is(AsmToken::Eof))
-      return Error(DirectiveLoc, "no matching '.ENDM' in definition");
-
-    if (getLexer().is(AsmToken::Identifier)) {
-      if (getTok().getIdentifier() == ".LOCAL") {
-        // Parse macro local symbol declarations and save
-        // the declaration start/end position.
-        size_t Start =
-            getTok().getLoc().getPointer() - StartToken.getLoc().getPointer();
-        getLexer().Lex();
-        parseMacroLocalSymbols(MacroLocalSymbolMap);
-        size_t End =
-            getTok().getLoc().getPointer() - StartToken.getLoc().getPointer();
-        MacroLocalSymbolRanges.push_back({Start, End});
-      } else if (getTok().getIdentifier() == ".ENDM") {
-        EndToken = getTok();
-        getLexer().Lex();
-        if (getLexer().isNot(AsmToken::EndOfStatement))
-          return TokError("unexpected token in '" + EndToken.getIdentifier() +
-                          "' directive");
-        break;
-      }
-    }
-
-    // Otherwise, scan til the end of the statement.
-    eatToEndOfStatement();
-  }
-
-  MCContext &context = getContext();
-
-  MCSymbol *Sym = context.lookupSymbol(Name);
-
-  if (Sym != nullptr && isGlobalElfSymbol(Sym)) {
-    return Error(DirectiveLoc, "symbol already defined as public/extern");
-  }
-
-  if (context.lookupMacro(Name)) {
-    return Error(DirectiveLoc, "macro '" + Name + "' is already defined");
-  }
-
-  const char *BodyStart = StartToken.getLoc().getPointer();
-  const char *BodyEnd = EndToken.getLoc().getPointer();
-  std::string Body = StringRef(BodyStart, BodyEnd - BodyStart).str();
-
-  // Prepend "\" to parameters, as expected by the gcc syntax
-  // The other option would be to reimplement handleMacroEntry and all the
-  // related functions.
-  for (const MCAsmMacroParameter &CurrParam : Parameters)
-    Body = std::regex_replace(Body, std::regex(CurrParam.Name.str()),
-                              ("\\" + CurrParam.Name).str());
-
-  // Save new body
-  MacroBodies[Name] = ReplaceMacroLocalSymbols(Body, MacroLocalSymbolMap,
-                                               MacroLocalSymbolRanges);
-
-  // checkForBadMacro(DirectiveLoc, Name, Body, Parameters);
-  MCAsmMacro Macro(Name, StringRef(MacroBodies[Name]), std::move(Parameters));
-  DEBUG_WITH_TYPE("asm-macros", dbgs() << "Defining new macro:\n";
-                  Macro.dump());
-  getContext().defineMacro(Name, std::move(Macro));
-  return false;
-}
-
-
-
-/// Returns whether the given symbol is used anywhere in the given expression,
-/// or subexpressions.
-static bool isSymbolUsedInExpression(const MCSymbol *Sym, const MCExpr *Value) {
-  switch (Value->getKind()) {
-  case MCExpr::Binary: {
-    const MCBinaryExpr *BE = static_cast<const MCBinaryExpr *>(Value);
-    return isSymbolUsedInExpression(Sym, BE->getLHS()) ||
-           isSymbolUsedInExpression(Sym, BE->getRHS());
-  }
-  case MCExpr::Target:
-  case MCExpr::Constant:
-    return false;
-  case MCExpr::SymbolRef: {
-    const MCSymbol &S =
-        static_cast<const MCSymbolRefExpr *>(Value)->getSymbol();
-    if (S.isVariable())
-      return isSymbolUsedInExpression(Sym, S.getVariableValue());
-    return &S == Sym;
-  }
-  case MCExpr::Unary:
-    return isSymbolUsedInExpression(
-        Sym, static_cast<const MCUnaryExpr *>(Value)->getSubExpr());
-  }
-
-  llvm_unreachable("Unknown expr kind!");
-}
-
-RL78AsmParser::EquOrSetSymbol *
-RL78AsmParser::findEquOrSetSymbol(StringRef name) {
-  for (EquOrSetSymbol &symbol : EquAndSetSymbols) {
-    if (symbol.name == name)
-      return &symbol;
-  }
-  return nullptr;
-}
-
-bool RL78AsmParser::isNameInReservedNames(
-    StringRef name, const llvm::ArrayRef<llvm::StringLiteral> reservedNames) {
-  for (llvm::StringRef reservedName : reservedNames) {
-    if (reservedName.compare_insensitive(name) == 0)
-      return true;
-  }
-  return false;
-}
-
-bool RL78AsmParser::checkSymbolDefinitionExpression(
-    StringRef Name, MCAsmParser &Parser, MCSymbol *&Sym, const MCExpr *Value,
-    SMLoc EqualLoc, bool isEqu) {
-
-  if (Parser.parseToken(AsmToken::EndOfStatement))
-    return true;
-
-  static const llvm::SmallVector<llvm::StringLiteral, 17> directiveNames = {
-      ".cseg",   ".dseg",   ".equ",   ".set",   ".public", ".extern",
-      ".extbit", ".vector", ".macro", ".local", ".rept",   ".irp",
-      ".exitm",  ".exitma", ".endm",  ".bcond", ".bseg"
-  };
-
-  static const llvm::SmallVector<llvm::StringLiteral, 13>
-      controlInstructionNames = {"include", "binclude", "mirror",  "nowarning",
-                                 "warning", "ifdef",    "ifndef",  "if",
-                                 "ifn",     "elseif",   "elseifn", "else",
-                                 "endif"};
-
-  static const llvm::SmallVector<llvm::StringLiteral, 22> registerNames = {
-      "pc",  "sp",  "h",   "l",       "d",   "e",  "b",  "c",
-      "a",   "x",   "hl",  "de",      "bc",  "ax", "es", "cs",
-      "spl", "sph", "psw", "reserve", "pmc", "mem"};
-
-  static const llvm::SmallVector<llvm::StringLiteral, 82> instructionNames = {
-      "mov",  "xch",   "oneb",  "clrb",  "movs",  "movw", "xchw", "onew",
-      "clrw", "add",   "addc",  "sub",   "subc",  "and",  "or",   "xor",
-      "cmp",  "cmp0",  "cmps",  "addw",  "subw",  "cmpw", "mulu", "mulhu",
-      "mulh", "divhu", "divwu", "machu", "mach",  "inc",  "dec",  "incw",
-      "decw", "shr",   "shrw",  "shl",   "shlw",  "sar",  "sarw", "ror",
-      "rol",  "rorc",  "rolc",  "rolwc", "mov1",  "and1", "or1",  "xor1",
-      "set1", "clr1",  "not1",  "call",  "callt", "brk",  "ret",  "reti",
-      "retb", "push",  "pop",   "br",    "bc",    "bnc",  "bz",   "bnz",
-      "bh",   "bnh",   "bt",    "bf",    "btclr", "skc",  "sknc", "skz",
-      "sknz", "skh",   "sknh",  "sel",   "nop",   "ei",   "di",   "halt",
-      "stop"};
-
-  if (isNameInReservedNames(Name, sectionNames))
-    return Parser.Error(EqualLoc,
-                        "Section name cannot be used in EQU/SET definition.");
-
-  if (isNameInReservedNames(Name, directiveNames))
-    return Parser.Error(EqualLoc,
-                        "Directive name cannot be used in EQU/SET definition.");
-
-  if (isNameInReservedNames(Name, controlInstructionNames))
-    return Parser.Error(
-        EqualLoc,
-        "Control instruction name cannot be used in EQU/SET definition.");
-
-  if (isNameInReservedNames(Name, registerNames))
-    return Parser.Error(EqualLoc,
-                        "Register name cannot be used in EQU/SET definition.");
-
-  if (isNameInReservedNames(Name, instructionNames))
-    return Parser.Error(
-        EqualLoc, "Instruction name cannot be used in EQU/SET definition.");
-
-  // Validate that the LHS is allowed to be a variable (either it has not been
-  // used as a symbol, or it is an absolute symbol).
-  Sym = Parser.getContext().lookupSymbol(Name);
-  if (Sym) {
-    // Diagnose assignment to a label.
-    if (Value && isSymbolUsedInExpression(Sym, Value))
-      return Parser.Error(EqualLoc, "Recursive use of '" + Name + "'");
-    else if (Sym->isUndefined() && !Sym->isVariable())
-      ; // Allow definitions of undefined symbols (MC no longer tracks whether
-        // they were used; upstream likewise allows forward references).
-    else if (!Sym->isUndefined()) {
-
-      EquOrSetSymbol *foundSymbol = findEquOrSetSymbol(Name);
-
-      if (!Sym->isVariable() || !foundSymbol)
-        return Parser.Error(EqualLoc, "redefinition of '" + Name + "'");
-
-      // Only symbols originally defined using SET can be redefined using SET.
-      if (foundSymbol->isEqu || (!foundSymbol->isEqu && isEqu)) {
-        SourceMgr &SM = Parser.getSourceManager();
-        auto LineCol = SM.getLineAndColumn(foundSymbol->loc);
-        return Parser.Error(EqualLoc, "redefinition of '" + Name + "'. '" +
-                                          Name + "' is defined at " +
-                                          std::to_string(LineCol.first) + ":" +
-                                          std::to_string(LineCol.second) + ".");
-      }
-      
-    } else if (!Sym->isVariable())
-      return Parser.Error(EqualLoc, "invalid assignment to '" + Name + "'");
-    else if (!isa<MCConstantExpr>(Sym->getVariableValue()))
-      return Parser.Error(EqualLoc,
-                          "invalid reassignment of non-absolute variable '" +
-                              Name + "'");
-  }   
-  return false;
-}
-
-bool RL78AsmParser::HasTargetSubExpressionKind(const MCExpr *Expr,
-                                               unsigned TargetExpressionKind) {
-
-  switch (Expr->getKind()) {
-  case MCExpr::Binary: {
-    const MCBinaryExpr *BExpr = cast<MCBinaryExpr>(Expr);
-    return HasTargetSubExpressionKind(BExpr->getLHS(), TargetExpressionKind) ||
-           HasTargetSubExpressionKind(BExpr->getRHS(), TargetExpressionKind);
-  }
-  case MCExpr::Constant:
-  case MCExpr::SymbolRef:
-    return false;
-  case MCExpr::Unary:
-    return HasTargetSubExpressionKind(cast<MCUnaryExpr>(Expr)->getSubExpr(),
-                                      TargetExpressionKind);
-
-  case MCExpr::Target: {
-    const RL78MCExpr *TExpr = cast<RL78MCExpr>(Expr);
-    return TExpr->getVariantKind() == TargetExpressionKind;
-  }
-  }
-  return false;
-}
-
-void RL78AsmParser::updateEquAndSetSymbols(EquOrSetSymbol equOrSetSymbol) {
-
-  if (equOrSetSymbol.isEqu) {
-    EquAndSetSymbols.push_back(equOrSetSymbol);
-  } else {
-    EquOrSetSymbol *foundSymbol = findEquOrSetSymbol(equOrSetSymbol.name);
-    if (foundSymbol == nullptr) {
-      EquAndSetSymbols.push_back(equOrSetSymbol);
-    } else {
-      llvm::erase(EquAndSetSymbols, *foundSymbol);
-      EquAndSetSymbols.push_back(equOrSetSymbol);
-    }
-  }
-}
-
-bool RL78AsmParser::parseDirectiveSet(StringRef Name) {
-  // Each name is a redefinable name.
-  // A bit position specification cannot be defined.
-  // The name generated by the .SET directive cannot be externally defined by
-  // the .PUBLIC directive.
-  MCSymbol *Sym = nullptr;
-  const MCExpr *Value = nullptr;
-  SMLoc EqualLoc = Parser.getTok().getLoc();
-  // Eat the .SET
-  Lex();
-
-  if (Parser.parseExpression(Value))
-    return Parser.TokError("missing expression");
-
-  if (HasTargetSubExpressionKind(Value, RL78MCExpr::VK_RL78_BITPOSITIONAL))
-    return Error(EqualLoc, "invalid expression");
-
-  int64_t Res;
-  if (!Value->evaluateAsAbsolute(Res))
-    return Parser.TokError("not an absolute expression");
-
-  if (checkSymbolDefinitionExpression(Name, getParser(), Sym, Value, EqualLoc,
-                                      false))
-    return true;
-  if (!Sym)
-    Sym = Parser.getContext().getOrCreateSymbol(Name);
-  else if (isGlobalElfSymbol(Sym))
-    return Error(EqualLoc, "symbol already defined as public/extern");
-
-  Sym->setRedefinable(true);
-  getStreamer().emitAssignment(Sym, MCConstantExpr::create(Res, getContext()));
-  updateEquAndSetSymbols(EquOrSetSymbol{EqualLoc, Name, false});
-  return false;
-}
-
-bool RL78AsmParser::isLeftSideOfBitPositionalABitPositional(
-    AsmToken bitPositionalTok, MCContext &ctx) {
-  // HasTargetSubExpressionKind verified that bitPositionalTok is an expression
-  // that matches the bit positional format. This function checks if the address
-  // part of the expression is a bit positional symbol.
-  StringRef leftSide = bitPositionalTok.getString().split(".").first;
-  MCSymbol *leftSideSym = ctx.lookupSymbol(BitPositionSymbolPrefix + leftSide);
-  return leftSideSym != nullptr;
-}
-
-bool RL78AsmParser::parseDirectiveEqu(StringRef Name) {
-  // Symbols that have already been defined by using .EQU cannot be redefined.
-  // The name generated by the .EQU directive can be externally defined by the
-  // .PUBLIC directive. A bit position specification can be defined.
-  // Relocatable terms cannot be specified in the operand field.
-  MCSymbol *Sym;
-  MCSymbol *BitPosSym =
-      Parser.getContext().lookupSymbol(BitPositionSymbolPrefix + Name);
-
-  SMLoc EqualLoc = Parser.getTok().getLoc();
-  // Eat the .EQU
-  Lex();
-
-  int64_t AbsoluteValue = 0;
-  bool CreateBitposSym = false;
-  int64_t BitPosition = -1;
-  // .EQU will treat dots as bit positional specifiers.
-  const MCExpr *Value = nullptr;
-  AsmToken EQURightSideTok = Parser.getTok();
-
-  if (Parser.parseExpression(Value))
-    return Parser.TokError("missing expression");
-
-  // Parse expression already tried to constant fold it
-  if (Value->getKind() == MCExpr::Constant) {
-    AbsoluteValue = cast<MCConstantExpr>(Value)->getValue();
-  } else {
-    // The expression contains a target expression somewhere or it's couldn't
-    // constant fold it.
-    MCValue AbsVal;
-    if (!HasTargetSubExpressionKind(Value, RL78MCExpr::VK_RL78_BITPOSITIONAL) ||
-        isLeftSideOfBitPositionalABitPositional(EQURightSideTok,
-                                                getContext()) ||
-        !RL78MCExpr::FoldBitPositionalExpression(Value, AbsVal, BitPosition,
-                                                 getContext()) ||
-        !AbsVal.isAbsolute() || BitPosition == -1)
-      return Error(EqualLoc, "invalid expression");
-    AbsoluteValue = AbsVal.getConstant();
-    CreateBitposSym = true;
-  }
-
-  if (checkSymbolDefinitionExpression(Name, getParser(), Sym, Value, EqualLoc,
-                                      true))
-    return true;
-
-  if (CreateBitposSym && BitPosSym)
-    return Parser.TokError("bit position symbol already defined");
-
-  // At this point we should have an absolute value and possibly a bit position
-  // value. Create the symbol(s) and assign values.
-  bool ShouldBePublic = false;
-  if (!Sym)
-    Sym = Parser.getContext().getOrCreateSymbol(Name);
-  else
-    ShouldBePublic = isGlobalElfSymbol(Sym);
-  Sym->setRedefinable(false);
-
-  if (CreateBitposSym) {
-    BitPosSym =
-        Parser.getContext().getOrCreateSymbol(BitPositionSymbolPrefix + Name);
-    BitPosSym->setRedefinable(false);
-    MCSymbolELF *ELFBitPosSymbol = static_cast<MCSymbolELF *>(BitPosSym);
-    ELFBitPosSymbol->setType(ELF::STT_HIPROC);
-
-    if (ShouldBePublic &&
-        !getStreamer().emitSymbolAttribute(BitPosSym, MCSA_Global))
-      return Error(Parser.getTok().getLoc(), "unable to emit symbol attribute");
-
-    getStreamer().emitAssignment(
-        BitPosSym, MCConstantExpr::create(BitPosition, getContext()));
-  }
-  getStreamer().emitAssignment(
-      Sym, MCConstantExpr::create(AbsoluteValue, getContext()));
-
-  updateEquAndSetSymbols(EquOrSetSymbol{EqualLoc, Name, true});
-
-  return false;
-}
-
-// symbol-name .VECTOR Vector-table-allocation-address
-bool RL78AsmParser::parseDirectiveVector(StringRef Name) {
-
-  MCSymbol *Sym = Parser.getContext().lookupSymbol(Name);
-
-  // Eat the .VECTOR
-  Lex();
-
-  // Parse vector table allocation address
-  if (getLexer().getTok().isNot(AsmToken::Integer))
-    return TokError("unexpected token in directive");
-
-  // An even address between 0x00000 and 0x0007E can be specified as the vector
-  // table allocation address.
-  int64_t VectorAddress = getLexer().getTok().getIntVal();
-  if (0 > VectorAddress || VectorAddress > 0x7e || VectorAddress % 2 != 0)
-    return TokError("invalid vector allocation address value");
-
-  std::string VectorSymbolName =
-      ("___vector_" + Twine::utohexstr(VectorAddress) + "_").str();
-
-  MCSymbol *VectorSym = Parser.getContext().lookupSymbol(VectorSymbolName);
-  if (VectorSym)
-    return TokError("Redefinition of the 0x" +
-                    Twine::utohexstr(VectorAddress & 0xFE).str() +
-                    " entry in the interrupt table!");
-
-  // Eat the address value.
-  Lex();
-  if (!Sym)
-    Sym = Parser.getContext().getOrCreateSymbol(Name);
-   VectorSym = Parser.getContext().getOrCreateSymbol(VectorSymbolName);
-
-  VectorSym->setRedefinable(false);
-  getStreamer().emitAssignment(VectorSym,
-                               MCSymbolRefExpr::create(Sym, getContext()));
-  getStreamer().emitSymbolAttribute(VectorSym, MCSA_Global);
-
-  return false;
-}
-
-// .LINE ["file-name",] line-number [; comment]
-bool RL78AsmParser::parseDirectiveLine() {
-  AsmToken Token = getLexer().getTok();
-
-  // Parse optional filename
-  if (Token.is(AsmToken::String)) {
-    Lex();
-    if (getParser().check(getLexer().getTok().isNot(AsmToken::Comma),
-                          getLexer().getTok().getLoc(),
-                          "expected ',' after filename"))
-      return true;
-    Lex();
-  }
-
-  // Parse line number
-  if (getLexer().getTok().isNot(AsmToken::Integer))
-    return TokError("unexpected token in directive");
-
-  Lex();
-
-  return false;
-}
-
-// ._LINE_TOP inline_asm [; comment]
-// ._LINE_END inline_asm [; comment]
-bool RL78AsmParser::parseDirectiveLineTopEnd() {
-  AsmToken Token = getLexer().getTok();
-  // After syntax checking we ignore this directive
-  // Note that we don't check for matching TOP/END pairs.
-  if (Token.isNot(AsmToken::Identifier) ||
-      Token.getString().compare("inline_asm") != 0)
-    return TokError("unexpected token in directive");
-  Lex();
-  return false;
-}
-
-// .STACK symbol-name=absolute-expression [; comment]
-bool RL78AsmParser::parseDirectiveStack() {
-
-  // After syntax checking we ignore this directive
-  if (getLexer().getTok().isNot(AsmToken::Identifier))
-    return TokError("unexpected token in directive");
-  Lex();
-
-  if (getLexer().getTok().isNot(AsmToken::Equal))
-    return TokError("unexpected token in directive");
-  Lex();
-
-  int64_t Value;
-  if (getParser().parseAbsoluteExpression(Value))
-    return true;
-
-  return false;
-}
-
-bool RL78AsmParser::parseDirectiveType() {
-
-  // No syntax checking because the CC-RL manual does not describe the
-  // directive. Just eat everything till the end of the line.
-  while (getLexer().getTok().isNot(AsmToken::EndOfStatement) &&
-         getLexer().getTok().isNot(AsmToken::Eof))
-    Lex();
-
-  return false;
-}
-
-bool RL78AsmParser::ParseDirective(AsmToken DirectiveID) {
-
-  if (!EnableRL78CCRLAsmSyntax)
-    return true;
-
-  SMLoc Loc = getLexer().getLoc();
-
-  if (DirectiveID.getString().compare_insensitive(".PUBLIC") == 0 ||
-      DirectiveID.getString().compare_insensitive(".EXTERN") == 0) {
-    return parseDirectiveSymbolAttribute(MCSA_Global);
-  }
-  if (DirectiveID.getString().compare_insensitive(".SECTION") == 0)
-    return ParseSectionArguments(Loc);
-  if (DirectiveID.getString().compare_insensitive(".ORG") == 0)
-    return ParseDirectiveOrg();
-  if (DirectiveID.getString().compare_insensitive(".OFFSET") == 0)
-    return ParseDirectiveOffset();
-  if (DirectiveID.getString().compare_insensitive(".DB") == 0)
-    return parseDirectiveValue(".DB", 1);
-  if (DirectiveID.getString().compare_insensitive(".DB2") == 0)
-    return parseDirectiveValue(".DB2", 2);
-  if (DirectiveID.getString().compare_insensitive(".DB4") == 0)
-    return parseDirectiveValue(".DB4", 4);
-  if (DirectiveID.getString().compare_insensitive(".DB8") == 0)
-    return parseDirectiveValue(".DB8", 8);
-  if (DirectiveID.getString().compare_insensitive(".DS") == 0)
-    return parseDSDirective();
-  if (DirectiveID.getString().compare_insensitive(".ALIGN") == 0)
-    return parseDirectiveAlign();
-
-  if (DirectiveID.getString().compare_insensitive(".LINE") == 0)
-    return parseDirectiveLine();
-  if (DirectiveID.getString().compare_insensitive("._LINE_TOP") == 0 ||
-      DirectiveID.getString().compare_insensitive("._LINE_END") == 0)
-    return parseDirectiveLineTopEnd();
-  if (DirectiveID.getString().compare_insensitive(".STACK") == 0)
-    return parseDirectiveStack();
-  if (DirectiveID.getString().compare_insensitive(".TYPE") == 0)
-    return parseDirectiveType();
-
-  if (DirectiveID.getKind() == AsmToken::Identifier) {
-    StringRef Tok = getLexer().getTok().getString();
-    if (Tok.compare_insensitive(".MACRO") == 0)
-      return parseDirectiveMacro(DirectiveID.getString());
-	if (Tok.compare_insensitive(".SET") == 0)
-      return parseDirectiveSet(DirectiveID.getString());
-	if (Tok.compare_insensitive(".EQU") == 0)
-      return parseDirectiveEqu(DirectiveID.getString());
-
-    if (Tok.compare_insensitive(".CSEG") == 0 || Tok.compare_insensitive(".BSEG") == 0 ||
-        Tok.compare_insensitive(".DSEG") == 0) {
-      Lex();
-      return parseDirectiveSeg(DirectiveID.getString(), Tok);
-    }
-
-    // section name is optional
-    if (DirectiveID.getString().compare_insensitive(".CSEG") == 0 ||
-        DirectiveID.getString().compare_insensitive(".DSEG") == 0 ||
-        DirectiveID.getString().compare_insensitive(".BSEG") == 0)
-      return parseDirectiveSeg("", DirectiveID.getString());
-
-    if (Tok.compare_insensitive(".VECTOR") == 0)
-      return parseDirectiveVector(DirectiveID.getString());
-  }
-  return true;
 }
 
 bool RL78AsmParser::parseInstruction(ParseInstructionInfo &Info, StringRef Name,
@@ -2704,29 +1498,14 @@ RL78AsmParser::parseDotIncludingOperand(OperandVector &Operands,
     return ParseStatus::NoMatch;
   }
 
-  int64_t AddressValue = 0;
   MCValue AddressMCValue;
   int64_t BitPosition = -1;
-  // Check if it's a symbolref to a bitpositional symbol
   if (Value->getKind() == MCExpr::SymbolRef) {
-    const MCSymbol *AddressSymbol =
-        Parser.getContext().lookupSymbol(Token.getString());
-    MCSymbol *PositionSymbol = Parser.getContext().lookupSymbol(
-        BitPositionSymbolPrefix + Token.getString());
-    if (!AddressSymbol || !AddressSymbol->isVariable() ||
-        !AddressSymbol->getVariableValue()->evaluateAsAbsolute(AddressValue))
-      return ParseStatus::NoMatch;
-    if (!PositionSymbol || !PositionSymbol->isVariable() ||
-        !PositionSymbol->getVariableValue()->evaluateAsAbsolute(BitPosition))
-      return ParseStatus::NoMatch;
-    if (!CheckAddressValueRange(Mnemonic, Operands, AddressValue, getContext(),
-                               S, E).isSuccess())
-      return ParseStatus::NoMatch;
+    // A plain symbol carries no bit position.
+    return ParseStatus::NoMatch;
   } else {
 
-    if (/*!HasTargetSubExpressionKind(Value, RL78MCExpr::VK_RL78_BITPOSITIONAL)
-           ||*/
-        !RL78MCExpr::FoldBitPositionalExpression(Value, AddressMCValue,
+    if (!RL78MCExpr::FoldBitPositionalExpression(Value, AddressMCValue,
                                                  BitPosition, getContext()) ||
         BitPosition == -1) {
       LLVM_DEBUG(Value->dump());
@@ -3714,31 +2493,143 @@ int64_t RL78AsmParser::getSymbolAliasValue(StringRef name) {
   return DefSymbol;
 }
 
-const MCExpr *RL78AsmParser::createTargetUnaryExpr(
-    const MCExpr *E, AsmToken::TokenKind OperatorToken, MCContext &Ctx) {
-  switch (OperatorToken) {
-  default:
-    llvm_unreachable("Unknown token");
-    return nullptr;
-  case AsmToken::High:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_HIGH, E, Ctx);
-  case AsmToken::Low:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_LOW, E, Ctx);
-  case AsmToken::HighW:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_HIGHW, E, Ctx);
-  case AsmToken::LowW:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_LOWW, E, Ctx);
-  case AsmToken::MirHW:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_MIRHW, E, Ctx);
-  case AsmToken::MirLW:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_MIRLW, E, Ctx);
-  case AsmToken::SMRLW:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_SMRLW, E, Ctx);
-  case AsmToken::StartOf:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_STARTOF, E, Ctx);
-  case AsmToken::SizeOf:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_SIZEOF, E, Ctx);
-  case AsmToken::BitPosition:
-    return RL78MCExpr::create(RL78MCExpr::VK_RL78_BITPOSITIONAL, E, Ctx);
+/// The Renesas relocation operators, written OPERATOR(expression).
+static std::optional<RL78MCExpr::VariantKind> matchOperator(StringRef Name) {
+  return StringSwitch<std::optional<RL78MCExpr::VariantKind>>(Name)
+      .CaseLower("high", RL78MCExpr::VK_RL78_HIGH)
+      .CaseLower("low", RL78MCExpr::VK_RL78_LOW)
+      .CaseLower("highw", RL78MCExpr::VK_RL78_HIGHW)
+      .CaseLower("loww", RL78MCExpr::VK_RL78_LOWW)
+      .CaseLower("mirhw", RL78MCExpr::VK_RL78_MIRHW)
+      .CaseLower("mirlw", RL78MCExpr::VK_RL78_MIRLW)
+      .CaseLower("smrlw", RL78MCExpr::VK_RL78_SMRLW)
+      .CaseLower("startof", RL78MCExpr::VK_RL78_STARTOF)
+      .CaseLower("sizeof", RL78MCExpr::VK_RL78_SIZEOF)
+      .Default(std::nullopt);
+}
+
+/// True if \p Tok is ".n" with n a bit number, the form in which the lexer
+/// returns the bit position that follows a number or a parenthesis.
+static bool isBitSuffix(const AsmToken &Tok) {
+  StringRef S = Tok.getString();
+  return Tok.is(AsmToken::Real) && S.size() == 2 && S[0] == '.' &&
+         S[1] >= '0' && S[1] <= '7';
+}
+
+/// Build the bit operand "address.bit" from an identifier token that
+/// contains a dot. Returns false, with Res untouched, if the token is not
+/// one (the bit part is neither a digit nor an absolute symbol).
+bool RL78AsmParser::parseBitPositional(const MCExpr *&Res, SMLoc FirstTokenLoc,
+                                       std::pair<StringRef, StringRef> Parts) {
+  MCContext &Ctx = getContext();
+  const MCExpr *AddressExpr;
+  int64_t BitPositionValue;
+
+  if (Parts.second.size() == 1 && Parts.second[0] >= '0' &&
+      Parts.second[0] <= '7') {
+    BitPositionValue = Parts.second[0] - '0';
+  } else {
+    const MCSymbol *BitSym = Ctx.lookupSymbol(Parts.second);
+    if (!BitSym || !BitSym->isVariable() ||
+        !BitSym->getVariableValue()->evaluateAsAbsolute(BitPositionValue))
+      return false;
   }
+
+  if (Parts.first.compare_insensitive("psw") == 0) {
+    AddressExpr = MCConstantExpr::create(0xFFFFA, Ctx);
+  } else {
+    if (Parts.first.empty())
+      return false;
+    // The address part may turn out to be a register name (A.3), so a
+    // symbol that does not exist yet is not created under its own name:
+    // parseDotIncludingOperand strips the guard again.
+    MCSymbol *AddressSymbol = Ctx.lookupSymbol(Parts.first);
+    if (!AddressSymbol)
+      AddressSymbol =
+          Ctx.createNamedTempSymbol("__$__" + Parts.first + "__$__");
+    AddressExpr = MCSymbolRefExpr::create(AddressSymbol, Ctx, FirstTokenLoc);
+  }
+
+  // RL78MCExpr takes the address and the bit as one "address && bit" node.
+  Res = MCBinaryExpr::create(MCBinaryExpr::LAnd, AddressExpr,
+                             MCConstantExpr::create(BitPositionValue, Ctx),
+                             Ctx, FirstTokenLoc);
+  Res = RL78MCExpr::create(RL78MCExpr::VK_RL78_BITPOSITIONAL, Res, Ctx);
+  getParser().Lex();
+  return true;
+}
+
+/// Primary expressions of the Renesas syntax on top of the generic ones:
+/// relocation operators (LOWW(sym), HIGHW(sym), ...), PSW as an address,
+/// and bit operands (sym.3, 0xFFE30.3, (sym+4).3).
+bool RL78AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
+  AsmLexer &Lexer = getLexer();
+  MCContext &Ctx = getContext();
+  SMLoc FirstTokenLoc = Lexer.getLoc();
+  AsmToken::TokenKind FirstTokenKind = Lexer.getKind();
+  StringRef Token = Lexer.getTok().getString();
+
+  switch (FirstTokenKind) {
+  default:
+    break;
+  case AsmToken::Identifier: {
+    if (std::optional<RL78MCExpr::VariantKind> Kind = matchOperator(Token);
+        Kind && Lexer.peekTok().is(AsmToken::LParen)) {
+      getParser().Lex(); // Eat the operator.
+      getParser().Lex(); // Eat the '('.
+      if (getParser().parseExpression(Res, EndLoc))
+        return true;
+      if (Lexer.isNot(AsmToken::RParen))
+        return TokError("expected ')'");
+      EndLoc = Lexer.getTok().getEndLoc();
+      getParser().Lex(); // Eat the ')'.
+      Res = RL78MCExpr::create(*Kind, Res, Ctx);
+      return false;
+    }
+    if (Token.equals_insensitive("psw")) {
+      Res = MCConstantExpr::create(0xFFFFA, Ctx);
+      EndLoc = Lexer.getTok().getEndLoc();
+      getParser().Lex();
+      return false;
+    }
+    if (Token.contains('.') && !Ctx.lookupSymbol(Token) &&
+        parseBitPositional(Res, FirstTokenLoc, Token.split('.')))
+      return false;
+    break;
+  }
+  case AsmToken::Integer: {
+    // An absolute value in a relocation expression is passed to the linker
+    // as a symbol (see RL78MCExpr::HandleBinaryRelAbsOp): give every
+    // integer one.
+    int64_t Value = Lexer.getTok().getIntVal();
+    std::string Name = "@$IMM_" + std::to_string(Value);
+    if (!Ctx.lookupSymbol(Name)) {
+      MCSymbol *Sym = Ctx.getOrCreateSymbol(Name);
+      MCStreamer &Out = getParser().getStreamer();
+      Out.emitSymbolAttribute(Sym, MCSA_Local);
+      Out.emitAssignment(Sym, MCConstantExpr::create(Value, Ctx));
+    }
+    break;
+  }
+  }
+
+  if (getParser().parsePrimaryExpr(Res, EndLoc, nullptr))
+    return true;
+
+  // 0xFFE30.3 and (0xF230+4).3: the lexer returns ".3" as a real number.
+  if (FirstTokenKind != AsmToken::Integer &&
+      FirstTokenKind != AsmToken::LParen)
+    return false;
+  const AsmToken &Next = Lexer.getTok();
+  if (Next.isNot(AsmToken::Real))
+    return false;
+  if (!isBitSuffix(Next))
+    return TokError("invalid bit position value");
+  Res = MCBinaryExpr::create(
+      MCBinaryExpr::LAnd, Res,
+      MCConstantExpr::create(Next.getString()[1] - '0', Ctx), Ctx, EndLoc);
+  Res = RL78MCExpr::create(RL78MCExpr::VK_RL78_BITPOSITIONAL, Res, Ctx);
+  EndLoc = Next.getEndLoc();
+  getParser().Lex();
+  return false;
 }

@@ -34,7 +34,8 @@ RL78ELFMCAsmInfo::RL78ELFMCAsmInfo(const Triple &TheTriple,
 
   CalleeSaveStackSlotSize = 2; // A saved register is always 2 byte.
 
-  HasRL78Expressions = true;
+  // "0xFFE30.3" is bit 3 of an address, not a hexadecimal float.
+  AllowHexFloatLiterals = false;
   // Linker relaxation: label differences use the CC-RL operator relocations,
   // which have no ULEB128 form.
   CanRelocateULEB128Differences = false;

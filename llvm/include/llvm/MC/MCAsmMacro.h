@@ -53,14 +53,6 @@ public:
     Amp, AmpAmp, Exclaim, ExclaimEqual, Percent, Hash,
     Less, LessEqual, LessLess, LessGreater,
     Greater, GreaterEqual, GreaterGreater, At, MinusGreater,
-
-    // RL78 unary expression operators
-    High, Low, HighW, LowW,
-    MirHW, MirLW, SMRLW,
-    StartOf, SizeOf,
-    DataPos, BitPos,
-    // RL78 token kind
-    BitPosition
   };
 
 private:

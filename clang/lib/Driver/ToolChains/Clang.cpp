@@ -7902,8 +7902,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (Args.hasFlag(options::OPT_frenesas_extensions,
                      options::OPT_fno_renesas_extensions, false)) {
       CmdArgs.push_back("-frenesas-extensions");
-      CmdArgs.push_back("-mllvm");
-      CmdArgs.push_back("-rl78-ccrl-asm-syntax");
     }
     if (Args.hasFlag(options::OPT_mfar_code, options::OPT_mnear_code, false))
       CmdArgs.push_back("-mfar-code");
@@ -9512,10 +9510,6 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
     llvm::sys::path::remove_filename(Dir);
     if (!Dir.empty())
       CmdArgs.push_back(Args.MakeArgString("-I" + Dir));
-    if (Args.hasArg(options::OPT_frenesas_extensions)) {
-      CmdArgs.push_back("-mllvm");
-      CmdArgs.push_back("-rl78-ccrl-asm-syntax");
-    }
     break;
   }
 

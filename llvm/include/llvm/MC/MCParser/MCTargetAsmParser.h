@@ -520,14 +520,6 @@ public:
     return nullptr;
   }
 
-  /// Build the expression for a target unary operator token (RL78 HIGH(),
-  /// LOW(), STARTOF(), bit positions, ...) applied to \p E.
-  virtual const MCExpr *createTargetUnaryExpr(const MCExpr *E,
-                                              AsmToken::TokenKind OperatorToken,
-                                              MCContext &Ctx) {
-    return nullptr;
-  }
-
   // For actions that have to be performed before a label is emitted
   virtual void doBeforeLabelEmit(MCSymbol *Symbol, SMLoc IDLoc) {}
   

@@ -428,10 +428,9 @@ protected:
   // If true, use Motorola-style integers in Assembly (ex. $0ac).
   bool UseMotorolaIntegers = false;
 
-  // If true, then the lexer and expression parser will support the Renesas
-  // RL78 unary operators (HIGH, LOW, HIGHW, LOWW, MIRHW, MIRLW, SMRLW,
-  // STARTOF, SIZEOF, ...).
-  bool HasRL78Expressions = false;
+  // If false, the lexer does not accept hexadecimal floating-point literals
+  // ("0x1.8p3"): "0x10.2" is then an integer followed by ".2".
+  bool AllowHexFloatLiterals = true;
 
   // If true, basic block labels keep their names in an object file. With
   // linker relaxation they stay in the symbol table, where they then mark
@@ -752,7 +751,7 @@ public:
   bool shouldUseLogicalShr() const { return UseLogicalShr; }
 
   bool shouldUseMotorolaIntegers() const { return UseMotorolaIntegers; }
-  bool hasRL78Expressions() const { return HasRL78Expressions; }
+  bool allowHexFloatLiterals() const { return AllowHexFloatLiterals; }
   bool useNamesOnBlockLabels() const { return UseNamesOnBlockLabels; }
   bool canRelocateULEB128Differences() const {
     return CanRelocateULEB128Differences;

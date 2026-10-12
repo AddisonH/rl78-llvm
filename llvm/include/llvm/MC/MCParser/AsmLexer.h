@@ -44,7 +44,6 @@ class AsmLexer {
   SmallVector<AsmToken, 1> CurTok;
 
   const char *CurPtr = nullptr;
-  const char *EndPtr = nullptr;
   /// NULL-terminated buffer. NULL terminator must reside at `CurBuf.end()`.
   StringRef CurBuf;
 
