@@ -16,6 +16,7 @@
 #include "clang/Options/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang::driver;
@@ -333,13 +334,27 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
   }
 
+  // The C library is picolibc when the sysroot has its linker script, and
+  // newlib with libgloss otherwise.
+  const bool Picolibc =
+      TC.getVFS().exists(GetStartObjectPath(TC, "picolibc.ld"));
+  const bool Sim = Args.hasArg(options::OPT_fsim);
+
+  // picolibc and the libraries built on it have a section per function and
+  // object so that a program takes only what it uses; without this a C++
+  // program that prints a line is several hundred kilobytes.
+  // -Wl,--no-gc-sections, later on the command line, turns it off.
+  if (Picolibc)
+    CmdArgs.insert(CmdArgs.begin(), "--gc-sections");
+
   // Adding default linker script if -T option not specified
   if (!Args.hasArg(options::OPT_T)) {
-    // Handling the -fsim option for
-    // default linker script usage.
-    std::string linkerscript = "rl78.ld";
-    if (const Arg *Msim = Args.getLastArg(options::OPT_fsim))
-      linkerscript = "rl78-sim.ld";
+    std::string linkerscript;
+    if (Picolibc)
+      // The C++ variant also places the exception tables.
+      linkerscript = TC.getDriver().CCCIsCXX() ? "picolibcpp.ld" : "picolibc.ld";
+    else
+      linkerscript = Sim ? "rl78-sim.ld" : "rl78.ld";
     CmdArgs.push_back(
         Args.MakeArgString("-T" + GetStartObjectPath(TC, linkerscript)));
 
@@ -349,8 +364,16 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Do not add if nostdlib or nostartfiles options present
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
-    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "crt0.o")));
-    CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtbegin.o")));
+    if (Picolibc) {
+      // crt0.o does not return from main; on a simulator the program ends
+      // with exit().
+      CmdArgs.push_back(Args.MakeArgString(
+          GetStartObjectPath(TC, Sim ? "crt0-semihost.o" : "crt0.o")));
+    } else {
+      CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "crt0.o")));
+      CmdArgs.push_back(
+          Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtbegin.o")));
+    }
   }
 
   // Do not add if nostdlib or nodefaultlibs options present
@@ -367,28 +390,37 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     if (TC.ShouldLinkCXXStdlib(Args))
       TC.AddCXXStdlibLibArgs(Args, CmdArgs);
 
-    if (const Arg *Msim = Args.getLastArg(options::OPT_fsim)) {
-      CmdArgs.push_back("-lsim");
+    if (Picolibc) {
+      // Console and exit: the simulator's, or stubs that an application's
+      // own definitions replace. libc.a contains the maths library, and
+      // there is one size of it (-fnewlib-nano changes nothing).
+      CmdArgs.push_back(Sim ? "-lsemihost" : "-ldummyhost");
+      CmdArgs.push_back("-lc");
     } else {
-      CmdArgs.push_back("-lnosys");
-    }
+      if (Sim) {
+        CmdArgs.push_back("-lsim");
+      } else {
+        CmdArgs.push_back("-lnosys");
+      }
 
-	if (const Arg *Mnano = Args.getLastArg(options::OPT_fnewlib_nano)) {
-		CmdArgs.push_back("-lc_nano");
-	}
-	else {
-		CmdArgs.push_back("-lc");
-		//libg.a is a debugging enabled version of libc.a 
-	}
-	//libm.a and libm_nano.a are similar and there is not code size difference
-    CmdArgs.push_back("-lm");
+      if (Args.hasArg(options::OPT_fnewlib_nano)) {
+        CmdArgs.push_back("-lc_nano");
+      } else {
+        CmdArgs.push_back("-lc");
+        // libg.a is a debugging enabled version of libc.a
+      }
+      // libm.a and libm_nano.a are similar and there is not code size
+      // difference
+      CmdArgs.push_back("-lm");
+    }
     
 	TC.AddLinkRuntimeLib(Args, CmdArgs);
 
   }
 
   // Do not add if nostdlib or nostartfiles options present
-  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
+  if (!Picolibc &&
+      !Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
     CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "clang_rt.crtend.o")));
     CmdArgs.push_back(Args.MakeArgString(GetStartObjectPath(TC, "crtn.o")));
   }
