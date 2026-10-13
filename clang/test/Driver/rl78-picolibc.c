@@ -14,7 +14,7 @@
 // RUN: %clang --target=rl78 --sysroot=%t/newlib -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
 // RUN: %clang --target=rl78 --sysroot=%t/newlib -fsim -fnewlib-nano -### %s 2>&1 | FileCheck %s --check-prefix=NEWLIB-SIM
 
-// PICO: "--gc-sections"
+// PICO-NOT: "--gc-sections"
 // PICO: "-T{{[^"]*}}picolibc.ld"
 // PICO: "{{[^"]*}}lib{{/|\\\\}}crt0.o"
 // PICO-NOT: crtbegin
@@ -27,6 +27,7 @@
 // PICO-SIM: "{{[^"]*}}crt0-semihost.o"
 // PICO-SIM: "-lsemihost" "-lc" "-lclang_rt.builtins"
 
+// PICO-CXX: "--gc-sections"
 // PICO-CXX: "-T{{[^"]*}}picolibcpp.ld"
 // PICO-CXX: "-lc++" "-lc++abi" "-ldummyhost" "-lc"
 

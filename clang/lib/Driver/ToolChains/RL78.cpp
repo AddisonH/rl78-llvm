@@ -340,11 +340,14 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       TC.getVFS().exists(GetStartObjectPath(TC, "picolibc.ld"));
   const bool Sim = Args.hasArg(options::OPT_fsim);
 
-  // picolibc and the libraries built on it have a section per function and
-  // object so that a program takes only what it uses; without this a C++
-  // program that prints a line is several hundred kilobytes.
+  // libc++ on picolibc is built with a section per function and object so
+  // that a program takes only what it uses; without this a C++ program that
+  // prints a line is several hundred kilobytes and its constants do not fit
+  // in the mirror area. C links are left as they are.
   // -Wl,--no-gc-sections, later on the command line, turns it off.
-  if (Picolibc && !Args.hasArg(options::OPT_r))
+  if (Picolibc && TC.getDriver().CCCIsCXX() &&
+      !Args.hasArg(options::OPT_r, options::OPT_nostdlib,
+                   options::OPT_nostartfiles))
     CmdArgs.insert(CmdArgs.begin(), "--gc-sections");
 
   // Adding default linker script if -T option not specified. A relocatable
