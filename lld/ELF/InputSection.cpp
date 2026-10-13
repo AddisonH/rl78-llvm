@@ -1104,6 +1104,14 @@ void InputSection::relocateNonAlloc(Ctx &ctx, uint8_t *buf,
       return;
     }
 
+    // The RL78 operator relocations (R_RL78_OPsub, R_RL78_ABS32U, ...) have no
+    // symbol: they work on values that preceding R_RL78_SYM relocations push.
+    // A relocatable link leaves those alone (below), so there is nothing for
+    // an operator to work on either.
+    if (ctx.arg.relocatable && emachine == EM_RL78 && RelTy::HasAddend &&
+        rel.getSymbol(ctx.arg.isMips64EL) == 0)
+      continue;
+
     if (tombstone && (expr == R_ABS || expr == R_DTPREL)) {
       // Resolve relocations in .debug_* referencing (discarded symbols or ICF
       // folded section symbols) to a tombstone value. Resolving to addend is
