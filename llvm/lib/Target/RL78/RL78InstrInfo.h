@@ -249,10 +249,6 @@ public:
       return true;
     return false;
   }
-
-  ScheduleHazardRecognizer *
-  CreateTargetPostRAHazardRecognizer(const InstrItineraryData *,
-                                     const ScheduleDAG *DAG) const override;
 };
 
 } // end namespace llvm
