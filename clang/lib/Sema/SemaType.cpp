@@ -7589,9 +7589,12 @@ bool Sema::CheckVarDeclSizeAddressSpace(const VarDecl *VD, LangAS AS) {
   QualType T = VD->getType();
 
   // Check that the variable's type can fit in the specified address space. This
-  // is determined by how far a pointer in that address space can reach.
-  llvm::APInt MaxSizeForAddrSpace =
-      llvm::APInt::getMaxValue(Context.getTargetInfo().getPointerWidth(AS));
+  // is determined by how far a pointer in that address space can reach, and
+  // by size_t, which may be narrower than the pointer (segmented pointers).
+  const TargetInfo &TI = Context.getTargetInfo();
+  llvm::APInt MaxSizeForAddrSpace = llvm::APInt::getMaxValue(
+      std::min<uint64_t>(TI.getPointerWidth(AS),
+                         TI.getTypeWidth(TI.getSizeType())));
   std::optional<CharUnits> TSizeInChars = Context.getTypeSizeInCharsIfKnown(T);
   if (TSizeInChars && static_cast<uint64_t>(TSizeInChars->getQuantity()) >
                           MaxSizeForAddrSpace.getZExtValue()) {

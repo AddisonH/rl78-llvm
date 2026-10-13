@@ -14962,6 +14962,18 @@ void Sema::addLifetimeBoundToImplicitThis(CXXMethodDecl *MD) {
 void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   if (var->isInvalidDecl()) return;
 
+  // A variable in the default address space has to fit it as well (one in
+  // another address space was checked when it was declared): a 16-bit target
+  // has types that do not.
+  // Only a structure, a union or an array of them can be that large (an
+  // array of anything else is limited by its element count).
+  if (!var->getType().hasAddressSpace() &&
+      Context.getBaseElementType(var->getType())->isRecordType() &&
+      !CheckVarDeclSizeAddressSpace(var, LangAS::Default)) {
+    var->setInvalidDecl();
+    return;
+  }
+
   CUDA().MaybeAddConstantAttr(var);
 
   if (getLangOpts().OpenCL) {
