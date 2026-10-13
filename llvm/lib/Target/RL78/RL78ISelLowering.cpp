@@ -1270,6 +1270,10 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
          {ISD::SHL, ISD::SRL, ISD::SRA, ISD::FSHL, ISD::FSHR})
       setOperationAction(Opc, VT, Custom);
 
+  // Two words rotated by one go through the carry as well.
+  setOperationAction(ISD::ROTL, MVT::i32, Custom);
+  setOperationAction(ISD::ROTR, MVT::i32, Custom);
+
   setOperationAction(ISD::SHL_PARTS, MVT::i16, Expand);
   setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRA_PARTS, MVT::i16, Expand);
@@ -1451,6 +1455,7 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::SRLC)
     MAKE_CASE(RL78ISD::SRAC)
     MAKE_CASE(RL78ISD::RORWC)
+    MAKE_CASE(RL78ISD::CY15)
     MAKE_CASE(RL78ISD::NOTCY)
     MAKE_CASE(RL78ISD::XCHW)
     MAKE_CASE(RL78ISD::ANDMEM)
@@ -5026,6 +5031,39 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
       Carry = W.getValue(1);
     }
     Results.push_back(joinWords(Words, dl, DAG));
+    return;
+  }
+  case ISD::ROTL:
+  case ISD::ROTR: {
+    // By one to the left: x + x, and the carry out of the top word is added
+    // in at the bottom. To the right the bit that leaves the low word goes
+    // through the high word (RORC) and back into bit 15 of the low one.
+    // Other counts are left to the generic expansion: by 8 and 24 it makes
+    // the byte moves of RL78::SHRB_AX_rp, and its word by word form of the
+    // rest keeps fewer values alive than a rotate by a multiple of 8 and one
+    // more bit through the carry does (measured on SHA-256).
+    auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
+    if (!C || N->getValueType(0) != MVT::i32)
+      return;
+    unsigned Left = C->getZExtValue() % 32;
+    if (N->getOpcode() == ISD::ROTR)
+      Left = (32 - Left) % 32;
+    if (Left != 1 && Left != 31)
+      return;
+    SmallVector<SDValue, 2> W;
+    splitIntoWords(N->getOperand(0), dl, DAG, W);
+    SDVTList VTs = DAG.getVTList(MVT::i16, MVT::Glue);
+    if (Left == 1) {
+      SDValue Lo = DAG.getNode(ISD::ADDC, dl, VTs, W[0], W[0]);
+      W[1] = DAG.getNode(ISD::ADDE, dl, VTs, W[1], W[1], Lo.getValue(1));
+      W[0] = DAG.getNode(ISD::ADDE, dl, VTs, Lo,
+                         DAG.getConstant(0, dl, MVT::i16), W[1].getValue(1));
+    } else {
+      SDValue Lo = DAG.getNode(RL78ISD::SRLC, dl, VTs, W[0]);
+      W[1] = DAG.getNode(RL78ISD::RORWC, dl, VTs, W[1], Lo.getValue(1));
+      W[0] = DAG.getNode(RL78ISD::CY15, dl, MVT::i16, Lo, W[1].getValue(1));
+    }
+    Results.push_back(joinWords(W, dl, DAG));
     return;
   }
   case ISD::ADD: {

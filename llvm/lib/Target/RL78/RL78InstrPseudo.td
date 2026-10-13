@@ -87,6 +87,21 @@ def BSWAP32_rp
                  (ins RL78AXRP:$rsrc, RL78BCDEHL:$rsrc2),
                  [(set i16:$rd, i16:$rd2, (xchw i16:$rsrc, i16:$rsrc2))]>;
 
+// The word in the middle of two, (a >> 8) + (b << 8), with either value in
+// AX. With a there its high byte goes down and the low byte of b comes in
+// above it (MOV X, A; MOV A, r); with b there its low byte goes up and the
+// high byte of a comes in below it (MOV A, r; XCH A, X). Shifts and rotates
+// of 32-bit values by 8 are made of these. RL78AccumulatorCopies changes one
+// into the other when the allocator has the other value in AX.
+let Constraints = "$rsrc = $rd" in {
+def SHRB_AX_rp
+    : RL78Pseudo<2, (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rp),
+                 [(set i16:$rd, (add (srl i16:$rsrc, (i8 8)),
+                                     (shl i16:$rp, (i8 8))))]>;
+def SHLB_AX_rp
+    : RL78Pseudo<2, (outs RL78AXRP:$rd), (ins RL78AXRP:$rsrc, RL78BCDEHL:$rp)>;
+}
+
 //===----------------------------------------------------------------------===//
 // Multiply, divide, multiply-accumulate
 //===----------------------------------------------------------------------===//

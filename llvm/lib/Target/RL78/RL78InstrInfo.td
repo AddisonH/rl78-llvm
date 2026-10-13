@@ -61,6 +61,9 @@ def rl78srlc : SDNode<"RL78ISD::SRLC", SDTIntUnaryOp, [SDNPOutGlue]>;
 def rl78srac : SDNode<"RL78ISD::SRAC", SDTIntUnaryOp, [SDNPOutGlue]>;
 def rl78rorwc : SDNode<"RL78ISD::RORWC", SDTIntUnaryOp,
                        [SDNPInGlue, SDNPOutGlue]>;
+// The word that a rotate to the right by one started with: its top bit is
+// the bit that left the last one.
+def rl78cy15 : SDNode<"RL78ISD::CY15", SDTIntUnaryOp, [SDNPInGlue]>;
 
 // A compare; the flags are the glue result.
 def SDTCMP : SDTypeProfile<0, 3, [SDTCisInt<0>, SDTCisSameAs<0, 1>,

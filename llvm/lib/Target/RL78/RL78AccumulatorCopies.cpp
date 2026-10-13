@@ -73,8 +73,9 @@ FunctionPass *llvm::createRL78AccumulatorCopiesPass() {
   return new RL78AccumulatorCopies();
 }
 
-// OP A, r and OP AX, rp whose two values may change places.
-static bool isCommutative(unsigned Opcode) {
+// OP A, r and OP AX, rp whose two values may change places: the operation
+// with them the other way round, or 0.
+static unsigned commutedOpcode(unsigned Opcode) {
   switch (Opcode) {
   case RL78::ADD_A_r:
   case RL78::AND_A_r:
@@ -84,9 +85,13 @@ static bool isCommutative(unsigned Opcode) {
   case RL78::AND16_AX_rp:
   case RL78::OR16_AX_rp:
   case RL78::XOR16_AX_rp:
-    return true;
+    return Opcode;
+  case RL78::SHRB_AX_rp:
+    return RL78::SHLB_AX_rp;
+  case RL78::SHLB_AX_rp:
+    return RL78::SHRB_AX_rp;
   }
-  return false;
+  return 0;
 }
 
 // A copy between the accumulator and another register of its size: which
@@ -129,11 +134,12 @@ bool RL78AccumulatorCopies::commute(MachineInstr &Save) {
   if (Load == MBB.end() || !isCopyIn(*Load, Acc, S) || S == R)
     return false;
   MachineBasicBlock::iterator Op = next_nodbg(Load, MBB.end());
-  if (Op == MBB.end() || !isCommutative(Op->getOpcode()) ||
+  if (Op == MBB.end() || !commutedOpcode(Op->getOpcode()) ||
       Op->getOperand(1).getReg() != Acc || Op->getOperand(2).getReg() != R ||
       !Op->getRegClassConstraint(2, TII, TRI)->contains(S) ||
       TII->isLiveBefore(MBB, std::next(Op), R))
     return false;
+  Op->setDesc(TII->get(commutedOpcode(Op->getOpcode())));
   Op->getOperand(2).setReg(S);
   Op->getOperand(2).setIsKill(false);
   Load->eraseFromParent();

@@ -66,6 +66,8 @@ enum NodeType : unsigned {
   SRLC,
   SRAC,
   RORWC,
+  // The carry into bit 15 of a word (glue operand).
+  CY15,
   LOAD_SELECTCC,
   DELAY_CYCLES_1_4,
   DELAY_CYCLES_5,

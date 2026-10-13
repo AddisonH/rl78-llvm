@@ -757,6 +757,30 @@ bool RL78InstrInfo::expandPseudo(MachineInstr &MI) const {
     }
     MI.eraseFromParent();
     return true;
+  case RL78::MOV1_AX_15_CY:
+    BuildMI(*BB, MI, DL, get(RL78::MOV1_A_b), RL78::R1)
+        .addReg(RL78::R1)
+        .addImm(7);
+    MI.eraseFromParent();
+    return true;
+  case RL78::SHRB_AX_rp:
+    BuildMI(*BB, MI, DL, get(RL78::MOV_r_A), RL78::R0)
+        .addReg(RL78::R1, RegState::Kill);
+    BuildMI(*BB, MI, DL, get(RL78::MOV_A_r), RL78::R1)
+        .addReg(getRegisterInfo().getSubReg(MI.getOperand(2).getReg(),
+                                            RL78::sub_lo));
+    MI.eraseFromParent();
+    return true;
+  case RL78::SHLB_AX_rp:
+    BuildMI(*BB, MI, DL, get(RL78::MOV_A_r), RL78::R1)
+        .addReg(getRegisterInfo().getSubReg(MI.getOperand(2).getReg(),
+                                            RL78::sub_hi));
+    BuildMI(*BB, MI, DL, get(RL78::XCH_A_X), RL78::R1)
+        .addReg(RL78::R0, RegState::Define)
+        .addReg(RL78::R1, RegState::Kill)
+        .addReg(RL78::R0, RegState::Kill);
+    MI.eraseFromParent();
+    return true;
   case RL78::RORW_AX_1:
     BuildMI(*BB, MI, DL, get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)

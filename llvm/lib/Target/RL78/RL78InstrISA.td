@@ -2176,6 +2176,12 @@ def RORWC_AX_1 : RL78Pseudo<6, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs),
 def : Pat<(rl78srlc i16:$x), (SHRW_AX_n $x, 1)>;
 def : Pat<(rl78srac i16:$x), (SARW_AX_n $x, 1)>;
 
+// CY into bit 15 of AX (MOV1 A.7, CY): the bit that went round in a rotate
+// of several words to the right by one.
+let Constraints = "$rs = $rd", Uses = [CCreg], OneInst = 1 in
+def MOV1_AX_15_CY : RL78Pseudo<2, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs),
+                               [(set i16:$rd, (rl78cy15 i16:$rs))]>;
+
 // A word at [HL+byte] whose second byte is also in reach.
 def MemHLw : ComplexPattern<iPTR, 2, "SelectMemHLw", [], []>;
 
