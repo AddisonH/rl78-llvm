@@ -150,6 +150,12 @@ public:
   
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
+  /// A branch to a common tail is two bytes: two instructions in common pay
+  /// for it.
+  unsigned getTailMergeSize(const MachineFunction &MF) const override {
+    return 2;
+  }
+
   /// Set the flags of the exchange instructions (XCH, XCHW) of \p MBB, and
   /// the kill flags of the block. An exchange often moves one value only:
   /// the half that comes from a register without a value is then an undef

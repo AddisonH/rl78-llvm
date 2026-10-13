@@ -15,6 +15,17 @@
 
 // NOJT: "-fno-jump-tables"
 
+// These are the target's own choices now (unrolling preferences, tail merge
+// size, pass configuration) or were found to change nothing.
+// RUN: %clang --target=rl78 -Os -### -c %s 2>&1 | FileCheck %s --check-prefix=RETIRED
+// RETIRED-NOT: "-unroll-threshold
+// RETIRED-NOT: "-tail-merge-size
+// RETIRED-NOT: "-disable-machine-licm
+// RETIRED-NOT: "-disable-block-placement
+// RETIRED-NOT: "-replexitval
+// RETIRED-NOT: "-adce-remove-loops
+// RETIRED-NOT: "-available-load-scan-limit
+
 // When optimizing for size the linker also turns calls to the most called
 // functions into CALLT.
 // RUN: %clang --target=rl78 -Os -### %s 2>&1 | FileCheck %s --check-prefix=LINK-SIZE

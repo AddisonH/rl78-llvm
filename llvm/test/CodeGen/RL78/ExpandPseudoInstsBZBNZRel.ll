@@ -68,7 +68,8 @@ define void @br_rel16_bz_backward_jump_substitute(i16 %flag) {
 ; CHECK-NEXT:    subw sp, #32
 ; CHECK-NEXT:  .LBB2_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    clrw ax
+; CHECK-NEXT:    clrw bc
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
 ; CHECK-NEXT:    movw [sp+28], ax
 ; CHECK-NEXT:    movw [sp+26], ax
@@ -277,18 +278,15 @@ define void @bnz_rel8_backward_jump(i16 %counter) {
 ; CHECK-LABEL: bnz_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    cmpw ax, #0
-; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    bnh $.LBB4_3
-; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:  .LBB4_2: ; %for.body
+; CHECK-NEXT:    bnh $.LBB4_2
+; CHECK-NEXT:  .LBB4_1: ; %for.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    cmpw ax, #0
-; CHECK-NEXT:    bnz $.LBB4_2
-; CHECK-NEXT:  .LBB4_3: ; %for.cond.cleanup
+; CHECK-NEXT:    bnz $.LBB4_1
+; CHECK-NEXT:  .LBB4_2: ; %for.cond.cleanup
 ; CHECK-NEXT:    ret
 entry:
   %cmp2 = icmp sgt i16 %counter, 0
@@ -346,7 +344,8 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw [sp+32], ax
-; CHECK-NEXT:    clrw ax
+; CHECK-NEXT:    clrw bc
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
 ; CHECK-NEXT:    movw [sp+28], ax
 ; CHECK-NEXT:    movw [sp+26], ax

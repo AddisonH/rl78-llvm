@@ -21,7 +21,6 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
-
 void rl78::getRL78TargetFeatures(const Driver &D, const llvm::Triple &Triple,
                             const llvm::opt::ArgList &Args,
                             std::vector<llvm::StringRef> &Features) {
@@ -150,7 +149,6 @@ StringRef rl78::getRL78DoubleSize(const llvm::opt::ArgList &Args,
     return "m32bit-doubles";
 }
 
-
 StringRef rl78::getRL78DisableMDA(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple) {
     assert(Triple.isRL78() && "Unexpected triple");
@@ -209,20 +207,7 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-split-spill-mode=size");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-available-load-scan-limit=2");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-adce-remove-loops=true");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-enable-load-pre=false");
-
-  // TODO: See if there is a replacement.
-  // CmdArgs.push_back("-mllvm");
-  // CmdArgs.push_back("-consider-local-interval-cost=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-block-placement=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-machine-cse=true");
@@ -237,12 +222,10 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-extra-vectorizer-passes=true");
 
+  // SimplifyCFG: a branch is two bytes and there is no conditional move, so
+  // computing a value on both paths to save a branch grows the code.
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-keep-loops=false");
-
-  // TODO: See if there is a replacement.
-  // CmdArgs.push_back("-mllvm");
-  // CmdArgs.push_back("-simplifycfg-dup-ret=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-bonus-inst-threshold=0");
@@ -251,19 +234,7 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-phi-node-folding-threshold=0");
 
   CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-tail-merge-size=2");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-unroll-threshold=9");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-replexitval=never");
-
-  CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-lsr=true");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-machine-licm=true");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-phi-elim-edge-splitting=true");

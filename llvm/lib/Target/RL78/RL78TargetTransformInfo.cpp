@@ -75,6 +75,10 @@ void RL78TTIImpl::getUnrollingPreferences(
       hasMACReduction(L->getSubLoops()[0]))
     UP.UnrollAndJam = false;
 
+  // When optimizing for size: a body of a few instructions that runs a
+  // known, small number of times is smaller without its counter and branch.
+  UP.OptSizeThreshold = 9;
+
   // A small innermost loop spends a good part of its time on the counter and
   // the branch. At -O3 the driver has those with a count known only at run
   // time unrolled (-unroll-runtime); do the same for a constant count too

@@ -74,7 +74,8 @@ define void @br_rel16_bh_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw [sp+32], ax
-; CHECK-NEXT:    clrw ax
+; CHECK-NEXT:    clrw bc
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
 ; CHECK-NEXT:    movw [sp+28], ax
 ; CHECK-NEXT:    movw [sp+26], ax
@@ -348,7 +349,8 @@ define void @br_rel16_bnh_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw [sp+32], ax
-; CHECK-NEXT:    clrw ax
+; CHECK-NEXT:    clrw bc
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
 ; CHECK-NEXT:    movw [sp+28], ax
 ; CHECK-NEXT:    movw [sp+26], ax

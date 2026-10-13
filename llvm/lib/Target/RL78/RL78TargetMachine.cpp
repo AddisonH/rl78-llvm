@@ -306,6 +306,10 @@ void RL78PassConfig::addFastRegAlloc() {
 }
 
 void RL78PassConfig::addMachineSSAOptimization() {
+  // What is hoisted out of a loop stays in a register across the loop, and
+  // there are four 16-bit registers: the loop body pays with spills for more
+  // than the hoisting saves, in size and (CoreMark, Embench at -O3) in time.
+  disablePass(&EarlyMachineLICMID);
   TargetPassConfig::addMachineSSAOptimization();
 }
 
