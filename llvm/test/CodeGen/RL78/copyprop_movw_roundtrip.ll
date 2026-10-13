@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; MachineCopyPropagation is registered with UseCopyInstr=true and
 ; RL78InstrInfo::isCopyInstrImpl reports MOVW_AX_rp / MOVW_rp_AX, so

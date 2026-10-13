@@ -1,7 +1,7 @@
 ; Test the LowerCMPW, LowerCMPWMem functions.
 ; Ensure CMPW_rp_imm, CMPW_rp_memri instructions are lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _aa:
 ; CHECK: 	cmpw ax, #1024

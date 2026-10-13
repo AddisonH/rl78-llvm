@@ -108,12 +108,12 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
 
             Register tmpRegCpy = MI1.getOperand(2).getReg();
 
-            MI1.getOperand(2).ChangeToRegister(MI.getOperand(1).getReg(), false,
-                                               MI1.getOperand(2).isImplicit(),
-                                               true);
-
-            MI.getOperand(1).ChangeToRegister(
-                tmpRegCpy, false, MI.getOperand(1).isImplicit(), true);
+            // The two uses change places: neither kill flag holds.
+            Register tmpRegMI = MI.getOperand(1).getReg();
+            MI1.getOperand(2).setReg(tmpRegMI);
+            MI.getOperand(1).setReg(tmpRegCpy);
+            MRI->clearKillFlags(tmpRegMI);
+            MRI->clearKillFlags(tmpRegCpy);
 
             changed = true;
             // remove pairs containing defs from MI and MI1 from ACPM
@@ -164,11 +164,11 @@ bool RL78ConstPropAndOpSwap::runOnMachineFunction(MachineFunction &MF) {
                 Register tmpCpyMI = MI1.getOperand(1).getReg();
                 Register tmpCpyMI1 = MI.getOperand(1).getReg();
 
-                MI.getOperand(1).ChangeToRegister(
-                    tmpCpyMI, false, MI.getOperand(1).isImplicit(), true);
-
-                MI1.getOperand(1).ChangeToRegister(
-                    tmpCpyMI1, false, MI1.getOperand(1).isImplicit(), true);
+                // The two uses change places: neither kill flag holds.
+                MI.getOperand(1).setReg(tmpCpyMI);
+                MI1.getOperand(1).setReg(tmpCpyMI1);
+                MRI->clearKillFlags(tmpCpyMI);
+                MRI->clearKillFlags(tmpCpyMI1);
 
                 changed = true;
 

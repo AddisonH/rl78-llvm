@@ -1,6 +1,6 @@
 ; Test basic block that ends in a single conditional branch.
 ; Ensure the branch is analyzed correctly and removed.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 define void @cond_branch(i1 %cond) {
 ; CHECK-LABEL: _cond_branch:

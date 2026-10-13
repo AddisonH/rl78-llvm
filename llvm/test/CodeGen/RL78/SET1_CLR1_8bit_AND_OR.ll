@@ -1,6 +1,6 @@
 ; Verify that bitwise OR/AND idioms on volatile i8 loads/stores produce set1/clr1.
 
-; RUN: llc < %s -mtriple=rl78 | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=rl78 | FileCheck %s
 
 
 define dso_local void @f1(i8 noundef %0) {

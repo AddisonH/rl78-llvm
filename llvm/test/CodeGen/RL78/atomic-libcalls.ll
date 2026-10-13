@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 ; RUN: llc -mtriple=rl78 -O2 -stop-after=atomic-expand < %s | FileCheck %s --check-prefix=IR
 
 ; RL78 has no lock-free atomics: every atomic operation becomes an __atomic_*

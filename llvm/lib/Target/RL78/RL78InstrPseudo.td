@@ -26,13 +26,13 @@ let mayLoad = 1 in {
 def LOAD8_r_stack_slot
     : RL78Pseudo<2, (outs RL78Reg:$rd), (ins STACKSlot:$addr)>;
 def LOAD16_rp_stack_slot
-    : RL78Pseudo<2, (outs RL78RPRegs:$rd), (ins STACKSlot:$addr)>;
+    : RL78Pseudo<2, (outs RL78SpillRP:$rd), (ins STACKSlot:$addr)>;
 }
 let mayStore = 1 in {
 def STORE8_stack_slot_r
     : RL78Pseudo<2, (outs), (ins STACKSlot:$addr, RL78Reg:$rsrc)>;
 def STORE16_stack_slot_rp
-    : RL78Pseudo<2, (outs), (ins STACKSlot:$addr, RL78RPRegs:$rsrc)>;
+    : RL78Pseudo<2, (outs), (ins STACKSlot:$addr, RL78SpillRP:$rsrc)>;
 }
 
 // An argument passed on the stack is loaded into any register too. Its slot
@@ -320,6 +320,14 @@ let Uses = [CCreg] in
 def BRCC : RL78Pseudo<0, (outs), (ins brtarget:$target, CCOp:$cond),
                       [(RL78brcc bb:$target, imm:$cond)]>;
 
+// A skip as the last instruction of a block, which RL78ExpandPseudoInsts
+// makes of a BRCC: a branch over the one instruction of the next block, or
+// over the BR that follows it.
+let Uses = [CCreg], OneInst = 1 in {
+def SKcc_cg : RL78Pseudo<2, (outs), (ins condSkCZ:$cc)>;
+def SKHcc_cg : RL78Pseudo<2, (outs), (ins condH:$cc)>;
+}
+
 // BT and BF on a bit of A, [HL], an sfr or a saddr byte.
 def BTBF
     : RL78Pseudo<0, (outs), (ins brtarget:$target, CCOp:$cond, RL78AReg:$rsrc,
@@ -344,6 +352,12 @@ def BTBF_saddr
                             imm:$bit)]>;
 }
 } // isTerminator = 1, isBranch = 1
+
+// BC/BNC/BZ/BNZ over the next instructions of a bundle, a distance in bytes
+// (the steps of a shift by a variable count): control stays in the bundle,
+// so this is not a terminator.
+let Uses = [CCreg], hasSideEffects = 1, OneInst = 1 in
+def Bcc_over : RL78Pseudo<2, (outs), (ins i8imm:$dist, condCZ:$cc)>;
 
 //===----------------------------------------------------------------------===//
 // Selects

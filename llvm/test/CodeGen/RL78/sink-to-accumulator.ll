@@ -2,8 +2,8 @@
 ; RL78SinkToAccumulator: MACH_cg reads AX and BC. Its BC operand is loaded through
 ; AX, so loading the AX operand first parks it in a stack slot. Sunk to the
 ; MACH_cg, the AX operand is loaded straight into AX after BC is set up.
-; RUN: llc -O2 < %s | FileCheck %s
-; RUN: llc -O2 -rl78-sink-to-acc=false < %s | FileCheck %s --check-prefix=NOSINK
+; RUN: llc -verify-machineinstrs -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -O2 -rl78-sink-to-acc=false < %s | FileCheck %s --check-prefix=NOSINK
 
 
 
@@ -42,9 +42,8 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw !0xffff2, ax
-; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [de]

@@ -1,6 +1,6 @@
 ; This test verifies the lowering of an i32 call instruction. It should introduce a far branch.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _main:
 ; CHECK: ; %bb.0:

@@ -1,6 +1,6 @@
 ; Verify that the set1 and clr1 are present in the RL78 assembly.
 
-; RUN: llc < %s -mtriple=rl78 | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=rl78 | FileCheck %s
 
 
 define dso_local void @f1(i16 noundef %0) {

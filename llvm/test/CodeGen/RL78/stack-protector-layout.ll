@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; The frame is laid out upwards from SP, so the stack protector's guard has
 ; to be its last object, with the array right below it: an overflow of the

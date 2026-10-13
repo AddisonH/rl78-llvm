@@ -3,7 +3,7 @@
 ; debug instruction.
 
 ; RUN: rm -rf %t && mkdir -p %t/g %t/n
-; RUN: llc -join-splitedges -disable-lsr=true -disable-machine-licm=true -filetype=obj %s -o %t/g/x.o
+; RUN: llc -verify-machineinstrs -join-splitedges -disable-lsr=true -disable-machine-licm=true -filetype=obj %s -o %t/g/x.o
 ; RUN: opt -strip-debug %s | llc -join-splitedges -disable-lsr=true -disable-machine-licm=true -filetype=obj -o %t/n/x.o
 ; RUN: cd %t/g && llvm-objdump -d --no-show-raw-insn x.o > %t/g.txt
 ; RUN: cd %t/n && llvm-objdump -d --no-show-raw-insn x.o > %t/n.txt

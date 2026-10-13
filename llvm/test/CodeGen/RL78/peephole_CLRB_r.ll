@@ -1,5 +1,5 @@
 ; Test replacement of MOV X, A + CLRB A with SHRW AX, 8.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: mov x, a

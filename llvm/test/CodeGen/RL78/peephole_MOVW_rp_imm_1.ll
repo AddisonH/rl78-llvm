@@ -1,5 +1,5 @@
 ; Test replacement of MOVW AX, #0 with CLRW AX.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: movw ax, #0

@@ -110,6 +110,11 @@ def RP6 : RL78RPReg<"HL", 6, [R6, R7], []>, DwarfRegNum<[41]>;
 // instructions on CoreMark): values are both produced and consumed in AX.
 def RL78RPRegs : RegisterClass<"RL78", [i16], 16, (add RP0, RP2, RP4, RP6)>;
 
+// What a 16-bit spill slot is written from and read into: the halves of
+// MACR are spilled too. No value has this class.
+def RL78SpillRP
+    : RegisterClass<"RL78", [i16], 16, (add RL78RPRegs, MACRL, MACRH)>;
+
 def RL78AXRP : RegisterClass<"RL78", [i16], 16, (add RP0)>;
 
 def RL78AXBCRP : RegisterClass<"RL78", [i16], 16, (add RP0, RP2)>;

@@ -1,7 +1,7 @@
 ; Test the LowerShift_Or_LowerRotate_rp_rp function.
 ; Ensure the SHLW_rp_rp instruction is lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK-LABEL: _ab:
 ; CHECK:       [[LOOP:\.LBB0_[0-9]+]]:{{.*}}Inner Loop Header

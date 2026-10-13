@@ -3,7 +3,7 @@
 ; FIXME: The BTCLR is not formed: RL78SelectBTCLR only removes the clear from
 ; a block that the branch alone enters, and here the fall-through path of the
 ; same branch enters it too (the bit is known clear there).
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 @g_cmd_flag.0 = global i8 0
 

@@ -1,6 +1,6 @@
 ; Testing validity of section prefixes for global objects.
 
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 
 define void @foo() {

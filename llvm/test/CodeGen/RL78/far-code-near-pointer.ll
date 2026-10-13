@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -mattr=+far-code -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -mattr=+far-code -O2 < %s | FileCheck %s
 
 ; With far code, a 16-bit pointer to a function (a C++ vtable slot, a pointer
 ; to member function) is a plain 16-bit reference: the linker points it at a

@@ -3,7 +3,7 @@
 ; LowerADDE_SUBE_rp_rp functions.
 ; Ensure ADDE_rp_imm, ADDE_rp_memri, ADDE_rp_abs16, ADDE_rp_rp instructions are lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 @xa = dso_local local_unnamed_addr global i32 0, align 2
 

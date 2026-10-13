@@ -227,6 +227,11 @@ BitVector RL78RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   Reserved.set(RL78::SPreg);
   Reserved.set(RL78::ES);
+  // CS is zero except around a far indirect call or jump.
+  Reserved.set(RL78::CS);
+  // The program status word always has a value; PUSH PSW and POP PSW save
+  // the interrupt enable flag around a sequence that must not be interrupted.
+  Reserved.set(RL78::PSW);
 
   return Reserved;
 }
@@ -237,6 +242,16 @@ BitVector RL78RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 const TargetRegisterClass *
 RL78RegisterInfo::getPointerRegClass(unsigned Kind) const {
   return &RL78::RL78RPRegsRegClass;
+}
+
+// The flags of a read that saves \p Reg around a use of it as a temporary:
+// an undef use when the register has no value that \p I or a later
+// instruction reads.
+static auto saveState(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                      MCRegister Reg) {
+  const auto *TII = static_cast<const RL78InstrInfo *>(
+      MBB.getParent()->getSubtarget().getInstrInfo());
+  return getUndefRegState(!TII->isLiveBefore(MBB, I, Reg));
 }
 
 void buildWordBCAccess(MachineBasicBlock &MBB, MachineFunction &MF,
@@ -252,7 +267,7 @@ void buildWordBCAccess(MachineBasicBlock &MBB, MachineFunction &MF,
 
   if (saveBC) {
     BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP2, RegState::Kill);
+        .addReg(RL78::RP2, saveState(MBB, II, RL78::RP2));
     if (FrameReg == RL78::SPreg) {
       offset = offset + 2;
     }
@@ -309,7 +324,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // MOVW BC, AX.
     // POP AX.
     BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP0, RegState::Kill);
+        .addReg(RL78::RP0, saveState(MBB, II, RL78::RP0));
     if (!isLoad) {
       BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::RP0)
           .addReg(mainRegister, RegState::Kill);
@@ -349,9 +364,9 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // COPY A, E.
     // POP DE.
     BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP4, RegState::Kill);
+        .addReg(RL78::RP4, saveState(MBB, II, RL78::RP4));
     BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::R4)
-        .addReg(RL78::R1, RegState::Kill);
+        .addReg(RL78::R1, saveState(MBB, II, RL78::R1));
     buildWordBCAccess(MBB, MF, TFI, II, DL, TII, isLoad, is8bit, FrameReg,
                       Offset, 2);
     BuildMI(MBB, II, DL, TII->get(RL78::COPY), RL78::R0)
@@ -369,10 +384,10 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
     // if load COPY mainRegister, AX/A.
     // POP AX.
     BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP0, RegState::Kill);
+        .addReg(RL78::RP0, saveState(MBB, II, RL78::RP0));
     if (!isLoad) {
       BuildMI(MBB, II, DL, TII->get(RL78::COPY), is8bit ? RL78::R1 : RL78::RP0)
-          .addReg(mainRegister, RegState::Kill);
+          .addReg(mainRegister, getKillRegState(MI.getOperand(2).isKill()));
     }
     buildWordBCAccess(MBB, MF, TFI, II, DL, TII, isLoad, is8bit, FrameReg,
                       Offset, 2);
@@ -384,6 +399,7 @@ void build16bitAccess(MachineBasicBlock &MBB, MachineFunction &MF,
   }
 
   MI.eraseFromParent();
+  static_cast<const RL78InstrInfo *>(TII)->setExchangeFlags(MBB);
 }
 
 static void loadUnalignedSP(MachineBasicBlock &MBB,
@@ -397,7 +413,7 @@ static void loadUnalignedSP(MachineBasicBlock &MBB,
         .addImm(offset);
   else if (isUInt<16>(offset + 2)) {
     BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-        .addReg(RL78::RP2, RegState::Kill);
+        .addReg(RL78::RP2, saveState(MBB, II, RL78::RP2));
     unsigned additionalAdj = 0;
     if (actualFrameReg == RL78::SPreg) {
       BuildMI(MBB, II, DL, TII->get(RL78::MOVW_AX_SP), RL78::RP0)
@@ -492,12 +508,12 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     if (FrameReg == RL78::RP4) {
       // It means we first need to retrieve the old SP.
       BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-          .addReg(RL78::RP6, RegState::Kill);
+          .addReg(RL78::RP6, saveState(MBB, II, RL78::RP6));
       offsetAdj += 2;
 
       if (!IsWordLoad) {
         BuildMI(MBB, II, DL, TII->get(RL78::PUSH_rp))
-            .addReg(RL78::RP0, RegState::Kill);
+            .addReg(RL78::RP0, saveState(MBB, II, RL78::RP0));
         offsetAdj += 2;
       }
 
@@ -550,7 +566,7 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       return false;
     } else if (isUInt<16>(Offset - 2)) {
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp))
-          .addReg(RL78::RP2, RegState::Kill);
+          .addReg(RL78::RP2, saveState(MBB, II, RL78::RP2));
 
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::MOVW_rp_SP), RL78::RP2)
           .addReg(RL78::SPreg);

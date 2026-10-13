@@ -2,7 +2,7 @@
 ; This test verifies the i32 PTRADD, which returns the unchanged high part and the sum consisting of the
 ; pointer's low part and its offset.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 
 define dso_local i8 @foo(i16 noundef %0, ptr addrspace(2) nocapture noundef readonly %1) local_unnamed_addr #0 {

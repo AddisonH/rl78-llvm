@@ -4,7 +4,7 @@
 ; in between: the high word of the first operand is loaded into AX. The low
 ; word cannot be (the compare of the high words needs AX first), and neither
 ; can a value that lives across something else in AX.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 @a = global [6 x i32] zeroinitializer
 @m = global i32 0

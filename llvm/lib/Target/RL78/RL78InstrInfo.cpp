@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RL78Subtarget.h"
+#include "llvm/CodeGen/LiveRegUnits.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -146,7 +147,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
     FirstInstruction = BuildMI(*BB, MI, DL, II->get(RL78::CMP0_r))
                            .addReg(RL78::R3, RegState::Kill);
     if (OpInstrCount > 1)
-      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_rel8))
+      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_over))
           .addImm(JumpSize)
           .addImm(RL78CC::RL78CC_Z);
     else
@@ -156,7 +157,7 @@ static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
                            .addReg(RL78::R3, RegState::Kill)
                            .addImm(CounterShiftAmount);
     if (OpInstrCount > 1 || JumpSize > 0)
-      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_rel8))
+      BuildMI(*BB, MI, DL, II->get(RL78::Bcc_over))
           .addImm(JumpSize)
           .addImm(RL78CC::RL78CC_NC);
     else
@@ -260,7 +261,10 @@ static bool Build_MUL16_rp_rp_S2(const RL78InstrInfo *II,
   FirstInstruction =
       BuildMI(*BB, MI, DL, II->get(RL78::PUSH_PSW))
           .addReg(RL78::PSW)
-          .addReg(RL78::CCreg, RegState::Implicit);
+          // The flags are saved with it, whether they have a value or not.
+          .addReg(RL78::CCreg,
+                  RegState::Implicit |
+                      getUndefRegState(!II->isLiveBefore(*BB, MI, RL78::CCreg)));
 
   // Maskable interrupt acknowledgment by vectored interrupt is disabled (with
   // the interrupt enable flag (IE) cleared (0)).
@@ -544,7 +548,102 @@ bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
   return true;
 }
 
+static bool isExchange(const MachineInstr &MI) {
+  return MI.getOpcode() == RL78::XCH_A_X || MI.getOpcode() == RL78::XCH_A_r ||
+         MI.getOpcode() == RL78::XCHW_AX_rp;
+}
+
+void RL78InstrInfo::setExchangeFlags(MachineBasicBlock &MBB,
+                                     const MachineInstr *Ignore) const {
+  const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+  auto Skip = [&](const MachineInstr &MI) {
+    return &MI == Ignore || MI.isDebugOrPseudoInstr();
+  };
+
+  // Backwards: the half of an exchange whose result nothing reads, and the
+  // kill flags, which the code that builds exchanges and saves does not know.
+  LiveRegUnits Live(getRegisterInfo());
+  Live.addLiveOuts(MBB);
+  for (MachineInstr &MI : reverse(MBB)) {
+    if (Skip(MI))
+      continue;
+    if (isExchange(MI)) {
+      // Operands: the two definitions, then the two uses tied to them. Each
+      // definition takes the value of the other use.
+      for (unsigned I : {0u, 1u}) {
+        MachineOperand &Def = MI.getOperand(I);
+        bool Unused = Live.available(Def.getReg());
+        Def.setIsDead(Unused);
+        MI.getOperand(3 - I).setIsUndef(Unused);
+      }
+    }
+    LiveRegUnits After = Live;
+    for (const MachineOperand &MO : MI.all_defs())
+      if (MO.getReg().isPhysical())
+        After.removeReg(MO.getReg());
+    for (MachineOperand &MO : MI.all_uses())
+      if (MO.getReg().isPhysical() && !MRI.isReserved(MO.getReg()))
+        MO.setIsKill(MO.readsReg() && After.available(MO.getReg()));
+    Live.stepBackward(MI);
+  }
+
+  // Forwards: an exchange with a register that has no value at all, and a
+  // push of one (a save around its use as a temporary, or two bytes of
+  // stack).
+  LiveRegUnits Defined(getRegisterInfo());
+  Defined.addLiveIns(MBB);
+  for (MachineInstr &MI : MBB) {
+    if (Skip(MI))
+      continue;
+    if (isExchange(MI) || MI.getOpcode() == RL78::PUSH_rp)
+      for (MachineOperand &Use : MI.explicit_uses())
+        if (!Use.isUndef() && Defined.available(Use.getReg())) {
+          Use.setIsUndef();
+          Use.setIsKill(false);
+        }
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isRegMask())
+        Defined.removeRegsNotPreserved(MO.getRegMask());
+      else if (MO.isReg() && MO.getReg().isPhysical() && MO.isUse() &&
+               MO.isKill())
+        Defined.removeReg(MO.getReg());
+    }
+    for (const MachineOperand &MO : MI.all_defs())
+      if (MO.getReg().isPhysical() && !MO.isDead())
+        Defined.addReg(MO.getReg());
+  }
+}
+
+bool RL78InstrInfo::isLiveBefore(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator I,
+                                 MCRegister Reg) const {
+  LiveRegUnits Live(getRegisterInfo());
+  Live.addLiveOuts(MBB);
+  for (MachineBasicBlock::iterator It = MBB.end(); It != I;)
+    if (!(--It)->isDebugOrPseudoInstr())
+      Live.stepBackward(*It);
+  return !Live.available(Reg);
+}
+
+// The COPY that copyPhysReg is called to replace, if \p I is that: it is
+// still in the block, and what is live is what is live after it.
+static bool isCopyBeingLowered(MachineBasicBlock &MBB,
+                               MachineBasicBlock::iterator I, Register DestReg,
+                               Register SrcReg) {
+  return I != MBB.end() && I->isCopy() &&
+         I->getOperand(0).getReg() == DestReg &&
+         I->getOperand(1).getReg() == SrcReg;
+}
+
 bool RL78InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
+  MachineBasicBlock &MBB = *MI.getParent();
+  if (!expandPseudo(MI))
+    return false;
+  setExchangeFlags(MBB);
+  return true;
+}
+
+bool RL78InstrInfo::expandPseudo(MachineInstr &MI) const {
   MachineBasicBlock *BB = MI.getParent();
   DebugLoc DL = BB->findDebugLoc(MI);
   if (expandWideOnAX(MI))
@@ -902,6 +1001,28 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                 const DebugLoc &DL, Register DestReg,
                                 Register SrcReg, bool KillSrc,
                                 bool RenamableDest, bool RenamableSrc) const {
+  bool AtBegin = I == MBB.begin();
+  MachineBasicBlock::iterator Before = AtBegin ? I : std::prev(I);
+  bool Lowering = isCopyBeingLowered(MBB, I, DestReg, SrcReg);
+  buildCopy(MBB, I, Lowering ? std::next(I) : I, DL, DestReg, SrcReg, KillSrc);
+  // A copy through an exchange with A or AX, or with AX saved around it:
+  // which half of the exchange is unused, and whether AX has a value to
+  // save, depends on what is live here.
+  for (MachineBasicBlock::iterator It = AtBegin ? MBB.begin() : std::next(Before);
+       It != I; ++It)
+    if (isExchange(*It) || It->getOpcode() == RL78::PUSH_rp) {
+      setExchangeFlags(MBB, Lowering ? &*I : nullptr);
+      break;
+    }
+}
+
+// Build the copy before \p I; \p After is where the liveness of a register
+// used as a temporary is taken.
+void RL78InstrInfo::buildCopy(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I,
+                              MachineBasicBlock::iterator After,
+                              const DebugLoc &DL, Register DestReg,
+                              Register SrcReg, bool KillSrc) const {
 #define MACRHigh 0xFFF2
 #define MACRLow 0xFFF0
   // 8 bit copy:
@@ -931,7 +1052,8 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       if (MBB.getParent()->getFunction().hasOptSize() &&
           (DestReg != RL78::R0)) {
         BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
-            .addReg(RL78::RP0, RegState::Kill);
+            .addReg(RL78::RP0,
+                    getUndefRegState(!isLiveBefore(MBB, After, RL78::RP0)));
         // mov A, r
         BuildMI(MBB, I, DL, get(RL78::MOV_A_r), RL78::R1)
             .addReg(SrcReg, getKillRegState(KillSrc));
@@ -1015,14 +1137,13 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   else if (RL78::CS == DestReg && RL78::RL78Bank0RegRegClass.contains(SrcReg)) {
     if (RL78::R1 == SrcReg) {
       BuildMI(MBB, I, DL, get(RL78::MOV_CS_A), RL78::CS)
-          .addReg(RL78::R1, RegState::Kill);
+          .addReg(RL78::R1, getKillRegState(KillSrc));
     } else {
       BuildMI(MBB, I, DL, get(getXCHOpcode(SrcReg)), RL78::R1)
           .addReg(SrcReg, RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
           .addReg(SrcReg, RegState::Kill);
-      BuildMI(MBB, I, DL, get(RL78::MOV_CS_A), RL78::CS)
-          .addReg(RL78::R1, RegState::Kill);
+      BuildMI(MBB, I, DL, get(RL78::MOV_CS_A), RL78::CS).addReg(RL78::R1);
       BuildMI(MBB, I, DL, get(getXCHOpcode(SrcReg)), RL78::R1)
           .addReg(SrcReg, RegState::Define)
           .addReg(RL78::R1, RegState::Kill)
@@ -1034,7 +1155,8 @@ void RL78InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // One half of MACR to the other (a MACH result that is the next MACH's
     // addend): both are memory, so the value goes through AX, which is saved
     // around it.
-    BuildMI(MBB, I, DL, get(RL78::PUSH_rp)).addReg(RL78::RP0, RegState::Kill);
+    BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
+        .addReg(RL78::RP0, getUndefRegState(!isLiveBefore(MBB, After, RL78::RP0)));
     BuildMI(MBB, I, DL, get(RL78::MOVW_rp_abs16), RL78::RP0)
         .addImm(SrcReg == RL78::MACRH ? MACRHigh : MACRLow)
         .addReg(SrcReg, RegState::Implicit | getKillRegState(KillSrc));

@@ -1,4 +1,4 @@
-; RUN: llc -filetype=obj < %s | llvm-objdump -dr - | FileCheck %s
+; RUN: llc -verify-machineinstrs -filetype=obj < %s | llvm-objdump -dr - | FileCheck %s
 
 ; A comparison with a function address plus a constant folds into one
 ; immediate operand, "movw bc, #_f+64"; its fixup used to assume a plain

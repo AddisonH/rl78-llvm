@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; i32 multiplies whose operands are known (not just explicitly zero-extended)
 ; to fit in 8 bits use MULU, and those of 16-bit operands MULHU_cg; neither calls

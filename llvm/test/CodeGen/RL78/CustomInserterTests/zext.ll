@@ -2,7 +2,7 @@
 ; Test the LowerEXTEND function.
 ; Ensure the ZEXT_8_16 instruction is lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 
 define dso_local i8 @shift_right_by_x_places(i8 noundef %0, i16 noundef %1) local_unnamed_addr #0 {

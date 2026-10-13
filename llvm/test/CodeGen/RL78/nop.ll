@@ -1,4 +1,4 @@
-;RUN: llc -mtriple=rl78 -minsert-nop-with-label=nop.ll,3,LABEL2 < %s | FileCheck %s
+;RUN: llc -verify-machineinstrs -mtriple=rl78 -minsert-nop-with-label=nop.ll,3,LABEL2 < %s | FileCheck %s
 
 source_filename = "nop.ll"
 

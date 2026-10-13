@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; RL78 memory operands take one register plus an unsigned byte displacement.
 ; LSR must not advance the pointer first and address the unrolled accesses

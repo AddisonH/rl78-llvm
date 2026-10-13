@@ -55,9 +55,13 @@ public:
   }
 
   /// The conditional skip on \p CC.
-  static unsigned getSkipOpcode(int64_t CC) {
-    return CC == RL78CC::RL78CC_H || CC == RL78CC::RL78CC_NH ? RL78::SKHcc
-                                                             : RL78::SKcc;
+  /// The skip on condition \p CC; with \p Terminator the form that ends a
+  /// block (a branch over the next instruction, which is in another block or
+  /// is a branch itself).
+  static unsigned getSkipOpcode(int64_t CC, bool Terminator = false) {
+    if (CC == RL78CC::RL78CC_H || CC == RL78CC::RL78CC_NH)
+      return Terminator ? RL78::SKHcc_cg : RL78::SKHcc;
+    return Terminator ? RL78::SKcc_cg : RL78::SKcc;
   }
 
   /// The number of places to the left that ROTL16_r_imm or ROTR16_r_imm
@@ -85,6 +89,10 @@ public:
 
   /// Expands the 16-bit pseudos that are two 8-bit operations on AX.
   bool expandWideOnAX(MachineInstr &MI) const;
+  bool expandPseudo(MachineInstr &MI) const;
+  void buildCopy(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                 MachineBasicBlock::iterator After, const DebugLoc &DL,
+                 Register DestReg, Register SrcReg, bool KillSrc) const;
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
@@ -141,6 +149,19 @@ public:
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
   
   bool expandPostRAPseudo(MachineInstr &MI) const override;
+
+  /// Set the flags of the exchange instructions (XCH, XCHW) of \p MBB, and
+  /// the kill flags of the block. An exchange often moves one value only:
+  /// the half that comes from a register without a value is then an undef
+  /// use and a dead definition. \p Ignore is an instruction that is about
+  /// to be removed.
+  void setExchangeFlags(MachineBasicBlock &MBB,
+                        const MachineInstr *Ignore = nullptr) const;
+
+  /// True if \p Reg, or a part of it, has a value that \p I or a later
+  /// instruction reads.
+  bool isLiveBefore(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                    MCRegister Reg) const;
 
   /// Returns the size in bytes of the specified MachineInstr, or ~0U
   /// when this function is not implemented by a target.

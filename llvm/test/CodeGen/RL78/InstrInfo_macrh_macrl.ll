@@ -1,6 +1,6 @@
 ; Verifies the if (SrcReg == RL78::MACRH || SrcReg == RL78::MACRL)
 ; from InstrInfo is not deadcode
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK: machu
 ; CHECK: machu

@@ -1,6 +1,6 @@
 ; This test verifies the build16bitAccess function when the main register is RP2.
 
-; RUN: llc -mtriple=rl78 -rl78-frame-order-density=false %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -rl78-frame-order-density=false %s -o - | FileCheck %s
 
 ; CHECK: _test_build16bitAccess_RP2:
 ; CHECK: 	push ax

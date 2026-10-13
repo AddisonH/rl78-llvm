@@ -3,7 +3,7 @@
 ; the bit in memory. The address of a stack slot is computed with MOVW AX, SP
 ; (and ADDW, which changes the flags): it must come before the first of them,
 ; not between. The MOV1 CY, A.bit used to be deleted as dead.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 declare void @use(ptr)
 declare void @llvm.rl78.mov1.p0(ptr, i8, i8, i8)

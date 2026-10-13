@@ -97,7 +97,8 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       (std::next(NextMBBI) == targetMBB.getIterator())) {
     // Insert a conditional skip instruction.
     BuildMI(MBB, MI, MI.getDebugLoc(),
-            TII->get(RL78InstrInfo::getSkipOpcode(MI.getOperand(1).getImm())))
+            TII->get(RL78InstrInfo::getSkipOpcode(MI.getOperand(1).getImm(),
+                                                  /*Terminator=*/true)))
         .add(MI.getOperand(1));
   } else {
     // First check if the jump is in range [-128 + size(instruction), +127]
@@ -211,7 +212,7 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
                                              ? RL78CC::CondCodes::RL78CC_NC
                                              : RL78CC::CondCodes::RL78CC_C;
 
-        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SKcc))
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(RL78::SKcc_cg))
             .addImm(ReversedInCy);
 
         if (isInt<16>(jumpSize))
@@ -224,7 +225,8 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       }
       case RL78::BRCC:
         BuildMI(MBB, MI, MI.getDebugLoc(),
-                TII->get(RL78InstrInfo::getSkipOpcode(Cond[0].getImm())))
+                TII->get(RL78InstrInfo::getSkipOpcode(Cond[0].getImm(),
+                                                    /*Terminator=*/true)))
             .addImm(Cond[0].getImm());
         LLVM_FALLTHROUGH;
       case RL78::BR:

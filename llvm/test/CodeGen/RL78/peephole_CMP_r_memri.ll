@@ -1,5 +1,5 @@
 ; Test replacement of MOV A, X + CMP A, [HL+byte] with CMPS X, [HL+byte].
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: cmp a, [hl+5]

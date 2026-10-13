@@ -794,7 +794,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                     .add(MI.getOperand(0));
                 BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
                     .add(MI.getOperand(0))
-                    .add(MI.getOperand(0));
+                    .addReg(MI.getOperand(0).getReg(), RegState::Kill);
                 MI.eraseFromParent();
               }
             }
@@ -918,7 +918,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // Insert 2 x INCW instructions
           BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp))
               .add(MI.getOperand(0))
-              .add(MI.getOperand(1));
+              .addReg(MI.getOperand(1).getReg());
           BuildMI(MBB, MI, DL, TII->get(RL78::INCW_rp))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
@@ -931,7 +931,7 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
           // Insert 2 x DECW instructions
           BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
               .add(MI.getOperand(0))
-              .add(MI.getOperand(1));
+              .addReg(MI.getOperand(1).getReg());
           BuildMI(MBB, MI, DL, TII->get(RL78::DECW_rp))
               .add(MI.getOperand(0))
               .add(MI.getOperand(1));
@@ -1114,6 +1114,8 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
       }
     }
   }
+  for (MachineBasicBlock &MBB : MF)
+    static_cast<const RL78InstrInfo *>(TII)->setExchangeFlags(MBB);
   LLVM_DEBUG(MF.dump());
   return true;
 }

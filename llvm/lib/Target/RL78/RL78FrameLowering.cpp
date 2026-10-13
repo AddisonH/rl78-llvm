@@ -288,7 +288,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
   } else if (NumBytes > 0) {
     if (NumBytes == 2)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::PUSH_rp))
-          .addReg(RL78::RP0)
+          .addReg(RL78::RP0, RegState::Undef)
           .setMIFlags(MachineInstr::FrameSetup);
     else if (NumBytes < 0x100)
       BuildMI(MBB, MBBI, dl, TII.get(RL78::SUBW_SP_i8), RL78::SPreg)
@@ -479,6 +479,7 @@ void RL78FrameLowering::emitPrologue(MachineFunction &MF,
       llvm_unreachable("Invalid stack offset!");
   }
 
+  TII.setExchangeFlags(MBB);
 }
 
 MachineBasicBlock::iterator RL78FrameLowering::eliminateCallFramePseudoInstr(
@@ -781,6 +782,8 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
       }
     }
   }
+  static_cast<const RL78InstrInfo *>(MF.getSubtarget().getInstrInfo())
+      ->setExchangeFlags(MBB);
 }
 
 bool RL78FrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {

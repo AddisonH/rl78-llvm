@@ -70,6 +70,15 @@ static bool lowerSpecial(const MCInst &In, SmallVectorImpl<MCInst> &Out) {
     return As(RL78::CALLT);
   case RL78::BR_AX_cg:
     return As(RL78::BR_AX);
+  case RL78::Bcc_over:
+    Out.push_back(MCInstBuilder(RL78::Bcc_rel8)
+                      .addOperand(In.getOperand(0))
+                      .addOperand(In.getOperand(1)));
+    return true;
+  case RL78::SKcc_cg:
+    return As(RL78::SKcc);
+  case RL78::SKHcc_cg:
+    return As(RL78::SKHcc);
   case RL78::BR_addr16:
     return As(RL78::BR_abs16);
   case RL78::BR_addr20:

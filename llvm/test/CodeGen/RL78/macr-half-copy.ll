@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; The high half of one MACH result is the low half of the next addend: a copy
 ; from MACRH to MACRL. Both are memory, so the value goes through AX, saved

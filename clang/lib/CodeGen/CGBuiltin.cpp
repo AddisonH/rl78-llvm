@@ -4307,6 +4307,9 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Locality = (E->getNumArgs() > 2)
                    ? EmitScalarOrConstFoldImmArg(ICEArguments, 2, E)
                    : llvm::ConstantInt::get(Int32Ty, 3);
+    // The intrinsic takes i32 arguments; int is narrower on 16-bit targets.
+    RW = Builder.CreateIntCast(RW, Int32Ty, /*isSigned=*/false);
+    Locality = Builder.CreateIntCast(Locality, Int32Ty, /*isSigned=*/false);
     Value *Data = llvm::ConstantInt::get(Int32Ty, 1);
     Function *F = CGM.getIntrinsic(Intrinsic::prefetch, Address->getType());
     Builder.CreateCall(F, {Address, RW, Locality, Data});

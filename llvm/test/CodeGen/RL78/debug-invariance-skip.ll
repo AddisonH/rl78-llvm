@@ -3,7 +3,7 @@
 ; prevent it.
 
 ; RUN: rm -rf %t && mkdir -p %t/g %t/n
-; RUN: llc -filetype=obj %s -o %t/g/x.o
+; RUN: llc -verify-machineinstrs -filetype=obj %s -o %t/g/x.o
 ; RUN: opt -strip-debug %s | llc -filetype=obj -o %t/n/x.o
 ; RUN: cd %t/g && llvm-objdump -d --no-show-raw-insn x.o > %t/g.txt
 ; RUN: cd %t/n && llvm-objdump -d --no-show-raw-insn x.o > %t/n.txt

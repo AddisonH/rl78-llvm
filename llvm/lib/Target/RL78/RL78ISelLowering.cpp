@@ -405,7 +405,10 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
   }
 
-  Chain = DAG.getCALLSEQ_START(Chain, ArgsSize, 0, dl);
+  // The call frame is part of the function's frame, so an argument that is
+  // copied with a call of memcpy is copied before the call sequence starts:
+  // call sequences do not nest. The stores of the others are made after it.
+  SmallVector<std::pair<SDValue, SDValue>, 8> ArgStores;
 
   bool isMemLoc = false;
   // Walk the register / memloc assignments, inserting copies / loads.
@@ -468,26 +471,27 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
         int FI = MF.getFrameInfo().CreateFixedObject(Size, Offset, false);
         SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
         SDValue SizeNode = DAG.getConstant(Size, dl, MVT::i16);
-        SDValue MemCpyChain =
-            DAG.getMemcpy(Chain, dl, FIPtr, LoadAddr, SizeNode, Align(2),
-                          Align(2),
-                          false, // isVolatile,
-                          false, // AlwaysInline
-                          /*CI=*/nullptr, std::nullopt,
-                          MachinePointerInfo(), MachinePointerInfo());
+        Chain = DAG.getMemcpy(Chain, dl, FIPtr, LoadAddr, SizeNode, Align(2),
+                              Align(2),
+                              false, // isVolatile,
+                              false, // AlwaysInline
+                              /*CI=*/nullptr, std::nullopt,
+                              MachinePointerInfo(), MachinePointerInfo());
         i += PartNum - 1;
-        MemOpChains.push_back(MemCpyChain);
       } else {
         int Offset = VA.getLocMemOffset();
         int FI = MF.getFrameInfo().CreateFixedObject(
             Arg.getValueSizeInBits() / 8, Offset, false);
 
-        SDValue FIPtr = DAG.getFrameIndex(FI, FIPtrTy);
-        MemOpChains.push_back(
-            DAG.getStore(Chain, dl, Arg, FIPtr, MachinePointerInfo()));
+        ArgStores.push_back({Arg, DAG.getFrameIndex(FI, FIPtrTy)});
       }
     }
   }
+
+  Chain = DAG.getCALLSEQ_START(Chain, ArgsSize, 0, dl);
+  for (auto &[Arg, FIPtr] : ArgStores)
+    MemOpChains.push_back(
+        DAG.getStore(Chain, dl, Arg, FIPtr, MachinePointerInfo()));
 
   if (!dyn_cast<GlobalAddressSDNode>(Callee) || isMemLoc)
     isTailCall = false;
@@ -3711,6 +3715,11 @@ RL78TargetLowering::LowerADDE_SUBE_rp_imm(unsigned int, MachineInstr &MI,
       const BasicBlock *LLVM_BB = BB->getBasicBlock();
       MachineBasicBlock *CarryAddMBB = MF->CreateMachineBasicBlock(LLVM_BB);
       MachineBasicBlock *sinkMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+      // The new blocks may be inside a call sequence.
+      unsigned CallFrameSize =
+          BB->getParent()->getSubtarget().getInstrInfo()->getCallFrameSizeAt(MI);
+      CarryAddMBB->setCallFrameSize(CallFrameSize);
+      sinkMBB->setCallFrameSize(CallFrameSize);
       MF->insert(It, CarryAddMBB);
       MF->insert(It, sinkMBB);
       sinkMBB->splice(sinkMBB->begin(), BB,
@@ -4034,6 +4043,11 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
   MachineFunction *F = BB->getParent();
   MachineBasicBlock *copy0MBB = F->CreateMachineBasicBlock(LLVM_BB);
   MachineBasicBlock *sinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  // The new blocks may be inside a call sequence.
+  unsigned CallFrameSize =
+      F->getSubtarget().getInstrInfo()->getCallFrameSizeAt(MI);
+  copy0MBB->setCallFrameSize(CallFrameSize);
+  sinkMBB->setCallFrameSize(CallFrameSize);
   F->insert(It, copy0MBB);
   F->insert(It, sinkMBB);
   // Transfer the remainder of BB and its successor edges to sinkMBB.
@@ -4152,6 +4166,11 @@ RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
   MachineFunction *F = BB->getParent();
   MachineBasicBlock *copy0MBB = F->CreateMachineBasicBlock(LLVM_BB);
   MachineBasicBlock *sinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  // The new blocks may be inside a call sequence.
+  unsigned CallFrameSize =
+      F->getSubtarget().getInstrInfo()->getCallFrameSizeAt(MI);
+  copy0MBB->setCallFrameSize(CallFrameSize);
+  sinkMBB->setCallFrameSize(CallFrameSize);
   F->insert(It, copy0MBB);
   F->insert(It, sinkMBB);
   // Transfer the remainder of BB and its successor edges to sinkMBB.
@@ -4272,6 +4291,12 @@ MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
   MachineBasicBlock *sinkMBB2 = MF->CreateMachineBasicBlock(LLVM_BB);
   MachineBasicBlock *sinkMBB3 = MF->CreateMachineBasicBlock(LLVM_BB);
   MachineBasicBlock *sinkMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+  // The new blocks may be inside a call sequence.
+  unsigned CallFrameSize =
+      BB->getParent()->getSubtarget().getInstrInfo()->getCallFrameSizeAt(MI);
+  sinkMBB2->setCallFrameSize(CallFrameSize);
+  sinkMBB3->setCallFrameSize(CallFrameSize);
+  sinkMBB->setCallFrameSize(CallFrameSize);
   //
   // Insert the blocks.
   MF->insert(It, sinkMBB2);

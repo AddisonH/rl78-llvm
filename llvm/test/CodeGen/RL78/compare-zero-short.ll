@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CMPW AX, #0 is 3 bytes. OR A, X sets Z the same way in 2 when A is not
 ; needed afterwards; CLRW BC + CMPW AX, BC is 2 bytes when AX is still needed

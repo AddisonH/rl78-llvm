@@ -1,6 +1,6 @@
 ; This test verifies the general fallback inside the build16bitAccess function.
 
-; RUN: llc -mtriple=rl78 -rl78-frame-order-density=false %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -rl78-frame-order-density=false %s -o - | FileCheck %s
 
 ; CHECK: _test_8bit_R0_store:
 ; CHECK:	push ax

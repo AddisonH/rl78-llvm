@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; A constant address in the short direct area (FFE20H to FFF1FH), as in a
 ; register written "(*(volatile unsigned char *)0xFFE30)", uses the saddr

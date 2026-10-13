@@ -2,7 +2,7 @@
 ; Test the LowerDIVWU function.
 ; Ensure the UDIVREM32_r_r instruction is lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 
 define dso_local i32 @aa(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {

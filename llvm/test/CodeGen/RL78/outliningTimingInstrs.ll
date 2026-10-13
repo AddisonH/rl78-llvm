@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -enable-machine-outliner < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -enable-machine-outliner < %s | FileCheck %s
 
 ; NOP (__nop, asm("nop")) is never outlined, even when the same run repeats:
 ; an outlined call/ret would change the cycle count of a timing delay.

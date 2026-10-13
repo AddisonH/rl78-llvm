@@ -1,7 +1,7 @@
 ; Test the LowerSELECTCC function.
 ; Ensure the SELECTCCBTBF16_imm_imm instruction is lowered correctly.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _am:
 ; CHECK: ; %bb.0:

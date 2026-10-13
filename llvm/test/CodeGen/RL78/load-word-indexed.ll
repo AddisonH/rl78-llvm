@@ -2,7 +2,7 @@
 ; A word at base + zero-extended byte: [HL+B] and [HL+C] address bytes only,
 ; so the sum is computed and used as a base register. The load and the store
 ; could not be selected.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 define i16 @load_word(ptr %p, i8 %c) {
 ; CHECK-LABEL: load_word:

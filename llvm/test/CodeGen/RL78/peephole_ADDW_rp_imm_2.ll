@@ -1,5 +1,5 @@
 ; Test replacement of ADDW AX, #-2 with 2 x DECW AX.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: addw ax, #-2

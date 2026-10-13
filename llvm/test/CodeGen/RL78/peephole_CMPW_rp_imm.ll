@@ -1,5 +1,5 @@
 ; Test replacement of XOR1 CY with ADDW AX, AX.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: xor1 cy

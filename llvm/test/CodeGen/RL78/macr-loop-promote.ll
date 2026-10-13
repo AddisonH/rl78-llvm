@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 -O2 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 ; The accumulator of a MACH_cg loop stays in MACR: written once before the loop,
 ; read once after it, no MACR traffic inside the loop.
 

@@ -2,7 +2,7 @@
 ; This test verifies when IsSrcAddress is false inside ReplaceNodeResults for an ADDRSPACECAST.
 ; If the address is null, the HighValue will be 0; if the address is not null, it will be 15.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 
 define dso_local void @func() local_unnamed_addr #1 {

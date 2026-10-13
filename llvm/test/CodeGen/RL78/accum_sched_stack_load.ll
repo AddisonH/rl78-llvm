@@ -10,9 +10,9 @@
 ;
 ;   movw ax, [sp+N] / movw bc, ax / movw ax, [sp+M]
 ;
-; RUN: llc -O2 -mtriple=rl78 -rl78-sink-to-acc=false -rl78-fold-reloads=false -rl78-accum-sched=false < %s \
+; RUN: llc -verify-machineinstrs -O2 -mtriple=rl78 -rl78-sink-to-acc=false -rl78-fold-reloads=false -rl78-accum-sched=false < %s \
 ; RUN:   | FileCheck %s --check-prefix=NOSCHED
-; RUN: llc -O2 -mtriple=rl78 -rl78-sink-to-acc=false -rl78-fold-reloads=false -rl78-accum-sched=true < %s \
+; RUN: llc -verify-machineinstrs -O2 -mtriple=rl78 -rl78-sink-to-acc=false -rl78-fold-reloads=false -rl78-accum-sched=true < %s \
 ; RUN:   | FileCheck %s --check-prefix=SCHED
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"

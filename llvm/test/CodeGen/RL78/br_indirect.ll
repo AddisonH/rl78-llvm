@@ -1,6 +1,6 @@
 ; Test basic block that ends in indirect branch. 
 ; Ensure that analyzeBranch reports this terminator cannot be analyzed and removeBranch/insertBranch is never called.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 define void @test_indirect(i8* %ptr) {
 ; CHECK-LABEL: _test_indirect:

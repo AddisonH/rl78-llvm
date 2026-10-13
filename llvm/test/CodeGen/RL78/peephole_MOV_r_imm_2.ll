@@ -1,5 +1,5 @@
 ; Test replacement of MOV A, #0 with CLRB A.
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
 
 ; CHECK-LABEL: _foo:
 ; CHECK-NOT: mov a, #0

@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=rl78 < %s | FileCheck %s
-; RUN: llc -mtriple=rl78 -filetype=obj < %s | llvm-dwarfdump --debug-frame - \
+; RUN: llc -verify-machineinstrs -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -filetype=obj < %s | llvm-dwarfdump --debug-frame - \
 ; RUN:   | FileCheck %s --check-prefix=FRAME
 
 ; The CFA is tracked with .cfi_adjust_cfa_offset as SP changes, so the offset

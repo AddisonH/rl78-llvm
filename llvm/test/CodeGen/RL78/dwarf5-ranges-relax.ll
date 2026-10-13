@@ -1,7 +1,7 @@
-; RUN: llc -mattr=+relax -filetype=obj < %s -o %t.relax.o
+; RUN: llc -verify-machineinstrs -mattr=+relax -filetype=obj < %s -o %t.relax.o
 ; RUN: llvm-dwarfdump -v --debug-rnglists %t.relax.o | FileCheck %s --check-prefix=RELAX
 ; RUN: llvm-dwarfdump --debug-info %t.relax.o | FileCheck %s --check-prefix=INFO
-; RUN: llc -mattr=-relax -filetype=obj < %s -o %t.o
+; RUN: llc -verify-machineinstrs -mattr=-relax -filetype=obj < %s -o %t.o
 ; RUN: llvm-dwarfdump -v --debug-rnglists %t.o | FileCheck %s --check-prefix=NORELAX
 ; RUN: llvm-dwarfdump --debug-info %t.o | FileCheck %s --check-prefix=INFO
 

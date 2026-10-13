@@ -3,8 +3,8 @@
 ; is read from its slot through [HL+byte] instead, with HL set to SP once for
 ; a run of them (RL78SlotOperands).
 ;
-; RUN: llc -O2 -mtriple=rl78 < %s | FileCheck %s
-; RUN: llc -O2 -mtriple=rl78 -rl78-fold-reloads=false < %s \
+; RUN: llc -verify-machineinstrs -O2 -mtriple=rl78 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -O2 -mtriple=rl78 -rl78-fold-reloads=false < %s \
 ; RUN:   | FileCheck %s --check-prefix=RELOAD
 
 ; Two arguments from the stack, one of them used twice; the XOR reads its

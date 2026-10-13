@@ -1,5 +1,5 @@
-;RUN: llc -mtriple=rl78 <%s -print-after=prolog-epilog 2>&1| FileCheck %s
-;RUN: llc -mtriple=rl78 -rl78-frame-order-density=false <%s -print-after=prolog-epilog 2>&1 \
+;RUN: llc -verify-machineinstrs -mtriple=rl78 <%s -print-after=prolog-epilog 2>&1| FileCheck %s
+;RUN: llc -verify-machineinstrs -mtriple=rl78 -rl78-frame-order-density=false <%s -print-after=prolog-epilog 2>&1 \
 ;RUN:   | FileCheck %s --check-prefix=USES
 
 ; Objects with the most uses per byte go closest to SP; by plain use count the

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 ; CHECK: _test_weight_r_16:
 ; CHECK: 	;APP

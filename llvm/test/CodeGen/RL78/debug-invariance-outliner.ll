@@ -4,7 +4,7 @@
 ; number (which reordered the outlined functions).
 
 ; RUN: rm -rf %t && mkdir -p %t/g %t/n
-; RUN: llc -disable-block-placement=true -filetype=obj %s -o %t/g/x.o
+; RUN: llc -verify-machineinstrs -disable-block-placement=true -filetype=obj %s -o %t/g/x.o
 ; RUN: opt -strip-debug %s | llc -disable-block-placement=true -filetype=obj -o %t/n/x.o
 ; RUN: cd %t/g && llvm-objdump -d --no-show-raw-insn x.o > %t/g.txt
 ; RUN: cd %t/n && llvm-objdump -d --no-show-raw-insn x.o > %t/n.txt

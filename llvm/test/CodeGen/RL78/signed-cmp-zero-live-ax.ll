@@ -4,7 +4,7 @@
 ; afterwards. XOR1 reads only A, so X (the low byte) must be dead as well.
 ; In f the low byte is still needed as the shift count; the allocator keeps
 ; the value in BC and compares a copy, which may then be doubled.
-; RUN: llc -mtriple=rl78 -O3 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O3 < %s | FileCheck %s
 
 @shift = global i16 1
 @res = global i16 0

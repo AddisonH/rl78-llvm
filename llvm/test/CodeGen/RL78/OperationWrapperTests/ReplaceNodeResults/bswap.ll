@@ -3,7 +3,7 @@
 ; The i64 variant recursively emits EXTRACT_ELEMENTs as it performs swaps on each half before recombining them.
 ; The i32 variant just swaps the high part with the low part of the node.
 
-; RUN: llc -mtriple=rl78 %s -o - | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 %s -o - | FileCheck %s
 
 
 define dso_local void @aa(ptr noalias nocapture writeonly sret(i64) align 2 %0, i64 noundef %1) local_unnamed_addr #0 {

@@ -1,7 +1,7 @@
 ; At -O0, a copy of an accumulator result gets the class
 ; RL78AXRP from instruction selection and has to be widened also in optnone
 ; functions, or it cannot stay live across the next pinned use of AX.
-; RUN: llc -mtriple=rl78 -O0 < %s | FileCheck %s
+; RUN: llc -verify-machineinstrs -mtriple=rl78 -O0 < %s | FileCheck %s
 
 ; CHECK-LABEL: _mulo:
 ; CHECK: mulhu
