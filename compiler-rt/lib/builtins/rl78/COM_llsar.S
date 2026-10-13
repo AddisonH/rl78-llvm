@@ -35,6 +35,29 @@ __COM_llsar:
   movw hl, ax
 #define ES_PREFIX
 #endif
+0: ; a byte at a time while 8 or more are left
+  mov a, c
+  sub a, #8
+  bc  $3f
+  mov c, a
+  mov a, [sp+5]
+  mov [sp+4], a
+  mov a, [sp+6]
+  mov [sp+5], a
+  mov a, [sp+7]
+  mov [sp+6], a
+  mov a, [sp+8]
+  mov [sp+7], a
+  mov a, [sp+9]
+  mov [sp+8], a
+  mov a, [sp+10]
+  mov [sp+9], a
+  mov a, [sp+11]
+  mov [sp+10], a
+  sar a, 7
+  mov [sp+11], a
+  br  $0b
+3:
   cmp0 c
   bz  $2f
 
