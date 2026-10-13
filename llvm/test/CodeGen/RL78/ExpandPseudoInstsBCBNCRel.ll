@@ -66,12 +66,10 @@ define void @br_rel16_bc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-LABEL: br_rel16_bc_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    push bc
-; CHECK-NEXT:    subw sp, #34
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    push ax
+; CHECK-NEXT:    subw sp, #32
 ; CHECK-NEXT:  .LBB2_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    movw [sp+32], ax
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
@@ -148,12 +146,11 @@ define void @br_rel16_bc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
-; CHECK-NEXT:    movw ax, [sp+32]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    incw de
+; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
+; CHECK-NEXT:    incw ax
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, [hl+34]
+; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    cmpw ax, [hl+34] ; 2-byte Folded Reload
 ; CHECK-NEXT:    sknc
 ; CHECK-NEXT:    br $!.LBB2_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
@@ -336,12 +333,10 @@ define void @br_rel16_bnc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-LABEL: br_rel16_bnc_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    push bc
-; CHECK-NEXT:    subw sp, #34
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    push ax
+; CHECK-NEXT:    subw sp, #32
 ; CHECK-NEXT:  .LBB6_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    movw [sp+32], ax
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
@@ -418,12 +413,11 @@ define void @br_rel16_bnc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
-; CHECK-NEXT:    movw ax, [sp+32]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    decw de
+; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
+; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    cmpw ax, [hl+34]
+; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    cmpw ax, [hl+34] ; 2-byte Folded Reload
 ; CHECK-NEXT:    skc
 ; CHECK-NEXT:    br $!.LBB6_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end

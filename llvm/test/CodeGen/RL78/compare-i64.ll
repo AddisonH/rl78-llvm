@@ -124,55 +124,51 @@ define i16 @set_ult(i64 %a, i64 %b) optsize {
 define i64 @umin(i64 %a, i64 %b) optsize {
 ; CHECK-LABEL: umin:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #4
+; CHECK-NEXT:    subw sp, #6
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+20]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+22]
+; CHECK-NEXT:    movw ax, [sp+24]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+14]
+; CHECK-NEXT:    movw ax, [sp+16]
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    cmpw ax, de
-; CHECK-NEXT:    movw ax, [sp+12]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, bc
-; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, bc
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, bc
-; CHECK-NEXT:    bc $.LBB4_1
-; CHECK-NEXT:  ; %bb.2:
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [sp+22]
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+14]
+; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    movw ax, [sp+20]
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+12]
+; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    br $.LBB4_3
-; CHECK-NEXT:  .LBB4_1:
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    movw ax, [sp+14]
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    sknz
+; CHECK-NEXT:    cmpw ax, de
+; CHECK-NEXT:    bc $.LBB4_2
+; CHECK-NEXT:  ; %bb.1:
+; CHECK-NEXT:    movw ax, [sp+18]
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw ax, [sp+24]
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:  .LBB4_3:
+; CHECK-NEXT:    movw ax, [sp+22]
+; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw ax, [sp+20]
+; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; CHECK-NEXT:  .LBB4_2:
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [hl+6], ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw [hl+4], ax
 ; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    addw sp, #4
+; CHECK-NEXT:    addw sp, #6
 ; CHECK-NEXT:    ret
   %r = call i64 @llvm.umin.i64(i64 %a, i64 %b)
   ret i64 %r

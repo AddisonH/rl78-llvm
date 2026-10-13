@@ -46,6 +46,10 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
   /// factor.
   bool reverseLocalAssignment() const override { return true; }
 
+  // No region splitting: see the definition.
+  bool shouldRegionSplitForVirtReg(const MachineFunction &MF,
+                                   const LiveInterval &VirtReg) const override;
+
   const TargetRegisterClass *
   getLargestLegalSuperClass(const TargetRegisterClass *RC,
                             const MachineFunction &MF) const override;

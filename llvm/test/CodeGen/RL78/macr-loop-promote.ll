@@ -6,33 +6,25 @@
 define i32 @dot(ptr %a, ptr %b, i16 %n) {
 ; CHECK-LABEL: dot:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    subw sp, #6
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    subw sp, #4
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2: ; %loop.preheader
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    inc d
 ; CHECK-NEXT:    inc e
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    xch a, e
 ; CHECK-NEXT:    mov [sp+2], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    xch a, e
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    mov a, h
+; CHECK-NEXT:    xch a, c
+; CHECK-NEXT:    mov a, d
 ; CHECK-NEXT:    mov [sp+3], a ; 1-byte Folded Spill
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
-; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    xch a, c
 ; CHECK-NEXT:  .LBB0_3: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw !0xffff0, ax
@@ -40,6 +32,8 @@ define i32 @dot(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:    movw !0xffff2, ax
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [de]
 ; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, !0xffff2
@@ -49,6 +43,9 @@ define i32 @dot(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    incw de
 ; CHECK-NEXT:    incw de
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    xch a, c
 ; CHECK-NEXT:    mov a, [sp+2] ; 1-byte Folded Reload
 ; CHECK-NEXT:    xch a, c
@@ -110,33 +107,33 @@ declare void @ext()
 define i32 @dot_call(ptr %a, ptr %b, i16 %n) {
 ; CHECK-LABEL: dot_call:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    push ax
+; CHECK-NEXT:    push de
 ; CHECK-NEXT:    subw sp, #8
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop bc
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB1_1
 ; CHECK-NEXT:  ; %bb.2: ; %loop.preheader
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:  .LBB1_3: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw !0xffff0, ax
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw !0xffff2, ax
-; CHECK-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    pop de
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [de]
 ; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    mach
 ; CHECK-NEXT:    movw ax, !0xffff2
@@ -144,41 +141,37 @@ define i32 @dot_call(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:    movw ax, !0xffff0
 ; CHECK-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    call !_ext
-; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw !0xffff2, ax
 ; CHECK-NEXT:    movw ax, !0xffff2
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw !0xffff0, ax
+; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, !0xffff0
-; CHECK-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    incw bc
 ; CHECK-NEXT:    incw bc
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    incw hl
+; CHECK-NEXT:    incw hl
+; CHECK-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
+; CHECK-NEXT:    decw ax
 ; CHECK-NEXT:    movw [sp+8], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    incw hl
-; CHECK-NEXT:    incw hl
-; CHECK-NEXT:    decw de
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop bc
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    or a, x
-; CHECK-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    bnz $.LBB1_3
 ; CHECK-NEXT:    br $.LBB1_4
 ; CHECK-NEXT:  .LBB1_1:
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:  .LBB1_4: ; %exit
-; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw sp, #10
 ; CHECK-NEXT:    ret
 entry:

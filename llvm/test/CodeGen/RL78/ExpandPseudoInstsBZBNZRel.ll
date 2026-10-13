@@ -346,14 +346,12 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-LABEL: br_rel16_bnz_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    subw sp, #34
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    addw ax, ax
 ; CHECK-NEXT:    skh
 ; CHECK-NEXT:    br $!.LBB6_2
 ; CHECK-NEXT:  .LBB6_1: ; %for.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
@@ -431,9 +429,8 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
 ; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    decw de
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    decw ax
+; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:    br $!.LBB6_1

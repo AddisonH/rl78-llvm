@@ -66,12 +66,11 @@ define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    cmpw ax, [hl+6]
-; CHECK-NEXT:    bc $.LBB2_1
-; CHECK-NEXT:  ; %bb.2:
+; CHECK-NEXT:    bc $.LBB2_2
+; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    ret
-; CHECK-NEXT:  .LBB2_1:
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:  .LBB2_2:
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret

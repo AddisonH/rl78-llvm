@@ -611,3 +611,13 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 Register RL78RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   return RL78::SPreg;
 }
+
+bool RL78RegisterInfo::shouldRegionSplitForVirtReg(
+    const MachineFunction &MF, const LiveInterval &VirtReg) const {
+  // A value split between two of BC, DE and HL is copied with PUSH and POP,
+  // or through AX, where the pieces meet: two instructions where the
+  // allocator counts one, in a block it has just made cheaper by one
+  // reload. With three pairs to choose from the pieces rarely get the same
+  // one.
+  return false;
+}

@@ -67,15 +67,14 @@ define i32 @abs(i32 %a) optsize {
 ; CHECK-NEXT:    subc a, b
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    mov a, b
-; CHECK-NEXT:    bt a.7, $.LBB2_1
-; CHECK-NEXT:  ; %bb.2:
+; CHECK-NEXT:    bt a.7, $.LBB2_2
+; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop de
-; CHECK-NEXT:    br $.LBB2_3
-; CHECK-NEXT:  .LBB2_1:
+; CHECK-NEXT:  .LBB2_2:
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:  .LBB2_3:
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop bc
 ; CHECK-NEXT:    pop hl

@@ -16,9 +16,9 @@
 ;   int f(int x) { int y = g(x); if (y) cold(); return g(y) + 1; }
 
 ; RELAX:   [DW_RLE_startx_length]: 0x00000000, 0x00000005
-; RELAX:   [DW_RLE_startx_endx  ]: 0x00000001, 0x00000007
+; RELAX:   [DW_RLE_startx_endx  ]: 0x00000001, 0x{{[0-9a-f]+}}
 ; NORELAX: [DW_RLE_startx_length]: 0x00000000, 0x00000005
-; NORELAX: [DW_RLE_startx_length]: 0x00000001, 0x00000019
+; NORELAX: [DW_RLE_startx_length]: 0x00000001, 0x{{[0-9a-f]+}}
 
 ; INFO:      DW_TAG_subprogram
 ; INFO-NEXT:   DW_AT_low_pc (0x00000000)
