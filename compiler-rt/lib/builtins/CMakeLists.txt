@@ -1074,6 +1074,7 @@ set(ASM_RL78_SOURCES
   rl78/COM_ulltof.S
   rl78/COM_ultod.S
   rl78/COM_ultof.S
+  rl78/REL_d_pack.S
   rl78/REL_d_round.S
   rl78/REL_lltod.S
   rl78/COM_dtosll.S

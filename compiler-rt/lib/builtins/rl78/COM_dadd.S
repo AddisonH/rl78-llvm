@@ -20,6 +20,7 @@
 //		[AX] ([A:DE] for far data)
 //===----------------------------------------------------------------------===//
   #include "def.S"
+  #include "REL_d_pack.h"
 
 #ifdef __FAR_DATA__
 #define __COM_dadd  __COM_dadd_nd
@@ -28,12 +29,13 @@
   .globl __COM_dadd
   .extern __REL_d_check
   .extern __REL_d_inf
+  .extern __REL_d_pack
 
 //	The operand with the larger exponent stays where it is; the other one is
 //	shifted right by the difference of the exponents into a work area, with
 //	16 bits kept below the last place and everything below those collected
-//	in their lowest bit. The sum or difference is normalized, rounded to
-//	nearest even with those 16 bits, and packed.
+//	in their lowest bit. The sum or difference is normalized, and rounded
+//	and packed by D_PACK.
 //
 //	The shift is a multiplication: by a power of two below 65536 with MULHU
 //	(a word at a time), below 256 with MULU (a byte at a time) on the cores
@@ -317,49 +319,20 @@ __COM_dadd:
 .L_exponent:
   movw  ax,[sp+F_EXP]
   movw  bc,ax
-.L_round:
-  ; BC: the exponent. With the hidden bit added to exponent - 1, a number
-  ; without one has the exponent field 0, and a carry out of the mantissa
-  ; when it is rounded up goes into the exponent.
-  decw  bc
-  movw  ax,bc
-  shlw  ax,4
-  addw  ax,[hl+8]
-  movw  [hl+8],ax
-  clrw  bc
-  movw  ax,[hl]
-  cmpw  ax,#0x8000
-  bc    $2f                 ; below half of the last place
-  bnz   $1f                 ; above
-  mov   a,[hl+2]
-  bf    a.0,$2f             ; half: to even
-1:
-  incw  bc
-2:
+.L_round:                   ; BC: the exponent
+  ; the sign to bit 63, and to the result
+  mov   a,[sp+F_SIGN]
+  and   a,#0x80
+  mov   [hl+9],a
   movw  ax,[sp+F_RES]
   movw  de,ax
-  movw  ax,[hl+2]
-  addw  ax,bc
-  movw  [de],ax
-  movw  ax,[hl+4]
-  sknc
-  addw  ax,#1
-  movw  [de+2],ax
-  movw  ax,[hl+6]
-  sknc
-  addw  ax,#1
-  movw  [de+4],ax
-  movw  ax,[hl+8]
-  sknc
-  addw  ax,#1
-  movw  bc,ax
-  mov   a,[sp+F_SIGN]
-  shl   a,1
-  movw  ax,bc
-  mov1  a.7,cy
-  movw  [de+6],ax
+#ifdef __OPTIMIZE_SIZE__
+  call  !!__REL_d_pack
   addw  sp,#F_SIZE
   ret
+#else
+  D_PACK F_SIZE, 0
+#endif
 
 .L_carry:
   ; 54 bits: one to the right, the exponent one up
@@ -394,15 +367,7 @@ __COM_dadd:
   movw  ax,[sp+F_EXP]
   incw  ax
   movw  bc,ax
-  cmpw  ax,#0x7ff
-  skz
   br    $!.L_round
-  movw  ax,[sp+F_RES]
-  movw  de,ax
-  mov   a,[sp+F_SIGN]
-  mov1  cy,a.7
-  addw  sp,#F_SIZE
-  br    !!__REL_d_inf
 
 .L_sub:
   clrw  ax

@@ -20,6 +20,7 @@
 //		[AX] ([A:DE] for far data)
 //===----------------------------------------------------------------------===//
   #include "def.S"
+  #include "REL_d_pack.h"
 
 #ifdef __FAR_DATA__
 #define __COM_ddiv  __COM_ddiv_nd
@@ -29,6 +30,7 @@
   .extern __COM_mului
   .extern __REL_d_check
   .extern __REL_d_inf
+  .extern __REL_d_pack
 
 //	The quotient of the two 53-bit mantissas is taken to 64 bits, of which
 //	the top one is set: its top 53 bits are the result; the bits below them,
@@ -335,115 +337,19 @@ __COM_ddiv:
   ; [HL]: the 16 bits below the last place, [HL+2..9]: the mantissa
   movw  ax,[sp+F_EXP]
   movw  bc,ax
-  decw  ax
-  cmpw  ax,#0x7fe
-  bnc   $.L_range
-.L_round:
-  ; BC: the exponent. With the hidden bit added to exponent - 1, a number
-  ; without one has the exponent field 0, and a carry out of the mantissa
-  ; when it is rounded up goes into the exponent.
-  decw  bc
-  movw  ax,bc
-  shlw  ax,4
-  addw  ax,[hl+8]
-  movw  [hl+8],ax
-  clrw  bc
-  movw  ax,[hl]
-  cmpw  ax,#0x8000
-  bc    $2f                 ; below half of the last place
-  bnz   $1f                 ; above
-  mov   a,[hl+2]
-  bf    a.0,$2f             ; half: to even
-1:
-  incw  bc
-2:
+  ; the sign to bit 63, and to the result
+  mov   a,[sp+F_SIGN]
+  and   a,#0x80
+  mov   [hl+9],a
   movw  ax,[sp+F_RES]
   movw  de,ax
-  movw  ax,[hl+2]
-  addw  ax,bc
-  movw  [de],ax
-  movw  ax,[hl+4]
-  sknc
-  addw  ax,#1
-  movw  [de+2],ax
-  movw  ax,[hl+6]
-  sknc
-  addw  ax,#1
-  movw  [de+4],ax
-  movw  ax,[hl+8]
-  sknc
-  addw  ax,#1
-  movw  bc,ax
-  mov   a,[sp+F_SIGN]
-  shl   a,1
-  movw  ax,bc
-  mov1  a.7,cy
-  movw  [de+6],ax
+#ifdef __OPTIMIZE_SIZE__
+  call  !!__REL_d_pack
   addw  sp,#F_SIZE
   ret
-
-  ; the exponent is below 1 or above 0x7fe
-.L_range:
-  mov   a,b
-  bt    a.7,$.L_tiny
-  movw  ax,bc
-  or    a,x
-  bz    $.L_tiny
-  movw  ax,[sp+F_RES]
-  movw  de,ax
-  mov   a,[sp+F_SIGN]
-  mov1  cy,a.7
-  addw  sp,#F_SIZE
-  br    !!__REL_d_inf
-.L_tiny:
-  ; a subnormal result: to the right until the exponent is 1; what falls
-  ; out stays in the lowest bit
-  onew  ax
-  subw  ax,bc
-  cmpw  ax,#64
-  bc    $1f
-  movw  ax,[sp+F_RES]
-  movw  de,ax
-  mov   a,[sp+F_SIGN]
-  mov1  cy,a.7
-  addw  sp,#F_SIZE
-  br    $!.L_zero_cy
-1:
-  movw  bc,ax
-2:
-  movw  ax,[hl+8]
-  shrw  ax,1
-  movw  [hl+8],ax
-  movw  ax,[hl+6]
-  rorc  a,1
-  xch   a,x
-  rorc  a,1
-  xch   a,x
-  movw  [hl+6],ax
-  movw  ax,[hl+4]
-  rorc  a,1
-  xch   a,x
-  rorc  a,1
-  xch   a,x
-  movw  [hl+4],ax
-  movw  ax,[hl+2]
-  rorc  a,1
-  xch   a,x
-  rorc  a,1
-  xch   a,x
-  movw  [hl+2],ax
-  movw  ax,[hl]
-  rorc  a,1
-  xch   a,x
-  rorc  a,1
-  xch   a,x
-  movw  [hl],ax
-  sknc
-  set1  [hl].0
-  dec   c
-  bnz   $2b
-  onew  bc
-  br    $!.L_round
+#else
+  D_PACK F_SIZE, 1
+#endif
 
   ; an exponent is 0 or 0x7ff
 .L_slow:
@@ -511,7 +417,6 @@ __COM_ddiv:
   mov1  cy,[hl].0
   xor1  cy,[hl].4
   pop   ax
-.L_zero_cy:
   clrw  ax
   movw  [de],ax
   movw  [de+2],ax
