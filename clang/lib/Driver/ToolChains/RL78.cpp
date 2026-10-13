@@ -344,11 +344,15 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // object so that a program takes only what it uses; without this a C++
   // program that prints a line is several hundred kilobytes.
   // -Wl,--no-gc-sections, later on the command line, turns it off.
-  if (Picolibc)
+  if (Picolibc && !Args.hasArg(options::OPT_r))
     CmdArgs.insert(CmdArgs.begin(), "--gc-sections");
 
-  // Adding default linker script if -T option not specified
-  if (!Args.hasArg(options::OPT_T)) {
+  // Adding default linker script if -T option not specified. A relocatable
+  // link (-r) gets none: the script's PROVIDEs would give addresses to
+  // symbols that the final link is to define.
+  if (Args.hasArg(options::OPT_r)) {
+    Args.AddAllArgs(CmdArgs, options::OPT_T);
+  } else if (!Args.hasArg(options::OPT_T)) {
     std::string linkerscript;
     if (Picolibc)
       // The C++ variant also places the exception tables.

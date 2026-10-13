@@ -10,6 +10,8 @@
 // RUN: %clangxx --target=rl78 --sysroot=%t/pico -### %s 2>&1 | FileCheck %s --check-prefix=PICO-CXX
 // RUN: %clang --target=rl78 --sysroot=%t/pico -nostartfiles -### %s 2>&1 | FileCheck %s --check-prefix=PICO-NOSTART
 // RUN: %clang --target=rl78 --sysroot=%t/newlib -### %s 2>&1 | FileCheck %s --check-prefix=NEWLIB
+// RUN: %clang --target=rl78 --sysroot=%t/pico -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
+// RUN: %clang --target=rl78 --sysroot=%t/newlib -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
 // RUN: %clang --target=rl78 --sysroot=%t/newlib -fsim -fnewlib-nano -### %s 2>&1 | FileCheck %s --check-prefix=NEWLIB-SIM
 
 // PICO: "--gc-sections"
@@ -38,3 +40,7 @@
 
 // NEWLIB-SIM: "-T{{[^"]*}}rl78-sim.ld"
 // NEWLIB-SIM: "-lsim" "-lc_nano" "-lm"
+
+// A relocatable link takes no default linker script.
+// RELOC-NOT: "-T
+// RELOC-NOT: "--gc-sections"
