@@ -65,6 +65,7 @@ void initializeRL78ByteLoopCountersPass(PassRegistry &);
 void initializeRL78OuterLoopPointersPass(PassRegistry &);
 void initializeRL78UnspeculateLoopLatchPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
+void initializeRL78SlotOperandsPass(PassRegistry &);
 
 /// Turns an MCInst of an older (code generation) definition into the
 /// hardware instruction(s) of RL78InstrISA.td that encode it.

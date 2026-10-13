@@ -428,15 +428,13 @@ define i32 @ADDE_Test(i32 %a, i32 %b){
 ; O3-NEXT:    xchw ax, de
 ; O3-NEXT:    movw ax, [sp+4]
 ; O3-NEXT:    xchw ax, de
-; O3-NEXT:    xchw ax, hl
-; O3-NEXT:    movw ax, [sp+6]
-; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    addw ax, de
 ; O3-NEXT:    movw de, ax
+; O3-NEXT:    movw hl, sp
 ; O3-NEXT:    movw ax, bc
 ; O3-NEXT:    sknc
 ; O3-NEXT:    incw ax
-; O3-NEXT:    addw ax, hl
+; O3-NEXT:    addw ax, [hl+6]
 ; O3-NEXT:    movw bc, ax
 ; O3-NEXT:    movw ax, de
 ; O3-NEXT:    ret
@@ -467,15 +465,13 @@ define i32 @SUBE_test(i32 %a, i32 %b){
 ; O3-NEXT:    xchw ax, de
 ; O3-NEXT:    movw ax, [sp+4]
 ; O3-NEXT:    xchw ax, de
-; O3-NEXT:    xchw ax, hl
-; O3-NEXT:    movw ax, [sp+6]
-; O3-NEXT:    xchw ax, hl
 ; O3-NEXT:    subw ax, de
 ; O3-NEXT:    movw de, ax
+; O3-NEXT:    movw hl, sp
 ; O3-NEXT:    movw ax, bc
 ; O3-NEXT:    sknc
 ; O3-NEXT:    decw ax
-; O3-NEXT:    subw ax, hl
+; O3-NEXT:    subw ax, [hl+6]
 ; O3-NEXT:    movw bc, ax
 ; O3-NEXT:    movw ax, de
 ; O3-NEXT:    ret

@@ -1,0 +1,159 @@
+# RUN: llc -mtriple=rl78 -run-pass=rl78-slot-operands -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=rl78 -run-pass=rl78-slot-operands -rl78-share-hl-sp=false %s -o - \
+# RUN:   | FileCheck %s --check-prefix=BLOCK
+
+# RL78SlotOperands keeps SP in HL from one block to the next: MOVW HL, SP is
+# not repeated where every path has it already, a loop sets it once in its
+# preheader, and a pointer that would take HL in between goes to DE or BC.
+
+--- |
+  target triple = "rl78"
+  define void @blocks() { ret void }
+  define void @loop() { ret void }
+  define void @pointer_de() { ret void }
+  define void @pointer_bc() { ret void }
+  define void @pointer_kept() { ret void }
+...
+---
+# Both successors find SP in HL.
+# CHECK-LABEL: name: blocks
+# CHECK: bb.0:
+# CHECK: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: CMPW_AX_mHLi $rp0, $rp6, 6
+# CHECK: bb.1:
+# CHECK-NEXT: liveins: $rp0, $rp6
+# CHECK-NOT: MOVW_rp_SP
+# CHECK: ADDW_AX_mHLi killed $rp0, $rp6, 8
+# CHECK: bb.2:
+# CHECK-NEXT: liveins: $rp0, $rp6
+# CHECK-NOT: MOVW_rp_SP
+# CHECK: SUBW_AX_mHLi killed $rp0, $rp6, 8
+#
+# BLOCK-LABEL: name: blocks
+# BLOCK: bb.1:
+# BLOCK: $rp6 = MOVW_rp_SP $spreg
+# BLOCK: bb.2:
+# BLOCK: $rp6 = MOVW_rp_SP $spreg
+name: blocks
+tracksRegLiveness: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $rp0
+    $rp4 = LOAD16_rp_stack_slot $spreg, 6
+    CMPW_AX_rp $rp0, killed $rp4, implicit-def $ccreg
+    BRCC %bb.2, 1, implicit killed $ccreg
+  bb.1:
+    liveins: $rp0
+    $rp4 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+  bb.2:
+    liveins: $rp0
+    $rp4 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = SUBW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The loop does nothing else to HL: set before it.
+# CHECK-LABEL: name: loop
+# CHECK: bb.0:
+# CHECK: $rp6 = MOVW_rp_SP $spreg
+# CHECK: bb.1:
+# CHECK-NEXT: successors
+# CHECK-NEXT: liveins: $rp0, $rp2, $rp6
+# CHECK-NOT: MOVW_rp_SP
+# CHECK: ADDW_AX_mHLi killed $rp0, $rp6, 6
+# CHECK: bb.2:
+#
+# BLOCK-LABEL: name: loop
+# BLOCK: bb.1:
+# BLOCK: $rp6 = MOVW_rp_SP $spreg
+name: loop
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $rp0, $rp2
+    $rp4 = LOAD16_rp_stack_slot $spreg, 6
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    CMPW_AX_rp $rp0, $rp2, implicit-def $ccreg
+    BRCC %bb.1, 1, implicit killed $ccreg
+  bb.2:
+    liveins: $rp0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The pointer between the two operands goes to DE.
+# CHECK-LABEL: name: pointer_de
+# CHECK: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: SUBW_AX_mHLi killed $rp0, $rp6, 6
+# CHECK-NEXT: $rp4 = LOAD16_rp_stack_slot $spreg, 4
+# CHECK-NEXT: MOVW_mRP_AX $rp4, $rp0
+# CHECK-NEXT: MOVW_mRPi_AX killed $rp4, 2, $rp0
+# CHECK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
+#
+# BLOCK-LABEL: name: pointer_de
+# BLOCK: $rp6 = LOAD16_rp_stack_slot $spreg, 4
+# BLOCK: $rp6 = MOVW_rp_SP $spreg
+# BLOCK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
+name: pointer_de
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0
+    $rp2 = LOAD16_rp_stack_slot $spreg, 6
+    $rp0 = SUBW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    $rp6 = LOAD16_rp_stack_slot $spreg, 4
+    MOVW_mRP_AX $rp6, $rp0
+    MOVW_mRPi_AX killed $rp6, 2, $rp0
+    $rp2 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# DE is taken: word[BC].
+# CHECK-LABEL: name: pointer_bc
+# CHECK: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: SUBW_AX_mHLi killed $rp0, $rp6, 6
+# CHECK-NEXT: $rp2 = LOAD16_rp_stack_slot $spreg, 4
+# CHECK-NEXT: MOVW_mBCw_AX $rp2, 0, $rp0
+# CHECK-NEXT: $r1 = MOV_A_mBCw killed $rp2, 2
+# CHECK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
+name: pointer_bc
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp4
+    $rp2 = LOAD16_rp_stack_slot $spreg, 6
+    $rp0 = SUBW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    $rp6 = LOAD16_rp_stack_slot $spreg, 4
+    MOVW_mRP_AX $rp6, $rp0
+    $r1 = MOV_A_mRPi killed $rp6, 2
+    $rp2 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# Not a base only (the ADDW reads through it), so HL is set again.
+# CHECK-LABEL: name: pointer_kept
+# CHECK: $rp6 = LOAD16_rp_stack_slot $spreg, 4
+# CHECK-NEXT: ADDW_AX_mHLi killed $rp0, killed $rp6, 2
+# CHECK-NEXT: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
+name: pointer_kept
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0
+    $rp2 = LOAD16_rp_stack_slot $spreg, 6
+    $rp0 = SUBW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    $rp6 = LOAD16_rp_stack_slot $spreg, 4
+    $rp0 = ADDW_AX_mHLi killed $rp0, killed $rp6, 2, implicit-def dead $ccreg
+    $rp2 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp2, implicit-def dead $ccreg
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...

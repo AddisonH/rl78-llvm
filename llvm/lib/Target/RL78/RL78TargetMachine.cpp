@@ -44,6 +44,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78ByteLoopCountersPass(*PR);
   initializeRL78OuterLoopPointersPass(*PR);
   initializeRL78UnspeculateLoopLatchPass(*PR);
+  initializeRL78SlotOperandsPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {

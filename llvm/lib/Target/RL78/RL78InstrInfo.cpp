@@ -244,6 +244,10 @@ static bool BuildADDE_SUBBE_rp_rp(const RL78InstrInfo *II,
   LastInstruction = BuildMI(*BB, MI, DL, II->get(opcode), RL78::RP0)
                         .addReg(RL78::RP0, RegState::Kill)
                         .add(MI.getOperand(2));
+  // The displacement of [HL+byte].
+  if (MI.getNumExplicitOperands() == 4)
+    LastInstruction.add(MI.getOperand(3));
+  LastInstruction.cloneMemRefs(MI);
   finalizeBundle(*BB, FirstInstruction->getIterator(),
                  std::next(LastInstruction->getIterator()));
   MI.eraseFromParent();
@@ -474,14 +478,18 @@ bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
   const TargetRegisterInfo &TRI = getRegisterInfo();
   assert(MI.getOperand(0).getReg() == RL78::RP0 && "not in AX");
 
-  // ADDE/SUBE AX, rp when the carry out is unused and speed matters: add
-  // the carry in with INCW/DECW under SKNC, then ADDW/SUBW.
-  if (W.Carry && Form == WideRP && MI.registerDefIsDead(RL78::CCreg, &TRI) &&
+  // ADDE/SUBE AX, rp or [HL+byte] when the carry out is unused and speed
+  // matters: add the carry in with INCW/DECW under SKNC, then ADDW/SUBW.
+  if (W.Carry && (Form == WideRP || Form == WideMHLi) &&
+      MI.registerDefIsDead(RL78::CCreg, &TRI) &&
       MI.getMF()->getTarget().getOptLevel() == CodeGenOptLevel::Aggressive) {
-    bool IsAdd = MI.getOpcode() == RL78::ADDE_AX_rp;
-    return BuildADDE_SUBBE_rp_rp(this, &MBB, MI, DL,
-                                 IsAdd ? RL78::INCW_rp : RL78::DECW_rp,
-                                 IsAdd ? RL78::ADDW_AX_rp : RL78::SUBW_AX_rp);
+    bool IsAdd = MI.getOpcode() == RL78::ADDE_AX_rp ||
+                 MI.getOpcode() == RL78::ADDE_AX_mHLi;
+    bool IsMem = Form == WideMHLi;
+    return BuildADDE_SUBBE_rp_rp(
+        this, &MBB, MI, DL, IsAdd ? RL78::INCW_rp : RL78::DECW_rp,
+        IsAdd ? (IsMem ? RL78::ADDW_AX_mHLi : RL78::ADDW_AX_rp)
+              : (IsMem ? RL78::SUBW_AX_mHLi : RL78::SUBW_AX_rp));
   }
 
   auto Xch = [&] {
