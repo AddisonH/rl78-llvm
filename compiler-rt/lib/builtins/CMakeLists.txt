@@ -1090,7 +1090,6 @@ set(ASM_RL78_SOURCES
   rl78/COM_dadd.S
   rl78/REL_d_inf.S
   rl78/REL_d_check.S
-  rl78/REL_d_shl11.S
   rl78/COM_ddiv.S
   rl78/COM_dmul.S
   rl78/COM_dsub.S
