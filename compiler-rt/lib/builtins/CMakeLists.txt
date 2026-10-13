@@ -1118,24 +1118,6 @@ set(ASM_RL78_SOURCES
   rl78/COM_lmul.S
   rl78/comparedf2.S
   rl78/comparesf2.S
-  rl78/COM_deq.S
-  rl78/COM_dge.S
-  rl78/COM_dgt.S
-  rl78/COM_dle.S
-  rl78/COM_dlt.S
-  rl78/COM_dne.S
-  rl78/COM_dunordered.S
-  rl78/COM_feq.S
-  rl78/COM_fge.S
-  rl78/COM_fgt.S
-  rl78/COM_fle.S
-  rl78/COM_flt.S
-  rl78/COM_fne.S
-  rl78/COM_funordered.S
-  rl78/REL_dcmp.S
-  rl78/REL_dordered_core.S
-  rl78/REL_fcmp.S
-  rl78/REL_fordered_core.S
   rl78/COM_sldiv.S
   rl78/COM_sidiv.S
   rl78/COM_uidiv.S
