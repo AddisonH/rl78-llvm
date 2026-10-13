@@ -2168,6 +2168,14 @@ def ROLW_AX_1 : RL78Pseudo<4, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs)>;
 def RORW_AX_1 : RL78Pseudo<4, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs)>;
 }
 
+// A word rotated to the right by one through CY, for the words below the
+// top one of a shift to the right by one: RORC A, 1 on each byte.
+let Constraints = "$rs = $rd", Defs = [CCreg], Uses = [CCreg] in
+def RORWC_AX_1 : RL78Pseudo<6, (outs RL78AXRP:$rd), (ins RL78AXRP:$rs),
+                            [(set i16:$rd, (rl78rorwc i16:$rs))]>;
+def : Pat<(rl78srlc i16:$x), (SHRW_AX_n $x, 1)>;
+def : Pat<(rl78srac i16:$x), (SARW_AX_n $x, 1)>;
+
 // A word at [HL+byte] whose second byte is also in reach.
 def MemHLw : ComplexPattern<iPTR, 2, "SelectMemHLw", [], []>;
 
@@ -2211,6 +2219,14 @@ defm SUBE : RL78Wide<sube, sube, 1>;
 def : Pat<(andmem i16:$a, i16:$rp), (AND16_AX_rp $a, $rp)>;
 def : Pat<(ormem i16:$a, i16:$rp), (OR16_AX_rp $a, $rp)>;
 def : Pat<(xormem i16:$a, i16:$rp), (XOR16_AX_rp $a, $rp)>;
+
+// A value of several words added to itself (its shift to the left by one,
+// RL78TargetLowering::ReplaceNodeResults): SHLW AX, 1 for the lowest word,
+// then the carry goes through each word above with ROLWC.
+let AddedComplexity = 20 in {
+def : Pat<(addc i16:$x, i16:$x), (SHLW_AX_n $x, 1)>;
+def : Pat<(adde i16:$x, i16:$x), (ROLWC_rp_1 $x)>;
+}
 
 // The high half of an i32 add of a 16-bit constant is adde(hi, 0): only the
 // carry. ADDE_rp_imm turns that into BNC + INCW, but when hi is a load the

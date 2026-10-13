@@ -55,6 +55,13 @@ def xormem : SDNode<"RL78ISD::XORMEM", SDTIntBinOp,
                     [SDNPCommutative, SDNPAssociative]>;
 def inc : SDNode<"RL78ISD::INC", SDTUnaryOp, [SDNPMemOperand]>;
 
+// The words of a value shifted to the right by one, from the top: the bit
+// that leaves a word is the glue.
+def rl78srlc : SDNode<"RL78ISD::SRLC", SDTIntUnaryOp, [SDNPOutGlue]>;
+def rl78srac : SDNode<"RL78ISD::SRAC", SDTIntUnaryOp, [SDNPOutGlue]>;
+def rl78rorwc : SDNode<"RL78ISD::RORWC", SDTIntUnaryOp,
+                       [SDNPInGlue, SDNPOutGlue]>;
+
 // A compare; the flags are the glue result.
 def SDTCMP : SDTypeProfile<0, 3, [SDTCisInt<0>, SDTCisSameAs<0, 1>,
                                   SDTCisInt<2>]>;

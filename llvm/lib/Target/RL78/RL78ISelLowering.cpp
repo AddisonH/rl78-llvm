@@ -1263,6 +1263,13 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SRL, MVT::i8, Custom);
   setOperationAction(ISD::SRL, MVT::i16, Custom);
 
+  // By one, a value of several words is shifted through the carry
+  // (ReplaceNodeResults).
+  for (MVT VT : {MVT::i32, MVT::i64})
+    for (unsigned Opc :
+         {ISD::SHL, ISD::SRL, ISD::SRA, ISD::FSHL, ISD::FSHR})
+      setOperationAction(Opc, VT, Custom);
+
   setOperationAction(ISD::SHL_PARTS, MVT::i16, Expand);
   setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRA_PARTS, MVT::i16, Expand);
@@ -1441,6 +1448,9 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::XOR1CY)
     MAKE_CASE(RL78ISD::NOT1CY)
     MAKE_CASE(RL78ISD::XORSIGNCY)
+    MAKE_CASE(RL78ISD::SRLC)
+    MAKE_CASE(RL78ISD::SRAC)
+    MAKE_CASE(RL78ISD::RORWC)
     MAKE_CASE(RL78ISD::NOTCY)
     MAKE_CASE(RL78ISD::XCHW)
     MAKE_CASE(RL78ISD::ANDMEM)
@@ -4815,6 +4825,34 @@ static void ReplaceLoadOperands(SDNode *N, SmallVectorImpl<SDValue> &Results,
 ///
 /// If the target has no operations that require custom lowering, it need not
 /// implement this.  The default implementation aborts.
+// The 16-bit words of \p V, lowest first.
+static void splitIntoWords(SDValue V, const SDLoc &dl, SelectionDAG &DAG,
+                           SmallVectorImpl<SDValue> &Words) {
+  EVT VT = V.getValueType();
+  if (VT == MVT::i16) {
+    Words.push_back(V);
+    return;
+  }
+  EVT Half = VT.getHalfSizedIntegerVT(*DAG.getContext());
+  auto [Lo, Hi] = DAG.SplitScalar(V, dl, Half, Half);
+  splitIntoWords(Lo, dl, DAG, Words);
+  splitIntoWords(Hi, dl, DAG, Words);
+}
+
+// The value made of the 16-bit words \p Words, lowest first.
+static SDValue joinWords(SmallVectorImpl<SDValue> &Words, const SDLoc &dl,
+                         SelectionDAG &DAG) {
+  for (MVT VT = MVT::i32; Words.size() > 1;
+       VT = MVT::getIntegerVT(VT.getSizeInBits() * 2)) {
+    SmallVector<SDValue, 4> Pairs;
+    for (unsigned I = 0, E = Words.size(); I != E; I += 2)
+      Pairs.push_back(
+          DAG.getNode(ISD::BUILD_PAIR, dl, VT, Words[I], Words[I + 1]));
+    Words = std::move(Pairs);
+  }
+  return Words[0];
+}
+
 void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
                                             SmallVectorImpl<SDValue> &Results,
                                             SelectionDAG &DAG) const {
@@ -4903,6 +4941,91 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     SDValue Pair =
         DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i32, LowValue, HighValue);
     Results.push_back(Pair);
+    return;
+  }
+  case ISD::SHL: {
+    // x << 1 is x + x: SHLW AX, 1 for the lowest word and ROLWC for each
+    // word above it, where the generic expansion takes the top bit of every
+    // word with a shift of its own. Two words are shifted by a little more
+    // the same way, twelve instructions otherwise.
+    auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
+    EVT VT = N->getValueType(0);
+    unsigned Most = VT != MVT::i32 ? 1 : DAG.shouldOptForSize() ? 2 : 4;
+    if (!C || C->getZExtValue() == 0 || C->getZExtValue() > Most)
+      return;
+    SDValue V = N->getOperand(0);
+    for (unsigned I = 0, E = C->getZExtValue(); I != E; ++I)
+      V = DAG.getNode(ISD::ADD, dl, VT, V, V);
+    Results.push_back(V);
+    return;
+  }
+  case ISD::SRL:
+  case ISD::SRA: {
+    // By one to the right: SHRW or SARW AX, 1 for the top word, then the
+    // bit that left it goes into the word below, RORC on its two bytes.
+    if (!isOneConstant(N->getOperand(1)))
+      return;
+    SmallVector<SDValue, 4> Words;
+    splitIntoWords(N->getOperand(0), dl, DAG, Words);
+    SDVTList VTs = DAG.getVTList(MVT::i16, MVT::Glue);
+    // The words at the top that are zero stay zero (a value that was
+    // extended): the shift starts below them.
+    unsigned NumZero = 0;
+    if (N->getOpcode() == ISD::SRL)
+      NumZero = std::min<unsigned>(
+          DAG.computeKnownBits(N->getOperand(0)).countMinLeadingZeros() / 16,
+          Words.size() - 1);
+    SDValue Carry;
+    for (SDValue &W : reverse(Words)) {
+      if (NumZero) {
+        --NumZero;
+        W = DAG.getConstant(0, dl, MVT::i16);
+        continue;
+      }
+      if (Carry)
+        W = DAG.getNode(RL78ISD::RORWC, dl, VTs, W, Carry);
+      else
+        W = DAG.getNode(N->getOpcode() == ISD::SRL ? RL78ISD::SRLC
+                                                   : RL78ISD::SRAC,
+                        dl, VTs, W);
+      Carry = W.getValue(1);
+    }
+    Results.push_back(joinWords(Words, dl, DAG));
+    return;
+  }
+  case ISD::FSHL: {
+    // (x << 1) | (y >> (bits - 1)): x + x + the carry out of the top word
+    // of y.
+    if (!isOneConstant(N->getOperand(2)))
+      return;
+    SmallVector<SDValue, 4> Words, Y;
+    splitIntoWords(N->getOperand(0), dl, DAG, Words);
+    splitIntoWords(N->getOperand(1), dl, DAG, Y);
+    SDVTList VTs = DAG.getVTList(MVT::i16, MVT::Glue);
+    SDValue Carry =
+        DAG.getNode(ISD::ADDC, dl, VTs, Y.back(), Y.back()).getValue(1);
+    for (SDValue &W : Words) {
+      W = DAG.getNode(ISD::ADDE, dl, VTs, W, W, Carry);
+      Carry = W.getValue(1);
+    }
+    Results.push_back(joinWords(Words, dl, DAG));
+    return;
+  }
+  case ISD::FSHR: {
+    // (y >> 1) | (x << (bits - 1)): the lowest bit of x goes into the top
+    // word of y.
+    if (!isOneConstant(N->getOperand(2)))
+      return;
+    SmallVector<SDValue, 4> X, Words;
+    splitIntoWords(N->getOperand(0), dl, DAG, X);
+    splitIntoWords(N->getOperand(1), dl, DAG, Words);
+    SDVTList VTs = DAG.getVTList(MVT::i16, MVT::Glue);
+    SDValue Carry = DAG.getNode(RL78ISD::SRLC, dl, VTs, X.front()).getValue(1);
+    for (SDValue &W : reverse(Words)) {
+      W = DAG.getNode(RL78ISD::RORWC, dl, VTs, W, Carry);
+      Carry = W.getValue(1);
+    }
+    Results.push_back(joinWords(Words, dl, DAG));
     return;
   }
   case ISD::ADD: {

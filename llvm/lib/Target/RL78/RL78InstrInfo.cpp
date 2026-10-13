@@ -743,6 +743,20 @@ bool RL78InstrInfo::expandPseudo(MachineInstr &MI) const {
         .addReg(RL78::RP0, RegState::Kill);
     MI.eraseFromParent();
     return true;
+  case RL78::RORWC_AX_1:
+    // CY goes into bit 15 and bit 8 into CY, then that into bit 7.
+    for (int Byte = 0; Byte != 2; ++Byte) {
+      // Only the carry of a word without a value is wanted.
+      RegState Undef = getUndefRegState(!Byte && MI.getOperand(1).isUndef());
+      BuildMI(*BB, MI, DL, get(RL78::RORC_A_1), RL78::R1)
+          .addReg(RL78::R1, RegState::Kill | Undef);
+      BuildMI(*BB, MI, DL, get(RL78::XCH_A_X), RL78::R1)
+          .addReg(RL78::R0, RegState::Define)
+          .addReg(RL78::R1, RegState::Kill)
+          .addReg(RL78::R0, RegState::Kill | Undef);
+    }
+    MI.eraseFromParent();
+    return true;
   case RL78::RORW_AX_1:
     BuildMI(*BB, MI, DL, get(RL78::SHRW_AX_n), RL78::RP0)
         .addReg(RL78::RP0, RegState::Kill)

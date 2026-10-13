@@ -60,6 +60,12 @@ enum NodeType : unsigned {
   MACHU,
   MACH,
   INC,
+  // A word shifted to the right by one, the bit that leaves in CY (the
+  // glue result): SRLC and SRAC shift a zero or the sign in, RORWC the CY
+  // that comes in.
+  SRLC,
+  SRAC,
+  RORWC,
   LOAD_SELECTCC,
   DELAY_CYCLES_1_4,
   DELAY_CYCLES_5,
