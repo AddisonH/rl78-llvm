@@ -49,6 +49,19 @@ __REL_ltod:
   CLRB A
   XCHW AX, BC
 .SL:
+  CMP0 A
+  BNZ $.SL_BITS
+  ; a byte at a time first (A is 0 here)
+  MOV A, D
+  SUB A, #8
+  MOV D, A
+  CLRB A
+  XCH A, X
+  XCH A, B
+  XCH A, X
+  XCH A, C
+  XCH A, B
+.SL_BITS:
   BT A.7, $.STOR
 .LOOP1:
   DEC D

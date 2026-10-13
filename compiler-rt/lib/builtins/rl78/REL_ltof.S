@@ -41,6 +41,19 @@ __REL_ltof:
   clrb  a     ; 16-bit left shift
   xchw  ax,bc
 1:
+  cmp0  a
+  bnz $6f
+  ; a byte at a time first (A is 0 here)
+  mov a,d
+  sub a,#8
+  mov d,a
+  clrb a
+  xch a,x
+  xch a,b
+  xch a,x
+  xch a,c
+  xch a,b
+6:
   bt  a.7,$3f   ; (msb == 1)?
 2:
   dec d     ; subtract the value of the exponent part
