@@ -24,11 +24,13 @@ define i16 @loop_carried_half_copy() {
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    oneb a
 ; CHECK-NEXT:  .LBB0_1: ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    mov [sp+0], a
+; CHECK-NEXT:    mov [sp+0], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:    call ax
-; CHECK-NEXT:    mov a, [sp+0]
-; CHECK-NEXT:    shrw ax, 8
+; CHECK-NEXT:    clrb a
+; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    mov a, [sp+0] ; 1-byte Folded Reload
+; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    cmp0 x
 ; CHECK-NEXT:    bnz $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2: ; in Loop: Header=BB0_1 Depth=1

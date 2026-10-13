@@ -11,8 +11,8 @@ define i16 @test_DAGCombine_AND(i16 %a, i16 %b) {
 ; CHECK-NEXT:    or a, b
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    or a, c
-; CHECK-NEXT:    movw bc, #-1
 ; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    movw bc, #-1
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    subw ax, hl

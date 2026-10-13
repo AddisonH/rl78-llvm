@@ -76,7 +76,10 @@ public:
     return &TSInfo;
   }
 
-  bool enablePostRAScheduler() const override { return true; }
+  // Not worth it here: the scheduler can separate a register write from the
+  // access through that register (one clock), but it moves spill code to
+  // where AX is live, and a slot is loaded and stored through AX only.
+  bool enablePostRAScheduler() const override { return false; }
 
   bool enableMachineScheduler() const override;
 

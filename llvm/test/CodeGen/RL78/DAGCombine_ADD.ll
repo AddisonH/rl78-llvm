@@ -10,7 +10,6 @@ define dso_local i8 @test_DAGCombine_ADD(i8 noundef %0) {
 ; ADD8-NEXT:    inc a
 ; ADD8-NEXT:    shl a, 1
 ; ADD8-NEXT:    ret
-;
 ; HI16-LABEL: test_DAGCombine_ADD:
 ; HI16:       ; %bb.0:
 ; HI16-NEXT:    inc a
@@ -27,8 +26,8 @@ define dso_local i8 @test_DAGCombine_ADD(i8 noundef %0) {
 define void @test_DAGCombine_ADD_HI16(i16 %idx) {
 ; ADD8-LABEL: test_DAGCombine_ADD_HI16:
 ; ADD8:       ; %bb.0:
-; ADD8-NEXT:    movw de, #LOWW(_u)
 ; ADD8-NEXT:    movw bc, ax
+; ADD8-NEXT:    movw de, #LOWW(_u)
 ; ADD8-NEXT:    addw ax, de
 ; ADD8-NEXT:    movw de, #0
 ; ADD8-NEXT:    movw hl, ax
@@ -37,7 +36,6 @@ define void @test_DAGCombine_ADD_HI16(i16 %idx) {
 ; ADD8-NEXT:    mov a, e
 ; ADD8-NEXT:    mov LOWW(_u)[bc], a
 ; ADD8-NEXT:    ret
-;
 ; HI16-LABEL: test_DAGCombine_ADD_HI16:
 ; HI16:       ; %bb.0:
 ; HI16-NEXT:    movw bc, ax

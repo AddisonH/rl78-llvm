@@ -10,9 +10,9 @@ target triple = "rl78-unknown-unknown-elf"
 define dso_local void @test_diff() local_unnamed_addr {
 ; CHECK-LABEL: test_diff:
 ; CHECK:       ; %bb.0:
+; CHECK-NEXT:    movw ax, !LOWW(_p+2)
 ; CHECK-NEXT:    movw hl, !LOWW(_p)
 ; CHECK-NEXT:    movw bc, #13
-; CHECK-NEXT:    movw ax, !LOWW(_p+2)
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    movw ax, bc

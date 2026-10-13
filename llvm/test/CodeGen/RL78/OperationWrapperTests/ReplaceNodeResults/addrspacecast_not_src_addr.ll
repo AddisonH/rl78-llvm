@@ -8,9 +8,9 @@
 define dso_local void @func() local_unnamed_addr #1 {
 ; CHECK-LABEL: func:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, !_func
 ; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    skz
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw bc, #15

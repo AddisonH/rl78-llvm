@@ -46,13 +46,11 @@ define dso_local i8 @ad(i8 noundef %0, i8 noundef %1) local_unnamed_addr #0 {
 define dso_local i32 @ae(i16 noundef %0, i16 noundef %1, i32 noundef %2) local_unnamed_addr #0 {
 ; CHECK-LABEL: ae:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw !0xffff0, ax
 ; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xchw ax, de

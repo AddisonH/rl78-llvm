@@ -16,8 +16,8 @@ define void @bz_rel8_backward_jump(i16 %flag) {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:  .LBB0_1: ; %do.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    nop
+; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    bz $.LBB0_1
 ; CHECK-NEXT:  ; %bb.2: ; %do.end
 ; CHECK-NEXT:    ret
@@ -144,7 +144,7 @@ define void @br_rel16_bz_backward_jump_substitute(i16 %flag) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
-; CHECK-NEXT:    movw ax, [sp+32]
+; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    br $!.LBB2_1
@@ -277,22 +277,21 @@ if.end:
 define void @bnz_rel8_backward_jump(i16 %counter) {
 ; CHECK-LABEL: bnz_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    addw ax, ax
 ; CHECK-NEXT:    bnh $.LBB4_4
 ; CHECK-NEXT:  ; %bb.1: ; %for.body.preheader
 ; CHECK-NEXT:    decw bc
-; CHECK-NEXT:    inc c
 ; CHECK-NEXT:    inc b
+; CHECK-NEXT:    inc c
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    mov a, b
 ; CHECK-NEXT:  .LBB4_2: ; %for.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    dec x
 ; CHECK-NEXT:    nop
+; CHECK-NEXT:    dec x
 ; CHECK-NEXT:    bnz $.LBB4_2
 ; CHECK-NEXT:  ; %bb.3: ; %for.body.hi
 ; CHECK-NEXT:    ; in Loop: Header=BB4_2 Depth=1
@@ -347,15 +346,14 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-LABEL: br_rel16_bnz_backward_jump_substitute:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    subw sp, #34
-; CHECK-NEXT:    cmpw ax, #0
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    addw ax, ax
 ; CHECK-NEXT:    skh
 ; CHECK-NEXT:    br $!.LBB6_2
 ; CHECK-NEXT:  .LBB6_1: ; %for.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    movw [sp+32], ax
+; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [sp+30], ax
@@ -432,7 +430,7 @@ define void @br_rel16_bnz_backward_jump_substitute(i16 %counter) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
-; CHECK-NEXT:    movw ax, [sp+32]
+; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    movw ax, de

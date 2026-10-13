@@ -25,11 +25,11 @@ define dso_local i16 @sum(ptr addrspace(2) nofree noundef readonly captures(none
 ; CHECK-NEXT:    clrw ax
 ; CHECK-NEXT:  .LBB0_3: ; %while.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    decw bc
 ; CHECK-NEXT:    addw ax, es:[hl+0]
 ; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    decw bc
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    movw ax, de
@@ -82,14 +82,13 @@ define dso_local void @copy(ptr addrspace(2) nofree noundef writeonly captures(n
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    mov [sp+0], a
+; CHECK-NEXT:    mov [sp+0], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    mov [sp+1], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, bc
-; CHECK-NEXT:    mov [sp+1], a
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:  .LBB2_2: ; %while.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    movw ax, bc
@@ -97,17 +96,17 @@ define dso_local void @copy(ptr addrspace(2) nofree noundef writeonly captures(n
 ; CHECK-NEXT:    bz $.LBB2_3
 ; CHECK-NEXT:  ; %bb.1: ; %while.body
 ; CHECK-NEXT:    ; in Loop: Header=BB2_2 Depth=1
-; CHECK-NEXT:    decw bc
-; CHECK-NEXT:    mov a, [sp+0]
+; CHECK-NEXT:    mov a, [sp+0] ; 1-byte Folded Reload
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    mov a, es:[hl]
-; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    mov x, a
-; CHECK-NEXT:    mov a, [sp+1]
+; CHECK-NEXT:    mov a, [sp+1] ; 1-byte Folded Reload
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    mov a, x
 ; CHECK-NEXT:    mov es:[de], a
 ; CHECK-NEXT:    incw de
+; CHECK-NEXT:    incw hl
+; CHECK-NEXT:    decw bc
 ; CHECK-NEXT:    br $.LBB2_2
 ; CHECK-NEXT:  .LBB2_3: ; %while.end
 ; CHECK-NEXT:    pop hl
@@ -138,14 +137,14 @@ define dso_local i16 @call(ptr addrspace(2) nofree noundef readonly captures(non
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    mov [sp+0], a
+; CHECK-NEXT:    mov [sp+0], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    movw ax, es:[de]
 ; CHECK-NEXT:    call !_id
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+2]
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    mov a, [sp+0]
+; CHECK-NEXT:    mov a, [sp+0] ; 1-byte Folded Reload
 ; CHECK-NEXT:    mov es, a
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    addw ax, es:[hl+2]

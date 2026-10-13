@@ -8,10 +8,9 @@
 define i16 @sgt(i32 %a, i32 %b) {
 ; CHECK-LABEL: sgt:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
@@ -59,10 +58,9 @@ define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-LABEL: sel:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push de
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+8]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+8]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
@@ -78,7 +76,7 @@ define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB2_1:
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %c = icmp slt i32 %a, %b

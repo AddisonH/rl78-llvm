@@ -29,41 +29,40 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    push bc
 ; NOSCHED-NEXT:    subw sp, #18
 ; NOSCHED-NEXT:    movw de, ax
+; NOSCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw hl, #3
-; NOSCHED-NEXT:    movw [sp+6], ax
 ; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    push hl
 ; NOSCHED-NEXT:    pop bc
 ; NOSCHED-NEXT:    mulhu
 ; NOSCHED-NEXT:    movw hl, ax
-; NOSCHED-NEXT:    movw bc, #3
 ; NOSCHED-NEXT:    movw ax, de
+; NOSCHED-NEXT:    movw bc, #3
 ; NOSCHED-NEXT:    mulhu
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    addw ax, hl
-; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+26]
-; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    movw bc, ax
+; NOSCHED-NEXT:    movw ax, [sp+26]
+; NOSCHED-NEXT:    movw hl, ax
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    addw ax, hl
+; NOSCHED-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    movw ax, [sp+28]
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw [sp+4], ax
-; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, h
-; NOSCHED-NEXT:    movw [sp+2], ax
-; NOSCHED-NEXT:    movw ax, [sp+18]
+; NOSCHED-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    push de
 ; NOSCHED-NEXT:    pop bc
 ; NOSCHED-NEXT:    shlw bc, 14
-; NOSCHED-NEXT:    movw ax, [sp+6]
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    shrw ax, 2
 ; NOSCHED-NEXT:    addw ax, bc
 ; NOSCHED-NEXT:    movw bc, ax
@@ -84,7 +83,7 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    addc a, e
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, d
-; NOSCHED-NEXT:    movw [sp+0], ax
+; NOSCHED-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    shlw ax, 3
 ; NOSCHED-NEXT:    movw de, ax
@@ -92,40 +91,38 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    shrw ax, 13
 ; NOSCHED-NEXT:    movw bc, ax
 ; NOSCHED-NEXT:    movw ax, de
-; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+18]
-; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    addw ax, bc
+; NOSCHED-NEXT:    xchw ax, de
+; NOSCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    xor a, d
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, e
-; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+6]
-; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
 ; NOSCHED-NEXT:    movw ax, [sp+26]
 ; NOSCHED-NEXT:    shlw ax, 3
+; NOSCHED-NEXT:    xchw ax, de
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    xor a, d
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, e
 ; NOSCHED-NEXT:    xch a, x
-; NOSCHED-NEXT:    movw [sp+10], ax
+; NOSCHED-NEXT:    movw [sp+10], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw [sp+12], ax
+; NOSCHED-NEXT:    movw [sp+12], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    xchw ax, bc
-; NOSCHED-NEXT:    movw [sp+8], ax
-; NOSCHED-NEXT:    xchw ax, bc
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
-; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+0]
-; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    movw ax, bc
+; NOSCHED-NEXT:    movw [sp+8], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
@@ -133,135 +130,137 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    movw hl, ax
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+20]
+; NOSCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    addw ax, de
-; NOSCHED-NEXT:    movw [sp+6], ax
+; NOSCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    sknc
 ; NOSCHED-NEXT:  ; %bb.1:
 ; NOSCHED-NEXT:    incw hl
 ; NOSCHED-NEXT:  .LBB0_2:
 ; NOSCHED-NEXT:    movw ax, hl
-; NOSCHED-NEXT:    movw [sp+18], ax
-; NOSCHED-NEXT:    movw ax, [sp+10]
+; NOSCHED-NEXT:    movw [sp+18], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+10] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, bc
-; NOSCHED-NEXT:    movw ax, [sp+12]
+; NOSCHED-NEXT:    movw ax, [sp+12] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, bc
 ; NOSCHED-NEXT:    addw ax, bc
 ; NOSCHED-NEXT:    movw de, ax
-; NOSCHED-NEXT:    movw ax, [sp+8]
+; NOSCHED-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+0]
+; NOSCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, h
-; NOSCHED-NEXT:    movw [sp+14], ax
+; NOSCHED-NEXT:    movw [sp+14], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+4]
+; NOSCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    addw ax, de
-; NOSCHED-NEXT:    movw [sp+20], ax
-; NOSCHED-NEXT:    movw ax, [sp+14]
+; NOSCHED-NEXT:    movw [sp+20], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+14] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+2]
+; NOSCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, h
-; NOSCHED-NEXT:    movw [sp+16], ax
+; NOSCHED-NEXT:    movw [sp+16], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    subw ax, de
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    movw [sp+12], ax
-; NOSCHED-NEXT:    movw ax, [sp+0]
+; NOSCHED-NEXT:    movw [sp+12], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    subc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    subc a, h
 ; NOSCHED-NEXT:    movw hl, ax
-; NOSCHED-NEXT:    movw [sp+14], ax
-; NOSCHED-NEXT:    movw ax, [sp+6]
+; NOSCHED-NEXT:    movw [sp+14], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    addw ax, bc
 ; NOSCHED-NEXT:    movw de, ax
-; NOSCHED-NEXT:    movw ax, [sp+18]
+; NOSCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, h
 ; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+16]
+; NOSCHED-NEXT:    movw ax, [sp+16] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
 ; NOSCHED-NEXT:    xch a, x
-; NOSCHED-NEXT:    movw [sp+0], ax
-; NOSCHED-NEXT:    movw ax, [sp+20]
-; NOSCHED-NEXT:    movw hl, ax
+; NOSCHED-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, de
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
 ; NOSCHED-NEXT:    xch a, x
-; NOSCHED-NEXT:    movw [sp+20], ax
-; NOSCHED-NEXT:    movw ax, [sp+10]
-; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+8]
-; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw [sp+20], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+10] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    shrw ax, 5
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    push hl
 ; NOSCHED-NEXT:    pop bc
-; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+4]
-; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    shlw bc, 11
 ; NOSCHED-NEXT:    addw ax, bc
+; NOSCHED-NEXT:    xchw ax, de
+; NOSCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    xor a, d
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, e
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    movw ax, hl
-; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+2]
-; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    shrw ax, 5
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
-; NOSCHED-NEXT:    xchw ax, hl
-; NOSCHED-NEXT:    movw ax, [sp+6]
-; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
 ; NOSCHED-NEXT:    movw ax, de
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    addw ax, hl
-; NOSCHED-NEXT:    movw [sp+6], ax
-; NOSCHED-NEXT:    movw ax, [sp+18]
-; NOSCHED-NEXT:    movw hl, ax
+; NOSCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, bc
+; NOSCHED-NEXT:    xchw ax, hl
+; NOSCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
+; NOSCHED-NEXT:    xchw ax, hl
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    addc a, h
 ; NOSCHED-NEXT:    movw hl, ax
-; NOSCHED-NEXT:    movw [sp+2], ax
+; NOSCHED-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    xchw ax, bc
-; NOSCHED-NEXT:    movw ax, [sp+14]
+; NOSCHED-NEXT:    movw ax, [sp+14] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, bc
 ; NOSCHED-NEXT:    xor a, b
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, c
 ; NOSCHED-NEXT:    xch a, x
-; NOSCHED-NEXT:    movw [sp+4], ax
+; NOSCHED-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    xchw ax, de
-; NOSCHED-NEXT:    movw ax, [sp+12]
+; NOSCHED-NEXT:    movw ax, [sp+12] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    xor a, d
 ; NOSCHED-NEXT:    xch a, x
@@ -271,14 +270,14 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    movw ax, hl
 ; NOSCHED-NEXT:    shlw ax, 15
 ; NOSCHED-NEXT:    movw de, ax
-; NOSCHED-NEXT:    movw ax, [sp+6]
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    shrw ax, 1
 ; NOSCHED-NEXT:    addw ax, de
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    movw ax, bc
 ; NOSCHED-NEXT:    addw ax, bc
 ; NOSCHED-NEXT:    movw hl, ax
-; NOSCHED-NEXT:    movw ax, [sp+20]
+; NOSCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xor a, h
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, l
@@ -287,8 +286,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, e
 ; NOSCHED-NEXT:    xch a, x
-; NOSCHED-NEXT:    movw [sp+6], ax
-; NOSCHED-NEXT:    movw ax, [sp+4]
+; NOSCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
+; NOSCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    movw de, ax
 ; NOSCHED-NEXT:    addw ax, de
 ; NOSCHED-NEXT:    movw de, ax
@@ -298,13 +297,13 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    addw ax, bc
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    movw ax, [sp+0]
+; NOSCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xor a, b
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    xor a, c
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    movw ax, [sp+2]
+; NOSCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    shrw ax, 1
 ; NOSCHED-NEXT:    movw hl, ax
 ; NOSCHED-NEXT:    movw ax, bc
@@ -313,7 +312,7 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    xor a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    movw ax, [sp+6]
+; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    addw sp, #22
 ; NOSCHED-NEXT:    ret
 ;
@@ -323,41 +322,37 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    push bc
 ; SCHED-NEXT:    subw sp, #18
 ; SCHED-NEXT:    movw de, ax
+; SCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    movw hl, #3
-; SCHED-NEXT:    movw [sp+6], ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    push hl
 ; SCHED-NEXT:    pop bc
 ; SCHED-NEXT:    mulhu
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw bc, #3
 ; SCHED-NEXT:    movw ax, de
+; SCHED-NEXT:    movw bc, #3
 ; SCHED-NEXT:    mulhu
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    addw ax, hl
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw ax, [sp+26]
-; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, de
-; SCHED-NEXT:    addw ax, hl
-; SCHED-NEXT:    xchw ax, hl
+; SCHED-NEXT:    movw ax, [sp+26]
+; SCHED-NEXT:    addw ax, de
+; SCHED-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    movw ax, [sp+28]
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw [sp+4], ax
+; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, h
-; SCHED-NEXT:    movw [sp+2], ax
-; SCHED-NEXT:    movw ax, [sp+18]
+; SCHED-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    push de
 ; SCHED-NEXT:    pop bc
 ; SCHED-NEXT:    shlw bc, 14
-; SCHED-NEXT:    movw ax, [sp+6]
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; SCHED-NEXT:    shrw ax, 2
 ; SCHED-NEXT:    addw ax, bc
 ; SCHED-NEXT:    movw bc, ax
@@ -374,151 +369,147 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    addc a, e
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, d
-; SCHED-NEXT:    movw [sp+0], ax
+; SCHED-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    shlw ax, 3
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    shrw ax, 13
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, [sp+18]
-; SCHED-NEXT:    xchw ax, de
+; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    addw ax, bc
+; SCHED-NEXT:    xchw ax, de
+; SCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
+; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, e
-; SCHED-NEXT:    xchw ax, de
-; SCHED-NEXT:    movw ax, [sp+6]
-; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
+; SCHED-NEXT:    movw ax, hl
+; SCHED-NEXT:    movw [sp+12], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
+; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    movw ax, [sp+26]
 ; SCHED-NEXT:    shlw ax, 3
 ; SCHED-NEXT:    xor a, d
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, e
 ; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    movw [sp+10], ax
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw [sp+12], ax
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    xchw ax, bc
-; SCHED-NEXT:    movw [sp+8], ax
-; SCHED-NEXT:    xchw ax, bc
+; SCHED-NEXT:    movw [sp+10], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw ax, [sp+0]
-; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw de, ax
+; SCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
+; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, bc
+; SCHED-NEXT:    movw [sp+8], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw ax, [sp+20]
+; SCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
 ; SCHED-NEXT:    addw ax, de
-; SCHED-NEXT:    movw [sp+6], ax
+; SCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    sknc
 ; SCHED-NEXT:  ; %bb.1:
 ; SCHED-NEXT:    incw hl
 ; SCHED-NEXT:  .LBB0_2:
-; SCHED-NEXT:    movw ax, hl
-; SCHED-NEXT:    movw [sp+18], ax
-; SCHED-NEXT:    movw ax, [sp+0]
-; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw ax, [sp+12]
+; SCHED-NEXT:    movw ax, [sp+12] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, [sp+10]
+; SCHED-NEXT:    movw ax, hl
+; SCHED-NEXT:    movw [sp+18], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
+; SCHED-NEXT:    movw hl, ax
+; SCHED-NEXT:    movw ax, [sp+10] ; 2-byte Folded Reload
 ; SCHED-NEXT:    addw ax, bc
 ; SCHED-NEXT:    movw de, ax
-; SCHED-NEXT:    movw ax, [sp+8]
+; SCHED-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, h
-; SCHED-NEXT:    movw [sp+14], ax
-; SCHED-NEXT:    movw ax, [sp+4]
+; SCHED-NEXT:    movw [sp+14], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; SCHED-NEXT:    movw hl, ax
+; SCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    addw ax, de
-; SCHED-NEXT:    movw [sp+20], ax
-; SCHED-NEXT:    movw ax, [sp+2]
-; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw ax, [sp+14]
+; SCHED-NEXT:    movw [sp+20], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+14] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, h
-; SCHED-NEXT:    movw [sp+16], ax
+; SCHED-NEXT:    movw [sp+16], ax ; 2-byte Folded Spill
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    subw ax, de
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw [sp+12], ax
-; SCHED-NEXT:    movw ax, [sp+0]
+; SCHED-NEXT:    movw [sp+12], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    subc a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    subc a, h
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw [sp+14], ax
-; SCHED-NEXT:    movw ax, [sp+6]
+; SCHED-NEXT:    movw [sp+14], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; SCHED-NEXT:    addw ax, bc
 ; SCHED-NEXT:    movw de, ax
-; SCHED-NEXT:    movw ax, [sp+18]
+; SCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, h
 ; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw ax, [sp+16]
+; SCHED-NEXT:    movw ax, [sp+16] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    movw [sp+0], ax
-; SCHED-NEXT:    movw ax, [sp+20]
+; SCHED-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    movw [sp+20], ax
-; SCHED-NEXT:    movw ax, [sp+8]
+; SCHED-NEXT:    movw [sp+20], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+8] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw ax, [sp+10]
+; SCHED-NEXT:    movw ax, [sp+10] ; 2-byte Folded Reload
 ; SCHED-NEXT:    shrw ax, 5
 ; SCHED-NEXT:    push hl
 ; SCHED-NEXT:    pop bc
-; SCHED-NEXT:    xchw ax, de
-; SCHED-NEXT:    movw ax, [sp+4]
-; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    shlw bc, 11
 ; SCHED-NEXT:    addw ax, bc
+; SCHED-NEXT:    xchw ax, de
+; SCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
+; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, e
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw de, ax
-; SCHED-NEXT:    movw ax, [sp+2]
-; SCHED-NEXT:    xchw ax, hl
+; SCHED-NEXT:    movw ax, hl
 ; SCHED-NEXT:    shrw ax, 5
+; SCHED-NEXT:    xchw ax, hl
+; SCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
-; SCHED-NEXT:    xchw ax, hl
-; SCHED-NEXT:    movw ax, [sp+6]
-; SCHED-NEXT:    xchw ax, hl
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, de
-; SCHED-NEXT:    addw ax, hl
-; SCHED-NEXT:    movw [sp+6], ax
-; SCHED-NEXT:    movw ax, [sp+18]
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
+; SCHED-NEXT:    addw ax, de
+; SCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    xch a, x
@@ -526,15 +517,15 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    addc a, h
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw [sp+2], ax
-; SCHED-NEXT:    movw ax, [sp+14]
+; SCHED-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+14] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xchw ax, bc
 ; SCHED-NEXT:    xor a, b
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, c
 ; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    movw [sp+4], ax
-; SCHED-NEXT:    movw ax, [sp+12]
+; SCHED-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+12] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
 ; SCHED-NEXT:    xch a, x
@@ -544,14 +535,14 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    movw ax, hl
 ; SCHED-NEXT:    shlw ax, 15
 ; SCHED-NEXT:    movw de, ax
-; SCHED-NEXT:    movw ax, [sp+6]
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; SCHED-NEXT:    shrw ax, 1
 ; SCHED-NEXT:    addw ax, de
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    movw ax, bc
 ; SCHED-NEXT:    addw ax, bc
 ; SCHED-NEXT:    movw hl, ax
-; SCHED-NEXT:    movw ax, [sp+20]
+; SCHED-NEXT:    movw ax, [sp+20] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, l
@@ -560,8 +551,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, e
 ; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    movw [sp+6], ax
-; SCHED-NEXT:    movw ax, [sp+4]
+; SCHED-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
+; SCHED-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; SCHED-NEXT:    movw de, ax
 ; SCHED-NEXT:    addw ax, de
 ; SCHED-NEXT:    movw de, ax
@@ -571,13 +562,13 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    addw ax, bc
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, [sp+0]
+; SCHED-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xor a, b
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, c
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, [sp+2]
+; SCHED-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; SCHED-NEXT:    shrw ax, 1
 ; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, bc
@@ -586,7 +577,7 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, [sp+6]
+; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; SCHED-NEXT:    addw sp, #22
 ; SCHED-NEXT:    ret
   %4 = shl i32 %1, 3

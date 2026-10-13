@@ -8,10 +8,9 @@ target triple = "rl78-unknown-unknown-elf"
 define void @test_DAGCombine_BRCOND(i32 %x, i32 %y) {
 ; CHECK-LABEL: test_DAGCombine_BRCOND:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7

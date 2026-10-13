@@ -9,8 +9,8 @@
 define ptr addrspace(2) @negofs(ptr addrspace(2) %p) {
 ; CHECK-LABEL: negofs:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    mov es, a
+; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    movw ax, es:[de]
 ; CHECK-NEXT:    or a, x

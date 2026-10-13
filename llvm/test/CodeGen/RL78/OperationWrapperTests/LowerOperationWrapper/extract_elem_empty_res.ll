@@ -10,8 +10,8 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
@@ -20,7 +20,7 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw hl, #0
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw [de], ax
 ; CHECK-NEXT:    mov a, b

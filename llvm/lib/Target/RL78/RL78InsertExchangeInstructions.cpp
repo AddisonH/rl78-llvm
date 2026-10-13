@@ -13,6 +13,8 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
 
 using namespace llvm;
 
@@ -435,8 +437,43 @@ static bool isStoreFoldableIntoPush(MachineBasicBlock &MBB,
   return Prev != MBB.end() && Prev->getOpcode() == RL78::PUSH_rp;
 }
 
+// Whether the slot of the spill pseudo \p MI is one the register allocator
+// made: nothing the program names is in it.
+static bool isAllocatorSlot(const MachineInstr &MI,
+                            const MachineFrameInfo &MFI) {
+  if (!MI.hasOneMemOperand())
+    return false;
+  const auto *FS = dyn_cast_or_null<FixedStackPseudoSourceValue>(
+      (*MI.memoperands_begin())->getPseudoValue());
+  return FS && MFI.isSpillSlotObjectIndex(FS->getFrameIndex());
+}
+
+// Whether \p Other, which loads or stores, may access the two bytes at
+// [Base+Offset]. An access to another slot through the same base does not,
+// and neither does an access to memory the program names when the slot is
+// the allocator's.
+static bool mayAccessSlot(const MachineInstr &Other, Register Base,
+                          int64_t Offset, bool IsAllocatorSlot) {
+  switch (Other.getOpcode()) {
+  case RL78::LOAD8_r_stack_slot:
+  case RL78::LOAD16_rp_stack_slot:
+    return Other.getOperand(1).getReg() != Base ||
+           std::abs(Other.getOperand(2).getImm() - Offset) < 2;
+  case RL78::STORE8_stack_slot_r:
+  case RL78::STORE16_stack_slot_rp:
+    return Other.getOperand(0).getReg() != Base ||
+           std::abs(Other.getOperand(1).getImm() - Offset) < 2;
+  default:
+    return !IsAllocatorSlot || Other.memoperands_empty() ||
+           any_of(Other.memoperands(), [](const MachineMemOperand *MMO) {
+             return !MMO->getValue();
+           });
+  }
+}
+
 static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
                                     const TargetRegisterInfo *TRI) {
+  const MachineFrameInfo &MFI = MBB.getParent()->getFrameInfo();
   // Bounds both the pass and how far the destination's live range stretches.
   const unsigned WindowSize = 8;
   bool ChangedAny = false;
@@ -462,6 +499,9 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
       Register Dst = MI.getOperand(0).getReg();
       if (Dst == RL78::RP0 || !AXLiveBefore.lookup(&MI))
         continue;
+      Register Base = MI.getOperand(1).getReg();
+      int64_t Offset = MI.getOperand(2).getImm();
+      bool IsSpillSlot = isAllocatorSlot(MI, MFI);
 
       MachineBasicBlock::iterator Target = MBB.end();
       MachineBasicBlock::iterator It(MI);
@@ -474,9 +514,12 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         MachineInstr &Prev = *It;
         // A store may write the slot being loaded, and moving SP changes what
         // [sp+N] means.
-        if (Prev.mayStore() || Prev.isCall() || Prev.isTerminator() ||
-            Prev.isInlineAsm() || Prev.hasUnmodeledSideEffects() ||
-            Prev.modifiesRegister(RL78::SPreg, TRI))
+        if (Prev.isCall() || Prev.isTerminator() || Prev.isInlineAsm() ||
+            Prev.hasUnmodeledSideEffects() ||
+            Prev.modifiesRegister(RL78::SPreg, TRI) ||
+            Prev.modifiesRegister(Base, TRI))
+          break;
+        if (Prev.mayStore() && mayAccessSlot(Prev, Base, Offset, IsSpillSlot))
           break;
         if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
           break;
@@ -548,6 +591,72 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         Changed = ChangedAny = true;
         break;
       }
+    }
+
+    if (Changed)
+      continue;
+
+    // A pair other than AX is stored while AX is live: xchw, movw [sp+n], ax,
+    // xchw. If the pair was copied from AX a few instructions back, store AX
+    // there; failing that, store where AX is dead and a MOVW AX, rp will do.
+    for (MachineInstr &MI : MBB) {
+      if (MI.getOpcode() != RL78::STORE16_stack_slot_rp)
+        continue;
+      Register Src = MI.getOperand(2).getReg();
+      if (Src == RL78::RP0 || !AXLiveBefore.lookup(&MI) ||
+          isStoreFoldableIntoPush(MBB, MI.getIterator()))
+        continue;
+      Register Base = MI.getOperand(0).getReg();
+      int64_t Offset = MI.getOperand(1).getImm();
+      bool IsSpillSlot = isAllocatorSlot(MI, MFI);
+
+      MachineBasicBlock::iterator Target = MBB.end();
+      MachineInstr *Copy = nullptr;
+      MachineBasicBlock::iterator It(MI);
+      for (unsigned N = 0; N != WindowSize && It != MBB.begin();) {
+        --It;
+        if (It->isDebugInstr())
+          continue;
+        ++N;
+        MachineInstr &Prev = *It;
+        if (Prev.isCall() || Prev.isTerminator() || Prev.isInlineAsm() ||
+            Prev.hasUnmodeledSideEffects() ||
+            Prev.getFlag(MachineInstr::FrameSetup) ||
+            Prev.modifiesRegister(RL78::SPreg, TRI) ||
+            Prev.modifiesRegister(Base, TRI))
+          break;
+        if (Prev.getOpcode() == RL78::MOVW_rp_AX &&
+            Prev.getOperand(0).getReg() == Src) {
+          Copy = &Prev;
+          break;
+        }
+        if (Prev.modifiesRegister(Src, TRI))
+          break;
+        // The store must not move above an access to its slot.
+        if (Prev.mayLoadOrStore() &&
+            mayAccessSlot(Prev, Base, Offset, IsSpillSlot))
+          break;
+        if (!AXLiveBefore.lookup(&Prev))
+          Target = It; // The earliest place is as good as any.
+      }
+
+      if (Copy) {
+        // AX is read once more, after the copy.
+        bool Kill = Copy->getOperand(1).isKill();
+        Copy->getOperand(1).setIsKill(false);
+        MI.getOperand(2).setReg(RL78::RP0);
+        MI.getOperand(2).setIsKill(Kill);
+        MBB.splice(std::next(Copy->getIterator()), &MBB,
+                   MachineBasicBlock::iterator(MI));
+      } else if (Target != MBB.end()) {
+        // Src is still read by the instructions the store moves above.
+        MI.getOperand(2).setIsKill(false);
+        MBB.splice(Target, &MBB, MachineBasicBlock::iterator(MI));
+      } else {
+        continue;
+      }
+      Changed = ChangedAny = true;
+      break;
     }
   }
   return ChangedAny;

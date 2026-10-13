@@ -7,18 +7,16 @@
 define i32 @smin(i32 %a, i32 %b) optsize {
 ; CHECK-LABEL: smin:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    cmpw ax, hl
@@ -57,11 +55,11 @@ define i32 @abs(i32 %a) optsize {
 ; CHECK-LABEL: abs:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    subw ax, hl
-; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    subc a, c
@@ -76,7 +74,7 @@ define i32 @abs(i32 %a) optsize {
 ; CHECK-NEXT:    pop de
 ; CHECK-NEXT:    br $.LBB2_3
 ; CHECK-NEXT:  .LBB2_1:
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:  .LBB2_3:
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop bc

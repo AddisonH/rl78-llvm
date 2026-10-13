@@ -26,10 +26,10 @@ define i16 @word(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e, i16 %f) {
 ; RELOAD-NEXT:    xchw ax, hl
 ; RELOAD-NEXT:    movw ax, [sp+6]
 ; RELOAD-NEXT:    xchw ax, hl
+; RELOAD-NEXT:    subw ax, hl
 ; RELOAD-NEXT:    xchw ax, bc
 ; RELOAD-NEXT:    movw ax, [sp+8]
 ; RELOAD-NEXT:    xchw ax, bc
-; RELOAD-NEXT:    subw ax, hl
 ; RELOAD-NEXT:    addw ax, bc
 ; RELOAD-NEXT:    xor a, h
 ; RELOAD-NEXT:    xch a, x

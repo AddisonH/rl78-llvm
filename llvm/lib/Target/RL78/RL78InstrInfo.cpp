@@ -88,17 +88,24 @@ void RL78InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   // dbgs() << "storeRegToStackSlot\n";
   if (I != MBB.end())
     DL = I->getDebugLoc();
+  MachineFunction &MF = *MBB.getParent();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo::getFixedStack(MF, FI), MachineMemOperand::MOStore,
+      MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
   if ((RI.getRegSizeInBits(*RC) == 8)) {
     BuildMI(MBB, I, DL, get(RL78::STORE8_stack_slot_r))
         .addFrameIndex(FI)
         .addImm(0)
         .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO)
         .setMIFlag(Flags);
   } else {
     BuildMI(MBB, I, DL, get(RL78::STORE16_stack_slot_rp))
         .addFrameIndex(FI)
         .addImm(0)
         .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO)
         .setMIFlag(Flags);
   }
   // MBB.dump();
@@ -115,15 +122,22 @@ void RL78InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   if (I != MBB.end())
     DL = I->getDebugLoc();
   // dbgs() << "loadRegFromStackSlot\n";
+  MachineFunction &MF = *MBB.getParent();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo::getFixedStack(MF, FI), MachineMemOperand::MOLoad,
+      MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
   if (RI.getRegSizeInBits(*RC) == 8) {
     BuildMI(MBB, I, DL, get(RL78::LOAD8_r_stack_slot), DestReg)
         .addFrameIndex(FI)
         .addImm(0)
+        .addMemOperand(MMO)
         .setMIFlag(Flags);
   } else {
     BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_stack_slot), DestReg)
         .addFrameIndex(FI)
         .addImm(0)
+        .addMemOperand(MMO)
         .setMIFlag(Flags);
     // We can't do this here becuase it's done during reg alloc.
     // BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_stack_slot),

@@ -13,14 +13,14 @@ define i8 @mov1(i8 %c) {
 ; CHECK-LABEL: mov1:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    subw sp, #4
-; CHECK-NEXT:    mov [sp+1], a
+; CHECK-NEXT:    mov [sp+1], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    movw ax, sp
-; CHECK-NEXT:    movw [sp+2], ax
+; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    call !_use
-; CHECK-NEXT:    movw ax, [sp+2]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    mov a, [sp+1]
+; CHECK-NEXT:    mov a, [sp+1] ; 1-byte Folded Reload
 ; CHECK-NEXT:    mov1 cy, a.4
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    mov1 [hl].1, cy
 ; CHECK-NEXT:    mov a, [sp+0]
 ; CHECK-NEXT:    addw sp, #4
@@ -36,13 +36,13 @@ define i8 @xor1(i8 %c) {
 ; CHECK-LABEL: xor1:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    subw sp, #4
-; CHECK-NEXT:    mov [sp+1], a
+; CHECK-NEXT:    mov [sp+1], a ; 1-byte Folded Spill
 ; CHECK-NEXT:    movw ax, sp
-; CHECK-NEXT:    movw [sp+2], ax
+; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    call !_use
-; CHECK-NEXT:    mov a, [sp+1]
+; CHECK-NEXT:    mov a, [sp+1] ; 1-byte Folded Reload
 ; CHECK-NEXT:    mov1 cy, a.4
-; CHECK-NEXT:    movw ax, [sp+2]
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    xor1 cy, [hl].1
 ; CHECK-NEXT:    mov1 [hl].1, cy

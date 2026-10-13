@@ -19,10 +19,17 @@ define dso_local void @f(i16 noundef %x) optsize {
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %body
+; CHECK-NEXT:    movw ax, #11
+; CHECK-NEXT:    movw !LOWW(_a), ax
 ; CHECK-NEXT:    movw hl, #12
+; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw !LOWW(_b), ax
 ; CHECK-NEXT:    movw de, #13
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw !LOWW(_c), ax
 ; CHECK-NEXT:    movw bc, #14
-; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw !LOWW(_d), ax
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
@@ -39,15 +46,15 @@ define dso_local void @f(i16 noundef %x) optsize {
 ; LONG-NEXT:    sknz
 ; LONG-NEXT:    br $!.LBB0_2
 ; LONG-NEXT:  ; %bb.1: ; %body
-; LONG-NEXT:    movw hl, #12
-; LONG-NEXT:    movw de, #13
-; LONG-NEXT:    movw bc, #14
 ; LONG-NEXT:    movw ax, #11
 ; LONG-NEXT:    movw !LOWW(_a), ax
+; LONG-NEXT:    movw hl, #12
 ; LONG-NEXT:    movw ax, hl
 ; LONG-NEXT:    movw !LOWW(_b), ax
+; LONG-NEXT:    movw de, #13
 ; LONG-NEXT:    movw ax, de
 ; LONG-NEXT:    movw !LOWW(_c), ax
+; LONG-NEXT:    movw bc, #14
 ; LONG-NEXT:    movw ax, bc
 ; LONG-NEXT:    movw !LOWW(_d), ax
 ; LONG-NEXT:    movw ax, #11

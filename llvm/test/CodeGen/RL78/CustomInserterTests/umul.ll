@@ -8,11 +8,11 @@
 define dso_local i8 @main(i8 %input) local_unnamed_addr {
 ; CHECK-LABEL: main:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    mov x, #79
 ; CHECK-NEXT:    mov c, a
+; CHECK-NEXT:    mov x, #79
 ; CHECK-NEXT:    mulu x
-; CHECK-NEXT:    mov x, #26
 ; CHECK-NEXT:    shr a, 3
+; CHECK-NEXT:    mov x, #26
 ; CHECK-NEXT:    mulu x
 ; CHECK-NEXT:    mov a, c
 ; CHECK-NEXT:    sub a, x
