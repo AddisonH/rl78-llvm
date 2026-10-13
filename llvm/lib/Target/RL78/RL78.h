@@ -52,6 +52,7 @@ FunctionPass *createRL78NarrowLoopCountersPass();
 FunctionPass *createRL78ByteLoopCountersPass();
 FunctionPass *createRL78OuterLoopPointersPass();
 FunctionPass *createRL78UnspeculateLoopLatchPass();
+FunctionPass *createRL78BiasSignedComparesPass();
 FunctionPass *createRL78ExpandInlineAsmPass();
 FunctionPass *createRL78MACRLoopPromotePass();
 FunctionPass *createRL78SinkToAccumulatorPass();
@@ -64,6 +65,7 @@ void initializeRL78NarrowLoopCountersPass(PassRegistry &);
 void initializeRL78ByteLoopCountersPass(PassRegistry &);
 void initializeRL78OuterLoopPointersPass(PassRegistry &);
 void initializeRL78UnspeculateLoopLatchPass(PassRegistry &);
+void initializeRL78BiasSignedComparesPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 void initializeRL78SlotOperandsPass(PassRegistry &);
 

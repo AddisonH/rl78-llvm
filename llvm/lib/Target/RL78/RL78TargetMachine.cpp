@@ -44,6 +44,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78ByteLoopCountersPass(*PR);
   initializeRL78OuterLoopPointersPass(*PR);
   initializeRL78UnspeculateLoopLatchPass(*PR);
+  initializeRL78BiasSignedComparesPass(*PR);
   initializeRL78SlotOperandsPass(*PR);
 }
 
@@ -282,9 +283,12 @@ void RL78PassConfig::addIRPasses() {
     addPass(createRL78UnspeculateLoopLatchPass());
   }
   TargetPassConfig::addIRPasses();
-  // After LSR, which does this for the innermost loops only.
-  if (getOptLevel() != CodeGenOptLevel::None)
+  if (getOptLevel() != CodeGenOptLevel::None) {
+    // After LSR, which does this for the innermost loops only.
     addPass(createRL78OuterLoopPointersPass());
+    // After LSR, which replaces the exit tests it can.
+    addPass(createRL78BiasSignedComparesPass());
+  }
 }
 
 bool RL78PassConfig::addInstSelector() {
