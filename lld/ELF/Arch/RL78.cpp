@@ -315,8 +315,10 @@ static uint64_t getTargetVA(Ctx &ctx, const InputSection &sec,
       ctx, Relocation{R_ABS, r.type, r.offset, r.addend, r.sym}, loc);
 }
 
+// \p prevRemove is what the previous pass removed at this relocation.
 static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
-                        uint64_t loc, Relocation &r, uint32_t &remove) {
+                        uint64_t loc, Relocation &r, uint32_t prevRemove,
+                        uint32_t &remove) {
   // Handle only br/call !!addr20.
   const auto opc = sec.content().data()[r.offset - 1];
   if (opc != 0xEC && opc != 0xFC)
@@ -329,16 +331,20 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
   // If the branch target is in the same input section after the branch,
   // relaxing the branch will affect its address; if we don't consider this we
   // fail to relax some branches that are just "at the boundary" e.g. at +127
-  // bytes (max. 8-bit signed value).
+  // bytes (max. 8-bit signed value). The target's address is the one the
+  // previous pass left, so what that pass removed here is in it already.
   const auto adjTgtVA = isa<Defined>(r.sym) &&
                         cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
+  auto tgtMoves = [&](int64_t n) {
+    return adjTgtVA ? n - int64_t(prevRemove) : 0;
+  };
 
   // Relative distance between the instructions.
   const auto deltaVA = int64_t(tgtVA - brVA);
 
   // For branches, try first to relax to br $addr20. PC will be brVA+2 when
   // relaxing to 2 bytes, and an adjusted tgtVA will be at -2.
-  const auto disp8 = (deltaVA - 2) - (adjTgtVA ? 2 : 0);
+  const auto disp8 = (deltaVA - 2) - tgtMoves(2);
   if (opc == 0xEC && isInt<8>(disp8)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
     sec.relaxAux->writes.push_back(0xEF); // BR $addr20.
@@ -363,7 +369,7 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
 
   // Lastly, try br/call $!addr20. PC will be brVA+3 when relaxing to 3 bytes,
   // and an adjusted tgtVA will be at -1.
-  const auto disp16 = (deltaVA - 3) - (adjTgtVA ? 1 : 0);
+  const auto disp16 = (deltaVA - 3) - tgtMoves(1);
   if (isInt<16>(disp16)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR16S_PCREL;
     sec.relaxAux->writes.push_back(opc + 2); // I.e. 0xEE and 0xFE, resp.
@@ -373,7 +379,8 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
 
 template <bool PCRel>
 static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
-                       uint64_t loc, Relocation &r, uint32_t &remove) {
+                       uint64_t loc, Relocation &r, uint32_t prevRemove,
+                       uint32_t &remove) {
   // Handle only the branches:
   //   br !addr16   (PCRel = false)
   //   br $!addr20  (PCRel = true)
@@ -403,7 +410,7 @@ static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
 
   // PC will be brVA+2 when relaxing to 2 bytes, and an adjusted tgtVA will be
   // at -1.
-  const auto disp8 = (deltaVA - 2) - (adjTgtVA ? 1 : 0);
+  const auto disp8 = (deltaVA - 2) - (adjTgtVA ? 1 - int64_t(prevRemove) : 0);
   if (isInt<8>(disp8)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
     sec.relaxAux->writes.push_back(0xEF); // BR $addr20.
@@ -421,6 +428,7 @@ static bool relax(Ctx &ctx, InputSection &sec) {
 
   ArrayRef<SymbolAnchor> sa = aux.anchors;
   uint64_t delta = 0;
+  uint32_t prevDelta = 0;
 
   auto updateAnchor = [&](const SymbolAnchor &a) {
     if (a.end)
@@ -435,19 +443,21 @@ static bool relax(Ctx &ctx, InputSection &sec) {
   for (auto [i, r] : llvm::enumerate(sec.relocs())) {
     const uint64_t loc = secAddr + r.offset - delta;
     uint32_t &cur = aux.relocDeltas[i], remove = 0;
+    const uint32_t prevRemove = cur - prevDelta;
+    prevDelta = cur;
     const bool relaxable = i + 1 != sec.relocs().size() &&
                            sec.relocs()[i + 1].type == R_RL78_RELAX;
 
     if (relaxable) {
       switch (r.type) {
       case R_RL78_DIR20U:
-        relaxDIR20U(ctx, sec, i, loc, r, remove);
+        relaxDIR20U(ctx, sec, i, loc, r, prevRemove, remove);
         break;
       case R_RL78_DIR16U:
-        relaxDIR16<false>(ctx, sec, i, loc, r, remove);
+        relaxDIR16<false>(ctx, sec, i, loc, r, prevRemove, remove);
         break;
       case R_RL78_DIR16S_PCREL:
-        relaxDIR16<true>(ctx, sec, i, loc, r, remove);
+        relaxDIR16<true>(ctx, sec, i, loc, r, prevRemove, remove);
         break;
       default:
         break;
@@ -755,7 +765,7 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     write16le(loc, checkAndConvertRAM(ctx, loc, rel, val) & 0xfffe);
     break;
   case R_RL78_DIR8S_PCREL:
-    checkIntUInt(ctx, loc, val - 1, 8, rel);
+    checkInt(ctx, loc, val - 1, 8, rel);
     write8le(loc, val - 1);
     break;
   case R_RL78_DIR16S_PCREL:
