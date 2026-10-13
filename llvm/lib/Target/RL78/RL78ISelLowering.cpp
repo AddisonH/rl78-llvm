@@ -1768,20 +1768,21 @@ static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
 static void TruncateCompareOpsIfPossible(SDValue &RHS, SDValue &LHS,
                                          SelectionDAG &DAG, SDLoc dl,
                                          bool enabled) {
-  if (((LHS.getOpcode() == ISD::ZERO_EXTEND && LHS.hasOneUse()) ||
-       (LHS.getOpcode() == ISD::AssertZext && LHS.hasOneUse() &&
-        LHS.getOperand(0).hasOneUse())) &&
-      enabled)
-    LHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8,
-                      LHS.getOpcode() == ISD::AssertZext ? LHS.getOperand(0)
-                                                         : LHS);
-  if (((RHS.getOpcode() == ISD::ZERO_EXTEND && RHS.hasOneUse()) ||
-       (RHS.getOpcode() == ISD::AssertZext && RHS.hasOneUse() &&
-        RHS.getOperand(0).hasOneUse())) &&
-      enabled)
-    RHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8,
-                      RHS.getOpcode() == ISD::AssertZext ? RHS.getOperand(0)
-                                                         : RHS);
+  // A value extended from a byte, or known to be no wider (the range of a
+  // call's result is asserted with the number of bits it needs, which may
+  // be more than eight).
+  auto IsByte = [](SDValue V) {
+    if (V.getOpcode() == ISD::ZERO_EXTEND)
+      return V.hasOneUse() && V.getOperand(0).getValueType() == MVT::i8;
+    return V.getOpcode() == ISD::AssertZext && V.hasOneUse() &&
+           V.getOperand(0).hasOneUse() &&
+           cast<VTSDNode>(V.getOperand(1))->getVT().getSizeInBits() <= 8;
+  };
+  for (SDValue *V : {&LHS, &RHS})
+    if (enabled && IsByte(*V))
+      *V = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8,
+                       V->getOpcode() == ISD::AssertZext ? V->getOperand(0)
+                                                         : *V);
   if (LHS.getValueType() == MVT::i8 && RHS.getValueType() != MVT::i8)
     RHS = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, RHS);
   else if (RHS.getValueType() == MVT::i8 && LHS.getValueType() != MVT::i8)
