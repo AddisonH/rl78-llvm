@@ -37,6 +37,10 @@ public:
                              Register &FrameReg) const override;
 
   void
+  processFunctionBeforeFrameFinalized(MachineFunction &MF,
+                                      RegScavenger *RS = nullptr) const override;
+
+  void
   orderFrameObjects(const MachineFunction &MF,
                     SmallVectorImpl<int> &objectsToAllocate) const override;
 

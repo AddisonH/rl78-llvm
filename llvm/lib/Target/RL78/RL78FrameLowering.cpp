@@ -12,6 +12,7 @@
 
 #include "RL78Subtarget.h"
 #include "RL78MachineFunctionInfo.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -866,6 +867,20 @@ struct RL78FrameSortingComparator {
 };
 } // namespace
 
+// PEI allocates the stack protector's guard before every other object, next
+// to the return address on a stack that grows down. This frame is laid out
+// upwards from SP, where "first" is the far end from the return address:
+// take the guard out of PEI's hands and place it in orderFrameObjects.
+void RL78FrameLowering::processFunctionBeforeFrameFinalized(
+    MachineFunction &MF, RegScavenger *RS) const {
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (!MFI.hasStackProtectorIndex())
+    return;
+  MF.getInfo<RL78MachineFunctionInfo>()->setStackGuardFI(
+      MFI.getStackProtectorIndex());
+  MFI.setStackProtectorIndex(-1);
+}
+
 // Order frame objects:
 // We want to place the more densely used objects first (lower address)
 // because we use [SP+offset] when offset < 256 and offset[BC] when offset >=
@@ -873,6 +888,28 @@ struct RL78FrameSortingComparator {
 void RL78FrameLowering::orderFrameObjects(
     const MachineFunction &MF, SmallVectorImpl<int> &objectsToAllocate) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  // With a stack protector the top of the frame is, from the saved registers
+  // and the return address down: the guard, the large arrays, the small
+  // ones, and the objects whose address is taken. An array that overflows
+  // then reaches the guard before anything else, and nothing the function
+  // uses before it checks the guard.
+  SmallVector<int, 8> Top;
+  if (int Guard = MF.getInfo<RL78MachineFunctionInfo>()->getStackGuardFI();
+      Guard >= 0) {
+    for (MachineFrameInfo::SSPLayoutKind Kind :
+         {MachineFrameInfo::SSPLK_AddrOf, MachineFrameInfo::SSPLK_SmallArray,
+          MachineFrameInfo::SSPLK_LargeArray})
+      for (int FI : objectsToAllocate)
+        if (FI != Guard && MFI.getObjectSSPLayout(FI) == Kind)
+          Top.push_back(FI);
+    if (llvm::is_contained(objectsToAllocate, Guard))
+      Top.push_back(Guard);
+    llvm::erase_if(objectsToAllocate,
+                   [&](int FI) { return llvm::is_contained(Top, FI); });
+  }
+  auto AppendTop = llvm::make_scope_exit(
+      [&] { objectsToAllocate.append(Top.begin(), Top.end()); });
 
   // Don't waste time if there's nothing to do.
   if (objectsToAllocate.empty())

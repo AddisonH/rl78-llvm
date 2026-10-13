@@ -25,6 +25,10 @@ private:
   /// VarArgsFrameOffset - Frame offset to start of varargs area.
   int VarArgsFrameOffset;
 
+  /// The frame index of the stack protector's guard, or -1: RL78FrameLowering
+  /// places it itself (see orderFrameObjects).
+  int StackGuardFI = -1;
+
   /// SRetReturnReg - Holds the virtual register(s) into which the sret
   /// argument is passed.
   unsigned SRetReturnReg;
@@ -51,6 +55,9 @@ public:
 
   unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
   void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
+
+  int getStackGuardFI() const { return StackGuardFI; }
+  void setStackGuardFI(int FI) { StackGuardFI = FI; }
 
   int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
   void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
