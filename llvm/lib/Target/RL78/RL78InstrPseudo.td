@@ -243,6 +243,13 @@ def ROTR16_r_imm : RL78Pseudo<0, (outs RL78AXRP:$rd),
                               [(set i16:$rd, (rotr i16:$rsrc, (i8 imm:$imm)))]>;
 }
 
+// The number of leading zeros of a word, 16 for zero. The custom inserter
+// makes the loop: the word is shifted to the left until a bit comes out,
+// with a one behind it that ends the loop for zero.
+let usesCustomInserter = 1, Defs = [CCreg] in
+def CTLZ16 : RL78Pseudo<0, (outs RL78Reg:$rd), (ins RL78RPRegs:$rs),
+                        [(set i8:$rd, (rl78ctlz i16:$rs))]>;
+
 //===----------------------------------------------------------------------===//
 // Calls and tail calls
 //===----------------------------------------------------------------------===//

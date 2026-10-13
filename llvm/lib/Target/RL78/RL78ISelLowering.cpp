@@ -1129,6 +1129,12 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::CTLZ, VT, Expand);
     setOperationAction(ISD::CTTZ, VT, Expand);
   }
+  // A loop that shifts a word to the left (RL78::CTLZ16); the generic
+  // expansion counts bits with 65 instructions for 16 bits.
+  setOperationAction(ISD::CTLZ, MVT::i16, Custom);
+  setOperationAction(ISD::CTTZ, MVT::i16, Custom);
+  setOperationAction(ISD::CTLZ, MVT::i8, Promote);
+  setOperationAction(ISD::CTTZ, MVT::i8, Promote);
 
   // We want to custom lower some of our intrinsics.
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::i32, Custom);
@@ -1459,6 +1465,7 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::SRAC)
     MAKE_CASE(RL78ISD::RORWC)
     MAKE_CASE(RL78ISD::CY15)
+    MAKE_CASE(RL78ISD::CTLZ16)
     MAKE_CASE(RL78ISD::NOTCY)
     MAKE_CASE(RL78ISD::XCHW)
     MAKE_CASE(RL78ISD::ANDMEM)
@@ -3756,6 +3763,25 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
   case ISD::ROTL:
   case ISD::ROTR:
     return LowerRotate(Op, DAG);
+  case ISD::CTLZ: {
+    SDLoc DL(Op);
+    return DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i16,
+                       DAG.getNode(RL78ISD::CTLZ16, DL, MVT::i8,
+                                   Op.getOperand(0)));
+  }
+  case ISD::CTTZ: {
+    // ~x & (x - 1) has a one for each zero below the lowest one of x.
+    SDLoc DL(Op);
+    SDValue X = Op.getOperand(0);
+    SDValue Below =
+        DAG.getNode(ISD::AND, DL, MVT::i16, DAG.getNOT(DL, X, MVT::i16),
+                    DAG.getNode(ISD::ADD, DL, MVT::i16, X,
+                                DAG.getAllOnesConstant(DL, MVT::i16)));
+    SDValue Zeros = DAG.getNode(RL78ISD::CTLZ16, DL, MVT::i8, Below);
+    return DAG.getNode(ISD::SUB, DL, MVT::i16,
+                       DAG.getConstant(16, DL, MVT::i16),
+                       DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i16, Zeros));
+  }
   case ISD::INTRINSIC_W_CHAIN:
     return LowerIntrinsicWithChain(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:
@@ -4336,6 +4362,92 @@ RL78TargetLowering::LowerLOAD_SELECTCC(MachineInstr &MI,
 
 
 
+// The number of leading zeros of a word:
+//
+//   BB:    Count = 0; Value = (X << 1) + 1; branch to Done if bit 15 of X
+//   Loop:  Count = Count + 1; Value = Value << 1; back unless a bit came out
+//   Done:
+//
+// The one behind the word comes out after 16 rounds when the word is zero.
+MachineBasicBlock *
+RL78TargetLowering::emitCTLZ16(MachineInstr &MI, MachineBasicBlock *BB) const {
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  DebugLoc DL = MI.getDebugLoc();
+
+  MachineBasicBlock *Loop = MF->CreateMachineBasicBlock(BB->getBasicBlock());
+  MachineBasicBlock *Done = MF->CreateMachineBasicBlock(BB->getBasicBlock());
+  // The new blocks may be inside a call sequence.
+  unsigned CallFrameSize = TII->getCallFrameSizeAt(MI);
+  Loop->setCallFrameSize(CallFrameSize);
+  Done->setCallFrameSize(CallFrameSize);
+  MachineFunction::iterator It = std::next(MachineFunction::iterator(BB));
+  MF->insert(It, Loop);
+  MF->insert(It, Done);
+  Done->splice(Done->begin(), BB, std::next(MachineBasicBlock::iterator(MI)),
+               BB->end());
+  Done->transferSuccessorsAndUpdatePHIs(BB);
+  BB->addSuccessor(Loop);
+  BB->addSuccessor(Done);
+  Loop->addSuccessor(Loop);
+  Loop->addSuccessor(Done);
+
+  const TargetRegisterClass *ByteRC = &RL78::RL78RegRegClass;
+  const TargetRegisterClass *WordRC = &RL78::RL78RPRegsRegClass;
+  Register Count0 = MRI.createVirtualRegister(ByteRC);
+  Register Count1 = MRI.createVirtualRegister(ByteRC);
+  Register Count2 = MRI.createVirtualRegister(ByteRC);
+  Register Value0 = MRI.createVirtualRegister(WordRC);
+  Register Value1 = MRI.createVirtualRegister(WordRC);
+  Register Value2 = MRI.createVirtualRegister(WordRC);
+  // ADDW AX, AX: one place to the left, the top bit in CY.
+  auto ShiftLeft = [&](MachineBasicBlock &MBB, Register In) {
+    Register Tied = MRI.createVirtualRegister(&RL78::RL78AXRPRegClass);
+    Register Out = MRI.createVirtualRegister(&RL78::RL78AXRPRegClass);
+    BuildMI(MBB, MBB.end(), DL, TII->get(TargetOpcode::COPY), Tied).addReg(In);
+    BuildMI(MBB, MBB.end(), DL, TII->get(RL78::ADDW_AX_rp), Out)
+        .addReg(Tied)
+        .addReg(Tied);
+    return Out;
+  };
+
+  BuildMI(*BB, BB->end(), DL, TII->get(RL78::MOV_r_i8), Count0).addImm(0);
+  Register Shifted = ShiftLeft(*BB, MI.getOperand(1).getReg());
+  // INCW leaves the flags alone.
+  BuildMI(*BB, BB->end(), DL, TII->get(RL78::INCW_rp), Value0).addReg(Shifted);
+  BuildMI(*BB, BB->end(), DL, TII->get(RL78::BRCC))
+      .addMBB(Done)
+      .addImm(RL78CC::RL78CC_C);
+
+  BuildMI(*Loop, Loop->end(), DL, TII->get(TargetOpcode::PHI), Count1)
+      .addReg(Count0)
+      .addMBB(BB)
+      .addReg(Count2)
+      .addMBB(Loop);
+  BuildMI(*Loop, Loop->end(), DL, TII->get(TargetOpcode::PHI), Value1)
+      .addReg(Value0)
+      .addMBB(BB)
+      .addReg(Value2)
+      .addMBB(Loop);
+  BuildMI(*Loop, Loop->end(), DL, TII->get(RL78::INC_r), Count2).addReg(Count1);
+  Shifted = ShiftLeft(*Loop, Value1);
+  BuildMI(*Loop, Loop->end(), DL, TII->get(TargetOpcode::COPY), Value2)
+      .addReg(Shifted);
+  BuildMI(*Loop, Loop->end(), DL, TII->get(RL78::Bcc_rel8))
+      .addMBB(Loop)
+      .addImm(RL78CC::RL78CC_NC);
+
+  BuildMI(*Done, Done->begin(), DL, TII->get(TargetOpcode::PHI),
+          MI.getOperand(0).getReg())
+      .addReg(Count0)
+      .addMBB(BB)
+      .addReg(Count2)
+      .addMBB(Loop);
+  MI.eraseFromParent();
+  return Done;
+}
+
 MachineBasicBlock *RL78TargetLowering::LowerShift_Or_LowerRotate_rp_rp(
     MachineInstr &MI, MachineBasicBlock *BB, unsigned int opcode,
     bool isI8) const {
@@ -4606,6 +4718,8 @@ RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTL16_rp_rp, false);
   case RL78::ROTR16_rp_rp:
     return OptForSpeed ? BB : LowerShift_Or_LowerRotate_rp_rp(MI, BB, RL78::ROTR16_rp_rp, false);
+  case RL78::CTLZ16:
+    return emitCTLZ16(MI, BB);
   case RL78::CALL_cs_rp:
     return LowerCallCSRP(MI, BB);
   case RL78::LOAD_SELECTCC8_r_esaddr16_esaddr16:

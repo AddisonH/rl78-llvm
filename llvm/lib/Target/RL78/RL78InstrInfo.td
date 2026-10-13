@@ -65,6 +65,10 @@ def rl78rorwc : SDNode<"RL78ISD::RORWC", SDTIntUnaryOp,
 // the bit that left the last one.
 def rl78cy15 : SDNode<"RL78ISD::CY15", SDTIntUnaryOp, [SDNPInGlue]>;
 
+// The number of leading zeros of a word, 16 for zero, in a byte.
+def rl78ctlz : SDNode<"RL78ISD::CTLZ16",
+                      SDTypeProfile<1, 1, [SDTCisVT<0, i8>, SDTCisVT<1, i16>]>>;
+
 // A compare; the flags are the glue result.
 def SDTCMP : SDTypeProfile<0, 3, [SDTCisInt<0>, SDTCisSameAs<0, 1>,
                                   SDTCisInt<2>]>;

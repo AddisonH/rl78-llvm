@@ -68,6 +68,8 @@ enum NodeType : unsigned {
   RORWC,
   // The carry into bit 15 of a word (glue operand).
   CY15,
+  // The number of leading zeros of a word, a byte.
+  CTLZ16,
   LOAD_SELECTCC,
   DELAY_CYCLES_1_4,
   DELAY_CYCLES_5,
@@ -344,6 +346,7 @@ private:
   MachineBasicBlock *LowerLOAD_SELECTCC(MachineInstr &MI,
                                         MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerMUL8(MachineInstr &MI, MachineBasicBlock *BB) const;
+  MachineBasicBlock *emitCTLZ16(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerShift_Or_LowerRotate_rp_rp(MachineInstr &MI,
                                                      MachineBasicBlock *BB,
                                                      unsigned int opcode,
