@@ -51,6 +51,7 @@ __COM_screm:
   CLRB A
   MOV D, A
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   MOV A, E
 #else
   XCH A, X

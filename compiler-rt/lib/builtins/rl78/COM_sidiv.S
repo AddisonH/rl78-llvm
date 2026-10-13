@@ -56,6 +56,7 @@ __COM_sidiv:
   SUBW AX, BC
 .L2:
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   DEC L
   BNZ $.L_END
   MOVW BC, AX

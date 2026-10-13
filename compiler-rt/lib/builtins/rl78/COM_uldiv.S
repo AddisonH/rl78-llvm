@@ -50,6 +50,7 @@ __COM_uldiv:
   MOVW HL, AX
   POP AX
   DIVWU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   RET
 #elif _XMULDIV
   POP AX

@@ -48,6 +48,7 @@ __COM_remui:
   CLRB A
   XCHW AX, DE
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   MOV A, E
   RET
 #else

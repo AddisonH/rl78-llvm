@@ -71,6 +71,7 @@ __COM_slrem:
   MOVW AX, [SP+6]
   XCHW AX, DE
   DIVWU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   POP BC
   DEC C
   MOVW AX, HL

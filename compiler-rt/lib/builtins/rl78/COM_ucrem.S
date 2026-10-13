@@ -37,6 +37,7 @@ __COM_ucrem:
   SHRW AX, 8
   MOV D, A
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   MOV A, E
 #elif _XMULDIV
   MOVW DE, AX

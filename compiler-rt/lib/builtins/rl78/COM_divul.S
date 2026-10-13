@@ -38,6 +38,7 @@ __COM_divul:
 #ifdef __RL78_S3__
   movw  hl,#0
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
 ;
   ret
 #else
@@ -107,6 +108,7 @@ __COM_divul:
 #if _RL78_S3
   MOVW HL, #0
   DIVWU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   RET
 #else
 #if _XMULDIV

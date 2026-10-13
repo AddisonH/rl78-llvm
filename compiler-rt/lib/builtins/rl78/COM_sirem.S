@@ -52,6 +52,7 @@ __COM_sirem:
   SUBW AX, BC
 .L2:
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   DEC L
   BNZ $.L_END
   CLRW AX

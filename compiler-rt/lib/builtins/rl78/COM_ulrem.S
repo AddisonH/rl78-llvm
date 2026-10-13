@@ -47,6 +47,7 @@ __COM_ulrem:
   MOVW HL, AX
   POP AX
   DIVWU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   MOVW AX, HL
   MOVW BC, AX
   MOVW AX, DE

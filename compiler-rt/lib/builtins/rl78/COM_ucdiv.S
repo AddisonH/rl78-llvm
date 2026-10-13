@@ -40,6 +40,7 @@ __COM_ucdiv:
   SHRW AX, 8
   MOV D, A
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   MOV A, X
   RET
 #elif _XMULDIV

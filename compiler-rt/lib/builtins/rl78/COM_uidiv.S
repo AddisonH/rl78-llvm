@@ -41,6 +41,7 @@ __COM_uidiv:
   MOVW AX, BC
   XCHW AX, DE
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   RET
 #elif _XMULDIV
   MOVW AX, DE

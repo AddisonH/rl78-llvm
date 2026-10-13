@@ -184,6 +184,7 @@ __COM_fdiv:
   xchw  ax,hl
   ; dst0 / src = ret1(8bit), rem1(24bit)
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   push  ax    ; ret1(8bit), high byte is 0
   mov a,l   ; dst1(bcax) = rem1(hlde) << 8
   mov b,a
@@ -196,6 +197,7 @@ __COM_fdiv:
   shlw  ax,8
   ; dst1 / src = ret2(8bit), rem2(24bit)
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   push  ax    ; ret2(8bit)
   mov a,l   ; dst2(bcax) = rem2(hlde) << 8
   mov b,a
@@ -208,6 +210,7 @@ __COM_fdiv:
   shlw  ax,8
   ; dst2 / src = ret3(8bit), rem3(24bit)
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   pop bc    ; ret2(8bit)
   mov a,c   ;
   xchw  ax,de   ; ret2-ret3(16bit)

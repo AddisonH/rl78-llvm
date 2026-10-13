@@ -26,6 +26,7 @@ __COM_remul:
 #ifdef __RL78_S3__
   movw  hl,#0
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
 ;
   movw  ax,de
   ret

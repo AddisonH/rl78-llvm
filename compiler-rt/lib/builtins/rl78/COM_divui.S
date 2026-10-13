@@ -38,6 +38,7 @@ __COM_divui:
   clrb  a
   xchw  ax,de
   divhu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
 ;
   ret
 #else
@@ -96,6 +97,7 @@ __COM_divui:
   CLRB A
   XCHW AX, DE
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   RET
 #else
 #if _XMULDIV

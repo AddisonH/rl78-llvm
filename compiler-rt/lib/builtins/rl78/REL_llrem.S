@@ -35,6 +35,7 @@
   movw  hl,ax
   pop ax
   divwu
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   movw  ax,hl   ; *retp_l = 32bit % 32bit
   pop hl    ; retp
   movw  [hl+2],ax
@@ -113,6 +114,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; hlde:rem1
+  nop                 ; TN-RL*-A025: not straight into the next instruction
 ;
   movw  ax,hl   ; bc = rem1_h (not use if 2f)
   movw  bc,ax
@@ -141,6 +143,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; de:rem2
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   ; rem2,*xp_ll % *yp_ll -> rem3(16bit)
   movw  ax,de   ; bc = rem2
   movw  bc,ax
@@ -156,6 +159,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; de:rem3
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   pop hl    ; retp
   movw  ax,de   ; *retp_ll = rem3
   movw  [hl],ax
@@ -185,6 +189,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; lde:rem2
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   ; rem2(24bit),*xp_lhl % *yp(24bit) -> rem3(24bit)
   mov a,l   ; b = rem2_hl
   mov b,a
@@ -203,6 +208,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; lde:rem3
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   ; rem3(24bit),*xp_llh % *yp(24bit) -> rem4(24bit)
   mov a,l   ; b = rem3_hl
   mov b,a
@@ -222,6 +228,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; lde:rem4
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   ; rem4_*xp_lll % *yp -> rem5(24bit)
   mov a,l   ; b = rem4_hl
   mov b,a
@@ -240,6 +247,7 @@ __REL_llrem:
   movw  hl,ax
   pop ax
   divwu     ; lde:rem5
+  nop                 ; TN-RL*-A025: not straight into the next instruction
   movw  ax,hl   ; *retp_l = rem5
   pop hl    ; retp
   movw  [hl+2],ax

@@ -42,6 +42,7 @@ __COM_uirem:
   MOVW AX, BC
   XCHW AX, DE
   DIVHU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
 #elif _XMULDIV
   PUSH PSW
   DI

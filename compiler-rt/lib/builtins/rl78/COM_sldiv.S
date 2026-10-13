@@ -74,6 +74,7 @@ __COM_sldiv:
   MOVW AX, [SP+6]
   XCHW AX, DE
   DIVWU
+  NOP                 ; TN-RL*-A025: not straight into the next instruction
   POP DE
 #else
   PUSH AX
