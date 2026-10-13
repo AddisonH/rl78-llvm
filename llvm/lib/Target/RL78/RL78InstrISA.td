@@ -2222,6 +2222,12 @@ defm ADDE : RL78Wide<adde, adde, 1>;
 defm SUBE : RL78Wide<sube, sube, 1>;
 }
 }
+// Z for AX | rp, without the result: OR A, X and OR A with each byte of rp
+// ((a | b) == 0, the test of a 32-bit value against zero).
+let Defs = [R1, CCreg] in
+def ORZ_AX_rp : RL78Pseudo<6, (outs), (ins RL78AXRP:$ax, RL78BCDEHL:$rp),
+                           [(cmp i16:$ax, i16:$rp, (i8 1))]>;
+
 def : Pat<(andmem i16:$a, i16:$rp), (AND16_AX_rp $a, $rp)>;
 def : Pat<(ormem i16:$a, i16:$rp), (OR16_AX_rp $a, $rp)>;
 def : Pat<(xormem i16:$a, i16:$rp), (XOR16_AX_rp $a, $rp)>;

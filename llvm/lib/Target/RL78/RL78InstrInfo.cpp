@@ -757,6 +757,17 @@ bool RL78InstrInfo::expandPseudo(MachineInstr &MI) const {
     }
     MI.eraseFromParent();
     return true;
+  case RL78::ORZ_AX_rp: {
+    Register RP = MI.getOperand(1).getReg();
+    const TargetRegisterInfo &TRI = getRegisterInfo();
+    for (MCRegister R : {MCRegister(RL78::R0), TRI.getSubReg(RP, RL78::sub_lo),
+                         TRI.getSubReg(RP, RL78::sub_hi)})
+      BuildMI(*BB, MI, DL, get(RL78::OR_A_r), RL78::R1)
+          .addReg(RL78::R1)
+          .addReg(R);
+    MI.eraseFromParent();
+    return true;
+  }
   case RL78::MOV1_AX_15_CY:
     BuildMI(*BB, MI, DL, get(RL78::MOV1_A_b), RL78::R1)
         .addReg(RL78::R1)

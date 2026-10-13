@@ -192,6 +192,19 @@ public:
   /// Speculating a call to intrinsic cttz is cheap.
   bool isCheapToSpeculateCttz(Type *Ty) const override { return true; }
 
+  bool isIntDivCheap(EVT VT, AttributeList Attr) const override;
+
+  /// The shifts the generic combine makes of a signed division by a power
+  /// of two, whether or not other divisions are cheap.
+  SDValue BuildSDIVPow2(SDNode *N, const APInt &Divisor, SelectionDAG &DAG,
+                        SmallVectorImpl<SDNode *> &Created) const override {
+    return SDValue();
+  }
+  SDValue BuildSREMPow2(SDNode *N, const APInt &Divisor, SelectionDAG &DAG,
+                        SmallVectorImpl<SDNode *> &Created) const override {
+    return SDValue();
+  }
+
   /// Speculating a call to intrinsic ctlz is cheap.
   bool isCheapToSpeculateCtlz(Type *Ty) const override { return true; }
 
@@ -283,6 +296,7 @@ private:
   SDValue PerformTruncateCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformANDCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformORCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue PerformDivByConstantCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformSHLCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   MachineBasicBlock *LowerEXTEND(bool sext, MachineInstr &MI,

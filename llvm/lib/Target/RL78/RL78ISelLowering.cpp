@@ -1231,6 +1231,9 @@ RL78TargetLowering::RL78TargetLowering(const TargetMachine &TM,
     // So we can handle combining into divwu.
     setTargetDAGCombine(ISD::UDIV);
     setTargetDAGCombine(ISD::UREM);
+    // Division by a constant (PerformDivByConstantCombine).
+    setTargetDAGCombine(ISD::SDIV);
+    setTargetDAGCombine(ISD::SREM);
   } else {
     //
     setOperationAction(ISD::UDIV, MVT::i16, LibCall);
@@ -1753,6 +1756,14 @@ static SDValue SwitchCMPOperands(SDLoc DL, unsigned cc, SDValue CCSign,
                                  SDValue &LHS, SDValue &RHS, SelectionDAG &DAG,
                                  SDValue &TargetCC) {
   SDValue Cmp;
+  // (a | b) == 0, the test of a 32-bit value against zero: the bytes are
+  // ORed into A (RL78::ORZ_AX_rp), which only Z is valid after.
+  if ((cc == RL78CC::RL78CC_Z || cc == RL78CC::RL78CC_NZ) &&
+      isNullConstant(RHS) && LHS.getValueType() == MVT::i16 &&
+      LHS.getOpcode() == ISD::OR && LHS.hasOneUse() &&
+      !isa<ConstantSDNode>(LHS.getOperand(1)))
+    return DAG.getNode(RL78ISD::CMP, DL, MVT::Glue, LHS.getOperand(0),
+                       LHS.getOperand(1), DAG.getConstant(1, DL, MVT::i8));
   // Heuristic to aid the matcher's cmp a, mem pattern matching
   // If we would have cmp mem, a, switch lhs/rhs and flip the condition
   if (LHS.getOpcode() == ISD::LOAD && RHS.getOpcode() == ISD::CopyFromReg) {
@@ -2998,6 +3009,56 @@ RL78TargetLowering::PerformUDIVREMCombine(SDNode *N, DAGCombinerInfo &DCI,
   return Opcode == ISD::UDIV ? div : remainder;
 }
 
+// DIVHU divides 16 bits by 16 in one instruction of 9 clocks, so the generic
+// combine is told that this division is cheap and leaves the remainder by a
+// constant to it (and the quotient too when the remainder is wanted as
+// well, or size matters). What else it would have turned into a
+// multiplication is done here: MULHU and a shift take 6 clocks, and there
+// is no signed division at all.
+bool RL78TargetLowering::isIntDivCheap(EVT VT, AttributeList Attr) const {
+  return Subtarget->isRL78S3CoreType() && VT == MVT::i16;
+}
+
+SDValue RL78TargetLowering::PerformDivByConstantCombine(
+    SDNode *N, DAGCombinerInfo &DCI) const {
+  SelectionDAG &DAG = DCI.DAG;
+  EVT VT = N->getValueType(0);
+  const Function &F = DAG.getMachineFunction().getFunction();
+  auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
+  if (!C || C->isZero() || !isIntDivCheap(VT, F.getAttributes()) ||
+      F.hasMinSize())
+    return SDValue();
+  SDLoc DL(N);
+  SDValue X = N->getOperand(0), Y = N->getOperand(1);
+  bool AfterOps = DCI.isAfterLegalizeDAG(), AfterTypes = !DCI.isBeforeLegalize();
+  SmallVector<SDNode *, 8> Created;
+  SDValue R;
+  switch (N->getOpcode()) {
+  case ISD::SREM: {
+    SDValue Div = DAG.getNode(ISD::SDIV, DL, VT, X, Y);
+    DCI.AddToWorklist(Div.getNode());
+    return DAG.getNode(ISD::SUB, DL, VT, X,
+                       DAG.getNode(ISD::MUL, DL, VT, Div, Y));
+  }
+  case ISD::SDIV:
+    // The generic combine has made shifts of a power of two.
+    if (!N->getFlags().hasExact() && (C->getAPIntValue().isPowerOf2() ||
+                                      C->getAPIntValue().isNegatedPowerOf2()))
+      return SDValue();
+    R = BuildSDIV(N, DAG, AfterOps, AfterTypes, Created);
+    break;
+  case ISD::UDIV:
+    if (DAG.shouldOptForSize() ||
+        DAG.getNodeIfExists(ISD::UREM, N->getVTList(), {X, Y}))
+      return SDValue();
+    R = BuildUDIV(N, DAG, AfterOps, AfterTypes, Created);
+    break;
+  }
+  for (SDNode *New : Created)
+    DCI.AddToWorklist(New);
+  return R;
+}
+
 SDValue RL78TargetLowering::PerformMULADDCombine(SDNode *N,
                                                  DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
@@ -3493,7 +3554,12 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
     return PerformBRCONDCombine(N, DCI);
   case ISD::MUL:
       return PerformMULCombine(N, DCI);
+  case ISD::SDIV:
+  case ISD::SREM:
+      return PerformDivByConstantCombine(N, DCI);
   case ISD::UDIV:
+      if (SDValue V = PerformDivByConstantCombine(N, DCI))
+        return V;
       return PerformUDIVREMCombine(N, DCI, ISD::UREM);
   case ISD::UREM:
       return PerformUDIVREMCombine(N, DCI, ISD::UDIV);

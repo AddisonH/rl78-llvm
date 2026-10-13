@@ -956,6 +956,36 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
     }
     break;
   }
+  case ISD::AND: {
+    // The low bits of a word, or a field of it: SHLW and SHRW, where AND
+    // works on one byte at a time (XCH A, X; AND A, #byte; XCH A, X;
+    // CLRB A) after the shift that brings the field down.
+    auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
+    if (N->getValueType(0) != MVT::i16 || !C || !isMask_64(C->getZExtValue()))
+      break;
+    unsigned Bits = llvm::countr_one(C->getZExtValue());
+    if (Bits >= 8 || any_of(N->users(), [](const SDNode *U) {
+          return U->getOpcode() == RL78ISD::CMP;
+        }))
+      break;
+    SDValue X = N->getOperand(0);
+    unsigned From = 0;
+    if (X.getOpcode() == ISD::SRL && X.hasOneUse() &&
+        isa<ConstantSDNode>(X.getOperand(1)) &&
+        X.getConstantOperandVal(1) + Bits <= 16) {
+      From = X.getConstantOperandVal(1);
+      X = X.getOperand(0);
+    }
+    if (unsigned Up = 16 - Bits - From)
+      X = SDValue(CurDAG->getMachineNode(
+                      RL78::SHLW_rp_n, dl, MVT::i16, X,
+                      CurDAG->getTargetConstant(Up, dl, MVT::i8)),
+                  0);
+    ReplaceNode(N, CurDAG->getMachineNode(
+                       RL78::SHRW_AX_n, dl, MVT::i16, X,
+                       CurDAG->getTargetConstant(16 - Bits, dl, MVT::i8)));
+    return;
+  }
   case ISD::BUILD_PAIR: {
     SDLoc DL(N);
     if (N->getValueType(0) == MVT::i16) {

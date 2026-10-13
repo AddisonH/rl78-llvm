@@ -85,6 +85,7 @@ static unsigned commutedOpcode(unsigned Opcode) {
   case RL78::AND16_AX_rp:
   case RL78::OR16_AX_rp:
   case RL78::XOR16_AX_rp:
+  case RL78::ORZ_AX_rp:
     return Opcode;
   case RL78::SHRB_AX_rp:
     return RL78::SHLB_AX_rp;
@@ -134,14 +135,18 @@ bool RL78AccumulatorCopies::commute(MachineInstr &Save) {
   if (Load == MBB.end() || !isCopyIn(*Load, Acc, S) || S == R)
     return false;
   MachineBasicBlock::iterator Op = next_nodbg(Load, MBB.end());
-  if (Op == MBB.end() || !commutedOpcode(Op->getOpcode()) ||
-      Op->getOperand(1).getReg() != Acc || Op->getOperand(2).getReg() != R ||
-      !Op->getRegClassConstraint(2, TII, TRI)->contains(S) ||
+  if (Op == MBB.end() || !commutedOpcode(Op->getOpcode()))
+    return false;
+  // The two values follow the result, if there is one.
+  unsigned First = Op->getNumExplicitDefs();
+  MachineOperand &Other = Op->getOperand(First + 1);
+  if (Op->getOperand(First).getReg() != Acc || Other.getReg() != R ||
+      !Op->getRegClassConstraint(First + 1, TII, TRI)->contains(S) ||
       TII->isLiveBefore(MBB, std::next(Op), R))
     return false;
   Op->setDesc(TII->get(commutedOpcode(Op->getOpcode())));
-  Op->getOperand(2).setReg(S);
-  Op->getOperand(2).setIsKill(false);
+  Other.setReg(S);
+  Other.setIsKill(false);
   Load->eraseFromParent();
   Save.eraseFromParent();
   ++NumCommuted;
