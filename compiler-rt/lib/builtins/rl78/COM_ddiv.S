@@ -226,6 +226,9 @@ __COM_ddiv:
   movw  [de+6],ax
   ret
 11:
+#if _RL78_S3
+  call  $!.L_s3_divide
+#else
   ; division of mantissa
   ; [hl+6] ... division, [hl+14] ... divisor, [hl].7 ... sign, bc ... return exponent part
   ; [de] ... division result
@@ -322,8 +325,10 @@ __COM_ddiv:
   rolwc ax,1
   movw  [de+6],ax
   br  $13b
+#endif
 16:
   ; de ... return address, bc ... exponent part, [de] ... mantissa part, [hl].7 ... code
+  call  $!.L_inexact
   movw  ax,bc   ; return value of exponent part
   bt  a.7,$17f  ; if the exponent part is negative, move on to processing the subnormal number
   cmpw  ax,#0x0
@@ -357,6 +362,8 @@ __COM_ddiv:
   rorc  a,1
   xch a,x
   rorc  a,1
+  sknc
+  or  a,#1    ; a bit that leaves stays as the lowest one, for the rounding
   xch a,x
   movw  [de],ax
   incw  bc    ; exponent part
@@ -525,6 +532,9 @@ __COM_ddiv:
   BR $!.L_EXP_UNDERFLOW
   
 .L3:
+#if _RL78_S3
+  call  $!.L_s3_divide
+#else
   
   CLRW AX
   MOVW [DE+2], AX
@@ -613,6 +623,8 @@ __COM_ddiv:
   movw ax, bc
   movw [de], ax
   pop bc
+#endif
+  call  $!.L_inexact
   MOVW AX, BC
   MOV1 CY, A.7
   SKNC
@@ -647,6 +659,8 @@ __COM_ddiv:
   RORC A, 1
   XCH A, X
   RORC A, 1
+  SKNC
+  OR A, #1
   XCH A, X
   MOVW [DE], AX
   INCW BC
@@ -661,6 +675,221 @@ __COM_ddiv:
   MOV A, X
   BR !!__REL_d_round
 #endif
+
+#if _RL78_S3
+;===------------------------------------------------------------------------===;
+; The mantissas are divided with DIVWU and MULHU on the cores that have them.
+;
+;   in:   HL = frame: x at [HL+6], y at [HL+14], 53 bits each with bit 52 set
+;         DE = address of the result, BC = its exponent
+;   out:  [DE] = 64 bits of the quotient with bit 63 set. BC = the exponent,
+;         one less if x < y. HL and DE are kept; the remainder is at [HL+6].
+;
+; Both mantissas go up by 11 bits, which puts the top bit of the divisor in
+; bit 63. Long division in base 65536 then gets each of the four digits of
+; the quotient from the top two digits of the remainder and the top digit of
+; the divisor, at most 2 too high (Knuth, algorithm D); the multiple of the
+; divisor is subtracted and added back while the result is negative. The
+; remainder starts as x, or as x / 2 when x >= y, so that it is below y.
+;===------------------------------------------------------------------------===;
+
+; One word of the 64 bits at [HL] times 2048; DE carries the bits that leave.
+.macro S3_SHL11 off
+  movw  ax,[hl+\off]
+  movw  bc,#2048
+  mulhu
+  addw  ax,de
+  movw  [hl+\off],ax
+  movw  ax,bc
+  movw  de,ax
+.endm
+
+.L_s3_shl11:
+  movw  de,#0
+  S3_SHL11 0
+  S3_SHL11 2
+  S3_SHL11 4
+  S3_SHL11 6
+  ret
+
+; One place of remainder * 65536 - digit * divisor. In: DE = the digit of the
+; remainder at this place less the carry out of the place below, CY = the
+; borrow of that; the digit of the quotient at [SP+0]. The new digit goes to
+; the remainder's place \r, whose old digit belongs to the next place.
+; MOVW, XCHW, MULHU, INCW and the skips leave CY alone.
+.macro S3_MULSUB d, r
+  movw  ax,[sp+0]
+  movw  bc,ax
+  movw  ax,[hl+\d]
+  mulhu
+  sknc
+  incw  bc
+  xchw  ax,de
+  subw  ax,de
+  movw  de,ax
+  movw  ax,[hl+\r]
+  xchw  ax,de
+  movw  [hl+\r],ax
+  movw  ax,bc
+  sknc
+  incw  ax
+  xchw  ax,de
+  subw  ax,de
+  movw  de,ax
+.endm
+
+; AX = the next digit of the quotient; the remainder at [HL+6] (below the
+; divisor at [HL+14]) becomes remainder * 65536 - digit * divisor.
+.L_s3_digit:
+  push  de
+  movw  ax,[hl+12]
+  cmpw  ax,[hl+20]
+  bnz   $.L_s3_estimate
+  movw  ax,#0xFFFF      ; equal top digits: DIVWU would give 65536 or more
+  br    $.L_s3_estimated
+.L_s3_estimate:
+  movw  bc,ax
+  movw  ax,[hl+20]
+  movw  de,ax
+  movw  ax,[hl+10]
+  push  hl
+  movw  hl,#0
+  divwu                 ; BC:AX / HL:DE, the top two digits by the top digit
+  nop
+  pop   hl
+.L_s3_estimated:
+  push  ax
+  movw  de,#0
+  clr1  cy
+  S3_MULSUB 14, 6
+  S3_MULSUB 16, 8
+  S3_MULSUB 18, 10
+  S3_MULSUB 20, 12
+  ; DE is the place above the remainder: 0, or -1 or -2 for a digit that
+  ; was too high.
+.L_s3_fix:
+  movw  ax,de
+  cmpw  ax,#0
+  bz    $.L_s3_fixed
+  movw  ax,[sp+0]
+  decw  ax
+  movw  [sp+0],ax
+  movw  ax,[hl+6]
+  addw  ax,[hl+14]
+  movw  [hl+6],ax
+  movw  ax,[hl+8]
+  xch   a,x
+  addc  a,[hl+16]
+  xch   a,x
+  addc  a,[hl+17]
+  movw  [hl+8],ax
+  movw  ax,[hl+10]
+  xch   a,x
+  addc  a,[hl+18]
+  xch   a,x
+  addc  a,[hl+19]
+  movw  [hl+10],ax
+  movw  ax,[hl+12]
+  xch   a,x
+  addc  a,[hl+20]
+  xch   a,x
+  addc  a,[hl+21]
+  movw  [hl+12],ax
+  sknc
+  incw  de
+  br    $.L_s3_fix
+.L_s3_fixed:
+  pop   ax
+  pop   de
+  ret
+
+.L_s3_divide:
+  push  de
+  push  bc              ; the exponent at [SP+0]
+  push  hl
+  movw  ax,hl
+  addw  ax,#6
+  movw  hl,ax
+  call  $!.L_s3_shl11   ; x
+  movw  ax,hl
+  addw  ax,#8
+  movw  hl,ax
+  call  $!.L_s3_shl11   ; y
+  pop   hl
+  movw  ax,[hl+12]
+  cmpw  ax,[hl+20]
+  bnz   $.L_s3_compared
+  movw  ax,[hl+10]
+  cmpw  ax,[hl+18]
+  bnz   $.L_s3_compared
+  movw  ax,[hl+8]
+  cmpw  ax,[hl+16]
+  bnz   $.L_s3_compared
+  movw  ax,[hl+6]
+  cmpw  ax,[hl+14]
+.L_s3_compared:
+  bnc   $.L_s3_halve
+  movw  ax,[sp+0]       ; x < y: the quotient is below 1
+  decw  ax
+  movw  [sp+0],ax
+  br    $.L_s3_digits
+.L_s3_halve:
+  movw  ax,[hl+12]
+  shrw  ax,1
+  movw  [hl+12],ax
+  movw  ax,[hl+10]
+  rorc  a,1
+  xch   a,x
+  rorc  a,1
+  xch   a,x
+  movw  [hl+10],ax
+  movw  ax,[hl+8]
+  rorc  a,1
+  xch   a,x
+  rorc  a,1
+  xch   a,x
+  movw  [hl+8],ax
+  movw  ax,[hl+6]
+  rorc  a,1
+  xch   a,x
+  rorc  a,1
+  xch   a,x
+  movw  [hl+6],ax
+.L_s3_digits:
+  movw  ax,[sp+2]
+  movw  de,ax
+  call  $!.L_s3_digit
+  movw  [de+6],ax
+  call  $!.L_s3_digit
+  movw  [de+4],ax
+  call  $!.L_s3_digit
+  movw  [de+2],ax
+  call  $!.L_s3_digit
+  movw  [de],ax
+  pop   bc
+  pop   de
+  ret
+#endif
+
+; A remainder (at [HL+6]) makes the quotient at [DE] inexact: its lowest bit
+; says so to the rounding. A division is never exactly halfway between two
+; results, but 64 bits of quotient can look as if it were.
+.L_inexact:
+  mov   a,[hl+6]
+  or    a,[hl+7]
+  or    a,[hl+8]
+  or    a,[hl+9]
+  or    a,[hl+10]
+  or    a,[hl+11]
+  or    a,[hl+12]
+  or    a,[hl+13]
+  sknz
+  ret
+  mov   a,[de]
+  or    a,#1
+  mov   [de],a
+  ret
+
 .Lfunc_end1:
   .size __COM_ddiv, .Lfunc_end1-__COM_ddiv
 
