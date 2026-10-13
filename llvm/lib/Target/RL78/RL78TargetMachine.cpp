@@ -46,6 +46,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78UnspeculateLoopLatchPass(*PR);
   initializeRL78BiasSignedComparesPass(*PR);
   initializeRL78SlotOperandsPass(*PR);
+  initializeRL78LoadLateStoreEarlyPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {
@@ -340,6 +341,7 @@ void RL78PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78ConstPropAndOpSwap());
     addPass(createRL78SinkToAccumulatorPass());
+    addPass(createRL78LoadLateStoreEarlyPass());
     addPass(&ProcessImplicitDefsID);
 
     // LiveVariables currently requires pure SSA form.

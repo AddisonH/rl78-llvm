@@ -47,13 +47,9 @@ define dso_local i32 @ae(i16 noundef %0, i16 noundef %1, i32 noundef %2) local_u
 ; CHECK-LABEL: ae:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw !0xffff0, ax
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw !0xffff2, ax
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    mach

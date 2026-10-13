@@ -11,12 +11,12 @@ target triple = "rl78-unknown-unknown-elf"
 define i32 @test_DAGCombine_UREM(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_DAGCombine_UREM:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    divwu
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:    movw ax, de

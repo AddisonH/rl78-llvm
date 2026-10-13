@@ -8,12 +8,12 @@
 define dso_local i32 @aa(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: aa:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, hl
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    xchw ax, hl
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    divwu
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:    ret

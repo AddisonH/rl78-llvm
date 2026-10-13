@@ -1049,6 +1049,18 @@ bool RL78InstrInfo::findCommutedOpIndices(const MachineInstr &MI,
   return true;
 }
 
+// LOAD8_r_arg_slot and LOAD16_rp_arg_slot read the fixed, immutable objects
+// above the frame: no store in the function writes them (their loads are
+// rematerialized on that ground too).
+bool RL78InstrInfo::areMemAccessesTriviallyDisjoint(
+    const MachineInstr &MIa, const MachineInstr &MIb) const {
+  auto IsArgumentLoad = [](const MachineInstr &MI) {
+    return MI.getOpcode() == RL78::LOAD8_r_arg_slot ||
+           MI.getOpcode() == RL78::LOAD16_rp_arg_slot;
+  };
+  return IsArgumentLoad(MIa) || IsArgumentLoad(MIb);
+}
+
 // Lets MachineCopyPropagation see the moves this target emits: by the time the
 // pre-emit passes run there are no COPY pseudos left for it to match.
 // The 8-bit MOV_A_r_cg/MOV_r_A_cg are deliberately not listed. Their register classes

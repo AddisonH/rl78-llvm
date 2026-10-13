@@ -64,17 +64,16 @@ define dso_local i32 @ac(i32 noundef %0) local_unnamed_addr #2 {
 define dso_local i32 @ad(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-LABEL: ad:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw ax, [sp+4]
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw hl, sp
+; CHECK-NEXT:    addw ax, [hl+4]
+; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+6]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+7]
-; CHECK-NEXT:    xchw ax, bc
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
   %3 = add i32 %0, %1
   ret i32 %3

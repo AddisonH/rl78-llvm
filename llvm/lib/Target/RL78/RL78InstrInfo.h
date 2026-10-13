@@ -33,6 +33,10 @@ protected:
   std::optional<DestSourcePair>
   isCopyInstrImpl(const MachineInstr &MI) const override;
 
+  /// A stack slot that an argument arrived in is never written.
+  bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                       const MachineInstr &MIb) const override;
+
 public:
   explicit RL78InstrInfo(RL78Subtarget &ST);
 

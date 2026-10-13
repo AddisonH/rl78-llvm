@@ -56,16 +56,19 @@ define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-LABEL: sel:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push de
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, [hl+8]
+; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, [sp+9]
+; CHECK-NEXT:    mov a, d
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    sknz
-; CHECK-NEXT:    cmpw ax, [hl+6]
+; CHECK-NEXT:    cmpw ax, bc
 ; CHECK-NEXT:    bc $.LBB2_2
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, [sp+10]

@@ -69,29 +69,27 @@ define i32 @shl32_5(i32 %x) {
 define void @shl64(ptr %p) {
 ; CHECK-LABEL: shl64:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #4
+; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    shlw ax, 1
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw [hl], ax
 ; CHECK-NEXT:    movw ax, [hl+2]
 ; CHECK-NEXT:    rolwc ax, 1
-; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [hl+4]
 ; CHECK-NEXT:    rolwc ax, 1
-; CHECK-NEXT:    movw de, ax
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [hl+6]
 ; CHECK-NEXT:    rolwc ax, 1
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    movw [hl+4], ax
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw [hl+4], ax
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw [hl+6], ax
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw [hl+2], ax
-; CHECK-NEXT:    addw sp, #4
+; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
   %x = load i64, ptr %p
   %r = shl i64 %x, 1
@@ -147,38 +145,28 @@ define i32 @ashr32(i32 %x) {
 define void @lshr64(ptr %p) {
 ; CHECK-LABEL: lshr64:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    subw sp, #4
 ; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [hl+6]
 ; CHECK-NEXT:    shrw ax, 1
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw [hl+6], ax
 ; CHECK-NEXT:    movw ax, [hl+4]
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw [hl+4], ax
 ; CHECK-NEXT:    movw ax, [hl+2]
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    movw bc, ax
+; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw [hl+4], ax
-; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw [hl+6], ax
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    movw [hl], ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw [hl+2], ax
-; CHECK-NEXT:    addw sp, #4
 ; CHECK-NEXT:    ret
   %x = load i64, ptr %p
   %r = lshr i64 %x, 1

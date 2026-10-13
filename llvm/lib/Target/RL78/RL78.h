@@ -42,6 +42,7 @@ FunctionPass *createRL78InsertExchangeInstructionsPass();
 FunctionPass *createRL78ExpandPseudoInstsPass();
 FunctionPass *createRL78SelectBTCLRPass();
 FunctionPass *createRL78AccumulatorCopiesPass();
+FunctionPass *createRL78LoadLateStoreEarlyPass();
 FunctionPass *createRL78CMPWithZeroElimPass(bool Late = false);
 FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
@@ -69,6 +70,7 @@ void initializeRL78UnspeculateLoopLatchPass(PassRegistry &);
 void initializeRL78BiasSignedComparesPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 void initializeRL78SlotOperandsPass(PassRegistry &);
+void initializeRL78LoadLateStoreEarlyPass(PassRegistry &);
 
 /// Turns an MCInst of an older (code generation) definition into the
 /// hardware instruction(s) of RL78InstrISA.td that encode it.

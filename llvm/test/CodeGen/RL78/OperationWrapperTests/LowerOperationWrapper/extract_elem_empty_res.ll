@@ -8,13 +8,16 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-LABEL: test_add:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push de
-; CHECK-NEXT:    push ax
+; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    onew ax
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    push bc
+; CHECK-NEXT:    pop de
+; CHECK-NEXT:    addw ax, de
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
+; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    movw [de], ax
+; CHECK-NEXT:    movw de, #1
 ; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
@@ -24,16 +27,12 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw hl, #0
 ; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
-; CHECK-NEXT:    xchw ax, de
-; CHECK-NEXT:    movw [de], ax
-; CHECK-NEXT:    mov a, b
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    bt a.7, $.LBB0_4
 ; CHECK-NEXT:  ; %bb.3:
-; CHECK-NEXT:    clrw ax
-; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:  .LBB0_4:
-; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    xor a, h
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    xor a, l

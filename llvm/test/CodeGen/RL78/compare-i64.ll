@@ -10,14 +10,7 @@ declare void @g()
 define void @br_uge(i64 %a, i64 %b) optsize {
 ; CHECK-LABEL: br_uge:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_1
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    skc
 ; CHECK-NEXT:  ; %bb.1: ; %call
@@ -39,14 +32,7 @@ end:
 define void @br_slt(i64 %a, i64 %b) optsize {
 ; CHECK-LABEL: br_slt:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_1
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
@@ -71,14 +57,7 @@ end:
 define void @br_eq(i64 %a, i64 %b) optsize {
 ; CHECK-LABEL: br_eq:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_1
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:  ; %bb.1: ; %call
@@ -100,14 +79,7 @@ end:
 define i16 @set_ult(i64 %a, i64 %b) optsize {
 ; CHECK-LABEL: set_ult:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw ax, [sp+18]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, [sp+16]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+14]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+10]
-; CHECK-NEXT:    cmpw ax, hl
+; CHECK-NEXT:    call !_OUTLINED_FUNCTION_1
 ; CHECK-NEXT:    call !_OUTLINED_FUNCTION_0
 ; CHECK-NEXT:    onew ax
 ; CHECK-NEXT:    skc
