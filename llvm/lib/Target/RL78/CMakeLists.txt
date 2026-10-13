@@ -25,6 +25,7 @@ add_llvm_target(RL78CodeGen
   RL78RegisterInfo.cpp
   RL78Subtarget.cpp
   RL78TargetMachine.cpp
+  RL78UnspeculateLoopLatch.cpp
   RL78MCInstLower.cpp
   RL78LowerToHardware.cpp
   RL78TargetObjectFile.cpp

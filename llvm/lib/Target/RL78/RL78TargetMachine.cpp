@@ -42,6 +42,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78NarrowDemandedOpsPass(*PR);
   initializeRL78NarrowLoopCountersPass(*PR);
   initializeRL78ByteLoopCountersPass(*PR);
+  initializeRL78UnspeculateLoopLatchPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {
@@ -275,6 +276,8 @@ void RL78PassConfig::addIRPasses() {
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRL78NarrowLoopCountersPass());
     addPass(createRL78NarrowDemandedOpsPass());
+    // Before LSR, which would start such a loop one step back.
+    addPass(createRL78UnspeculateLoopLatchPass());
   }
   TargetPassConfig::addIRPasses();
 }
