@@ -632,6 +632,10 @@ def : Pat<(inc i8:$r), (INC_r $r)>;
 defm : RL78IncDecSel<"DEC", i8, -1, "_r", "_saddr">;
 defm : RL78IncDecSel<"INCW", i16, 1, "_rp", "_saddrp">;
 defm : RL78IncDecSel<"DECW", i16, -1, "_rp", "_saddrp">;
+// Two steps on any register pair are two bytes; ADDW AX, #2 is three and
+// needs the value in AX, where a loop usually has something else.
+def : Pat<(add i16:$r, 2), (INCW_rp (INCW_rp $r))>;
+def : Pat<(add i16:$r, -2), (DECW_rp (DECW_rp $r))>;
 
 //===----------------------------------------------------------------------===//
 // CMP0, CLRB, ONEB (manual 6.1, 6.3): X, A, C, B, saddr, !addr16

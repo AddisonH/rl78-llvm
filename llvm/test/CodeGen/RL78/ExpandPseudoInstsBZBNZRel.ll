@@ -278,15 +278,27 @@ define void @bnz_rel8_backward_jump(i16 %counter) {
 ; CHECK-LABEL: bnz_rel8_backward_jump:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    cmpw ax, #0
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    bnh $.LBB4_2
-; CHECK-NEXT:  .LBB4_1: ; %for.body
+; CHECK-NEXT:    bnh $.LBB4_4
+; CHECK-NEXT:  ; %bb.1: ; %for.body.preheader
+; CHECK-NEXT:    decw bc
+; CHECK-NEXT:    inc c
+; CHECK-NEXT:    inc b
+; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    mov a, c
+; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    mov a, b
+; CHECK-NEXT:  .LBB4_2: ; %for.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    dec x
 ; CHECK-NEXT:    nop
-; CHECK-NEXT:    decw ax
-; CHECK-NEXT:    cmpw ax, #0
-; CHECK-NEXT:    bnz $.LBB4_1
-; CHECK-NEXT:  .LBB4_2: ; %for.cond.cleanup
+; CHECK-NEXT:    bnz $.LBB4_2
+; CHECK-NEXT:  ; %bb.3: ; %for.body.hi
+; CHECK-NEXT:    ; in Loop: Header=BB4_2 Depth=1
+; CHECK-NEXT:    dec a
+; CHECK-NEXT:    bnz $.LBB4_2
+; CHECK-NEXT:  .LBB4_4: ; %for.cond.cleanup
 ; CHECK-NEXT:    ret
 entry:
   %cmp2 = icmp sgt i16 %counter, 0

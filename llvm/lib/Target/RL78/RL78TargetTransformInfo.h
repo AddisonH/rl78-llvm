@@ -31,6 +31,7 @@ class RL78TTIImpl : public BasicTTIImplBase<RL78TTIImpl> {
 
   const RL78Subtarget *ST;
   const RL78TargetLowering *TLI;
+  bool OptSize;
 
   const RL78Subtarget *getST() const { return ST; }
   const RL78TargetLowering *getTLI() const { return TLI; }
@@ -38,7 +39,7 @@ class RL78TTIImpl : public BasicTTIImplBase<RL78TTIImpl> {
 public:
   explicit RL78TTIImpl(const RL78TargetMachine *TM, const Function &F)
       : BaseT(TM, F.getDataLayout()), ST(TM->getSubtargetImpl(F)),
-        TLI(ST->getTargetLowering()) {}
+        TLI(ST->getTargetLowering()), OptSize(F.hasOptSize()) {}
 
   TTI::MemCmpExpansionOptions
   enableMemCmpExpansion(bool OptSize, bool IsZeroCmp) const override;
@@ -50,6 +51,18 @@ public:
   // strength-reduce those uses.
   bool shouldTrackIllegalIVWidth(unsigned BitWidth) const override {
     return BitWidth == 32;
+  }
+
+  // An address is one register, with a small constant at most. Where loop
+  // strength reduction saves an induction variable by indexing two bases
+  // with one counter, every access pays with an addition: count
+  // instructions first.
+  bool isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
+                     const TargetTransformInfo::LSRCost &C2) const override {
+    return std::tie(C1.Insns, C1.NumRegs, C1.AddRecCost, C1.NumIVMuls,
+                    C1.NumBaseAdds, C1.ScaleCost, C1.ImmCost, C1.SetupCost) <
+           std::tie(C2.Insns, C2.NumRegs, C2.AddRecCost, C2.NumIVMuls,
+                    C2.NumBaseAdds, C2.ScaleCost, C2.ImmCost, C2.SetupCost);
   }
 
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,

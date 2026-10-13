@@ -16,6 +16,7 @@ add_public_tablegen_target(RL78CommonTableGen)
 add_llvm_target(RL78CodeGen
   RL78AsmPrinter.cpp
   RL78AssignES.cpp
+  RL78ByteLoopCounters.cpp
   RL78InstrInfo.cpp
   RL78ISelDAGToDAG.cpp
   RL78ISelLowering.cpp

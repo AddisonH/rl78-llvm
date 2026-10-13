@@ -9,17 +9,15 @@
 define ptr addrspace(2) @negofs(ptr addrspace(2) %p) {
 ; CHECK-LABEL: negofs:
 ; CHECK:       ; %bb.0: ; %entry
+; CHECK-NEXT:    decw de
 ; CHECK-NEXT:    mov es, a
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    decw ax
-; CHECK-NEXT:    decw ax
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, es:[hl]
+; CHECK-NEXT:    decw de
+; CHECK-NEXT:    movw ax, es:[de]
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    bz $.LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %clear
 ; CHECK-NEXT:    clrw ax
-; CHECK-NEXT:    movw es:[hl], ax
+; CHECK-NEXT:    movw es:[de], ax
 ; CHECK-NEXT:  .LBB0_2: ; %ret
 ; CHECK-NEXT:    movw de, #0
 ; CHECK-NEXT:    clrb a

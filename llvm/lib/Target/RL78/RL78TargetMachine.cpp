@@ -41,6 +41,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78ExpandInlineAsmPass(*PR);
   initializeRL78NarrowDemandedOpsPass(*PR);
   initializeRL78NarrowLoopCountersPass(*PR);
+  initializeRL78ByteLoopCountersPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &T, StringRef FS) {
@@ -257,6 +258,10 @@ TargetPassConfig *RL78TargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 bool RL78PassConfig::addPreISel() {
+  // After loop strength reduction, which makes the counters this looks for
+  // and would take the byte counters for something to reduce.
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRL78ByteLoopCountersPass());
   return false;
 }
 

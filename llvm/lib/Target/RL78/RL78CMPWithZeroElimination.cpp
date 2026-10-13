@@ -127,6 +127,51 @@ static bool shortenCMPWWithZero(MachineBasicBlock &MBB) {
   return Changed;
 }
 
+// INC r or DEC r, then instructions that have nothing to do with r, then
+// CMP0 r and a branch on Z:
+//
+//     dec c; addw ax, [hl]; incw hl; cmp0 c; bnz $loop
+//
+// INC and DEC set Z themselves. Move the INC or DEC down to the comparison
+// and drop the comparison; what was between them did not read the flags it
+// set (they were dead) and does not see the register.
+static bool sinkIncDecToCompare(MachineBasicBlock &MBB) {
+  MachineFunction &MF = *MBB.getParent();
+  if (MF.getRegInfo().isSSA())
+    return false;
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  MachineBasicBlock::iterator Br = MBB.getFirstTerminator();
+  if (Br == MBB.end() || Br == MBB.begin() || Br->getOpcode() != RL78::BRCC)
+    return false;
+  MachineBasicBlock::iterator Cmp = prev_nodbg(Br, MBB.begin());
+  if (Cmp == Br || Cmp->getOpcode() != RL78::CMP0_r ||
+      !Cmp->getOperand(0).getReg().isPhysical() ||
+      !onlyZeroFlagRead(MBB, *Cmp, TRI))
+    return false;
+  Register Reg = Cmp->getOperand(0).getReg();
+  for (MachineBasicBlock::iterator I = Cmp; I != MBB.begin();) {
+    --I;
+    if (I->isDebugInstr())
+      continue;
+    if ((I->getOpcode() == RL78::DEC_r || I->getOpcode() == RL78::INC_r) &&
+        I->getOperand(0).getReg() == Reg) {
+      if (!I->registerDefIsDead(RL78::CCreg, TRI))
+        return false;
+      if (std::next(I) != Cmp)
+        MBB.splice(Cmp, &MBB, I);
+      for (MachineOperand &MO : I->implicit_operands())
+        if (MO.isDef() && MO.getReg() == RL78::CCreg)
+          MO.setIsDead(false);
+      Cmp->eraseFromParent();
+      return true;
+    }
+    if (I->isCall() || I->readsRegister(Reg, TRI) ||
+        I->modifiesRegister(Reg, TRI))
+      return false;
+  }
+  return false;
+}
+
 static bool definesCCReg(MachineInstr &MI, bool requiresZflag) {
   bool hasdefCCReg = false;
   bool hasdefZflag = false;
@@ -162,6 +207,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
     //
     if (MBB.getLastNonDebugInstr() == MBB.end())
       continue;
+    Changed |= sinkIncDecToCompare(MBB);
     // MBB.dump();
     for (MachineBasicBlock::reverse_iterator prevI = MBB.rbegin(),
                                              e = MBB.rend();

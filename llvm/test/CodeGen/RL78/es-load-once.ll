@@ -27,9 +27,9 @@ define dso_local i16 @sum(ptr addrspace(2) nofree noundef readonly captures(none
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    decw bc
 ; CHECK-NEXT:    addw ax, es:[hl+0]
+; CHECK-NEXT:    incw hl
+; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    incw hl
-; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    movw ax, de
