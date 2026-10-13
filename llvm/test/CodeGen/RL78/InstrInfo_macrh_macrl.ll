@@ -87,9 +87,7 @@ define dso_local void @__dorand48(ptr nocapture noundef readonly %r, ptr nocaptu
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    mulhu
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, de
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, !0xffff2
 ; CHECK-NEXT:    xchw ax, bc

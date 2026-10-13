@@ -40,9 +40,7 @@ define i32 @shl32_3_size(i32 %x) optsize {
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    shrw ax, 13
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, hl
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    shlw ax, 3
@@ -59,9 +57,7 @@ define i32 @shl32_5(i32 %x) {
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    shrw ax, 11
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    addw ax, bc
+; CHECK-NEXT:    addw ax, hl
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    shlw ax, 5
@@ -121,11 +117,9 @@ define i32 @fshl32(i32 %x, i32 %y) {
 define i32 @lshr32(i32 %x) {
 ; CHECK-LABEL: lshr32:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    shrw ax, 1
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    rorc a, 1
@@ -138,11 +132,9 @@ define i32 @lshr32(i32 %x) {
 define i32 @ashr32(i32 %x) {
 ; CHECK-LABEL: ashr32:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    sarw ax, 1
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    rorc a, 1
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    rorc a, 1

@@ -29,14 +29,12 @@ define dso_local i32 @ab(i32 noundef %0, ptr nocapture noundef readonly %1) loca
 ; CHECK-NEXT:    push de
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    addw ax, [hl+8]
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+10]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+11]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    ret
   %3 = getelementptr inbounds i32, ptr %1, i16 2
   %4 = load i32, ptr %3, align 2
@@ -50,14 +48,12 @@ define dso_local i32 @ac(i32 noundef %0) local_unnamed_addr #2 {
 ; CHECK-LABEL: ac:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    addw ax, !LOWW(_xa)
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, !LOWW(_xa+2)
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, !LOWW(_xa+3)
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    ret
   %2 = load i32, ptr @xa, align 2
   %3 = add i32 %2, %0
@@ -72,15 +68,13 @@ define dso_local i32 @ad(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+6]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, [hl+7]
-; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    ret
   %3 = add i32 %0, %1
   ret i32 %3

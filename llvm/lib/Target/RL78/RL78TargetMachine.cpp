@@ -357,5 +357,7 @@ void RL78PassConfig::addPreRegAlloc() {
 }
 
 void RL78PassConfig::addPostRegAlloc() {
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRL78AccumulatorCopiesPass());
   addPass(createRL78CMPWithZeroElimPass());
 }
