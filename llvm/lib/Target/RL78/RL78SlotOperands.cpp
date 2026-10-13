@@ -672,8 +672,9 @@ void RL78SlotOperands::movePointer(PointerRange &R) {
   ++NumPointersMoved;
 }
 
-// A loop that sets HL to SP, and does nothing else to HL or to SP, sets it
-// in its preheader.
+// A loop whose every block leaves SP in HL when it is entered with SP in HL
+// has it there at the start of every block once its preheader sets it: the
+// first MOVW HL, SP of a block goes then.
 bool RL78SlotOperands::hoistToPreheader(
     const MachineLoop &L, DenseMap<MachineBasicBlock *, EventList> &Events) {
   auto Hoist = [&] {
@@ -685,19 +686,24 @@ bool RL78SlotOperands::hoistToPreheader(
     Units.addLiveIns(*L.getHeader());
     if (!Units.available(RL78::RP6))
       return false;
-    unsigned NumSets = 0;
+    unsigned NumGone = 0;
     for (MachineBasicBlock *MBB : L.blocks()) {
       const EventList &List = Events[MBB];
+      bool IsSP = true;
       for (unsigned I = 0, E = List.size(); I != E; ++I) {
-        if (List[I].Kind == Event::Set)
-          ++NumSets;
-        else if (List[I].Kind == Event::Kill || I + 1 == E ||
-                 List[I + 1].Kind != Event::Set)
-          return false;
+        if (List[I].Kind == Event::Set) {
+          NumGone += IsSP;
+          IsSP = true;
+        } else if (List[I].Kind == Event::Kill || !IsSP || I + 1 == E ||
+                   List[I + 1].Kind != Event::Set) {
+          IsSP = false;
+        }
       }
+      if (!IsSP)
+        return false;
     }
     // One instruction more outside the loop for each one less inside.
-    if (NumSets < (OptSize ? 2u : 1u))
+    if (NumGone < (OptSize ? 2u : 1u))
       return false;
     MachineBasicBlock::iterator At = Pre->getFirstTerminator();
     MachineInstr *MI = BuildMI(*Pre, At, DebugLoc(),

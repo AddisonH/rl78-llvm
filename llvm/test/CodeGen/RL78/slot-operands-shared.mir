@@ -10,6 +10,7 @@
   target triple = "rl78"
   define void @blocks() { ret void }
   define void @loop() { ret void }
+  define void @loop_restored() { ret void }
   define void @pointer_de() { ret void }
   define void @pointer_bc() { ret void }
   define void @pointer_kept() { ret void }
@@ -79,6 +80,40 @@ body: |
     liveins: $rp0, $rp2
     $rp4 = LOAD16_rp_stack_slot $spreg, 6
     $rp0 = ADDW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    CMPW_AX_rp $rp0, $rp2, implicit-def $ccreg
+    BRCC %bb.1, 1, implicit killed $ccreg
+  bb.2:
+    liveins: $rp0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The loop uses HL for something else and sets it again: the first MOVW of
+# the block goes for one before the loop, the second stays.
+# CHECK-LABEL: name: loop_restored
+# CHECK: bb.0:
+# CHECK: $rp6 = MOVW_rp_SP $spreg
+# CHECK: bb.1:
+# CHECK-NEXT: successors
+# CHECK-NEXT: liveins: $rp0, $rp2, $rp6
+# CHECK: $rp0 = ADDW_AX_mHLi killed $rp0, $rp6, 6
+# CHECK-NEXT: $rp6 = LOAD16_rp_stack_slot $spreg, 4
+# CHECK-NEXT: ADDW_AX_mHLi killed $rp0, killed $rp6, 2
+# CHECK-NEXT: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: SUBW_AX_mHLi killed $rp0, $rp6, 8
+name: loop_restored
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $rp0, $rp2
+    $rp4 = LOAD16_rp_stack_slot $spreg, 6
+    $rp0 = ADDW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
+    $rp6 = LOAD16_rp_stack_slot $spreg, 4
+    $rp0 = ADDW_AX_mHLi killed $rp0, killed $rp6, 2, implicit-def dead $ccreg
+    $rp4 = LOAD16_rp_stack_slot $spreg, 8
+    $rp0 = SUBW_AX_rp killed $rp0, killed $rp4, implicit-def dead $ccreg
     CMPW_AX_rp $rp0, $rp2, implicit-def $ccreg
     BRCC %bb.1, 1, implicit killed $ccreg
   bb.2:
