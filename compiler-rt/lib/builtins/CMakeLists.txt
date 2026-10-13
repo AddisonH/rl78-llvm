@@ -1116,6 +1116,8 @@ set(ASM_RL78_SOURCES
   rl78/COM_mului.S
   rl78/COM_imul.S
   rl78/COM_lmul.S
+  rl78/comparedf2.S
+  rl78/comparesf2.S
   rl78/COM_deq.S
   rl78/COM_dge.S
   rl78/COM_dgt.S
