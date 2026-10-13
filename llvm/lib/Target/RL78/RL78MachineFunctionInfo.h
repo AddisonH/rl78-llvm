@@ -12,6 +12,8 @@
 #ifndef LLVM_LIB_TARGET_RL78_RL78MACHINEFUNCTIONINFO_H
 #define LLVM_LIB_TARGET_RL78_RL78MACHINEFUNCTIONINFO_H
 
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
@@ -39,6 +41,11 @@ private:
   std::optional<uint32_t> CSRegisterMask; 
 
 public:
+  /// The virtual registers the allocator may split by region (see
+  /// RL78RegisterInfo::shouldRegionSplitForVirtReg), computed when it first
+  /// asks.
+  mutable std::optional<DenseSet<Register>> RegionSplitCandidates;
+
   RL78MachineFunctionInfo()
       : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}

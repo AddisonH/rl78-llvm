@@ -10,9 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RL78MachineFunctionInfo.h"
 #include "RL78Subtarget.h"
 #include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -612,12 +615,47 @@ Register RL78RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   return RL78::SPreg;
 }
 
+static cl::opt<unsigned>
+    SplitLoopBytes("rl78-split-loop-bytes", cl::Hidden, cl::init(12),
+                   cl::desc("Split by region the values of an innermost "
+                            "loop whose virtual registers are at most this "
+                            "many bytes together (0: none)"));
+
 bool RL78RegisterInfo::shouldRegionSplitForVirtReg(
     const MachineFunction &MF, const LiveInterval &VirtReg) const {
   // A value split between two of BC, DE and HL is copied with PUSH and POP,
   // or through AX, where the pieces meet: two instructions where the
-  // allocator counts one, in a block it has just made cheaper by one
-  // reload. With three pairs to choose from the pieces rarely get the same
-  // one.
-  return false;
+  // allocator counts one, and with three pairs the pieces rarely get the
+  // same one. It pays where the split is around a small loop that then runs
+  // in registers: an innermost loop with few values (all its virtual
+  // registers are counted, the short-lived ones too, so the limit is twice
+  // what BC, DE and HL hold). The copies are bytes either way, so not in a
+  // function optimized for size.
+  const auto *FI = MF.getInfo<RL78MachineFunctionInfo>();
+  if (!FI->RegionSplitCandidates) {
+    FI->RegionSplitCandidates.emplace();
+    if (SplitLoopBytes && !MF.getFunction().hasOptSize()) {
+      const MachineRegisterInfo &MRI = MF.getRegInfo();
+      MachineDominatorTree MDT(const_cast<MachineFunction &>(MF));
+      MachineLoopInfo MLI(MDT);
+      for (const MachineLoop *L : MLI.getLoopsInPreorder()) {
+        if (!L->isInnermost())
+          continue;
+        SmallDenseSet<Register, 8> Regs;
+        unsigned Bytes = 0;
+        for (const MachineBasicBlock *MBB : L->blocks())
+          for (const MachineInstr &MI : *MBB) {
+            if (MI.isDebugInstr())
+              continue;
+            for (const MachineOperand &MO : MI.operands())
+              if (MO.isReg() && MO.getReg().isVirtual() &&
+                  Regs.insert(MO.getReg()).second)
+                Bytes += getRegSizeInBits(*MRI.getRegClass(MO.getReg())) / 8;
+          }
+        if (Bytes <= SplitLoopBytes)
+          FI->RegionSplitCandidates->insert(Regs.begin(), Regs.end());
+      }
+    }
+  }
+  return FI->RegionSplitCandidates->contains(VirtReg.reg());
 }
