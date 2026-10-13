@@ -22,7 +22,7 @@
 //   addw ax, [hl+4]
 //
 // This pass does that for a reload whose every use is such an operand, or a
-// copy to the accumulator (which becomes the load itself), where it takes
+// copy to the accumulator (which becomes the load itself, of one byte too), where it takes
 // fewer clocks, or fewer bytes in a function optimized for size. HL has to be
 // free at each use, or be the reloaded register.
 //
@@ -72,6 +72,12 @@ private:
   struct SlotUse {
     MachineInstr *MI;
     int64_t Offset;
+  };
+  // What a use reads once its reload is gone: the offset, and the memory
+  // operand of the reload.
+  struct SlotRead {
+    int64_t Offset;
+    MachineMemOperand *MMO;
   };
   // What is live after an instruction.
   struct LiveAfter {
@@ -239,6 +245,16 @@ bool RL78SlotOperands::findSlotUses(MachineInstr &Load, bool HLIsSP,
         // The copy becomes the load.
         Uses.push_back({&MI, Offset});
         ++NumCopies;
+      } else if (MI.getOpcode() == RL78::MOV_A_r && Size == 2 &&
+                 TRI->isSubRegister(D, MI.getOperand(1).getReg())) {
+        // So does the copy of one byte of a pair: the sign of the second
+        // operand of a signed comparison is read this way.
+        bool Hi = Register(TRI->getSubReg(D, RL78::sub_hi)) ==
+                  MI.getOperand(1).getReg();
+        if (!isUInt<8>(Offset + Hi))
+          return false;
+        Uses.push_back({&MI, Offset + Hi});
+        ++NumCopies;
       } else {
         const MemForm *F = getMemForm(MI.getOpcode());
         if (!F)
@@ -355,14 +371,16 @@ bool RL78SlotOperands::processBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
   // HL holds SP from an earlier operand of this block.
   bool HLIsSP = false;
-  DenseMap<MachineInstr *, int64_t> SlotUses;
+  DenseMap<MachineInstr *, SlotRead> SlotUses;
   for (MachineInstr &MI : make_early_inc_range(MBB)) {
     auto It = SlotUses.find(&MI);
     if (It == SlotUses.end()) {
       SmallVector<SlotUse, 4> Uses;
       if (findSlotUses(MI, HLIsSP, Uses)) {
+        MachineMemOperand *MMO =
+            MI.hasOneMemOperand() ? *MI.memoperands_begin() : nullptr;
         for (const SlotUse &U : Uses)
-          SlotUses[U.MI] = U.Offset;
+          SlotUses[U.MI] = {U.Offset, MMO};
         if (MI.getOperand(0).getReg() == RL78::RP6)
           for (MachineBasicBlock::iterator I = std::next(MI.getIterator());;
                ++I) {
@@ -379,7 +397,11 @@ bool RL78SlotOperands::processBlock(MachineBasicBlock &MBB) {
       continue;
     }
 
-    int64_t Offset = It->second;
+    int64_t Offset = It->second.Offset;
+    // The use is a load now, of the reload's slot (a byte of it at most:
+    // nothing looks at the size).
+    if (It->second.MMO)
+      MI.addMemOperand(*MBB.getParent(), It->second.MMO);
     if (MI.getOpcode() == RL78::MOVW_AX_rp || MI.getOpcode() == RL78::MOV_A_r) {
       bool IsWord = MI.getOpcode() == RL78::MOVW_AX_rp;
       MI.setDesc(TII->get(IsWord ? RL78::MOVW_AX_mSPi : RL78::MOV_A_mSPi));

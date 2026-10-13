@@ -9,14 +9,12 @@ define void @test_DAGCombine_BRCOND(i32 %x, i32 %y) {
 ; CHECK-LABEL: test_DAGCombine_BRCOND:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    movw de, ax
-; CHECK-NEXT:    movw ax, [sp+6]
-; CHECK-NEXT:    movw hl, ax
-; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    cmpw ax, hl
-; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    movw hl, sp
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    cmpw ax, [hl+6]
+; CHECK-NEXT:    xor1 cy, a.7
+; CHECK-NEXT:    mov a, [sp+7]
+; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    sknz
 ; CHECK-NEXT:    cmpw ax, [hl+4]

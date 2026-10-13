@@ -437,23 +437,26 @@ static bool isStoreFoldableIntoPush(MachineBasicBlock &MBB,
   return Prev != MBB.end() && Prev->getOpcode() == RL78::PUSH_rp;
 }
 
-// Whether the slot of the spill pseudo \p MI is one the register allocator
-// made: nothing the program names is in it.
-static bool isAllocatorSlot(const MachineInstr &MI,
+// The frame index of the slot the spill pseudo \p MI accesses if the
+// register allocator made that slot (nothing the program names is in it
+// then), or -1.
+static int getAllocatorSlot(const MachineInstr &MI,
                             const MachineFrameInfo &MFI) {
   if (!MI.hasOneMemOperand())
-    return false;
+    return -1;
   const auto *FS = dyn_cast_or_null<FixedStackPseudoSourceValue>(
       (*MI.memoperands_begin())->getPseudoValue());
-  return FS && MFI.isSpillSlotObjectIndex(FS->getFrameIndex());
+  if (!FS || !MFI.isSpillSlotObjectIndex(FS->getFrameIndex()))
+    return -1;
+  return FS->getFrameIndex();
 }
 
 // Whether \p Other, which loads or stores, may access the two bytes at
-// [Base+Offset]. An access to another slot through the same base does not,
-// and neither does an access to memory the program names when the slot is
-// the allocator's.
+// [Base+Offset]. An access to another slot through the same base does not.
+// When the slot is the allocator's, \p SpillSlot, neither does an access to
+// memory the program names or to another frame object.
 static bool mayAccessSlot(const MachineInstr &Other, Register Base,
-                          int64_t Offset, bool IsAllocatorSlot) {
+                          int64_t Offset, int SpillSlot) {
   switch (Other.getOpcode()) {
   case RL78::LOAD8_r_stack_slot:
   case RL78::LOAD16_rp_stack_slot:
@@ -464,9 +467,13 @@ static bool mayAccessSlot(const MachineInstr &Other, Register Base,
     return Other.getOperand(0).getReg() != Base ||
            std::abs(Other.getOperand(1).getImm() - Offset) < 2;
   default:
-    return !IsAllocatorSlot || Other.memoperands_empty() ||
-           any_of(Other.memoperands(), [](const MachineMemOperand *MMO) {
-             return !MMO->getValue();
+    return SpillSlot < 0 || Other.memoperands_empty() ||
+           any_of(Other.memoperands(), [&](const MachineMemOperand *MMO) {
+             if (MMO->getValue())
+               return false;
+             const auto *FS = dyn_cast_or_null<FixedStackPseudoSourceValue>(
+                 MMO->getPseudoValue());
+             return !FS || FS->getFrameIndex() == SpillSlot;
            });
   }
 }
@@ -501,7 +508,7 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         continue;
       Register Base = MI.getOperand(1).getReg();
       int64_t Offset = MI.getOperand(2).getImm();
-      bool IsSpillSlot = isAllocatorSlot(MI, MFI);
+      int SpillSlot = getAllocatorSlot(MI, MFI);
 
       MachineBasicBlock::iterator Target = MBB.end();
       MachineBasicBlock::iterator It(MI);
@@ -519,7 +526,7 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
             Prev.modifiesRegister(RL78::SPreg, TRI) ||
             Prev.modifiesRegister(Base, TRI))
           break;
-        if (Prev.mayStore() && mayAccessSlot(Prev, Base, Offset, IsSpillSlot))
+        if (Prev.mayStore() && mayAccessSlot(Prev, Base, Offset, SpillSlot))
           break;
         if (Prev.readsRegister(Dst, TRI) || Prev.modifiesRegister(Dst, TRI))
           break;
@@ -608,7 +615,7 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
         continue;
       Register Base = MI.getOperand(0).getReg();
       int64_t Offset = MI.getOperand(1).getImm();
-      bool IsSpillSlot = isAllocatorSlot(MI, MFI);
+      int SpillSlot = getAllocatorSlot(MI, MFI);
 
       MachineBasicBlock::iterator Target = MBB.end();
       MachineInstr *Copy = nullptr;
@@ -634,7 +641,7 @@ static bool moveLoadToWhereAXIsDead(MachineBasicBlock &MBB,
           break;
         // The store must not move above an access to its slot.
         if (Prev.mayLoadOrStore() &&
-            mayAccessSlot(Prev, Base, Offset, IsSpillSlot))
+            mayAccessSlot(Prev, Base, Offset, SpillSlot))
           break;
         if (!AXLiveBefore.lookup(&Prev))
           Target = It; // The earliest place is as good as any.
