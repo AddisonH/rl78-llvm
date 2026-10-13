@@ -42,6 +42,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78NarrowDemandedOpsPass(*PR);
   initializeRL78NarrowLoopCountersPass(*PR);
   initializeRL78ByteLoopCountersPass(*PR);
+  initializeRL78OuterLoopPointersPass(*PR);
   initializeRL78UnspeculateLoopLatchPass(*PR);
 }
 
@@ -280,6 +281,9 @@ void RL78PassConfig::addIRPasses() {
     addPass(createRL78UnspeculateLoopLatchPass());
   }
   TargetPassConfig::addIRPasses();
+  // After LSR, which does this for the innermost loops only.
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRL78OuterLoopPointersPass());
 }
 
 bool RL78PassConfig::addInstSelector() {

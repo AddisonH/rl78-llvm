@@ -50,6 +50,7 @@ FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 FunctionPass *createRL78NarrowDemandedOpsPass();
 FunctionPass *createRL78NarrowLoopCountersPass();
 FunctionPass *createRL78ByteLoopCountersPass();
+FunctionPass *createRL78OuterLoopPointersPass();
 FunctionPass *createRL78UnspeculateLoopLatchPass();
 FunctionPass *createRL78ExpandInlineAsmPass();
 FunctionPass *createRL78MACRLoopPromotePass();
@@ -61,6 +62,7 @@ void initializeRL78DAGToDAGISelLegacyPass(PassRegistry &);
 void initializeRL78NarrowDemandedOpsPass(PassRegistry &);
 void initializeRL78NarrowLoopCountersPass(PassRegistry &);
 void initializeRL78ByteLoopCountersPass(PassRegistry &);
+void initializeRL78OuterLoopPointersPass(PassRegistry &);
 void initializeRL78UnspeculateLoopLatchPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 

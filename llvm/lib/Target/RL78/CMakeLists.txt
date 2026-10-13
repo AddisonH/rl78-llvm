@@ -43,6 +43,7 @@ add_llvm_target(RL78CodeGen
   RL78InsertInstsForDelayCycles.cpp
   RL78NarrowDemandedOps.cpp
   RL78NarrowLoopCounters.cpp
+  RL78OuterLoopPointers.cpp
   RL78MACRLoopPromote.cpp
   RL78SinkToAccumulator.cpp
   RL78SplitConstrainedValues.cpp
