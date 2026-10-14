@@ -17,6 +17,7 @@
 #include "RL78ISelLowering.h"
 #include "RL78InstrInfo.h"
 #include "RL78SelectionDAGTargetInfo.h"
+#include "llvm/CodeGen/SchedulerRegistry.h"
 
 #define GET_SUBTARGETINFO_HEADER
 #include "RL78GenSubtargetInfo.inc"
@@ -82,6 +83,9 @@ public:
   bool enablePostRAScheduler() const override { return false; }
 
   bool enableMachineScheduler() const override;
+
+  RegisterScheduler::FunctionPassCtor
+  getDAGScheduler(CodeGenOptLevel OptLevel) const override;
 
   bool useAA() const override { return true; }
 

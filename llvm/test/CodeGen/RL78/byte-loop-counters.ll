@@ -149,10 +149,10 @@ define i16 @sum_size(ptr %p, i16 %n) optsize {
 ; CHECK-NEXT:  .LBB2_3: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    addw ax, [hl+0]
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    incw hl
 ; CHECK-NEXT:    decw bc
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    or a, x
 ; CHECK-NEXT:    movw ax, de
@@ -175,10 +175,10 @@ define i16 @sum_size(ptr %p, i16 %n) optsize {
 ; WORD-NEXT:  .LBB2_3: ; %loop
 ; WORD-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; WORD-NEXT:    addw ax, [hl+0]
-; WORD-NEXT:    movw de, ax
 ; WORD-NEXT:    incw hl
 ; WORD-NEXT:    incw hl
 ; WORD-NEXT:    decw bc
+; WORD-NEXT:    movw de, ax
 ; WORD-NEXT:    movw ax, bc
 ; WORD-NEXT:    or a, x
 ; WORD-NEXT:    movw ax, de
