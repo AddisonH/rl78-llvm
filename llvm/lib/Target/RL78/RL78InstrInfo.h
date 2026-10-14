@@ -219,7 +219,8 @@ public:
   /// For code size improvements, consider that every MachineInstruction is
   /// cheaper than a move.
   bool isAsCheapAsAMove(const MachineInstr &MI) const override {
-    return MI.getParent()->getParent()->getFunction().hasOptSize();
+    return MI.getParent()->getParent()->getFunction().hasOptSize() ||
+           MI.isAsCheapAsAMove();
   }
 
   bool isSubregFoldable() const override { return true; }

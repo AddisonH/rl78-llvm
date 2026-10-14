@@ -675,7 +675,7 @@ multiclass RL78ByteOp<string Mn, bits<4> Op, bit IsCmp> {
 
 let Defs = [CCreg] in
 defm CMP0 : RL78ByteOp<"cmp0", 0xD, 1>;
-let isReMaterializable = 1 in {
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 defm CLRB : RL78ByteOp<"clrb", 0xF, 0>;
 defm ONEB : RL78ByteOp<"oneb", 0xE, 0>;
 }
@@ -800,7 +800,7 @@ def ROLWC_rp_1 : RL78Inst<2, (outs RL78AXBCRP:$rd), (ins RL78AXBCRP:$rs),
 // 8-bit data transfer (manual 6.1): MOV, XCH
 //===----------------------------------------------------------------------===//
 
-let isMoveImm = 1, isReMaterializable = 1 in
+let isMoveImm = 1, isReMaterializable = 1, isAsCheapAsAMove = 1 in
 // MOV r, #byte           5r data
 def MOV_r_i8 : RL78Inst<2, (outs RL78Reg:$r), (ins imm8:$imm), "mov $r, $imm"> {
   bits<3> r;

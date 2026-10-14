@@ -10,15 +10,10 @@ define i16 @ctlz16(i16 %x) {
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    mov d, #0
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xch a, e
-; CHECK-NEXT:    mov a, d
-; CHECK-NEXT:    xch a, e
+; CHECK-NEXT:    mov e, #0
 ; CHECK-NEXT:    bc $.LBB0_3
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    incw ax
-; CHECK-NEXT:    xch a, e
-; CHECK-NEXT:    mov a, d
-; CHECK-NEXT:    xch a, e
 ; CHECK-NEXT:  .LBB0_2: ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    inc e
 ; CHECK-NEXT:    addw ax, ax
@@ -46,15 +41,10 @@ define i16 @cttz16(i16 %x) {
 ; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    mov h, #0
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, l
+; CHECK-NEXT:    mov l, #0
 ; CHECK-NEXT:    bc $.LBB1_3
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    incw ax
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, l
 ; CHECK-NEXT:  .LBB1_2: ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    inc l
 ; CHECK-NEXT:    addw ax, ax
@@ -96,15 +86,10 @@ define i32 @ctlz32(i32 %x) {
 ; CHECK-NEXT:    mov h, #0
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, l
+; CHECK-NEXT:    mov l, #0
 ; CHECK-NEXT:    bc $.LBB3_3
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    incw ax
-; CHECK-NEXT:    xch a, l
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, l
 ; CHECK-NEXT:  .LBB3_2: ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    inc l
 ; CHECK-NEXT:    addw ax, ax
@@ -112,15 +97,10 @@ define i32 @ctlz32(i32 %x) {
 ; CHECK-NEXT:  .LBB3_3:
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    xch a, e
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, e
+; CHECK-NEXT:    mov e, #0
 ; CHECK-NEXT:    bc $.LBB3_6
 ; CHECK-NEXT:  ; %bb.4:
 ; CHECK-NEXT:    incw ax
-; CHECK-NEXT:    xch a, e
-; CHECK-NEXT:    mov a, h
-; CHECK-NEXT:    xch a, e
 ; CHECK-NEXT:  .LBB3_5: ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    inc e
 ; CHECK-NEXT:    addw ax, ax
