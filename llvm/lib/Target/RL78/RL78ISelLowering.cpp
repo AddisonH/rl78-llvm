@@ -3536,6 +3536,179 @@ static SDValue PerformWideCompareCombine(SDNode *N, SelectionDAG &DAG) {
   return getFromWords(DAG, dl, Words);
 }
 
+// A comparison of a float or double with +0.0 or -0.0, which would be a call
+// of about 40 clocks, as one or two integer comparisons of its bits B. With S
+// the sign bit, I the bits of infinity and A = B & ~S:
+//   oeq: A == 0                   une: A != 0
+//   ogt: B - 1 <u I               ule: not ogt
+//   olt: B - (S + 1) <u I         uge: not olt
+//   one: A - 1 <u I               ueq: not one
+//   ord: A <=u I                  uno: A >u I
+//   oge: A == 0 or B <=u I        ult: not oge
+//   ole: A == 0 or B - S <=u I    ugt: not ole
+// A NaN has A >u I and fails every ordered test. The forms without O or U
+// (no NaNs) take the ordered test.
+namespace {
+struct IntCompare {
+  SDValue LHS, RHS;
+  ISD::CondCode CC;
+};
+} // namespace
+
+// Fills Parts with the comparisons and returns how many there are (0: not a
+// comparison with zero). Two are joined by Join.
+static unsigned getFloatZeroCompare(SelectionDAG &DAG, const SDLoc &dl,
+                                    SDValue LHS, SDValue RHS, ISD::CondCode CC,
+                                    IntCompare Parts[2], unsigned &Join) {
+  EVT VT = LHS.getValueType();
+  if ((VT != MVT::f32 && VT != MVT::f64) ||
+      DAG.getTargetLoweringInfo().isTypeLegal(VT))
+    return 0;
+  if (isa<ConstantFPSDNode>(LHS)) {
+    std::swap(LHS, RHS);
+    CC = ISD::getSetCCSwappedOperands(CC);
+  }
+  // isnan(x) and "x uno 0.0" arrive as x uno x.
+  bool SelfOrdered = LHS == RHS && (CC == ISD::SETO || CC == ISD::SETUO);
+  auto *Zero = dyn_cast<ConstantFPSDNode>(RHS);
+  if (!SelfOrdered && (!Zero || !Zero->isZero()))
+    return 0;
+
+  unsigned Bits = VT.getSizeInBits();
+  EVT IntVT = EVT::getIntegerVT(*DAG.getContext(), Bits);
+  APInt S = APInt::getSignMask(Bits);
+  APInt I = APFloat::getInf(VT.getFltSemantics()).bitcastToAPInt();
+  SDValue B = DAG.getBitcast(IntVT, LHS);
+  SDValue A =
+      DAG.getNode(ISD::AND, dl, IntVT, B, DAG.getConstant(~S, dl, IntVT));
+  SDValue Inf = DAG.getConstant(I, dl, IntVT);
+  auto Minus = [&](SDValue X, const APInt &C) {
+    return DAG.getNode(ISD::SUB, dl, IntVT, X, DAG.getConstant(C, dl, IntVT));
+  };
+  SDValue IntZero = DAG.getConstant(0, dl, IntVT);
+
+  // The ordered test, and whether the result is its negation.
+  bool Negate = false;
+  switch (CC) {
+  case ISD::SETUNE:
+  case ISD::SETULE:
+  case ISD::SETUGE:
+  case ISD::SETUEQ:
+  case ISD::SETUO:
+  case ISD::SETULT:
+  case ISD::SETUGT:
+    CC = ISD::getSetCCInverse(CC, VT);
+    Negate = true;
+    break;
+  case ISD::SETEQ:
+    CC = ISD::SETOEQ;
+    break;
+  case ISD::SETNE:
+    CC = ISD::SETOEQ;
+    Negate = true;
+    break;
+  case ISD::SETGT:
+    CC = ISD::SETOGT;
+    break;
+  case ISD::SETLT:
+    CC = ISD::SETOLT;
+    break;
+  case ISD::SETGE:
+    CC = ISD::SETOGE;
+    break;
+  case ISD::SETLE:
+    CC = ISD::SETOLE;
+    break;
+  default:
+    break;
+  }
+
+  // For size, only the tests that are not longer than the call (about 25
+  // bytes with a float, 44 with a double): one comparison, with a subtraction
+  // only from a float's bits and only of 1.
+  if (DAG.shouldOptForSize() &&
+      !(CC == ISD::SETOEQ || CC == ISD::SETO ||
+        (Bits == 32 && (CC == ISD::SETOGT || CC == ISD::SETONE))))
+    return 0;
+
+  unsigned N = 1;
+  switch (CC) {
+  case ISD::SETOEQ:
+    Parts[0] = {A, IntZero, ISD::SETEQ};
+    break;
+  case ISD::SETOGT:
+    Parts[0] = {Minus(B, APInt(Bits, 1)), Inf, ISD::SETULT};
+    break;
+  case ISD::SETOLT:
+    Parts[0] = {Minus(B, S + 1), Inf, ISD::SETULT};
+    break;
+  case ISD::SETONE:
+    Parts[0] = {Minus(A, APInt(Bits, 1)), Inf, ISD::SETULT};
+    break;
+  case ISD::SETO:
+    Parts[0] = {A, Inf, ISD::SETULE};
+    break;
+  case ISD::SETOGE:
+    Parts[0] = {A, IntZero, ISD::SETEQ};
+    Parts[1] = {B, Inf, ISD::SETULE};
+    N = 2;
+    break;
+  case ISD::SETOLE:
+    Parts[0] = {A, IntZero, ISD::SETEQ};
+    Parts[1] = {Minus(B, S), Inf, ISD::SETULE};
+    N = 2;
+    break;
+  default:
+    return 0;
+  }
+  Join = ISD::OR;
+  if (Negate) {
+    // not (P or Q) = not P and not Q.
+    for (unsigned K = 0; K != N; ++K)
+      Parts[K].CC = ISD::getSetCCInverse(Parts[K].CC, IntVT);
+    Join = ISD::AND;
+  }
+  return N;
+}
+
+static SDValue PerformFloatZeroCompareCombine(SDNode *N, SelectionDAG &DAG) {
+  unsigned Opc = N->getOpcode();
+  unsigned LHSIdx = Opc == ISD::BR_CC ? 2 : 0;
+  unsigned CCIdx = Opc == ISD::SETCC ? 2 : Opc == ISD::BR_CC ? 1 : 4;
+  SDValue LHS = N->getOperand(LHSIdx), RHS = N->getOperand(LHSIdx + 1);
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(CCIdx))->get();
+  SDLoc dl(N);
+  IntCompare Parts[2];
+  unsigned Join;
+  unsigned Num = getFloatZeroCompare(DAG, dl, LHS, RHS, CC, Parts, Join);
+  if (!Num)
+    return SDValue();
+
+  auto Bool = [&](EVT VT) {
+    SDValue V = DAG.getSetCC(dl, VT, Parts[0].LHS, Parts[0].RHS, Parts[0].CC);
+    if (Num == 2)
+      V = DAG.getNode(
+          Join, dl, VT, V,
+          DAG.getSetCC(dl, VT, Parts[1].LHS, Parts[1].RHS, Parts[1].CC));
+    return V;
+  };
+  if (Opc == ISD::SETCC)
+    return Bool(N->getValueType(0));
+
+  // A branch or select tests the one comparison, or the joined two against 0.
+  SDValue L = Parts[0].LHS, R = Parts[0].RHS;
+  ISD::CondCode IntCC = Parts[0].CC;
+  if (Num == 2) {
+    L = Bool(MVT::i8);
+    R = DAG.getConstant(0, dl, MVT::i8);
+    IntCC = ISD::SETNE;
+  }
+  if (Opc == ISD::BR_CC)
+    return DAG.getNode(ISD::BR_CC, dl, MVT::Other, N->getOperand(0),
+                       DAG.getCondCode(IntCC), L, R, N->getOperand(4));
+  return DAG.getSelectCC(dl, L, R, N->getOperand(2), N->getOperand(3), IntCC);
+}
+
 // A minimum or maximum of 32 or 64 bits. Type legalization would compare the
 // high halves twice and the low halves once and pick the result with three
 // selects (and again for each half of 64 bits); as a select it is one
@@ -3577,10 +3750,14 @@ SDValue RL78TargetLowering::PerformDAGCombine(SDNode *N,
     return PerformMinMaxCombine(N, DCI);
   case ISD::SETCC:
   case ISD::SELECT_CC:
+    if (SDValue V = PerformFloatZeroCompareCombine(N, DCI.DAG))
+      return V;
     return PerformWideCompareCombine(N, DCI.DAG);
   case ISD::SELECT:
     return PerformSELECTCombine(N, DCI.DAG);
   case ISD::BR_CC:
+    if (SDValue V = PerformFloatZeroCompareCombine(N, DCI.DAG))
+      return V;
     return PerformBRCCCombine(N, DCI);
   case ISD::BRCOND:
     return PerformBRCONDCombine(N, DCI);
