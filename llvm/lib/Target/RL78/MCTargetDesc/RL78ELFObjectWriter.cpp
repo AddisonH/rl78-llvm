@@ -46,7 +46,6 @@ unsigned RL78ELFObjectWriter::getRelocType(const MCFixup &Fixup,
     switch ((unsigned)Fixup.getKind()) {
     default:
       llvm_unreachable("Unimplemented fixup -> relocation");
-      // TODO:
     case RL78::fixup_RL78_DIR16S_PCREL:
       return ELF::R_RL78_DIR16S_PCREL;
     case RL78::fixup_RL78_DIR8S_PCREL:
