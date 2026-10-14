@@ -140,3 +140,5 @@ BUILTIN(__builtin_rl78_macsi, "LiiiLi", "")
 //Wait for the specified number of cycles. Only constants are allowed.
 //CCRL: void __delay_cycles(unsigned long cycles);
 BUILTIN(__builtin_rl78_delay_cycles, "vULi", "n")
+
+#undef BUILTIN

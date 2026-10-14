@@ -900,7 +900,7 @@ void RL78FrameLowering::orderFrameObjects(
     llvm::erase_if(objectsToAllocate,
                    [&](int FI) { return llvm::is_contained(Top, FI); });
   }
-  auto AppendTop = llvm::make_scope_exit(
+  llvm::scope_exit AppendTop(
       [&] { objectsToAllocate.append(Top.begin(), Top.end()); });
 
   // Don't waste time if there's nothing to do.

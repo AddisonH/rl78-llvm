@@ -511,8 +511,7 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       Callee =
           DAG.getTargetGlobalAddress(G->getGlobal(), SDLoc(G), MVT::i16,
                                      G->getOffset(), RL78MCExpr::VK_RL78_None);
-  }
-  else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+  } else if (isa<ExternalSymbolSDNode>(Callee)) {
     Callee = LowerExternalSymbol(Callee, DAG);
   }
   // CALL rp goes to CS:rp. A program with far code changes CS in its far
@@ -521,7 +520,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   else if (Callee.getValueType() == MVT::i16 && Subtarget->HasFarCodeModel()) {
     Callee = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Callee);
   }
-
 
   // Returns a chain & a flag for retval copy to use.
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
@@ -2224,9 +2222,8 @@ SDValue RL78TargetLowering::LowerCDIV(SDValue Op, SelectionDAG &DAG,
 
 SDValue RL78TargetLowering::LowerAndOrXor(SDValue Op, SelectionDAG &DAG,
                                           unsigned int opcode) const {
-  if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op.getOperand(1))) {
+  if (isa<ConstantSDNode>(Op.getOperand(1)))
     return Op;
-  }
   SDLoc dl(Op);
   SDNode *N = Op.getNode();
   const SDValue &logicalOp = N->getOperand(0);
@@ -2245,9 +2242,8 @@ SDValue RL78TargetLowering::LowerAndOrXor(SDValue Op, SelectionDAG &DAG,
 SDValue RL78TargetLowering::LowerShift(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   // If shift amount is constant we can do this using one instruction.
-  if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op.getOperand(1))) {
+  if (isa<ConstantSDNode>(Op.getOperand(1)))
     return Op;
-  }
   RTLIB::Libcall LC;
   bool is8Bit = Op.getSimpleValueType() == MVT::i8;
   switch (Op.getOpcode()) {
@@ -4868,7 +4864,7 @@ bool RL78TargetLowering::ExpandInlineAsm(CallInst *CI) const {
         return false;
     }
 
-    Value *Op = CallInst::Create(Int, CI->getName(), CI);
+    Value *Op = CallInst::Create(Int, CI->getName(), CI->getIterator());
     CI->replaceAllUsesWith(Op);
     CI->eraseFromParent();
     return true;

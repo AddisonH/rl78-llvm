@@ -161,9 +161,8 @@ public:
         Fn->addFnAttr("disable-tail-calls", "true");
       }
 
-      if (const auto *Attr = FD->getAttr<RL78CalltAttr>()) {
+      if (FD->hasAttr<RL78CalltAttr>())
         Fn->addFnAttr("callt");
-      }
 
     }
 

@@ -102,8 +102,8 @@ bool RL78UnspeculateLoopLatch::convert(Loop &L) {
   BasicBlock *Pre = L.getLoopPreheader();
   if (L.getNumBlocks() != 1 || !Pre)
     return false;
-  auto *Br = dyn_cast<BranchInst>(H->getTerminator());
-  if (!Br || !Br->isConditional())
+  auto *Br = dyn_cast<CondBrInst>(H->getTerminator());
+  if (!Br)
     return false;
   auto *Cmp = dyn_cast<ICmpInst>(Br->getCondition());
   if (!Cmp || Cmp->getParent() != H || !Cmp->hasOneUse())
@@ -151,14 +151,14 @@ bool RL78UnspeculateLoopLatch::convert(Loop &L) {
   }
 
   // The test of the values the loop is entered with.
-  auto *PreBr = cast<BranchInst>(Pre->getTerminator());
+  Instruction *PreBr = Pre->getTerminator();
   auto *Cmp0 = cast<ICmpInst>(Cmp->clone());
   Cmp0->insertBefore(PreBr->getIterator());
   for (Use &U : Cmp0->operands())
     if (auto *Phi = dyn_cast<PHINode>(U.get()); Phi && Phi->getParent() == H)
       U.set(Phi->getIncomingValueForBlock(Pre));
-  BranchInst *NewBr = ExitIdx == 1 ? BranchInst::Create(H, Exit, Cmp0)
-                                   : BranchInst::Create(Exit, H, Cmp0);
+  CondBrInst *NewBr = ExitIdx == 1 ? CondBrInst::Create(Cmp0, H, Exit)
+                                   : CondBrInst::Create(Cmp0, Exit, H);
   NewBr->insertBefore(PreBr->getIterator());
   NewBr->setDebugLoc(PreBr->getDebugLoc());
   PreBr->eraseFromParent();

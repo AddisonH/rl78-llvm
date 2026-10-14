@@ -141,8 +141,8 @@ bool RL78ByteLoopCounters::convert(Loop &L, LoopInfo &LI,
   BasicBlock *Latch = L.getLoopLatch();
   if (!Preheader || !Latch)
     return false;
-  auto *Br = dyn_cast<BranchInst>(Latch->getTerminator());
-  if (!Br || !Br->isConditional())
+  auto *Br = dyn_cast<CondBrInst>(Latch->getTerminator());
+  if (!Br)
     return false;
   auto *Cmp = dyn_cast<ICmpInst>(Br->getCondition());
   if (!Cmp || !Cmp->hasOneUse())

@@ -628,7 +628,7 @@ bool RL78DAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
     return false; // direct calls.
 
   if (Addr.getOpcode() == ISD::ADD) {
-    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
+    if (isa<ConstantSDNode>(Addr.getOperand(1)))
       return false;
     // the index must be zero-extended to i16 (full 16-bit index is not supported,
     // also sign-extension won't work for negative values)

@@ -693,6 +693,8 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     } else
       return DefaultStatus;
   }
+  case MCExpr::Specifier: // Not made for RL78.
+    break;
   }
   return DefaultStatus;
 }

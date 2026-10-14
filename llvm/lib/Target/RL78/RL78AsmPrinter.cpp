@@ -276,7 +276,6 @@ void RL78AsmPrinter::emitFunctionBodyStart() {
 
 void RL78AsmPrinter::printOperand(const MachineInstr *MI, int opNum,
                                   raw_ostream &O) {
-  const DataLayout &DL = getDataLayout();
   const MachineOperand &MO = MI->getOperand(opNum);
   RL78MCExpr::VariantKind TF = (RL78MCExpr::VariantKind)MO.getTargetFlags();
 

@@ -92,7 +92,7 @@ public:
           operandValid = false;
 
         for (unsigned j = 0; (j < UI->getNumOperands()) && operandValid; ++j) {
-          if (auto UI2 = dyn_cast<Instruction>(UI->getOperandUse(j)))
+          if (isa<Instruction>(UI->getOperandUse(j)))
             operandValid = false;
         }
 

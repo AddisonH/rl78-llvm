@@ -143,8 +143,8 @@ StringRef rl78::getRL78DoubleSize(const llvm::opt::ArgList &Args,
                                   const llvm::Triple &Triple) {
     assert(Triple.isRL78() && "Unexpected triple");
 
-    if (const Arg *BitDoubles = Args.getLastArg(options::OPT_m64bit_doubles))
-        return "m64bit-doubles";
+    if (Args.hasArg(options::OPT_m64bit_doubles))
+      return "m64bit-doubles";
     // Default is 32 bit.
     return "m32bit-doubles";
 }
@@ -153,8 +153,8 @@ StringRef rl78::getRL78DisableMDA(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple) {
     assert(Triple.isRL78() && "Unexpected triple");
 
-    if (const Arg *BitDoubles = Args.getLastArg(options::OPT_mdisable_mda))
-        return "mdisable-mda";
+    if (Args.hasArg(options::OPT_mdisable_mda))
+      return "mdisable-mda";
     // Default is enabled, but we don't have a flag for it.
     return "";
 }
