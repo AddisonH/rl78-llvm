@@ -22,8 +22,8 @@ public:
 
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
-  std::string getSectionPrefixForGlobal(SectionKind Kind,
-                                        const GlobalObject *GO) const override;
+  StringRef getSectionPrefixForGlobal(SectionKind Kind,
+                                      const GlobalObject *GO) const override;
 };
 
 } // end namespace llvm

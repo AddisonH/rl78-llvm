@@ -481,7 +481,7 @@ static SectionKind getELFKindForNamedSection(StringRef Name, SectionKind K) {
       Name.starts_with(".gnu.linkonce.b.") ||
       Name.starts_with(".llvm.linkonce.b.") || Name == ".sbss" ||
       Name.starts_with(".sbss.") || Name.starts_with(".gnu.linkonce.sb.") ||
-      Name.starts_with(".llvm.linkonce.sb.") || Name.starts_with(".bssf"))
+      Name.starts_with(".llvm.linkonce.sb."))
     return SectionKind::getBSS();
 
   if (Name == ".tdata" || Name.starts_with(".tdata.") ||
@@ -522,10 +522,6 @@ static unsigned getELFSectionType(StringRef Name, SectionKind K) {
     return ELF::SHT_LLVM_OFFLOADING;
   if (Name == ".llvm.lto")
     return ELF::SHT_LLVM_LTO;
-
-  // Renesas RL78 far and short-address uninitialized data.
-  if (Name.starts_with(".bssf") || Name.starts_with(".sbss"))
-    return ELF::SHT_NOBITS;
 
   if (K.isBSS() || K.isThreadBSS())
     return ELF::SHT_NOBITS;
@@ -2299,7 +2295,7 @@ selectWasmSectionForGlobal(MCContext &Ctx, const GlobalObject *GO,
 
   bool UniqueSectionNames = TM.getUniqueSectionNames();
   SmallString<128> Name(
-      TM.getObjFileLowering()->getSectionPrefixForGlobal(Kind, GO));
+      TM.getObjFileLowering()->getSectionPrefixForGlobal(Kind));
 
   if (const auto *F = dyn_cast<Function>(GO)) {
     const auto &OptionalPrefix = F->getSectionPrefix();

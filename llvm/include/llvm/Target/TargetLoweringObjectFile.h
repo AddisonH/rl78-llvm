@@ -118,7 +118,9 @@ public:
                                            Align &Alignment, const Function *F,
                                            StringRef SectionSuffix) const;
 
-  virtual std::string
+  /// Return the section prefix name used by options FunctionsSections and
+  /// DataSections.
+  virtual StringRef
   getSectionPrefixForGlobal(SectionKind Kind,
                             const GlobalObject *GO = nullptr) const;
 

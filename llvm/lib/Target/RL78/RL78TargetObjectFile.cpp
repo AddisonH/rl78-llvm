@@ -17,7 +17,7 @@ void RL78ELFTargetObjectFile::Initialize(MCContext &Ctx,
   InitializeELF(TM.Options.UseInitArray);
 }
 
-std::string RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
+StringRef RL78ELFTargetObjectFile::getSectionPrefixForGlobal(
     SectionKind Kind, const GlobalObject *GO) const {
   bool isFar = false;
   bool isSaddr = false;

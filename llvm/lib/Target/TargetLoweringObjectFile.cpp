@@ -368,14 +368,8 @@ SectionKind TargetLoweringObjectFile::getKindForGlobal(const GlobalObject *GO,
   return SectionKind::getData();
 }
 
-/// This method computes the appropriate section to emit the specified global
-/// variable or function definition.  This should not be passed external (or
-/// available externally) globals.
-/// Return the section prefix name used by options FunctionsSections and
-/// DataSections.
-std::string
-TargetLoweringObjectFile::getSectionPrefixForGlobal(SectionKind Kind,
-                                                    const GlobalObject *GO) const {
+StringRef TargetLoweringObjectFile::getSectionPrefixForGlobal(
+    SectionKind Kind, const GlobalObject *GO) const {
   bool IsLarge = GO && TM->isLargeGlobalValue(GO);
   if (Kind.isText())
     return IsLarge ? ".ltext" : ".text";
@@ -394,6 +388,9 @@ TargetLoweringObjectFile::getSectionPrefixForGlobal(SectionKind Kind,
   llvm_unreachable("Unknown section kind");
 }
 
+/// This method computes the appropriate section to emit the specified global
+/// variable or function definition.  This should not be passed external (or
+/// available externally) globals.
 MCSection *TargetLoweringObjectFile::SectionForGlobal(
     const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
   // Select section name.
