@@ -210,13 +210,15 @@ namespace llvm {
   }
 
   // RL78 "relaxes" downwards: BR_rel16 is emitted and shrunk to BR_rel8 when
-  // the displacement fits. As in LLVM 17 this ignores Resolved, so a branch
-  // to a not-yet-resolved symbol is decided on the value computed so far.
+  // the displacement fits. A target in another section has no displacement
+  // yet (Value is its offset in its own section): that branch stays BR_rel16.
   bool RL78AsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
                                                     const MCFixup &Fixup,
                                                     const MCValue &,
                                                     uint64_t Value,
                                                     bool Resolved) const {
+    if (!Resolved)
+      return false;
     int64_t Offset = int64_t(Value);
 
     switch (Fixup.getKind()) {
