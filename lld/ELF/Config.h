@@ -422,7 +422,6 @@ struct Config {
   bool timeTraceEnabled;
   bool tocOptimize;
   bool pcRelOptimize;
-  bool strideDSPMemoryArea = false;
   bool undefinedVersion;
   bool unique;
   bool useAndroidRelrTags = false;

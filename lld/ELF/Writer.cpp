@@ -2650,13 +2650,6 @@ template <class ELFT> void Writer<ELFT>::setPhdrs() {
 
       if (!p->hasLMA)
         p->p_paddr = first->getLMA();
-
-      // RL78 --stride-dsp-memory-area: a segment loaded at a different
-      // address must not have its load image overlap the DSP area.
-      if (ctx.arg.emachine == EM_RL78 && ctx.arg.strideDSPMemoryArea &&
-          p->p_vaddr != p->p_paddr && p->p_paddr + p->p_memsz >= 0xFD800 &&
-          p->p_paddr < 0xFF000)
-        Err(ctx) << "unable to allocate program header in DSP area";
     }
   }
 }

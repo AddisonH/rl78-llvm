@@ -1306,15 +1306,6 @@ bool LinkerScript::assignOffsets(OutputSection *sec) {
       isec->outSecOff = dot - sec->addr;
       dot += isec->getSize();
 
-      // RL78 --stride-dsp-memory-area: no input section may overlap the DSP
-      // area [0xFD800, 0xFF000); move an overlapping one past it.
-      if (ctx.arg.emachine == EM_RL78 && ctx.arg.strideDSPMemoryArea &&
-          sec->addr + isec->outSecOff + isec->getSize() >= 0xFD800 &&
-          sec->addr + isec->outSecOff < 0xFF000) {
-        isec->outSecOff = alignToPowerOf2(0xFF000, isec->addralign) - sec->addr;
-        dot = sec->addr + isec->outSecOff + isec->getSize();
-      }
-
       // Update output section size after adding each section. This is so that
       // SIZEOF works correctly in the case below:
       // .foo { *(.aaa) a = SIZEOF(.foo); *(.bbb) }
