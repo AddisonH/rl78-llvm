@@ -4979,6 +4979,11 @@ RL78TargetLowering::getConstraintType(StringRef Constraint) const {
     switch (Constraint[0]) {
     case 'r':
       return C_RegisterClass;
+    case 'i':
+    case 'n':
+    case 's':
+    case 'X':
+      return TargetLowering::getConstraintType(Constraint);
     default:
       return C_Unknown;
     }
@@ -4987,22 +4992,38 @@ RL78TargetLowering::getConstraintType(StringRef Constraint) const {
     return TargetLowering::getConstraintType(Constraint);
 }
 
+// An immediate operand of inline asm is only printed. A far address (a
+// function with -mfar-code, __far data) is an i32, which the type legalizer
+// would split into halves the asm statement cannot take; its symbol goes
+// into the asm as an i16 node instead.
+void RL78TargetLowering::LowerAsmOperandForConstraint(
+    SDValue Op, StringRef Constraint, std::vector<SDValue> &Ops,
+    SelectionDAG &DAG) const {
+  if (Constraint.size() == 1 && Constraint[0] != 'n')
+    if (auto *GA = dyn_cast<GlobalAddressSDNode>(Op))
+      if (GA->getValueType(0) == MVT::i32) {
+        Ops.push_back(DAG.getTargetGlobalAddress(
+            GA->getGlobal(), SDLoc(Op), MVT::i16, GA->getOffset()));
+        return;
+      }
+  TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
+}
+
 std::pair<unsigned, const TargetRegisterClass *>
 RL78TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                  StringRef Constraint,
                                                  MVT VT) const {
   if (Constraint.size() == 1) {
-    // We only support 'r'.
+    // We only support 'r'. A value wider than 16 bits takes several
+    // register pairs.
     if (Constraint[0] == 'r') {
-
-      if (VT == MVT::i16)
-        return std::pair<unsigned, const TargetRegisterClass *>(
-            0U, &RL78::RL78RPRegsRegClass);
       if (VT == MVT::i8)
         return std::pair<unsigned, const TargetRegisterClass *>(
             0U, &RL78::RL78RegRegClass);
-    } 
-    // Default return if VT is not i16 or i8:
+      if (VT.isInteger() && VT.getSizeInBits() % 16 == 0)
+        return std::pair<unsigned, const TargetRegisterClass *>(
+            0U, &RL78::RL78RPRegsRegClass);
+    }
     return std::make_pair(0u, static_cast<TargetRegisterClass *>(nullptr));
   } else {
     StringRef RegName(Constraint.data() + 1, Constraint.size() - 2);

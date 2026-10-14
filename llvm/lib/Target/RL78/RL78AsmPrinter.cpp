@@ -323,13 +323,19 @@ void RL78AsmPrinter::printMemOperand(const MachineInstr *MI, int opNum,
 ///
 bool RL78AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                                      const char *ExtraCode, raw_ostream &O) {
-  // Currently only register operands are supported (without any modifiers).
-  if ((ExtraCode && ExtraCode[0]) ||
-      (MI->getOperand(OpNo).getType() != MachineOperand::MO_Register))
-    return true;
+  // The modifiers are the generic ones ('c', 'n', ...).
+  if (ExtraCode && ExtraCode[0])
+    return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
 
-  printOperand(MI, OpNo, O);
-  return false;
+  switch (MI->getOperand(OpNo).getType()) {
+  case MachineOperand::MO_Register:
+  case MachineOperand::MO_Immediate:
+  case MachineOperand::MO_GlobalAddress:
+    printOperand(MI, OpNo, O);
+    return false;
+  default:
+    return true;
+  }
 }
 
 // When a global variable is emitted, we want the specialized behavior of
