@@ -502,6 +502,12 @@ bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
   auto OnA = [&](unsigned Opcode) {
     return BuildMI(MBB, MI, DL, get(Opcode), RL78::R1).addReg(RL78::R1);
   };
+  // The memory operand of one byte of the word the pseudo loads.
+  MachineFunction &MF = *MBB.getParent();
+  auto ByteMem = [&](MachineInstrBuilder MIB, bool Hi) {
+    for (MachineMemOperand *MMO : MI.memoperands())
+      MIB.addMemOperand(MF.getMachineMemOperand(MMO, Hi, LLT::scalar(8)));
+  };
   // The operation on A with the low or the high byte of the source.
   auto Op = [&](bool Hi) {
     switch (Form) {
@@ -515,9 +521,9 @@ bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
     case WideMHLi: {
       int64_t Disp = MI.getOperand(3).getImm() + Hi;
       if (Disp)
-        OnA(W.MHLi).add(MI.getOperand(2)).addImm(Disp);
+        ByteMem(OnA(W.MHLi).add(MI.getOperand(2)).addImm(Disp), Hi);
       else
-        OnA(W.MHL).add(MI.getOperand(2));
+        ByteMem(OnA(W.MHL).add(MI.getOperand(2)), Hi);
       break;
     }
     case WideAbs16: {
@@ -526,7 +532,7 @@ bool RL78InstrInfo::expandWideOnAX(MachineInstr &MI) const {
         Addr.setImm(Addr.getImm() + Hi);
       else
         Addr.setOffset(Addr.getOffset() + Hi);
-      OnA(W.Abs16).add(Addr);
+      ByteMem(OnA(W.Abs16).add(Addr), Hi);
       break;
     }
     case NotWide:

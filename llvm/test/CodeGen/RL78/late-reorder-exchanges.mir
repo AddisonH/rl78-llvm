@@ -1,0 +1,221 @@
+# RUN: llc -mtriple=rl78 -run-pass=rl78-late-reorder -verify-machineinstrs %s -o - | FileCheck %s
+
+# RL78LateReorder: byte operations on A between exchanges of A and X are
+# grouped by the byte they work on, so that the exchanges in the middle of
+# two 16-bit logic operations cancel.
+
+--- |
+  target triple = "rl78"
+  define void @two() { ret void }
+  define void @three() { ret void }
+  define void @aside() { ret void }
+  define void @aside_blocked() { ret void }
+  define void @operand_x() { ret void }
+  define void @flags_read() { ret void }
+  define void @after_skip() { ret void }
+...
+---
+# (AX ^ BC) & DE.
+# CHECK-LABEL: name: two
+# CHECK:      $r1 = XOR_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r5
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: RET
+name: two
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2, $rp4
+    $r1 = XOR_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r5, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r4, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# Three operations, the first on the low byte first (an immediate): six
+# exchanges become two.
+# CHECK-LABEL: name: three
+# CHECK:      $r1 = XOR_A_i8 killed $r1, 18
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1 = OR_A_abs16 killed $r1, 65025
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_i8 killed $r1, 52
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1 = OR_A_abs16 killed $r1, 65024
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: RET
+name: three
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_i8 killed $r1, 52, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_i8 killed $r1, 18, implicit-def $ccreg
+    $r1 = AND_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = OR_A_abs16 killed $r1, 65025, implicit-def $ccreg :: (load (s8))
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = OR_A_abs16 killed $r1, 65024, implicit-def $ccreg :: (load (s8))
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# An instruction that touches neither AX nor the flags goes in front.
+# CHECK-LABEL: name: aside
+# CHECK:      $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1 = OR_A_mHLi killed $r1, $rp6, 5
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1 = OR_A_mHLi killed $r1, killed $rp6, 4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: RET
+name: aside
+tracksRegLiveness: true
+fixedStack:
+  - { id: 0, offset: -4, size: 2, alignment: 2, isImmutable: true }
+body: |
+  bb.0:
+    liveins: $rp0, $rp2
+    $r1 = AND_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $rp6 = MOVW_rp_SP $spreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = OR_A_mHLi killed $r1, $rp6, 5, implicit-def $ccreg :: (load (s8) from %fixed-stack.0 + 1)
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8) from %fixed-stack.0)
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# HL is written after operations that read it: it stays behind them, and the
+# operations on each byte that read the new HL follow it. Four exchanges
+# become two.
+# CHECK-LABEL: name: aside_blocked
+# CHECK:      $r1 = OR_A_mHLi killed $r1, $rp6, 1
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = OR_A_mHLi killed $r1, killed $rp6, 0
+# CHECK-NEXT: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $r1 = AND_A_mHLi killed $r1, $rp6, 4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_mHLi killed $r1, killed $rp6, 5
+# CHECK-NEXT: RET
+name: aside_blocked
+tracksRegLiveness: true
+fixedStack:
+  - { id: 0, offset: -4, size: 2, alignment: 2, isImmutable: true }
+body: |
+  bb.0:
+    liveins: $rp0, $rp6
+    $r1 = OR_A_mHLi killed $r1, $rp6, 1, implicit-def $ccreg :: (load (s8))
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 0, implicit-def $ccreg :: (load (s8))
+    $rp6 = MOVW_rp_SP $spreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_mHLi killed $r1, $rp6, 5, implicit-def $ccreg :: (load (s8) from %fixed-stack.0 + 1)
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8) from %fixed-stack.0)
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# An operation that reads X depends on both bytes: nothing moves across it.
+# CHECK-LABEL: name: operand_x
+# CHECK:      $r1 = XOR_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, $r0
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+name: operand_x
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2, $rp4
+    $r1 = XOR_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, $r0, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r4, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The branch reads the flags of the last AND, on the high byte; regrouped,
+# the low byte's would be last.
+# CHECK-LABEL: name: flags_read
+# CHECK:      $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r5
+# CHECK-NEXT: BRCC
+name: flags_read
+tracksRegLiveness: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $rp0, $rp2, $rp4
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r4, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r5, implicit-def $ccreg
+    BRCC %bb.2, 2, implicit killed $ccreg
+  bb.1:
+    liveins: $rp0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+  bb.2:
+    liveins: $rp0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The skip keeps the exchange after it; the rest is regrouped.
+# CHECK-LABEL: name: after_skip
+# CHECK:      SKcc
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r2
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r4
+# CHECK-NEXT: $r1, $r0 = XCH_A_X
+# CHECK-NEXT: $r1 = XOR_A_r killed $r1, killed $r3
+# CHECK-NEXT: $r1 = AND_A_r killed $r1, killed $r5
+# CHECK-NEXT: RET
+name: after_skip
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2, $rp4, $ccreg
+    SKcc 2, implicit $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r2, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = XOR_A_r killed $r1, killed $r3, implicit-def $ccreg
+    $r1 = AND_A_r killed $r1, killed $r5, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    $r1 = AND_A_r killed $r1, killed $r4, implicit-def $ccreg
+    $r1, $r0 = XCH_A_X killed $r1, killed $r0
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...

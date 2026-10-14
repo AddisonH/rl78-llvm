@@ -559,11 +559,9 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, [sp+18] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xor a, b
-; SCHED-NEXT:    xch a, x
-; SCHED-NEXT:    xor a, c
-; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    xor a, h
 ; SCHED-NEXT:    xch a, x
+; SCHED-NEXT:    xor a, c
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax

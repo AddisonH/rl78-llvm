@@ -38,29 +38,21 @@ define dso_local noundef i32 @ch(i32 noundef %0, i32 noundef %1, i32 noundef %2,
 ; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, [sp+14]
 ; CHECK-NEXT:    xor a, [hl+11]
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    xor a, [hl+10]
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    and a, d
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    and a, e
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    xor a, [hl+15]
 ; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    xor a, [hl+10]
+; CHECK-NEXT:    and a, e
 ; CHECK-NEXT:    xor a, [hl+14]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+16]
 ; CHECK-NEXT:    xor a, [hl+13]
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    xor a, [hl+12]
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    and a, [hl+5] ; 2-byte Folded Reload
-; CHECK-NEXT:    xch a, x
-; CHECK-NEXT:    and a, [hl+4] ; 2-byte Folded Reload
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    xor a, [hl+17]
 ; CHECK-NEXT:    xch a, x
+; CHECK-NEXT:    xor a, [hl+12]
+; CHECK-NEXT:    and a, [hl+4] ; 2-byte Folded Reload
 ; CHECK-NEXT:    xor a, [hl+16]
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    movw hl, ax
@@ -109,29 +101,21 @@ define dso_local noundef i32 @ch(i32 noundef %0, i32 noundef %1, i32 noundef %2,
 ; SPLIT-NEXT:    movw hl, sp
 ; SPLIT-NEXT:    movw ax, [sp+14]
 ; SPLIT-NEXT:    xor a, [hl+11]
-; SPLIT-NEXT:    xch a, x
-; SPLIT-NEXT:    xor a, [hl+10]
-; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    and a, d
-; SPLIT-NEXT:    xch a, x
-; SPLIT-NEXT:    and a, e
-; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    xor a, [hl+15]
 ; SPLIT-NEXT:    xch a, x
+; SPLIT-NEXT:    xor a, [hl+10]
+; SPLIT-NEXT:    and a, e
 ; SPLIT-NEXT:    xor a, [hl+14]
 ; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    movw de, ax
 ; SPLIT-NEXT:    movw ax, [sp+16]
 ; SPLIT-NEXT:    xor a, [hl+13]
-; SPLIT-NEXT:    xch a, x
-; SPLIT-NEXT:    xor a, [hl+12]
-; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    and a, [hl+3] ; 2-byte Folded Reload
-; SPLIT-NEXT:    xch a, x
-; SPLIT-NEXT:    and a, [hl+2] ; 2-byte Folded Reload
-; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    xor a, [hl+17]
 ; SPLIT-NEXT:    xch a, x
+; SPLIT-NEXT:    xor a, [hl+12]
+; SPLIT-NEXT:    and a, [hl+2] ; 2-byte Folded Reload
 ; SPLIT-NEXT:    xor a, [hl+16]
 ; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    movw hl, ax

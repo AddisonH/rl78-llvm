@@ -46,6 +46,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRL78Target() {
   initializeRL78UnspeculateLoopLatchPass(*PR);
   initializeRL78BiasSignedComparesPass(*PR);
   initializeRL78SlotOperandsPass(*PR);
+  initializeRL78LateReorderPass(*PR);
   initializeRL78LoadLateStoreEarlyPass(*PR);
 }
 
@@ -304,6 +305,8 @@ void RL78PassConfig::addPreEmitPass() {
   // UseCopyInstr, so it matches the real moves rather than only COPY pseudos.
   addPass(createMachineCopyPropagationPass(true));
   addPass(createRL78CMPWithZeroElimPass(/*Late=*/true));
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRL78LateReorderPass());
   if (!InsertNOPWithLabel.empty()) {
     addPass(createRL78InsertNOPWithLabelPass());
   }

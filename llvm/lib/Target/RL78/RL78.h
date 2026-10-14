@@ -48,6 +48,7 @@ FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
 FunctionPass *createRL78SlotOperandsPass();
+FunctionPass *createRL78LateReorderPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
 FunctionPass *createRL78NarrowDemandedOpsPass();
 FunctionPass *createRL78NarrowLoopCountersPass();
@@ -70,6 +71,7 @@ void initializeRL78UnspeculateLoopLatchPass(PassRegistry &);
 void initializeRL78BiasSignedComparesPass(PassRegistry &);
 void initializeRL78ExpandInlineAsmPass(PassRegistry &);
 void initializeRL78SlotOperandsPass(PassRegistry &);
+void initializeRL78LateReorderPass(PassRegistry &);
 void initializeRL78LoadLateStoreEarlyPass(PassRegistry &);
 
 /// Turns an MCInst of an older (code generation) definition into the

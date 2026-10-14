@@ -51,6 +51,7 @@ add_llvm_target(RL78CodeGen
   RL78SinkToAccumulator.cpp
   RL78SplitConstrainedValues.cpp
   RL78SlotOperands.cpp
+  RL78LateReorder.cpp
 
   LINK_COMPONENTS
   Analysis
