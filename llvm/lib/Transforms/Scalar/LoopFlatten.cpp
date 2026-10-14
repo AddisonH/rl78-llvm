@@ -90,8 +90,9 @@ static cl::opt<unsigned> RepeatedInstructionThreshold(
 
 // The overflow check is one multiply outside the loop nest. On a target with
 // narrow registers (RL78: 16-bit, i32 trip counts from `unsigned long`
-// bounds) that multiply is a library call, but still worth it.
-static cl::opt<bool> VersionIllegalTripCount(
+// bounds) that multiply is a library call, but still worth it. The pass's
+// constructor argument does the same.
+static cl::opt<bool> ClVersionIllegalTripCount(
     "loop-flatten-version-illegal-tripcount", cl::Hidden, cl::init(false),
     cl::desc("Version loops for the overflow check even when the trip count "
              "type is not a legal integer"));
@@ -123,6 +124,8 @@ namespace {
 struct FlattenInfo {
   Loop *OuterLoop = nullptr;  // The loop pair to be flattened.
   Loop *InnerLoop = nullptr;
+
+  bool VersionIllegalTripCount = false;
 
   PHINode *InnerInductionPHI = nullptr; // These PHINodes correspond to loop
   PHINode *OuterInductionPHI = nullptr; // induction variables, which are
@@ -959,7 +962,7 @@ static bool FlattenLoopPair(FlattenInfo &FI, DominatorTree *DT, LoopInfo *LI,
     if (!VersionLoops) {
       LLVM_DEBUG(dbgs() << "Multiply might overflow, not flattening\n");
       return false;
-    } else if (!VersionIllegalTripCount &&
+    } else if (!FI.VersionIllegalTripCount &&
                !DL.isLegalInteger(
                    FI.OuterTripCount->getType()->getScalarSizeInBits())) {
       // If the trip count type isn't legal then it won't be possible to check
@@ -981,7 +984,7 @@ static bool FlattenLoopPair(FlattenInfo &FI, DominatorTree *DT, LoopInfo *LI,
     // The original nest only runs when the trip count product overflows; with
     // an illegal trip count type that is a narrow-register target, where an
     // unrolled copy of it costs scarce code space for nothing.
-    if (VersionIllegalTripCount)
+    if (FI.VersionIllegalTripCount)
       for (Loop *L : LVer.getNonVersionedLoop()->getLoopsInPreorder()) {
         addStringMetadataToLoop(L, "llvm.loop.unroll.disable", 1);
         addStringMetadataToLoop(L, "llvm.loop.unroll_and_jam.disable", 1);
@@ -1031,6 +1034,8 @@ PreservedAnalyses LoopFlattenPass::run(LoopNest &LN, LoopAnalysisManager &LAM,
     if (!OuterLoop)
       continue;
     FlattenInfo FI(OuterLoop, InnerLoop);
+    FI.VersionIllegalTripCount =
+        VersionIllegalTripCount || ClVersionIllegalTripCount;
     Changed |=
         FlattenLoopPair(FI, &AR.DT, &AR.LI, &AR.SE, &AR.AC, &AR.TTI, &U,
                         MSSAU ? &*MSSAU : nullptr, LAIM.getInfo(*OuterLoop));

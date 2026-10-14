@@ -21,8 +21,13 @@ class LPMUpdater;
 class LoopNest;
 
 class LoopFlattenPass : public OptionalPassInfoMixin<LoopFlattenPass> {
+  // Version a loop nest on the overflow check even when the trip count type
+  // is not a legal integer, so that the check is not one instruction.
+  bool VersionIllegalTripCount;
+
 public:
-  LoopFlattenPass() = default;
+  LoopFlattenPass(bool VersionIllegalTripCount = false)
+      : VersionIllegalTripCount(VersionIllegalTripCount) {}
 
   LLVM_ABI PreservedAnalyses run(LoopNest &LN, LoopAnalysisManager &LAM,
                                  LoopStandardAnalysisResults &AR,

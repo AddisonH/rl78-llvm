@@ -26,6 +26,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/LoopFlatten.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopUnrollAndJamPass.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -170,6 +171,15 @@ void RL78TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
   // At -O3, unroll an outer loop and jam the copies of its inner loop (as
   // -enable-unroll-and-jam would), before the loops are unrolled: CoreMark's
   // matrix kernels, 3% of its clocks. getUnrollingPreferences says where.
+  // At -O3, flatten i*N+j loop nests into one loop, as CC-RL does: CoreMark's
+  // matrix kernels, 4% of its clocks. Their trip counts are i32, which takes
+  // a library call to multiply for the overflow check; worth it all the same.
+  PB.registerLateLoopOptimizationsEPCallback(
+      [](LoopPassManager &LPM, OptimizationLevel Level) {
+        if (Level == OptimizationLevel::O3)
+          LPM.addPass(LoopFlattenPass(/*VersionIllegalTripCount=*/true));
+      });
+
   PB.registerVectorizerStartEPCallback(
       [](FunctionPassManager &FPM, OptimizationLevel Level) {
         if (Level == OptimizationLevel::O3)
