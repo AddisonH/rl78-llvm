@@ -1509,27 +1509,6 @@ void RL78TargetLowering::computeKnownBitsForTargetNode(
 }
 
 // Convert to a target node and set target flags.
-SDValue RL78TargetLowering::withTargetFlags(SDValue Op, unsigned TF,
-                                            SelectionDAG &DAG) const {
-  if (const GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(Op))
-    return DAG.getTargetGlobalAddress(GA->getGlobal(), SDLoc(GA), MVT::i16,
-                                      GA->getOffset(), TF);
-
-  if (const ConstantPoolSDNode *CP = dyn_cast<ConstantPoolSDNode>(Op))
-    return DAG.getTargetConstantPool(CP->getConstVal(), CP->getValueType(0),
-                                     CP->getAlign(), CP->getOffset(), TF);
-
-  if (const BlockAddressSDNode *BA = dyn_cast<BlockAddressSDNode>(Op))
-    return DAG.getTargetBlockAddress(BA->getBlockAddress(), Op.getValueType(),
-                                     0, TF);
-
-  if (const ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(Op))
-    return DAG.getTargetExternalSymbol(ES->getSymbol(), ES->getValueType(0),
-                                       TF);
-
-  llvm_unreachable("Unhandled address SDNode");
-}
-
 // Build SDNodes for producing an address from a GlobalAddress, ConstantPool,
 // or ExternalSymbol SDNode.
 SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {

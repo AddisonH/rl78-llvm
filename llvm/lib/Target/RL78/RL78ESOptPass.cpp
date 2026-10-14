@@ -69,8 +69,8 @@ static std::optional<ESValue> getESValue(const MachineInstr &MI,
   return ESValue(false, Reg, Sub, 0);
 }
 
-// Deletes a write of ES that writes the value ES already has: LowerESSrc sets
-// ES before every far access, which repeats the same MOV es, a (and the copy
+// Deletes a write of ES that writes the value ES already has: ES is set
+// before every far access, which repeats the same MOV es, a (and the copy
 // to A feeding it) for consecutive accesses through one far pointer:
 //   mov a, c
 //   mov es, a

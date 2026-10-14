@@ -232,13 +232,11 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
         if (prevI == MBB.rend())
           break;
         // If compare with 0 instruction.
-        // We don't check for CMP0_abs16_cg because it's highly unlikely to happen:
-        // We will not have a store and a load (maybe in case of volatile in
-        // which case we don't realy want to touch it) normally the compiler
-        // will do a store and a compare using the same registers (which
-        // contains the store value) as operand 0. We also ignore any signed
-        // comparisons which needed extra instruction (XOR1_cy_r etc.), see
-        // RL78TargetLowering::LowerSignedCMP.
+        // A compare of a memory operand with 0 is not checked: a store and a
+        // load of the same place hardly happen (volatile aside, which is to
+        // be left alone); the compiler compares the register that was
+        // stored. Signed comparisons, which need extra instructions (XOR1
+        // CY and the like), are ignored as well.
         if ((prevI->getOpcode() == RL78::CMP0_r) ||
             ((prevI->getOpcode() == RL78::CMPW_AX_i16) &&
              (prevI->getOperand(1).getImm() == 0))) {

@@ -186,7 +186,6 @@ public:
   SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
@@ -304,86 +303,21 @@ private:
   SDValue PerformDivByConstantCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue PerformSHLCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
-  MachineBasicBlock *LowerEXTEND(bool sext, MachineInstr &MI,
-                                 MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerADDE_SUBE_rp_rp(unsigned int opcode, MachineInstr &MI,
-                                          MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerADDE_SUBE_rp_imm(unsigned int opcode,
                                            MachineInstr &MI,
                                            MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerADDE_SUBE_rp_memri(unsigned int opcode,
-                                             MachineInstr &MI,
-                                             MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerADDE_SUBE_rp_abs16(unsigned int opcode,
-                                             MachineInstr &MI,
-                                             MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerAndOrXor16_rp_imm(unsigned int opcode,
-                                            MachineInstr &MI,
-                                            MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerAndOrXor16_rp_rp(unsigned int opcode,
-                                           MachineInstr &MI,
-                                           MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerAndOrXor16_rp_memri(unsigned int opcode,
-                                              unsigned int opcode2,
-                                              MachineInstr &MI,
-                                              MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerAndOrXor16_rp_abs16(unsigned int opcode,
-                                              MachineInstr &MI,
-                                              MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerSignedCMP0(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMP0(MachineInstr &MI, MachineBasicBlock *BB) const;
 
-  MachineBasicBlock *LowerSignedCMP(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMPOps(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMP(MachineInstr &MI, MachineBasicBlock *BB) const;
-
-  MachineBasicBlock *LowerSignedCMPW(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMPWOps(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMPW(MachineInstr &MI, MachineBasicBlock *BB) const;
-
-  MachineBasicBlock *LowerSignedCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMPWMemOps(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerCMPWMem(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerSELECTCC(bool isI8, MachineInstr &MI,
                                    MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerLOAD_SELECTCC(MachineInstr &MI,
                                         MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerMUL8(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *emitCTLZ16(MachineInstr &MI, MachineBasicBlock *BB) const;
   MachineBasicBlock *LowerShift_Or_LowerRotate_rp_rp(MachineInstr &MI,
                                                      MachineBasicBlock *BB,
                                                      unsigned int opcode,
                                                      bool isI8) const;
-  MachineBasicBlock *LowerMUL8Zext16(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerUMUL_LOHI16(MachineInstr &MI,
-                                      MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerMULDIV16(MachineInstr &MI, MachineBasicBlock *BB,
-                                   unsigned srcIndex) const;
-  MachineBasicBlock *LowerDIVWU(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *Lower8BitOpAA(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-  MachineBasicBlock *Lower16BitOpAXAX(MachineInstr &MI,
-                                      MachineBasicBlock *BB) const;
-  MachineBasicBlock *Lower8bitADst(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-  MachineBasicBlock *Lower16bitAXDst(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-  MachineBasicBlock *Lower8bitASrc(MachineInstr &MI, MachineBasicBlock *BB,
-                                   unsigned OpNum = 0,
-                                   unsigned Reg = RL78::R1) const;
-  MachineBasicBlock *Lower16bitAXSrc(MachineInstr &MI, MachineBasicBlock *BB,
-                                     unsigned OpNum = 0,
-                                     unsigned Reg = RL78::RP0) const;
-  MachineBasicBlock *LowerESSrc(MachineInstr &MI, MachineBasicBlock *BB,
-                                unsigned OpNum) const;
   MachineBasicBlock *LowerCallCSRP(MachineInstr &MI,
                                    MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerBSWAP32(MachineInstr &MI,
-                                  MachineBasicBlock *BB) const;
-  MachineBasicBlock *LowerToHLByteOrWordBC(unsigned ImmPos, unsigned RegPos,
-                                           MachineInstr &MI,
-                                           MachineBasicBlock *BB) const;
   bool decomposeMulByConstant(LLVMContext &Context, EVT VT,
                               SDValue C) const override;
 };
