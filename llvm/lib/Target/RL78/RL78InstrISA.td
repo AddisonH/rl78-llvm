@@ -2144,7 +2144,6 @@ defm : RL78BitMemSel<"MOV1", store1fromcy, 0, 1>;
 def : Pat<(mov1tocy i8:$a, (i8 imm:$b)), (MOV1_CY_A_b $a, imm:$b)>;
 def : Pat<(mov1tocy (i8 (load SADDR:$a)), (i8 imm:$b)),
           (MOV1_CY_saddr_b SADDR:$a, imm:$b)>;
-def : Pat<(mov1fromcy i8:$a, (i8 imm:$b), CCreg), (MOV1_A_b $a, imm:$b)>;
 def : Pat<(not1cy), (NOT1_CY)>;
 
 def : Pat<(int_rl78_nop), (NOP)>;
@@ -2379,5 +2378,3 @@ def : Pat<(set1 (i8 imm:$b), ESHL:$m), (SET1_emHL_b ESHL:$m, imm:$b)>;
 def : Pat<(clr1 (i8 imm:$b), ESAbs16:$m), (CLR1_eabs16_b ESAbs16:$m, imm:$b)>;
 def : Pat<(clr1 (i8 imm:$b), ESHL:$m), (CLR1_emHL_b ESHL:$m, imm:$b)>;
 
-// SEL RBn.
-def : Pat<(sel_rb i8:$rb), (SEL_RBn i8:$rb)>;

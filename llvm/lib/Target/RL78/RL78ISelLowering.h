@@ -23,7 +23,6 @@ class RL78Subtarget;
 namespace RL78ISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
-  SEL_RB,
   CMP,
   LOWCMP,
   CALL,
@@ -37,7 +36,6 @@ enum NodeType : unsigned {
   SELECTCCBTBF,
   BTBF,
   MOV1TOCY,
-  MOV1FROMCY,
   LOAD1TOCY,
   STORE1FROMCY,
   AND1CY,

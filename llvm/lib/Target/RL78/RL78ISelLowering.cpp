@@ -1390,7 +1390,6 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((RL78ISD::NodeType)Opcode) {
     case RL78ISD::FIRST_NUMBER:
       break;
-    MAKE_CASE(RL78ISD::SEL_RB)
     MAKE_CASE(RL78ISD::CMP)
     MAKE_CASE(RL78ISD::LOWCMP)
     MAKE_CASE(RL78ISD::CALL)
@@ -1410,7 +1409,6 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(RL78ISD::HI16)
     MAKE_CASE(RL78ISD::CALLT)
     MAKE_CASE(RL78ISD::MOV1TOCY)
-    MAKE_CASE(RL78ISD::MOV1FROMCY)
     MAKE_CASE(RL78ISD::LOAD1TOCY)
     MAKE_CASE(RL78ISD::STORE1FROMCY)
     MAKE_CASE(RL78ISD::AND1CY)

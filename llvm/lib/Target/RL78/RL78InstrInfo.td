@@ -109,10 +109,6 @@ def SDTLOAD1TOCY : SDTypeProfile<0, 2, [SDTCisInt<0>, SDTCisPtrTy<1>]>;
 def load1tocy : SDNode<"RL78ISD::LOAD1TOCY", SDTLOAD1TOCY,
                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand,
                         SDNPOutGlue]>;
-def SDTIntMov1FromCy : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>,
-                                            SDTCisSameAs<0, 1>,
-                                            SDTCisSameAs<0, 2>, SDTCisInt<0>]>;
-def mov1fromcy : SDNode<"RL78ISD::MOV1FROMCY", SDTIntMov1FromCy, []>;
 def store1fromcy : SDNode<"RL78ISD::STORE1FROMCY", SDTLOAD1TOCY,
                           [SDNPHasChain, SDNPMayStore, SDNPMemOperand,
                            SDNPInGlue]>;
@@ -181,11 +177,6 @@ def SDTRL78load_selectcc : SDTypeProfile<1, 3, [SDTCisInt<0>,
                                                 SDTCisVT<3, i8>]>;
 def RL78load_selectcc : SDNode<"RL78ISD::LOAD_SELECTCC", SDTRL78load_selectcc,
                                [SDNPHasChain, SDNPInGlue]>;
-
-// SEL RBn
-def SDTSELRB : SDTypeProfile<0, 1, [SDTCisInt<0>]>;
-def sel_rb : SDNode<"RL78ISD::SEL_RB", SDTSELRB,
-                    [SDNPHasChain, SDNPSideEffect]>;
 
 // __delay_cycles
 def RL78delay_cycles_1_4
