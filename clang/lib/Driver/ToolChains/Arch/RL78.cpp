@@ -188,9 +188,6 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-lsr=true");
 
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-disable-phi-elim-edge-splitting=true");
-
   // What the MachineOutliner leaves between two outlined calls often repeats
   // as well. Outlining again costs a call and a return each time, so only
   // where size is all that counts.
