@@ -190,15 +190,12 @@ uint32_t RL78::calcEFlags() const {
       mergeSucceeded = false;
     }
 
-    // TODO change to size 8 if force option is specified
     mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_DOUBLE_8,
                                  "incompatible double type size flags: ", f);
 
-    // TODO change to far if force option is specified
     mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_TEXT_FAR,
                                  "incompatible text area flags: ", f);
 
-    // TODO change to far if force option is specified
     mergeSucceeded &= mergeFlags(ctx, mergedFlags, newFlags, EF_RL78_DATA_FAR,
                                  "incompatible data area flags: ", f);
 
@@ -249,7 +246,9 @@ bool RL78::needsPltEntry(const Symbol &sym, RelType type) const {
   // only the plain 16-bit reference is a near pointer to it.
   if (ctx.arg.rl78FarCode)
     return false;
-  // FIXME: Is there a better way to handle test in ticket_2677?
+  // Without far code, LOWW() of a symbol in .text is a near function
+  // pointer, which reaches a function above 64 KiB only through its PLT
+  // entry; an undefined symbol is treated the same.
   return type == R_RL78_OPlowW &&
          (!sym.isDefined() ||
           cast<Defined>(sym).section->name.starts_with(".text"));
@@ -750,12 +749,15 @@ uint64_t RL78::checkAndPop(uint8_t *loc, const Relocation &rel, char bitSize,
 
 void RL78::push(uint64_t value) const { relocationStack.push(value); }
 
-void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
-  // TODO Not sure if zero refers to boot cluster 0?
-  // also if these addresses are target specific?
-  uint32_t zeroCALLTST = 0x00080;
-  uint32_t CALLTST = 0x01080;
+// CALLT [addr5] calls through the table entry at 0x80 + 2n, n < 32 (0x1080
+// with boot swap: the same modulo 0x40). The opcode is 0x84 with n's bits 0-2
+// in bits 4-6 and bits 3-4 in bits 0-1.
+static uint8_t calltOpcode(uint64_t entry) {
+  uint64_t off = entry - 0x80;
+  return 0x84 | ((off & 0x30) >> 4) | ((off & 0x0e) << 3);
+}
 
+void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   switch (rel.type) {
   case R_RL78_DIR3U:
     checkUInt(ctx, loc, val, 3, rel);
@@ -766,7 +768,12 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     write8le(loc, val);
     break;
   case R_RL78_DIR16U:
-    // checkUInt(ctx, loc, val, 16, rel); - temporary revert
+    // A 16-bit immediate, signed or not (#-1), or a near address: one in
+    // 0xF0000-0xFFFFF is reached through its low 16 bits (MOVW SP, #__stack).
+    if (!isInt<16>(static_cast<int64_t>(val)) && !isUInt<16>(val) &&
+        (val >> 16) != 0xf)
+      reportRangeError(ctx, loc, rel, Twine(static_cast<int64_t>(val)),
+                       llvm::minIntN(16), 0xfffff);
     write16le(loc, val);
     break;
   case R_RL78_DIR20U:
@@ -815,9 +822,7 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     write16le(loc, val - 2);
     break;
   case R_RL78_DIR_CALLT:
-    write8le(loc, ((((val - zeroCALLTST) & 0x30) >> 4) +
-                   (((val - CALLTST) & 0x0e) << 3)) |
-                      0x84);
+    write8le(loc, calltOpcode(val));
     break;
   case R_RL78_ABS3U:
     write3le(loc, checkAndPop(loc, rel, 3));
@@ -852,13 +857,9 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   case R_RL78_ABS16S_PCREL:
     write16le(loc, (checkAndPop(loc, rel, 16, true, val) - 2) & 0xffff);
     break;
-  case R_RL78_ABS_CALLT: {
-    uint64_t savedVal = checkAndPop(loc, rel);
-    write8le(loc, ((((savedVal - zeroCALLTST) & 0x30) >> 4) +
-                   (((savedVal - CALLTST) & 0x0e) << 3)) |
-                      0x84);
+  case R_RL78_ABS_CALLT:
+    write8le(loc, calltOpcode(checkAndPop(loc, rel)));
     break;
-  }
   case R_RL78_REF:
     break;
   case R_RL78_SYM:
