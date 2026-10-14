@@ -440,18 +440,12 @@ bool RL78DAGToDAGISel::SelectADDRSPi(SDValue Addr, SDValue &Base,
   return false;
 }
 
-static cl::opt<bool> RematArguments(
-    "rl78-remat-arguments", cl::Hidden, cl::init(true),
-    cl::desc("Load arguments passed on the stack with a pseudo that the "
-             "register allocator can rematerialize"));
-
 bool RL78DAGToDAGISel::SelectADDRArgSP(SDValue Addr, SDValue &Base,
                                        SDValue &Offset) {
   auto *FIN = dyn_cast<FrameIndexSDNode>(Addr);
   // In a function that realigns its stack the arguments are read through
   // the saved SP, with HL: a sequence written for loads into A and AX.
-  if (!RematArguments || !FIN ||
-      Subtarget->getRegisterInfo()->shouldRealignStack(*MF))
+  if (!FIN || Subtarget->getRegisterInfo()->shouldRealignStack(*MF))
     return false;
   // The fixed objects above the frame (negative offsets) are the arguments
   // and the return address; those at SP are the arguments of calls made

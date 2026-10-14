@@ -65,10 +65,6 @@ static cl::opt<bool> FoldReloads(
     cl::desc("Use a reloaded value from its stack slot where every use is the "
              "second operand of an 8- or 16-bit operation"));
 
-static cl::opt<bool> ShareHL(
-    "rl78-share-hl-sp", cl::Hidden, cl::init(true),
-    cl::desc("Keep SP in HL across blocks and loops for stack slot operands"));
-
 namespace {
 class RL78SlotOperands : public MachineFunctionPass {
 public:
@@ -874,8 +870,7 @@ bool RL78SlotOperands::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF)
     Changed |= processBlock(MBB);
-  if (ShareHL)
-    Changed |= shareAcrossBlocks(
-        MF, getAnalysis<MachineLoopInfoWrapperPass>().getLI());
+  Changed |=
+      shareAcrossBlocks(MF, getAnalysis<MachineLoopInfoWrapperPass>().getLI());
   return Changed;
 }

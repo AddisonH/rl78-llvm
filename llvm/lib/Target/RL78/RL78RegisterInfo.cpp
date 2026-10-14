@@ -23,16 +23,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "rl78-reginfo"
 
-static cl::opt<bool> RL78CopyHints(
-    "rl78-copy-hints", cl::Hidden, cl::init(true),
-    cl::desc("Hint the register of a single-register class that a value is "
-             "copied to or from"));
-
-static cl::opt<bool> RL78JoinFree(
-    "rl78-join-free", cl::Hidden, cl::init(true),
-    cl::desc("Join a copy into a single-register class when nothing else "
-             "needs that register meanwhile"));
-
 #define GET_REGINFO_TARGET_DESC
 #include "RL78GenRegisterInfo.inc"
 
@@ -103,7 +93,7 @@ bool RL78RegisterInfo::getRegAllocationHints(
   // two of X, C, B ..., so those go first; anything moves to and from AX
   // and A in one byte, and they are the registers everything else wants.
   SmallVector<MCPhysReg, 4> Fixed, Accumulator;
-  if (RL78CopyHints && VirtReg.isVirtual()) {
+  if (VirtReg.isVirtual()) {
     const TargetRegisterClass *RC = MRI.getRegClass(VirtReg);
     auto Add = [&](MCPhysReg Reg) {
       if (!Reg || !is_contained(Order, Reg) || MRI.isReserved(Reg))
@@ -194,7 +184,7 @@ bool RL78RegisterInfo::shouldCoalesce(
   // long as nothing else needs that register: every other need shows as a
   // value of a small class or as the physical register, so the joined value
   // can always be assigned.
-  if (!RL78JoinFree || NewRC->getNumRegs() != 1)
+  if (NewRC->getNumRegs() != 1)
     return false;
   Register Dst = MI->getOperand(0).getReg();
   Register Src = MI->getOperand(1).getReg();
@@ -621,11 +611,6 @@ static cl::opt<unsigned>
                             "loop whose virtual registers are at most this "
                             "many bytes together (0: none)"));
 
-static cl::opt<bool> SplitOperandsLocally(
-    "rl78-split-operands-locally", cl::Hidden, cl::init(false),
-    cl::desc("Split a value that is only read as the second operand of "
-             "operations on A or AX within a block before spilling it"));
-
 // Whether Reg is only ever read as the second operand of an operation on A
 // or AX, or copied: ADDW AX, rp and the like, which read [HL+byte] as well.
 static bool isOperandOnly(const MachineRegisterInfo &MRI, Register Reg,
@@ -667,7 +652,7 @@ bool RL78RegisterInfo::shouldLocalSplitForVirtReg(
   // such an operand is read from its slot instead ([HL+byte] with SP in HL,
   // RL78SlotOperands). The slot forms are a byte or two longer than the
   // register forms, so not in a function optimized for size.
-  if (SplitOperandsLocally || MF.getFunction().hasOptSize())
+  if (MF.getFunction().hasOptSize())
     return true;
   return !isOperandOnly(MF.getRegInfo(), VirtReg.reg(), *this);
 }

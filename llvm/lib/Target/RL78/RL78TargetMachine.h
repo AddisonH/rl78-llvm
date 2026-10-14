@@ -52,8 +52,6 @@ public:
 
   bool useIPRA() const override { return true; }
 
-  ScheduleDAGInstrs *
-  createMachineScheduler(MachineSchedContext *C) const override;
 
   bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override {
     return SrcAS == DestAS ||

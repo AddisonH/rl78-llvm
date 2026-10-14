@@ -69,11 +69,6 @@ unsigned RL78FrameLowering::calculateCSRegisterMask(MachineFunction &MF) const {
   return mask;
 }
 
-static cl::opt<bool> PushIncomingRegisters(
-    "rl78-push-incoming", cl::Hidden, cl::init(true),
-    cl::desc("Spill registers that are unchanged since function entry with "
-             "PUSH in the prologue"));
-
 // The spills at the top of the entry block that could be done by a PUSH on
 // entry instead: 16-bit stores to a spill slot of a register that still has
 // the value it had on entry, into a slot nothing has touched before. Whether
@@ -81,8 +76,7 @@ static cl::opt<bool> PushIncomingRegisters(
 static void findEntrySpills(MachineFunction &MF,
                             SmallVectorImpl<MachineInstr *> &Spills) {
   const Function &F = MF.getFunction();
-  if (!PushIncomingRegisters || F.hasFnAttribute("interrupt") ||
-      F.hasFnAttribute("brk_interrupt"))
+  if (F.hasFnAttribute("interrupt") || F.hasFnAttribute("brk_interrupt"))
     return;
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();

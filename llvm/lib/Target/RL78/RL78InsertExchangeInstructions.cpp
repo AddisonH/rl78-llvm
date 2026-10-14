@@ -20,11 +20,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "insert-exchange"
 
-static cl::opt<bool> RL78AccumSched(
-    "rl78-accum-sched", cl::Hidden, cl::init(true),
-    cl::desc("Move stack-slot loads to where AX is dead before inserting "
-             "exchanges"));
-
 namespace {
 class RL78InsertExchangeInstructionsPass : public MachineFunctionPass {
 public:
@@ -777,12 +772,11 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
   // Before the liveness below: this changes which exchanges are needed.
-  if (RL78AccumSched)
-    for (MachineBasicBlock &MBB : MF)
-      if (!MBB.empty()) {
-        moveLoadToWhereAXIsDead(MBB, TRI);
-        loadIntoAXFirst(MBB, TRI, TII);
-      }
+  for (MachineBasicBlock &MBB : MF)
+    if (!MBB.empty()) {
+      moveLoadToWhereAXIsDead(MBB, TRI);
+      loadIntoAXFirst(MBB, TRI, TII);
+    }
 
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.empty())

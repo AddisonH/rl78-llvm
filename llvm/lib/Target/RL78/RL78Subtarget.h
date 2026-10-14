@@ -82,7 +82,6 @@ public:
   // where AX is live, and a slot is loaded and stored through AX only.
   bool enablePostRAScheduler() const override { return false; }
 
-  bool enableMachineScheduler() const override;
 
   RegisterScheduler::FunctionPassCtor
   getDAGScheduler(CodeGenOptLevel OptLevel) const override;

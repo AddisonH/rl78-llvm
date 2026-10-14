@@ -1,6 +1,4 @@
 # RUN: llc -mtriple=rl78 -run-pass=rl78-slot-operands -verify-machineinstrs %s -o - | FileCheck %s
-# RUN: llc -mtriple=rl78 -run-pass=rl78-slot-operands -rl78-share-hl-sp=false %s -o - \
-# RUN:   | FileCheck %s --check-prefix=BLOCK
 
 # RL78SlotOperands keeps SP in HL from one block to the next: MOVW HL, SP is
 # not repeated where every path has it already, a loop sets it once in its
@@ -30,11 +28,6 @@
 # CHECK-NOT: MOVW_rp_SP
 # CHECK: SUBW_AX_mHLi killed $rp0, $rp6, 8
 #
-# BLOCK-LABEL: name: blocks
-# BLOCK: bb.1:
-# BLOCK: $rp6 = MOVW_rp_SP $spreg
-# BLOCK: bb.2:
-# BLOCK: $rp6 = MOVW_rp_SP $spreg
 name: blocks
 tracksRegLiveness: true
 body: |
@@ -67,9 +60,6 @@ body: |
 # CHECK: ADDW_AX_mHLi killed $rp0, $rp6, 6
 # CHECK: bb.2:
 #
-# BLOCK-LABEL: name: loop
-# BLOCK: bb.1:
-# BLOCK: $rp6 = MOVW_rp_SP $spreg
 name: loop
 tracksRegLiveness: true
 body: |
@@ -130,10 +120,6 @@ body: |
 # CHECK-NEXT: MOVW_mRPi_AX killed $rp4, 2, $rp0
 # CHECK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
 #
-# BLOCK-LABEL: name: pointer_de
-# BLOCK: $rp6 = LOAD16_rp_stack_slot $spreg, 4
-# BLOCK: $rp6 = MOVW_rp_SP $spreg
-# BLOCK-NEXT: ADDW_AX_mHLi killed $rp0, $rp6, 8
 name: pointer_de
 tracksRegLiveness: true
 body: |

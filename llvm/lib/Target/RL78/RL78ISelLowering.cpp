@@ -1483,10 +1483,6 @@ const char *RL78TargetLowering::getTargetNodeName(unsigned Opcode) const {
   return nullptr;
 }
 
-static cl::opt<bool> RL78NarrowAddrModes(
-    "rl78-narrow-addr-modes", cl::Hidden, cl::init(true),
-    cl::desc("Report only RL78's real addressing modes to LSR/CGP"));
-
 // A memory operand takes one register plus an unsigned 8-bit displacement
 // ([DE+byte], [HL+byte], [SP+byte]), or a 16-bit address with no register
 // (!addr16) or with BC (word[BC]). There is no reg+reg form with a 16-bit
@@ -1496,8 +1492,6 @@ bool RL78TargetLowering::isLegalAddressingMode(const DataLayout &DL,
                                                const AddrMode &AM, Type *Ty,
                                                unsigned AS,
                                                Instruction *I) const {
-  if (!RL78NarrowAddrModes)
-    return TargetLowering::isLegalAddressingMode(DL, AM, Ty, AS, I);
   bool HasReg = AM.HasBaseReg || AM.Scale == 1;
   if (AM.Scale != 0 && (AM.Scale != 1 || AM.HasBaseReg))
     return false;
@@ -3474,12 +3468,7 @@ static SDValue PerformSELECTCombine(SDNode *N, SelectionDAG &DAG) {
 // the lower ones while those are equal, into the same flags:
 //   CMPW; [XOR1 CY fixup]; [SKNZ; CMPW]...; select on the flags
 // Equality of 32-bit values is left alone: its expansion is recognized later.
-static cl::opt<bool> RL78CombineI32Compare(
-    "rl78-combine-i32-compare", cl::Hidden, cl::init(true),
-    cl::desc("Lower i32/i64 setcc/select_cc as one CMP/LOWCMP chain"));
 static SDValue PerformWideCompareCombine(SDNode *N, SelectionDAG &DAG) {
-  if (!RL78CombineI32Compare)
-    return SDValue();
   bool IsSetCC = N->getOpcode() == ISD::SETCC;
   SDValue LHS = N->getOperand(0);
   SDValue RHS = N->getOperand(1);
