@@ -2034,10 +2034,6 @@ void Clang::AddPPCTargetArgs(const ArgList &Args,
 
 void Clang::AddRL78TargetArgs(const ArgList &Args,
                               ArgStringList &CmdArgs) const {
-  // By default, do not replace infinite loops with unreachable.
-  if (!Args.getLastArg(options::OPT_ffinite_loops))
-    CmdArgs.push_back("-fno-finite-loops");
-
   // TODO: maybe this can be removed at some point.
   CmdArgs.push_back("-fno-aligned-allocation");
 
