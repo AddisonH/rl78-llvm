@@ -290,6 +290,8 @@ void RL78PassConfig::addIRPasses() {
     addPass(createRL78OuterLoopPointersPass());
     // After LSR, which replaces the exit tests it can.
     addPass(createRL78BiasSignedComparesPass());
+    // After LSR, which folds a zext(trunc) of a value with a known range.
+    addPass(createRL78NarrowDemandedOpsPass(/*Bytes=*/true));
   }
 }
 

@@ -12,11 +12,18 @@
 // InstCombine and AggressiveInstCombine both decline the case, so it needs a
 // pass of its own.
 //
+// A second instance, after LSR (which would fold it away again), marks the
+// operand of an i16 multiply as a byte, zext(trunc), where ScalarEvolution
+// knows it is below 256 and the other operand is a byte: a loop counter that
+// IndVarSimplify widened from a byte to a word. Selection then uses MULU
+// (A * X) instead of MULHU on two zero-extended words.
+//
 //===----------------------------------------------------------------------===//
 
 #include "RL78.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/DemandedBits.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
@@ -39,7 +46,8 @@ namespace {
 class RL78NarrowDemandedOps : public FunctionPass {
 public:
   static char ID;
-  RL78NarrowDemandedOps() : FunctionPass(ID) {}
+  explicit RL78NarrowDemandedOps(bool Bytes = false)
+      : FunctionPass(ID), Bytes(Bytes) {}
 
   StringRef getPassName() const override {
     return "RL78 narrow demanded 32-bit operations";
@@ -49,10 +57,16 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AssumptionCacheTracker>();
     AU.addRequired<DominatorTreeWrapperPass>();
+    if (Bytes)
+      AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.setPreservesCFG();
   }
 
   bool runOnFunction(Function &F) override;
+
+private:
+  // Mark byte multiplies instead of narrowing.
+  bool Bytes;
 };
 } // end anonymous namespace
 
@@ -62,11 +76,12 @@ INITIALIZE_PASS_BEGIN(RL78NarrowDemandedOps, DEBUG_TYPE,
                       "RL78 narrow demanded 32-bit operations", false, false)
 INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_END(RL78NarrowDemandedOps, DEBUG_TYPE,
                     "RL78 narrow demanded 32-bit operations", false, false)
 
-FunctionPass *llvm::createRL78NarrowDemandedOpsPass() {
-  return new RL78NarrowDemandedOps();
+FunctionPass *llvm::createRL78NarrowDemandedOpsPass(bool Bytes) {
+  return new RL78NarrowDemandedOps(Bytes);
 }
 
 // Ops whose low half depends only on the low halves of the operands. Shifts are
@@ -85,9 +100,48 @@ static bool isNarrowableOpcode(unsigned Opc) {
   }
 }
 
+// A byte zero-extended to i16.
+static bool isZExtByte(Value *V) {
+  auto *Z = dyn_cast<ZExtInst>(V);
+  return Z && Z->getSrcTy()->isIntegerTy(8);
+}
+
+// mul i16 of a byte and a value that ScalarEvolution knows is below 256:
+// that value as zext(trunc) as well.
+static bool markByteMultiplies(Function &F, ScalarEvolution &SE) {
+  bool Changed = false;
+  Type *I8 = Type::getInt8Ty(F.getContext());
+  for (BasicBlock &BB : F)
+    for (Instruction &I : BB) {
+      auto *BO = dyn_cast<BinaryOperator>(&I);
+      if (!BO || BO->getOpcode() != Instruction::Mul ||
+          !BO->getType()->isIntegerTy(16))
+        continue;
+      auto IsByte = [&](Value *V) {
+        return isZExtByte(V) || SE.getUnsignedRangeMax(SE.getSCEV(V)).ult(256);
+      };
+      Value *L = BO->getOperand(0), *R = BO->getOperand(1);
+      if ((isZExtByte(L) && isZExtByte(R)) || isa<Constant>(L) ||
+          isa<Constant>(R) || !IsByte(L) || !IsByte(R))
+        continue;
+      IRBuilder<> B(BO);
+      for (unsigned Op : {0u, 1u}) {
+        Value *V = BO->getOperand(Op);
+        if (!isZExtByte(V))
+          BO->setOperand(Op, B.CreateZExt(B.CreateTrunc(V, I8), V->getType()));
+      }
+      LLVM_DEBUG(dbgs() << "RL78 byte multiply: " << *BO << '\n');
+      Changed = true;
+    }
+  return Changed;
+}
+
 bool RL78NarrowDemandedOps::runOnFunction(Function &F) {
   if (!EnableNarrowing || F.empty())
     return false;
+  if (Bytes)
+    return markByteMultiplies(
+        F, getAnalysis<ScalarEvolutionWrapperPass>().getSE());
 
   AssumptionCache &AC = getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
   DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();

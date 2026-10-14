@@ -3,7 +3,8 @@
 ; i32 multiplies whose operands are known (not just explicitly zero-extended)
 ; to fit in 8 bits use MULU, and those of 16-bit operands MULHU_cg; neither calls
 ; __COM_lmul (CoreMark matrix_mul_matrix_bitextract). An i16 multiply of
-; 8-bit values stays MULHU_cg: MULU's A/X operands cost more moves.
+; values only known to fit in 8 bits stays MULHU_cg: MULU's A/X operands cost
+; more moves. One with an operand masked to a byte is MULU.
 
 ; CHECK-LABEL: _bitfields:
 ; CHECK:       mulu x
@@ -20,12 +21,23 @@ define i32 @bitfields(i32 %t, i32 %acc) {
 }
 
 ; CHECK-LABEL: _masked16:
-; CHECK:       mulhu
-; CHECK-NOT:   mulu
+; CHECK:       mulu x
+; CHECK-NOT:   mulhu
 ; CHECK:       ret
 define i16 @masked16(i16 %a, i16 %b) {
   %x = and i16 %a, 15
   %y = and i16 %b, 255
+  %m = mul i16 %x, %y
+  ret i16 %m
+}
+
+; CHECK-LABEL: _known16:
+; CHECK:       mulhu
+; CHECK-NOT:   mulu
+; CHECK:       ret
+define i16 @known16(i16 %a, i16 %b) {
+  %x = and i16 %a, 15
+  %y = lshr i16 %b, 9
   %m = mul i16 %x, %y
   ret i16 %m
 }

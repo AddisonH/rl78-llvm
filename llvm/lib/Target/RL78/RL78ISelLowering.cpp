@@ -2910,6 +2910,31 @@ SDValue RL78TargetLowering::PerformMULCombine(SDNode *N,
                             LoHi.getValue(1));
     return DAG.getNode(ISD::ZERO_EXTEND, dl, VT, P);
   }
+  // An i16 mul of two bytes of which one was masked to a byte, by hand or by
+  // RL78NarrowDemandedOps for a counter whose range only SCEV knows (its
+  // zext(trunc) is an AND by now): MULU as well. Only for bytes written as
+  // such; known bits are not enough for i16 (see above).
+  auto IsMasked = [](SDValue V) {
+    return V.getOpcode() == ISD::AND && isa<ConstantSDNode>(V.getOperand(1)) &&
+           V.getConstantOperandVal(1) == 0xFF;
+  };
+  auto IsByte = [&](SDValue V) {
+    if (auto *L = dyn_cast<LoadSDNode>(V))
+      return L->getExtensionType() == ISD::ZEXTLOAD &&
+             L->getMemoryVT() == MVT::i8;
+    return IsMasked(V) || (V.getOpcode() == ISD::ZERO_EXTEND &&
+                           V.getOperand(0).getValueType() == MVT::i8);
+  };
+  SDValue M0 = N->getOperand(0), M1 = N->getOperand(1);
+  if (VT == MVT::i16 && (IsMasked(M0) || IsMasked(M1)) && IsByte(M0) &&
+      IsByte(M1)) {
+    SDValue A = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, M0);
+    SDValue B = DAG.getNode(ISD::TRUNCATE, dl, MVT::i8, M1);
+    SDValue LoHi =
+        DAG.getNode(ISD::UMUL_LOHI, dl, DAG.getVTList(MVT::i8, MVT::i8), A, B);
+    return DAG.getNode(ISD::BUILD_PAIR, dl, MVT::i16, LoHi.getValue(0),
+                       LoHi.getValue(1));
+  }
   if (!Subtarget->isRL78S3CoreType())
     return SDValue();
 

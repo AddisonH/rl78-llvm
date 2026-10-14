@@ -50,7 +50,7 @@ FunctionPass *createRL78ESOptPass();
 FunctionPass *createRL78SlotOperandsPass();
 FunctionPass *createRL78LateReorderPass();
 FunctionPass *createRL78InsertInstsForDelayCyclesPass();
-FunctionPass *createRL78NarrowDemandedOpsPass();
+FunctionPass *createRL78NarrowDemandedOpsPass(bool Bytes = false);
 FunctionPass *createRL78NarrowLoopCountersPass();
 FunctionPass *createRL78ByteLoopCountersPass();
 FunctionPass *createRL78OuterLoopPointersPass();
