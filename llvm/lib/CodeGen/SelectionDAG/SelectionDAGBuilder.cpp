@@ -10533,6 +10533,14 @@ static bool prepareDAGLevelOperands(ConstraintDecisionInfo &Info,
     switch (OpInfo.Type) {
     case InlineAsm::isOutput:
       if (OpInfo.ConstraintType == TargetLowering::C_Memory) {
+        // A pointer of another address space may be wider than the target
+        // can take as a memory operand.
+        if (OpInfo.CallOperand.getValueType() !=
+            TLI.getPointerTy(DAG.getDataLayout())) {
+          Info.ErrorMsg << "invalid operand for inline asm constraint '"
+                        << OpInfo.ConstraintCode << "'";
+          return true;
+        }
         const InlineAsm::ConstraintCode ConstraintID =
             TLI.getInlineAsmMemConstraint(OpInfo.ConstraintCode);
         assert(ConstraintID != InlineAsm::ConstraintCode::Unknown &&
@@ -10658,9 +10666,12 @@ static bool prepareDAGLevelOperands(ConstraintDecisionInfo &Info,
         assert((OpInfo.isIndirect ||
                 OpInfo.ConstraintType != TargetLowering::C_Memory) &&
                "Operand must be indirect to be a mem!");
-        assert(InOperandVal.getValueType() ==
-                   TLI.getPointerTy(DAG.getDataLayout()) &&
-               "Memory operands expect pointer values");
+        if (InOperandVal.getValueType() !=
+            TLI.getPointerTy(DAG.getDataLayout())) {
+          Info.ErrorMsg << "invalid operand for inline asm constraint '"
+                        << OpInfo.ConstraintCode << "'";
+          return true;
+        }
 
         const InlineAsm::ConstraintCode ConstraintID =
             TLI.getInlineAsmMemConstraint(OpInfo.ConstraintCode);
