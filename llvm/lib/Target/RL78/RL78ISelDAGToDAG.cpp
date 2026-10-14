@@ -54,6 +54,9 @@ public:
   void PostprocessISelDAG() override;
 
   void Select(SDNode *N) override;
+  bool SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                    InlineAsm::ConstraintCode ConstraintCode,
+                                    std::vector<SDValue> &OutOps) override;
   // Complex Pattern Selectors.
   bool SelectADDRr(SDValue Addr, SDValue &Base);
   bool SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2);
@@ -462,6 +465,21 @@ bool RL78DAGToDAGISel::SelectADDRArgSP(SDValue Addr, SDValue &Base,
       FIN->getIndex(), TLI->getPointerTy(CurDAG->getDataLayout()));
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
+}
+
+// An inline asm memory operand ("m") is [DE] or [HL]: the address goes into
+// one of them. A far address (__far data) is not supported.
+bool RL78DAGToDAGISel::SelectInlineAsmMemoryOperand(
+    const SDValue &Op, InlineAsm::ConstraintCode ConstraintCode,
+    std::vector<SDValue> &OutOps) {
+  if (ConstraintCode != InlineAsm::ConstraintCode::m ||
+      Op.getValueType() != MVT::i16)
+    return true;
+  SDLoc DL(Op);
+  Register VReg = MF->getRegInfo().createVirtualRegister(&RL78::RL78DEHLRegClass);
+  SDValue Copy = CurDAG->getCopyToReg(CurDAG->getEntryNode(), DL, VReg, Op);
+  OutOps.push_back(CurDAG->getCopyFromReg(Copy, DL, VReg, MVT::i16));
+  return false;
 }
 
 bool RL78DAGToDAGISel::SelectADDRr(SDValue Addr, SDValue &Base) {

@@ -2,8 +2,8 @@
 ; RUN: llc -verify-machineinstrs -mtriple=rl78 -O2 < %s | FileCheck %s
 
 ; Inline asm takes symbols and constants ("X", "i", "n", printed with the
-; generic modifiers) and "r" operands wider than a register pair, in several
-; pairs (%0 names the first).
+; generic modifiers), "r" operands wider than a register pair, in several
+; pairs (%0 names the first), and memory operands, [DE] or [HL].
 
 target datalayout = "e-m:o-p0:16:16:16-p1:16:16:16-p2:32:16:16:16-p3:32:16:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:8-n16:16-S16"
 
@@ -32,4 +32,39 @@ define i32 @wide(i32 %a) {
 ; CHECK-NEXT:    ret
   %r = call i32 asm sideeffect "; $0", "=r,0"(i32 %a)
   ret i32 %r
+}
+
+define i16 @mem(ptr %p) {
+; CHECK-LABEL: mem:
+; CHECK:       ; %bb.0:
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    ;APP
+; CHECK-NEXT:    incw [hl+0]
+; CHECK-NEXT:    ;NO_APP
+; CHECK-NEXT:    movw ax, [hl]
+; CHECK-NEXT:    ret
+  call void asm sideeffect "incw $0", "=*m,*m"(ptr elementtype(i16) %p, ptr elementtype(i16) %p)
+  %v = load i16, ptr %p
+  ret i16 %v
+}
+
+define i16 @local() {
+; CHECK-LABEL: local:
+; CHECK:       ; %bb.0:
+; CHECK-NEXT:    push ax
+; CHECK-NEXT:    movw ax, #40
+; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    movw ax, sp
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    ;APP
+; CHECK-NEXT:    incw [hl+0]
+; CHECK-NEXT:    ;NO_APP
+; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    ret
+  %x = alloca i16
+  store i16 40, ptr %x
+  call void asm sideeffect "incw $0", "=*m,*m"(ptr elementtype(i16) %x, ptr elementtype(i16) %x)
+  %v = load i16, ptr %x
+  ret i16 %v
 }

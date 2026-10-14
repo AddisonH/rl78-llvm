@@ -76,6 +76,8 @@ public:
 
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        const char *ExtraCode, raw_ostream &O) override;
+  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
+                             const char *ExtraCode, raw_ostream &O) override;
 
 private:
   // The CFA is described with relative .cfi_adjust_cfa_offset directives as
@@ -336,6 +338,20 @@ bool RL78AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   default:
     return true;
   }
+}
+
+// A memory operand is the register that holds the address, DE or HL.
+bool RL78AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
+                                           unsigned OpNo,
+                                           const char *ExtraCode,
+                                           raw_ostream &O) {
+  const MachineOperand &MO = MI->getOperand(OpNo);
+  if ((ExtraCode && ExtraCode[0]) || !MO.isReg())
+    return true;
+  O << '[';
+  printOperand(MI, OpNo, O);
+  O << ']';
+  return false;
 }
 
 // When a global variable is emitted, we want the specialized behavior of

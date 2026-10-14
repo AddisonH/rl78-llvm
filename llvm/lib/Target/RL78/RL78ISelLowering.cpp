@@ -4980,6 +4980,7 @@ RL78TargetLowering::getConstraintType(StringRef Constraint) const {
     case 'r':
       return C_RegisterClass;
     case 'i':
+    case 'm':
     case 'n':
     case 's':
     case 'X':
