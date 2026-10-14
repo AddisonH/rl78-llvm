@@ -40,7 +40,7 @@ public:
   /// \name Scalar TTI Implementations
   /// @{
 
-  unsigned adjustInliningThreshold(const CallBase *CB) const override;
+  int adjustInliningThreshold(const CallBase *CB) const override;
 
   InstructionCost getIntImmCost(const APInt &Imm, Type *Ty,
                                 TTI::TargetCostKind CostKind) const override;

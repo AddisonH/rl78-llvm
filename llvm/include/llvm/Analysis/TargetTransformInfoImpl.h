@@ -100,7 +100,7 @@ public:
     // removed along with the introduction of this function.
     return 15000;
   }
-  virtual unsigned adjustInliningThreshold(const CallBase *CB) const {
+  virtual int adjustInliningThreshold(const CallBase *CB) const {
     return 0;
   }
   virtual unsigned getCallerAllocaCost(const CallBase *CB,

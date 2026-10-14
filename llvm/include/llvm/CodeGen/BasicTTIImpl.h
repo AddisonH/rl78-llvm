@@ -714,7 +714,7 @@ public:
   }
 
   unsigned getInliningThresholdMultiplier() const override { return 1; }
-  unsigned adjustInliningThreshold(const CallBase *CB) const override {
+  int adjustInliningThreshold(const CallBase *CB) const override {
     return 0;
   }
   unsigned getCallerAllocaCost(const CallBase *CB,

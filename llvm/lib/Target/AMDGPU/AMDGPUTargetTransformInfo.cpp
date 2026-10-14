@@ -1655,7 +1655,7 @@ int GCNTTIImpl::getInliningLastCallToStaticBonus() const {
          getInliningThresholdMultiplier();
 }
 
-unsigned GCNTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
+int GCNTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
   unsigned Threshold = adjustInliningThresholdUsingCallee(CB, TLI, this);
 
   // Private object passed as arguments may end up in scratch usage if the call

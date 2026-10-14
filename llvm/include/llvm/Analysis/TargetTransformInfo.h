@@ -428,8 +428,9 @@ public:
   /// \returns The bonus of inlining the last call to a static function.
   LLVM_ABI int getInliningLastCallToStaticBonus() const;
 
-  /// \returns A value to be added to the inlining threshold.
-  LLVM_ABI unsigned adjustInliningThreshold(const CallBase *CB) const;
+  /// \returns A value to be added to the inlining threshold; negative to
+  /// lower it.
+  LLVM_ABI int adjustInliningThreshold(const CallBase *CB) const;
 
   /// \returns The cost of having an Alloca in the caller if not inlined, to be
   /// added to the threshold

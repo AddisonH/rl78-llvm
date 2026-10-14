@@ -260,7 +260,7 @@ public:
 
   int getInliningLastCallToStaticBonus() const override;
   unsigned getInliningThresholdMultiplier() const override { return 11; }
-  unsigned adjustInliningThreshold(const CallBase *CB) const override;
+  int adjustInliningThreshold(const CallBase *CB) const override;
   unsigned getCallerAllocaCost(const CallBase *CB,
                                const AllocaInst *AI) const override;
 

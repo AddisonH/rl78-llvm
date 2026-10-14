@@ -75,7 +75,7 @@ static void countNumMemAccesses(const Value *Ptr, unsigned &NumStores,
     }
 }
 
-unsigned SystemZTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
+int SystemZTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
   unsigned Bonus = 0;
   const Function *Caller = CB->getParent()->getParent();
   const Function *Callee = CB->getCalledFunction();
