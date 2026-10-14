@@ -2788,12 +2788,6 @@ SDValue RL78TargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
-SDValue RL78TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
-  if (Op.getOperand(0).getValueType() == MVT::i64) {
-  }
-  llvm_unreachable("Should not custom lower this SETCC!");
-}
-
 SDValue RL78TargetLowering::PerformBRCCCombine(SDNode *N,
                                                DAGCombinerInfo &DCI) const {
   // Convert a ? (0-b) back to a + b ? 0
@@ -3905,8 +3899,6 @@ SDValue RL78TargetLowering::LowerOperation(SDValue Op,
     return LowerRETURNADDR(Op, DAG);
   case ISD::FRAMEADDR:
     return LowerFRAMEADDR(Op, DAG);
-  case ISD::SETCC:
-    return LowerSETCC(Op, DAG);
   case ISD::LOAD:
     return LowerLOAD(Op, DAG);
   case ISD::STORE:
