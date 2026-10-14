@@ -3748,9 +3748,9 @@ SDValue RL78TargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
                                               SelectionDAG &DAG) const {
   const Function &Fn = DAG.getMachineFunction().getFunction();
 
-  DiagnosticInfoUnsupported NoDynamicAlloca(Fn, "Unsupported dynamic stack allocation",
-                                            SDLoc(Op).getDebugLoc());
-  DAG.getContext()->diagnose(NoDynamicAlloca);
+  // The diagnostic keeps a reference to its message: built in the call.
+  DAG.getContext()->diagnose(DiagnosticInfoUnsupported(
+      Fn, "Unsupported dynamic stack allocation", SDLoc(Op).getDebugLoc()));
   auto Ops = {DAG.getConstant(0, SDLoc(), Op.getValueType()), Op.getOperand(0)};
   return DAG.getMergeValues(Ops, SDLoc());
 }
