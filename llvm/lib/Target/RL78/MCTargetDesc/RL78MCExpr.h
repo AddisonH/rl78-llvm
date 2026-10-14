@@ -54,10 +54,12 @@ private:
   const VariantKind VKind;
   const MCExpr *Expr;
   const MCExpr *BitPositionExpr;
+  // Where the operator (LOWW, SIZEOF, ...) is in the assembly source, for
+  // diagnostics; invalid for an expression made by code generation.
+  SMLoc OperatorLoc;
 
-
-  explicit RL78MCExpr(VariantKind Kind, const MCExpr *Expr)
-      : VKind(Kind), Expr(Expr) {}
+  explicit RL78MCExpr(VariantKind Kind, const MCExpr *Expr, SMLoc OperatorLoc)
+      : VKind(Kind), Expr(Expr), OperatorLoc(OperatorLoc) {}
 
   explicit RL78MCExpr(VariantKind Kind, const MCExpr *AddressExpr,
                       const MCExpr *BitPositionExpr)
@@ -89,13 +91,15 @@ public:
   /// @{
 
   static const RL78MCExpr *create(VariantKind Kind, const MCExpr *Expr,
-                                  MCContext &Ctx);
+                                  MCContext &Ctx, SMLoc OperatorLoc = SMLoc());
   /// @}
   /// @name Accessors
   /// @{
 
   /// getOpcode - Get the kind of this expression.
   VariantKind getVariantKind() const { return VKind; }
+
+  SMLoc getOperatorLoc() const { return OperatorLoc; }
 
   /// getSubExpr - Get the child of this expression.
   const MCExpr *getSubExpr() const { return Expr; }

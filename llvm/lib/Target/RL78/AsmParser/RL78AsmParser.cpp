@@ -2575,6 +2575,7 @@ bool RL78AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
   case AsmToken::Identifier: {
     if (std::optional<RL78MCExpr::VariantKind> Kind = matchOperator(Token);
         Kind && Lexer.peekTok().is(AsmToken::LParen)) {
+      SMLoc OperatorLoc = Lexer.getTok().getLoc();
       getParser().Lex(); // Eat the operator.
       getParser().Lex(); // Eat the '('.
       if (getParser().parseExpression(Res, EndLoc))
@@ -2583,7 +2584,7 @@ bool RL78AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
         return TokError("expected ')'");
       EndLoc = Lexer.getTok().getEndLoc();
       getParser().Lex(); // Eat the ')'.
-      Res = RL78MCExpr::create(*Kind, Res, Ctx);
+      Res = RL78MCExpr::create(*Kind, Res, Ctx, OperatorLoc);
       return false;
     }
     if (Token.equals_insensitive("psw")) {

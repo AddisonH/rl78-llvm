@@ -27,14 +27,14 @@ using namespace llvm;
 #define DEBUG_TYPE "RL78mcexpr"
 
 const RL78MCExpr *RL78MCExpr::create(VariantKind Kind, const MCExpr *Expr,
-                                     MCContext &Ctx) {
+                                     MCContext &Ctx, SMLoc OperatorLoc) {
   if (Kind == VK_RL78_BITPOSITIONAL) {
     if (Expr->getKind() != MCExpr::ExprKind::Binary)
       llvm_unreachable("Bad VK_RL78_BITPOSITIONAL expression");
     const MCBinaryExpr *BinExpr = cast<MCBinaryExpr>(Expr);
     return new (Ctx) RL78MCExpr(Kind, BinExpr->getLHS(), BinExpr->getRHS());
   }
-  return new (Ctx) RL78MCExpr(Kind, Expr);
+  return new (Ctx) RL78MCExpr(Kind, Expr, OperatorLoc);
 }
 
 void RL78MCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
@@ -460,57 +460,6 @@ RL78MCExpr::ConversionStatus RL78MCExpr::HandleBinaryRelAbsOp(
 
 // Checking what VariantKind was used by the ConversionStatus and get its
 // position.
-const char *GetKindLocation(SMLoc Loc, RL78MCExpr::VariantKind Kind) {
-
-  StringRef String(Loc.getPointer() ? Loc.getPointer() + 1 : nullptr);
-  if (String.empty())
-    return nullptr;
-
-  StringRef KindString;
-  String = String.slice(0, String.find("\n"));
-
-  switch (Kind) {
-  case RL78MCExpr::VK_RL78_None:
-    return nullptr;
-    break;
-  case RL78MCExpr::VK_RL78_LOW:
-    KindString = "LOW";
-    break;
-  case RL78MCExpr::VK_RL78_LOWW:
-    KindString = "LOWW";
-    break;
-  case RL78MCExpr::VK_RL78_HIGHW:
-    KindString = "HIGHW";
-    break;
-  case RL78MCExpr::VK_RL78_HIGH:
-    KindString = "HIGH";
-    break;
-  case RL78MCExpr::VK_RL78_MIRHW:
-    KindString = "MIRHW";
-    break;
-  case RL78MCExpr::VK_RL78_MIRLW:
-    KindString = "MIRLW";
-    break;
-  case RL78MCExpr::VK_RL78_SMRLW:
-    KindString = "SMRLW";
-    break;
-  case RL78MCExpr::VK_RL78_STARTOF:
-    KindString = "STARTOF";
-    break;
-  case RL78MCExpr::VK_RL78_SIZEOF:
-    KindString = "SIZEOF";
-    break;
-  default:
-    return nullptr;
-    break;
-  }
-
-  size_t Pos;
-  if ((Pos = String.find(KindString)) != StringRef::npos)
-    return String.data() + Pos;
-  return nullptr;
-}
-
 RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     const MCExpr *Expression, SmallVectorImpl<MCFixup> &fixups, bool &NeedsPop,
     unsigned FixupFromOp, MCContext &Ctx, SMLoc Loc, int64_t offset,
@@ -524,7 +473,6 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
                                     /*VariantKind*/ RL78MCExpr::VK_RL78_None,
                                     /*WasSizeOfPlusStartOf*/ false,
                                     /*Loc*/ Loc};
-  const char *ExprLoc = nullptr;
 
   std::set<RL78MCExpr::VariantKind> VariantSet1 = {};
   std::set<RL78MCExpr::VariantKind> VariantSet2 = {};
@@ -549,19 +497,16 @@ RL78MCExpr::ConversionStatus RL78MCExpr::ConvertExpressionToFixups(
     const RL78MCExpr *TargetExpr = cast<RL78MCExpr>(Expression);
     const MCExpr *SubExpr = TargetExpr->getSubExpr();
     RL78::Fixups Fixup;
-    ExprLoc = GetKindLocation(Loc, TargetExpr->getVariantKind());
-    ConversionStatus SubStatus = ConvertExpressionToFixups(
-        SubExpr, fixups, NeedsPop, FixupFromOp, Ctx,
-        ExprLoc ? SMLoc::getFromPointer(ExprLoc) : Loc, offset, DirectFixup);
+    SMLoc OpLoc = TargetExpr->getOperatorLoc().isValid()
+                      ? TargetExpr->getOperatorLoc()
+                      : Loc;
+    ConversionStatus SubStatus =
+        ConvertExpressionToFixups(SubExpr, fixups, NeedsPop, FixupFromOp, Ctx,
+                                  OpLoc, offset, DirectFixup);
     CurrentStatus.VariantKind = TargetExpr->getVariantKind();
     CurrentStatus.WasSizeOfPlusStartOf = SubStatus.WasSizeOfPlusStartOf;
     CurrentStatus.Loc =
-        SubStatus.Success ? SMLoc::getFromPointer(ExprLoc) : SubStatus.Loc;
-
-   if (!CurrentStatus.Loc.isValid()) {
-      ExprLoc = GetKindLocation(Loc, CurrentStatus.VariantKind);
-      CurrentStatus.Loc = ExprLoc ? SMLoc::getFromPointer(ExprLoc) : Loc;
-    }
+        SubStatus.Success || !SubStatus.Loc.isValid() ? OpLoc : SubStatus.Loc;
 
     if (!SubStatus.Success ||
         !TargetExpr->getFixupForKind(
