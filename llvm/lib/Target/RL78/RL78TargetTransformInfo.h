@@ -65,6 +65,8 @@ public:
                     C2.NumBaseAdds, C2.ScaleCost, C2.ImmCost, C2.SetupCost);
   }
 
+  int adjustInliningThreshold(const CallBase *CB) const override;
+
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE) const override;

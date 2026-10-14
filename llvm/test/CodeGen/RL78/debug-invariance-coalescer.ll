@@ -1,6 +1,5 @@
-; -g must not change code. The register coalescer (with -join-splitedges, which
-; RL78 enables at -Os/-Oz) must recognise a split edge block that also holds a
-; debug instruction.
+; -g must not change code. The register coalescer (with -join-splitedges) must
+; recognise a split edge block that also holds a debug instruction.
 
 ; RUN: rm -rf %t && mkdir -p %t/g %t/n
 ; RUN: llc -verify-machineinstrs -join-splitedges -disable-lsr=true -disable-machine-licm=true -filetype=obj %s -o %t/g/x.o

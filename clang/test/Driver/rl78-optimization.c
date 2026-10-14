@@ -1,23 +1,31 @@
 // What the driver adds for each optimization level.
 
-// RUN: %clang --target=rl78 -Os -### -c %s 2>&1 | FileCheck %s --check-prefixes=CHECK,SIZE
-// RUN: %clang --target=rl78 -Oz -### -c %s 2>&1 | FileCheck %s --check-prefixes=CHECK,SIZE
-// RUN: %clang --target=rl78 -O2 -### -c %s 2>&1 | FileCheck %s --check-prefixes=CHECK,SPEED
-// RUN: %clang --target=rl78 -O3 -### -c %s 2>&1 | FileCheck %s --check-prefixes=CHECK,SPEED
+// RUN: %clang --target=rl78 -Os -### -c %s 2>&1 | FileCheck %s
+// RUN: %clang --target=rl78 -Oz -### -c %s 2>&1 | FileCheck %s
+// RUN: %clang --target=rl78 -O2 -### -c %s 2>&1 | FileCheck %s
+// RUN: %clang --target=rl78 -O3 -### -c %s 2>&1 | FileCheck %s
 // RUN: %clang --target=rl78 -Os -fno-jump-tables -### -c %s 2>&1 | FileCheck %s --check-prefix=NOJT
 
-// Inlining and jump tables are left to the optimization level: for size, only
-// callees about as small as a call are inlined.
+// Inlining and jump tables are left to the optimization level (the inlining
+// threshold is the target's: RL78TTIImpl::adjustInliningThreshold).
 // CHECK-NOT: "-fno-inline"
 // CHECK-NOT: "-fno-jump-tables"
-// SIZE: "-mllvm" "-inline-threshold=5"
-// SPEED-NOT: "-inline-threshold=5"
+// CHECK-NOT: "-inline-threshold
 
 // NOJT: "-fno-jump-tables"
 
 // These are the target's own choices now (unrolling preferences, tail merge
-// size, pass configuration) or were found to change nothing.
+// size, pass configuration, target options) or were found to change nothing.
 // RUN: %clang --target=rl78 -Os -### -c %s 2>&1 | FileCheck %s --check-prefix=RETIRED
+// RUN: %clang --target=rl78 -O3 -### -c %s 2>&1 | FileCheck %s --check-prefix=RETIRED
+// RETIRED-NOT: "-inline-threshold
+// RETIRED-NOT: "-unroll-runtime
+// RETIRED-NOT: "-enable-unroll-and-jam
+// RETIRED-NOT: "-enable-dfa-jump-thread
+// RETIRED-NOT: "-join-splitedges
+// RETIRED-NOT: "--trap-unreachable
+// RETIRED-NOT: "-split-spill-mode
+// RETIRED-NOT: "-enable-scalar-pre
 // RETIRED-NOT: "-unroll-threshold
 // RETIRED-NOT: "-tail-merge-size
 // RETIRED-NOT: "-disable-machine-licm

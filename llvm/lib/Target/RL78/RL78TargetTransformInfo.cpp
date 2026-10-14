@@ -13,6 +13,7 @@
 ///
 
 #include "RL78TargetTransformInfo.h"
+#include "llvm/Analysis/InlineCost.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/CodeGen/CostTable.h"
@@ -61,11 +62,36 @@ static bool hasMACReduction(const Loop *L) {
   return false;
 }
 
+static bool isAggressive(const RL78TargetLowering *TLI) {
+  return TLI->getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive;
+}
+
+int RL78TTIImpl::adjustInliningThreshold(const CallBase *CB) const {
+  const Function *Caller = CB->getCaller();
+  // A call is three or four bytes and its arguments arrive in registers:
+  // when optimizing for size, inline only a callee about as small as the
+  // call (the minsize threshold), or one with no other caller.
+  if (Caller->hasOptSize())
+    return Caller->hasMinSize() ? 0
+                                : InlineConstants::OptMinSizeThreshold -
+                                      InlineConstants::OptSizeThreshold;
+  // A call and return with the register saves around them cost tens of
+  // clocks: at -O3 inline up to a threshold of 600.
+  if (isAggressive(TLI))
+    return 600 - InlineConstants::OptAggressiveThreshold;
+  return 0;
+}
+
 void RL78TTIImpl::getUnrollingPreferences(
     Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP,
     OptimizationRemarkEmitter *ORE) const {
   BaseT::getUnrollingPreferences(L, SE, UP, ORE);
-  // Unroll-and-jam runs only when the driver enables it (-O3). It pays on
+  // At -O3, unroll loops whose trip count is known only at run time
+  // (CoreMark's list and matrix loops: 15% of its clocks).
+  if (isAggressive(TLI))
+    UP.Runtime = true;
+
+  // Unroll-and-jam runs at -O3 (RL78TargetMachine adds the pass). It pays on
   // RL78 except around MACH_cg: there is one MACR, and jamming an outer loop
   // gives the inner reduction one accumulator per copy, each swapped through
   // MACR around every MACH_cg. Plain unrolling of the inner loop keeps the
@@ -80,9 +106,9 @@ void RL78TTIImpl::getUnrollingPreferences(
   UP.OptSizeThreshold = 9;
 
   // A small innermost loop spends a good part of its time on the counter and
-  // the branch. At -O3 the driver has those with a count known only at run
-  // time unrolled (-unroll-runtime); do the same for a constant count too
-  // large to unroll completely, and for a count with a known bound.
+  // the branch. At -O3 those with a count known only at run time are
+  // unrolled (above); do the same for a constant count too large to unroll
+  // completely, and for a count with a known bound.
   if (!L->isInnermost() || L->getHeader()->getParent()->hasOptSize())
     return;
   unsigned Size = 0;
@@ -96,6 +122,6 @@ void RL78TTIImpl::getUnrollingPreferences(
     return;
   UP.Partial = UP.UpperBound = true;
   UP.PartialThreshold = 150;
-  // As many copies as -unroll-runtime makes; more save little more.
+  // As many copies as runtime unrolling makes; more save little more.
   UP.MaxCount = 8;
 }

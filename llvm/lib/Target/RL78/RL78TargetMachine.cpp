@@ -26,6 +26,8 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Scalar/LoopUnrollAndJamPass.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/Debug.h"
 
@@ -104,9 +106,10 @@ RL78TargetMachine::RL78TargetMachine(const Target &T, const Triple &TT,
                                getEffectiveCodeModel(CM, CodeModel::Tiny), OL),
       TLOF(std::make_unique<RL78ELFTargetObjectFile>()) {
 
-  // Bcause the optimizer is getting smarter in figuring out undefined behavior/poison
-  // cases, we have trap unreachable = true as default (can be overriden by the user).
-  // We don't want to trap after the __attribute__((noreturn)) though.
+  // Code that the optimizer proves unreachable (often undefined behaviour)
+  // traps instead of running into whatever follows; not after a call to a
+  // noreturn function, though.
+  this->Options.TrapUnreachable = true;
   this->Options.NoTrapAfterNoreturn = true;
   this->Options.ExceptionModel = ExceptionHandling::None;
   initAsmInfo();
@@ -162,6 +165,16 @@ void RL78TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         FunctionPassManager FPM;
         FPM.addPass(RL78GenSet1Clr1IntrinPass());
         MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+      });
+
+  // At -O3, unroll an outer loop and jam the copies of its inner loop (as
+  // -enable-unroll-and-jam would), before the loops are unrolled: CoreMark's
+  // matrix kernels, 3% of its clocks. getUnrollingPreferences says where.
+  PB.registerVectorizerStartEPCallback(
+      [](FunctionPassManager &FPM, OptimizationLevel Level) {
+        if (Level == OptimizationLevel::O3)
+          FPM.addPass(createFunctionToLoopPassAdaptor(
+              LoopUnrollAndJamPass(static_cast<int>(Level))));
       });
 
   PB.registerPipelineParsingCallback(

@@ -2041,14 +2041,6 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
   // TODO: maybe this can be removed at some point.
   CmdArgs.push_back("-fno-aligned-allocation");
 
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-join-splitedges");
-
-  // The optimizer is getting smarter at finding undefined behavior/poison;
-  // trap instead of eliminating everything (including the return).
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("--trap-unreachable=true");
-
   // -mllvm -minsert-nop-with-label= needs debug info.
   for (Arg *A : Args.filtered(options::OPT_mllvm)) {
     if (StringRef(A->getValue()).starts_with("-minsert-nop-with-label=")) {

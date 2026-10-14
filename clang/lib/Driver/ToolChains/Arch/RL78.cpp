@@ -167,23 +167,6 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
 
   // Aggressive (-O3) speed optimizations
   if (OptLevel == '3') {
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-inline-threshold=600");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-unroll-runtime");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-dfa-jump-thread");
-
-    // RL78's TTI allows unroll-and-jam (except around MACH reductions);
-    // -allow-unroll-and-jam would override that choice.
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-unroll-and-jam");
-
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-unroll-runtime-epilog");
-
     // Flatten i*N+j nests into one loop (CoreMark matrix kernels, as CC-RL
     // does); the overflow check is an i32 multiply, so allow versioning
     // although i32 is not a legal integer on RL78.
@@ -197,24 +180,11 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   if (OptLevel != 's' && OptLevel != 'z')
     return;
 
-  // A call is 3 or 4 bytes and arguments arrive in registers: only a callee
-  // that is about as small as the call itself, or has no other caller, is
-  // worth inlining (LLVM's -Os threshold of 50 grows RL78 code).
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-inline-threshold=5");
-
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-split-spill-mode=size");
-
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-enable-load-pre=false");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-machine-cse=true");
-
-  CmdArgs.push_back("-mllvm");
-  // LLVM 23 renamed GVN's -enable-pre to -enable-scalar-pre.
-  CmdArgs.push_back("-enable-scalar-pre=false");
 
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-sched-height=true");
