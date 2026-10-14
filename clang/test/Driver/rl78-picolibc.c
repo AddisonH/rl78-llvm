@@ -1,18 +1,11 @@
-// The C library is picolibc when the sysroot has picolibc.ld, and newlib with
-// libgloss otherwise.
+// The C library is picolibc: its linker script, start-up object and
+// libraries.
 
-// RUN: rm -rf %t && mkdir -p %t/pico/lib %t/newlib/lib
-// RUN: touch %t/pico/lib/picolibc.ld
-
-// RUN: %clang --target=rl78 --sysroot=%t/pico -### %s 2>&1 | FileCheck %s --check-prefix=PICO
-// RUN: %clang --target=rl78 --sysroot=%t/pico -fsim -### %s 2>&1 | FileCheck %s --check-prefix=PICO-SIM
-// RUN: %clang --target=rl78 --sysroot=%t/pico -fnewlib-nano -### %s 2>&1 | FileCheck %s --check-prefix=PICO
-// RUN: %clangxx --target=rl78 --sysroot=%t/pico -### %s 2>&1 | FileCheck %s --check-prefix=PICO-CXX
-// RUN: %clang --target=rl78 --sysroot=%t/pico -nostartfiles -### %s 2>&1 | FileCheck %s --check-prefix=PICO-NOSTART
-// RUN: %clang --target=rl78 --sysroot=%t/newlib -### %s 2>&1 | FileCheck %s --check-prefix=NEWLIB
-// RUN: %clang --target=rl78 --sysroot=%t/pico -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
-// RUN: %clang --target=rl78 --sysroot=%t/newlib -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
-// RUN: %clang --target=rl78 --sysroot=%t/newlib -fsim -fnewlib-nano -### %s 2>&1 | FileCheck %s --check-prefix=NEWLIB-SIM
+// RUN: %clang --target=rl78 -### %s 2>&1 | FileCheck %s --check-prefix=PICO
+// RUN: %clang --target=rl78 -fsim -### %s 2>&1 | FileCheck %s --check-prefix=PICO-SIM
+// RUN: %clangxx --target=rl78 -### %s 2>&1 | FileCheck %s --check-prefix=PICO-CXX
+// RUN: %clang --target=rl78 -nostartfiles -### %s 2>&1 | FileCheck %s --check-prefix=PICO-NOSTART
+// RUN: %clang --target=rl78 -nostdlib -r -### %s 2>&1 | FileCheck %s --check-prefix=RELOC
 
 // PICO-NOT: "--gc-sections"
 // PICO: "-T{{[^"]*}}picolibc.ld"
@@ -34,14 +27,10 @@
 // PICO-NOSTART-NOT: crt0
 // PICO-NOSTART: "-ldummyhost" "-lc"
 
-// NEWLIB-NOT: "--gc-sections"
-// NEWLIB: "-T{{[^"]*}}rl78.ld"
-// NEWLIB: "{{[^"]*}}crt0.o" "{{[^"]*}}clang_rt.crtbegin.o"
-// NEWLIB: "-lnosys" "-lc" "-lm" "-lclang_rt.builtins" "{{[^"]*}}clang_rt.crtend.o" "{{[^"]*}}crtn.o"
-
-// NEWLIB-SIM: "-T{{[^"]*}}rl78-sim.ld"
-// NEWLIB-SIM: "-lsim" "-lc_nano" "-lm"
-
 // A relocatable link takes no default linker script.
 // RELOC-NOT: "-T
 // RELOC-NOT: "--gc-sections"
+
+// The newlib options are gone with newlib.
+// RUN: not %clang --target=rl78 -fnewlib-nano -### %s 2>&1 | FileCheck %s --check-prefix=NANO
+// NANO: error: unknown argument: '-fnewlib-nano'

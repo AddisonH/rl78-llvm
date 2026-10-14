@@ -7178,9 +7178,6 @@ foreach i = {0-7} in
 } // let Flags = [TargetSpecific]
 
 // RL78 options.
-def fnewlib_nano : Flag<["-"], "fnewlib-nano">, Group<f_Group>,
-  Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Uses newlib nano optimized libc_nano.a instead of libc.a.">;
 def mirror_source_EQ : Joined<["-"], "mirror-source=">, Group<m_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Specify the value to be set in the MAA register. [0|1|common]">;
