@@ -186,9 +186,6 @@ void rl78::addRL78PassTuneArgs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-disable-machine-cse=true");
 
-  CmdArgs.push_back("-mllvm");
-  CmdArgs.push_back("-extra-vectorizer-passes=true");
-
   // SimplifyCFG: a branch is two bytes and there is no conditional move, so
   // computing a value on both paths to save a branch grows the code.
   CmdArgs.push_back("-mllvm");
