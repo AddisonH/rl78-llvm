@@ -69,6 +69,13 @@ def rl78cy15 : SDNode<"RL78ISD::CY15", SDTIntUnaryOp, [SDNPInGlue]>;
 def rl78ctlz : SDNode<"RL78ISD::CTLZ16",
                       SDTypeProfile<1, 1, [SDTCisVT<0, i8>, SDTCisVT<1, i16>]>>;
 
+// A load that may be left out: where an instruction is skipped, or a value
+// is loaded only when it is chosen, a volatile or atomic load would not
+// always happen.
+def skippable_load : PatFrag<(ops node:$ptr), (load node:$ptr), [{
+  return cast<LoadSDNode>(N)->isSimple();
+}]>;
+
 // A compare; the flags are the glue result.
 def SDTCMP : SDTypeProfile<0, 3, [SDTCisInt<0>, SDTCisSameAs<0, 1>,
                                   SDTCisInt<2>]>;

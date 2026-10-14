@@ -522,13 +522,13 @@ def LowCMPW_rp_rp
 let mayLoad = 1 in {
 def LowCMPW_rp_saddr
     : RL78Pseudo<4, (outs), (ins RL78AXRP:$rsrc, ABS8:$addr),
-                 [(RL78lowcmp i16:$rsrc, (load SADDR:$addr))]>;
+                 [(RL78lowcmp i16:$rsrc, (skippable_load SADDR:$addr))]>;
 def LowCMPW_rp_abs16
     : RL78Pseudo<5, (outs), (ins RL78AXRP:$rsrc, ABS16:$addr),
-                 [(RL78lowcmp i16:$rsrc, (load ADDRABS16:$addr))]>;
+                 [(RL78lowcmp i16:$rsrc, (skippable_load ADDRABS16:$addr))]>;
 def LowCMPW_rp_memri
     : RL78Pseudo<5, (outs), (ins RL78AXRP:$rsrc, memHLi:$addr),
-                 [(RL78lowcmp i16:$rsrc, (load ADDRri8:$addr))]>;
+                 [(RL78lowcmp i16:$rsrc, (skippable_load ADDRri8:$addr))]>;
 }
 }
 

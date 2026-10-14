@@ -35,6 +35,7 @@ class RL78DAGToDAGISel : public SelectionDAGISel {
 
   void MatchSET1CLR1(SDNode *&N);
   bool MatchLOAD_SELECTCC(SDNode *&N);
+  bool orderCompareLoadLast(SDNode *Br);
   SDNode *SelectFI(SDNode *N);
 
 public:
@@ -194,6 +195,52 @@ static bool AreCmpOpsEqual(SDValue Cmp) {
   return TraversePossibleMOV(LHS) == TraversePossibleMOV(RHS);
 }
 
+// A branch on a compare whose chain is a TokenFactor of loads that are not
+// ordered among themselves, one of them the second operand of the compare
+// (the 32-bit compare of two volatile globals): the load's chain reaches the
+// branch around the glue, so folding it into the compare would make the
+// glued group depend on itself, and the generic check refuses. Make that
+// load the last of them, after the others, and the branch's chain its chain:
+// then CMPW AX, !addr16 reads it, as in the 16-bit compare. Only the first
+// compare, CMP: the ones after it (LOWCMP) are skipped when the words above
+// differ, and a volatile load must happen.
+bool RL78DAGToDAGISel::orderCompareLoadLast(SDNode *Br) {
+  SDValue Chain = Br->getOperand(0);
+  if (Chain.getOpcode() != ISD::TokenFactor || !Chain.hasOneUse())
+    return false;
+  SDNode *Cmp = Br->getOperand(Br->getNumOperands() - 1).getNode();
+  while (Cmp->getOpcode() == RL78ISD::LOWCMP && Cmp->getNumOperands() == 3)
+    Cmp = Cmp->getOperand(2).getNode();
+  if (Cmp->getOpcode() != RL78ISD::CMP)
+    return false;
+  auto *Ld = dyn_cast<LoadSDNode>(Cmp->getOperand(1));
+  if (!Ld || !Ld->isUnindexed() || !Ld->hasNUsesOfValue(1, 0))
+    return false;
+  SDValue LdChain(Ld, 1);
+  SmallVector<SDValue, 4> Before;
+  bool Found = false;
+  for (SDValue Op : Chain->op_values()) {
+    if (Op == LdChain) {
+      Found = true;
+      continue;
+    }
+    if (Op.getNode()->hasPredecessor(Ld))
+      return false;
+    Before.push_back(Op);
+  }
+  if (!Found)
+    return false;
+  Before.push_back(Ld->getChain());
+  SDValue In = CurDAG->getNode(ISD::TokenFactor, SDLoc(Ld), MVT::Other, Before);
+  if (CurDAG->UpdateNodeOperands(Ld, In, Ld->getBasePtr(), Ld->getOffset()) !=
+      Ld)
+    report_fatal_error("load folded into another while reordering");
+  SmallVector<SDValue, 4> BrOps(Br->ops());
+  BrOps[0] = LdChain;
+  CurDAG->UpdateNodeOperands(Br, BrOps);
+  return true;
+}
+
 void RL78DAGToDAGISel::PreprocessISelDAG() {
   SelectionDAG::allnodes_iterator Position = CurDAG->allnodes_end();
 
@@ -209,6 +256,9 @@ void RL78DAGToDAGISel::PreprocessISelDAG() {
       break;
     case ISD::LOAD:
       MadeChange |= MatchLOAD_SELECTCC(N);
+      break;
+    case RL78ISD::BRCC:
+      MadeChange |= orderCompareLoadLast(N);
       break;
     }
   }

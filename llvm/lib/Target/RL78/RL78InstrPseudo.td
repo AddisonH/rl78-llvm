@@ -464,36 +464,36 @@ let mayLoad = 1 in {
 def SELECTCC8_esaddr_imm
     : RL78Pseudo<0, (outs RL78Reg:$rd),
                  (ins EsAddr16:$addr1, i8imm:$imm2, CCOp:$cond),
-                 [(set i8:$rd, (RL78selectcc (load ESADDRABS16:$addr1),
+                 [(set i8:$rd, (RL78selectcc (skippable_load ESADDRABS16:$addr1),
                                              (i8 imm:$imm2), imm:$cond))]>;
 def SELECTCBTBFC8_esaddr_imm
     : RL78Pseudo<0, (outs RL78Reg:$rd),
                  (ins EsAddr16:$addr1, i8imm:$imm2, CCOp:$cond, RL78Reg:$rcmp,
                       bitimm:$bit),
-                 [(set i8:$rd, (RL78selectccBTBF (load ESADDRABS16:$addr1),
+                 [(set i8:$rd, (RL78selectccBTBF (skippable_load ESADDRABS16:$addr1),
                                                  (i8 imm:$imm2), imm:$cond,
                                                  i8:$rcmp, imm:$bit))]>;
 def SELECTCC8_esaddr_r
     : RL78Pseudo<0, (outs RL78Reg:$rd),
                  (ins EsAddr16:$addr1, RL78Reg:$rsrc2, CCOp:$cond),
-                 [(set i8:$rd, (RL78selectcc (load ESADDRABS16:$addr1),
+                 [(set i8:$rd, (RL78selectcc (skippable_load ESADDRABS16:$addr1),
                                              i8:$rsrc2, imm:$cond))]>;
 def SELECTCC16_esaddr_imm
     : RL78Pseudo<0, (outs RL78RPRegs:$rd),
                  (ins EsAddr16:$addr1, i16imm:$imm2, CCOp:$cond),
-                 [(set i16:$rd, (RL78selectcc (load ESADDRABS16:$addr1),
+                 [(set i16:$rd, (RL78selectcc (skippable_load ESADDRABS16:$addr1),
                                               (i16 imm:$imm2), imm:$cond))]>;
 def SELECTCCBTBF116_esaddr_imm
     : RL78Pseudo<0, (outs RL78RPRegs:$rd),
                  (ins EsAddr16:$addr1, i16imm:$imm2, CCOp:$cond, RL78Reg:$rcmp,
                       bitimm:$bit),
-                 [(set i16:$rd, (RL78selectccBTBF (load ESADDRABS16:$addr1),
+                 [(set i16:$rd, (RL78selectccBTBF (skippable_load ESADDRABS16:$addr1),
                                                   (i16 imm:$imm2), imm:$cond,
                                                   i8:$rcmp, imm:$bit))]>;
 def SELECTCC16_esaddr_rp
     : RL78Pseudo<0, (outs RL78RPRegs:$rd),
                  (ins EsAddr16:$addr1, RL78RPRegs:$rsrc2, CCOp:$cond),
-                 [(set i16:$rd, (RL78selectcc (load ESADDRABS16:$addr1),
+                 [(set i16:$rd, (RL78selectcc (skippable_load ESADDRABS16:$addr1),
                                               i16:$rsrc2, imm:$cond))]>;
 
 // A load from one of two far addresses.
