@@ -130,6 +130,9 @@ public:
 
   StringRef getABI() const override { return ABI; }
 
+  // The frame has a fixed size (VLASupported is false for the same reason).
+  bool isDynamicAllocaSupported() const override { return false; }
+
   bool validateAsmConstraint(const char *&Name,
                              TargetInfo::ConstraintInfo &Info) const override {
     if ((Name[0] == 'a' && Name[1] == 'x') ||

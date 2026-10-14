@@ -1671,6 +1671,9 @@ public:
   /// Whether target supports variable-length arrays.
   bool isVLASupported() const { return VLASupported; }
 
+  /// Whether __builtin_alloca may take a size known only at run time.
+  virtual bool isDynamicAllocaSupported() const { return true; }
+
   /// Whether the target supports SEH __try.
   bool isSEHTrySupported() const {
     return getTriple().isOSWindows() &&

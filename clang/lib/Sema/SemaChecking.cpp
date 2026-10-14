@@ -3179,13 +3179,11 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
     if (getLangOpts().OpenCL) {
       builtinAllocaAddrSpace(*this, TheCall);
     }
-    // RL78 does not support dynamic stack allocation.
-    if (Context.getTargetInfo().getTriple().isRL78()) {
+    if (!Context.getTargetInfo().isDynamicAllocaSupported()) {
       Expr *SizeExpr = TheCall->getArg(0);
       Expr::EvalResult Result;
       if (!SizeExpr->EvaluateAsInt(Result, Context)) {
-        Diag(SizeExpr->getExprLoc(),
-             diag::err_rl78_dynamic_alloca_unsupported);
+        Diag(SizeExpr->getExprLoc(), diag::err_dynamic_alloca_unsupported);
         return ExprError();
       }
     }

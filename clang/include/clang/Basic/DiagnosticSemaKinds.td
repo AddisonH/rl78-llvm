@@ -447,7 +447,7 @@ def warn_rl78_interrupt_attribute_return_type : Warning<
 def error_rl78_callt_change : Error<
    "incompatible declaration: function was previously declared %select{with | without}0 callt">;
 def err_rl78_saddr_not_applicable: Error<"saddr attribute only applies to non-constant, static storage duration variables">;
-def err_rl78_dynamic_alloca_unsupported : Error<
+def err_dynamic_alloca_unsupported : Error<
    "dynamic stack allocation is not supported for the current target">;
 def warn_unused_parameter : Warning<"unused parameter %0">,
   InGroup<UnusedParameter>, DefaultIgnore;
