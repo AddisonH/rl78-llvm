@@ -126,6 +126,10 @@ private:
   uint64_t checkAndPop(uint8_t *loc, const Relocation &rel, char bitSize = 0,
                        bool isSigned = false, uint64_t adj = 0) const;
   void push(uint64_t value) const;
+
+  // Set once relaxation has had to lengthen a branch: from then on it only
+  // lengthens.
+  mutable bool noShrink = false;
 };
 } // namespace
 
@@ -315,13 +319,15 @@ static uint64_t getTargetVA(Ctx &ctx, const InputSection &sec,
       ctx, Relocation{R_ABS, r.type, r.offset, r.addend, r.sym}, loc);
 }
 
-// \p prevRemove is what the previous pass removed at this relocation.
+// \p loc and the target's address are those of the previous pass's layout, and
+// \p prevRemove is what that pass removed at this relocation. No form removing
+// more than \p maxRemove bytes is chosen.
 static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
                         uint64_t loc, Relocation &r, uint32_t prevRemove,
-                        uint32_t &remove) {
+                        uint32_t maxRemove, uint32_t &remove) {
   // Handle only br/call !!addr20.
   const auto opc = sec.content().data()[r.offset - 1];
-  if (opc != 0xEC && opc != 0xFC)
+  if ((opc != 0xEC && opc != 0xFC) || maxRemove < 1)
     return;
 
   // Note that 'loc' is the VA of the relocation (= brVA + 1).
@@ -331,8 +337,8 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
   // If the branch target is in the same input section after the branch,
   // relaxing the branch will affect its address; if we don't consider this we
   // fail to relax some branches that are just "at the boundary" e.g. at +127
-  // bytes (max. 8-bit signed value). The target's address is the one the
-  // previous pass left, so what that pass removed here is in it already.
+  // bytes (max. 8-bit signed value). What the previous pass removed here is in
+  // the target's address already.
   const auto adjTgtVA = isa<Defined>(r.sym) &&
                         cast<Defined>(r.sym)->section == &sec && tgtVA > brVA;
   auto tgtMoves = [&](int64_t n) {
@@ -345,7 +351,7 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
   // For branches, try first to relax to br $addr20. PC will be brVA+2 when
   // relaxing to 2 bytes, and an adjusted tgtVA will be at -2.
   const auto disp8 = (deltaVA - 2) - tgtMoves(2);
-  if (opc == 0xEC && isInt<8>(disp8)) {
+  if (maxRemove >= 2 && opc == 0xEC && isInt<8>(disp8)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR8S_PCREL;
     sec.relaxAux->writes.push_back(0xEF); // BR $addr20.
     remove = 2;
@@ -353,7 +359,7 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
   }
 
   // Then, try callt [addr5].
-  if (opc == 0xFC && relaxToCallt(ctx, r, tgtVA)) {
+  if (maxRemove >= 2 && opc == 0xFC && relaxToCallt(ctx, r, tgtVA)) {
     sec.relaxAux->relocTypes[i] = R_RL78_DIR_CALLT;
     remove = 2;
     return;
@@ -377,16 +383,19 @@ static void relaxDIR20U(Ctx &ctx, const InputSection &sec, size_t i,
   }
 }
 
+// See relaxDIR20U.
 template <bool PCRel>
 static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
                        uint64_t loc, Relocation &r, uint32_t prevRemove,
-                       uint32_t &remove) {
+                       uint32_t maxRemove, uint32_t &remove) {
   // Handle only the branches:
   //   br !addr16   (PCRel = false)
   //   br $!addr20  (PCRel = true)
   // and call !addr16, which can become callt [addr5]; call $!addr20 cannot be
   // relaxed further.
   const auto opc = sec.content().data()[r.offset - 1];
+  if (maxRemove < 1)
+    return;
   if (!PCRel && opc == 0xFD) {
     if (relaxToCallt(ctx, r, getTargetVA(ctx, sec, r, loc))) {
       sec.relaxAux->relocTypes[i] = R_RL78_DIR_CALLT;
@@ -418,17 +427,67 @@ static void relaxDIR16(Ctx &ctx, const InputSection &sec, size_t i,
   }
 }
 
-static bool relax(Ctx &ctx, InputSection &sec) {
+// Chooses the form of each relaxable branch and call in sec from the previous
+// pass's layout and records what it removes in relocDeltas. Sets \p gaveBack
+// when a relocation keeps more bytes than the previous pass removed there; with
+// \p noShrink, none removes more than it did.
+static bool relax(Ctx &ctx, InputSection &sec, bool noShrink, bool &gaveBack) {
   if (sec.relocs().empty())
     return false;
 
   const uint64_t secAddr = sec.getVA();
   auto &aux = *sec.relaxAux;
   bool changed = false;
+  uint32_t delta = 0, prevDelta = 0;
 
+  std::fill_n(aux.relocTypes.get(), sec.relocs().size(), R_RL78_NONE);
+  aux.writes.clear();
+
+  for (auto [i, r] : llvm::enumerate(sec.relocs())) {
+    // The relocation's address in the previous pass's layout.
+    const uint64_t loc = secAddr + r.offset - prevDelta;
+    uint32_t &cur = aux.relocDeltas[i], remove = 0;
+    const uint32_t prevRemove = cur - prevDelta;
+    const uint32_t maxRemove = noShrink ? prevRemove : 2;
+    prevDelta = cur;
+    const bool relaxable = i + 1 != sec.relocs().size() &&
+                           sec.relocs()[i + 1].type == R_RL78_RELAX;
+
+    if (relaxable) {
+      switch (r.type) {
+      case R_RL78_DIR20U:
+        relaxDIR20U(ctx, sec, i, loc, r, prevRemove, maxRemove, remove);
+        break;
+      case R_RL78_DIR16U:
+        relaxDIR16<false>(ctx, sec, i, loc, r, prevRemove, maxRemove, remove);
+        break;
+      case R_RL78_DIR16S_PCREL:
+        relaxDIR16<true>(ctx, sec, i, loc, r, prevRemove, maxRemove, remove);
+        break;
+      default:
+        break;
+      }
+    }
+
+    gaveBack |= remove < prevRemove;
+    delta += remove;
+    if (delta != cur) {
+      cur = delta;
+      changed = true;
+    }
+  }
+
+  sec.bytesDropped = delta;
+  return changed;
+}
+
+// Moves sec's symbols to where the removals relax recorded put them.
+static void moveSymbols(InputSection &sec) {
+  if (sec.relocs().empty())
+    return;
+  auto &aux = *sec.relaxAux;
   ArrayRef<SymbolAnchor> sa = aux.anchors;
-  uint64_t delta = 0;
-  uint32_t prevDelta = 0;
+  uint32_t delta = 0;
 
   auto updateAnchor = [&](const SymbolAnchor &a) {
     if (a.end)
@@ -437,70 +496,53 @@ static bool relax(Ctx &ctx, InputSection &sec) {
       a.d->value = a.offset - delta;
   };
 
-  std::fill_n(aux.relocTypes.get(), sec.relocs().size(), R_RL78_NONE);
-  aux.writes.clear();
-
   for (auto [i, r] : llvm::enumerate(sec.relocs())) {
-    const uint64_t loc = secAddr + r.offset - delta;
-    uint32_t &cur = aux.relocDeltas[i], remove = 0;
-    const uint32_t prevRemove = cur - prevDelta;
-    prevDelta = cur;
-    const bool relaxable = i + 1 != sec.relocs().size() &&
-                           sec.relocs()[i + 1].type == R_RL78_RELAX;
-
-    if (relaxable) {
-      switch (r.type) {
-      case R_RL78_DIR20U:
-        relaxDIR20U(ctx, sec, i, loc, r, prevRemove, remove);
-        break;
-      case R_RL78_DIR16U:
-        relaxDIR16<false>(ctx, sec, i, loc, r, prevRemove, remove);
-        break;
-      case R_RL78_DIR16S_PCREL:
-        relaxDIR16<true>(ctx, sec, i, loc, r, prevRemove, remove);
-        break;
-      default:
-        break;
-      }
-    }
-
     // For all anchors whose offsets are <= r.offset, they are preceded by
     // the previous relocation whose `relocDeltas` value equals `delta`.
     // Decrease their st_value and update their st_size.
     for (; sa.size() && sa[0].offset <= r.offset; sa = sa.slice(1))
       updateAnchor(sa[0]);
-
-    delta += remove;
-    if (delta != cur) {
-      cur = delta;
-      changed = true;
-    }
+    delta = aux.relocDeltas[i];
   }
 
   for (const auto &a : sa)
     updateAnchor(a);
-
-  sec.bytesDropped = delta;
-  return changed;
 }
 
+// Every pass chooses all forms from one layout, the previous pass's, and only
+// then moves the symbols. A choice made from a mix of the two layouts can
+// overstate a distance by what was removed before the branch in this pass, and
+// two branches that each fit only if the other is short then take turns being
+// long (address assignment does not converge). From one layout, a branch that
+// fitted still fits after a pass that only removed bytes, so each pass removes
+// at least what the one before did. Alignment padding can still grow when the
+// code before it shrinks; once a
+// branch has had to give bytes back, no branch takes more, which ends the
+// passes.
 bool RL78::relaxOnce(int pass) const {
   if (!ctx.arg.relax)
     return false;
 
   llvm::TimeTraceScope timeScope("RL78 relaxOnce");
-  if (pass == 0)
+  if (pass == 0) {
     initSymbolAnchors(ctx);
+    noShrink = false;
+  }
 
-  SmallVector<InputSection *, 0> storage;
-  bool changed = false;
+  SmallVector<InputSection *, 0> storage, relaxed;
+  bool changed = false, gaveBack = false;
   for (OutputSection *osec : ctx.outputSections) {
     if (!(osec->flags & SHF_EXECINSTR))
       continue;
     for (InputSection *sec : getInputSections(*osec, storage))
-      if (sec->relaxAux)
-        changed |= relax(ctx, *sec);
+      if (sec->relaxAux) {
+        changed |= relax(ctx, *sec, noShrink, gaveBack);
+        relaxed.push_back(sec);
+      }
   }
+  for (InputSection *sec : relaxed)
+    moveSymbols(*sec);
+  noShrink |= gaveBack;
   return changed;
 }
 
@@ -769,7 +811,7 @@ void RL78::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
     write8le(loc, val - 1);
     break;
   case R_RL78_DIR16S_PCREL:
-    checkIntUInt(ctx, loc, val - 2, 16, rel);
+    checkInt(ctx, loc, val - 2, 16, rel);
     write16le(loc, val - 2);
     break;
   case R_RL78_DIR_CALLT:
