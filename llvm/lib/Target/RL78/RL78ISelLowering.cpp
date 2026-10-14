@@ -62,7 +62,6 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                  *DAG.getContext());
   AnalyzeCCRLReturnOperands(CCInfo, Outs);
 
-  // Chain.dump();
   // Copy the result values into the output registers.
   SDValue Flag;
   SmallVector<SDValue, 4> RetOps(1, Chain);
@@ -71,7 +70,6 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     CCValAssign &VA = RVLocs[i];
     assert(VA.isRegLoc() && "Can only return in registers!");
     SDValue Arg = OutVals[realRVLocIdx];
-    // Arg.dump(&DAG);
 
     switch (VA.getLocInfo()) {
     default:
@@ -110,7 +108,6 @@ RL78TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  // MF.getFunction().dump();
   if (MF.getFunction().hasFnAttribute("brk_interrupt"))
     return DAG.getNode(RL78ISD::RETB, DL, MVT::Other, RetOps);
   else if (MF.getFunction().hasFnAttribute("interrupt"))
@@ -207,39 +204,11 @@ SDValue RL78TargetLowering::LowerFormalArguments(
   // If the function takes variable number of arguments, make a frame index for
   // the start of the first vararg value... for expansion of llvm.va_start.
   if (IsVarArg) {
-    // static const MCPhysReg ArgRegs[] = { RL78::RP0, RL78::RP2, RL78::RP4 };
-    // unsigned NumAllocated = CCInfo.getFirstUnallocated(ArgRegs);
-    // const MCPhysReg *CurArgReg = ArgRegs + NumAllocated,
-    //                *ArgRegEnd = ArgRegs + 3;
-    // int StackOffset = CCInfo.getNextStackOffset() + 4;
-    // unsigned StackSize = MF.getFrameInfo().getStackSize();
     RL78MachineFunctionInfo *RL78MFI = MF.getInfo<RL78MachineFunctionInfo>();
     int FI =
         MFI.CreateFixedObject(2, -4 - (int)CCInfo.getStackSize(), true);
     RL78MFI->setVarArgsFrameOffset(FI);
-    // std::vector<SDValue> OutChains;
-    //   //MF.getFrameInfo().getStackSize();
-    // for (; CurArgReg != ArgRegEnd; ++CurArgReg) {
-    //  unsigned VReg =
-    //  MF.getRegInfo().createVirtualRegister(&RL78::RL78RPRegsRegClass);
-    //     MF.getRegInfo().addLiveIn(*CurArgReg, VReg);
-    //     SDValue Arg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i16);
-    //     StackOffset -= 2;
-    //     int FI = MFI.CreateFixedObject(2, StackOffset, true);
-    //     SDValue FIN = DAG.getFrameIndex(FI, MVT::i16);
-    //     OutChains.push_back(
-    //         DAG.getStore(DAG.getRoot(), DL, Arg, FIN, MachinePointerInfo()));
-    //}
-
-    ////MF.getFrameInfo().setStackSize(MF.getFrameInfo().getStackSize() +
-    /// StackOffset);
-
-    // if (!OutChains.empty()) {
-    //     OutChains.push_back(Chain);
-    //     Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
-    //   }
   }
-  // Chain.dump();
   return Chain;
 }
 
@@ -366,10 +335,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (ArgsSize & 1)
     ArgsSize++;
 
-  // Keep stack frames 2-byte aligned.
-  // ArgsSize = (ArgsSize + 7) & ~3;
-  // ArgsSize &= ~3;
-
   MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
 
   SmallVector<std::pair<unsigned, SDValue>, 16> RegsToPass;
@@ -385,7 +350,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       continue;
 
     SDValue Arg = OutVals[i];
-    // Arg.dump(&DAG);
     unsigned Size = Flags.getByValSize();
     Align align = Flags.getNonZeroByValAlign();
     // Size == 0 can be reproduced with pr23135.c from gcc c-torture.
@@ -558,10 +522,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     Callee = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Callee);
   }
 
-  // Callee.dump();
-  // if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
-  //  G->getGlobal()->getAlignment();
-  //}
 
   // Returns a chain & a flag for retval copy to use.
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
@@ -632,7 +592,6 @@ SDValue RL78TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
   }
 
-  // DAG.dump();
   return Chain;
 }
 
@@ -1577,15 +1536,12 @@ SDValue RL78TargetLowering::withTargetFlags(SDValue Op, unsigned TF,
 // or ExternalSymbol SDNode.
 SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  // Op.dump();
   EVT VT = getPointerTy(DAG.getDataLayout());
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
   int64_t Offset = cast<GlobalAddressSDNode>(Op)->getOffset();
 
   const auto *V = dyn_cast<GlobalVariable>(GV);
   if (V) {
-    // unsigned AS = V->getAddressSpace();
-
     // See if we have a pragma address with the saddr range
     bool PragmaAddressInSaddrRange = false;
     if (V->hasSection()) {
@@ -1630,14 +1586,7 @@ SDValue RL78TargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Unsupported absolute code model");
   case CodeModel::Small:
-    // SDValue Result = DAG.getTargetGlobalAddress(GV, SDLoc(Op), VT, Offset);
-    // return DAG.getNode(RL78ISD::LOW16, DL, VT, withTargetFlags(Op,
-    // RL78MCExpr::VK_RL78_LOW16, DAG));
     return DAG.getTargetGlobalAddress(GV, SDLoc(Op), VT, Offset);
-    // case CodeModel::Medium: {
-    //}
-    // case CodeModel::Large: {
-    //}
   }
 }
 
@@ -1887,8 +1836,6 @@ static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) {
 
   // Create the CMP node.
   SDValue Cmp = SwitchCMPOperands(dl, cc, CCSign, LHS, RHS, DAG, TargetCC);
-  // DAG.dump();
-  //
   return DAG.getNode(RL78ISD::BRCC, dl, MVT::Other, Chain, Dest, TargetCC, Cmp);
 }
 
@@ -1976,9 +1923,6 @@ static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
   RL78MachineFunctionInfo *FuncInfo = MF.getInfo<RL78MachineFunctionInfo>();
 
   auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
-
-  // Need frame address to find the address of VarArgsFrameIndex.
-  // MF.getFrameInfo().setFrameAddressIsTaken(true);
 
   // vastart just stores the address of the VarArgsFrameIndex slot into the
   // memory location argument.
@@ -2070,8 +2014,6 @@ SDValue RL78TargetLowering::LowerLibCall(SDValue Op, SelectionDAG &DAG,
       std::move(Args));
 
   std::pair<SDValue, SDValue> CallResult = LowerCallTo(CLI);
-  // CallResult.first.dump();
-  // CallResult.second.dump();
   // Is unary operation?
   if (Op.getNumOperands() == 1) {
     return CallResult.first;
@@ -2257,8 +2199,6 @@ SDValue RL78TargetLowering::LowerMULO(SDValue Op, SelectionDAG &DAG) const {
 
 SDValue RL78TargetLowering::LowerMul(SDValue Op, SelectionDAG &DAG) const {
   bool isS3Core = Subtarget->isRL78S3CoreType();
-  // Op.dump();
-  // DAG.dump();
   assert(Op.getValueType() == MVT::i16);
   // In case of zero extend we can use MULU, MULU_zext_16_r_r.
   if ((Op.getOperand(0).getOpcode() == ISD::ZERO_EXTEND) &&
@@ -2284,7 +2224,6 @@ SDValue RL78TargetLowering::LowerCDIV(SDValue Op, SelectionDAG &DAG,
 
 SDValue RL78TargetLowering::LowerAndOrXor(SDValue Op, SelectionDAG &DAG,
                                           unsigned int opcode) const {
-  // Op.dump();
   if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op.getOperand(1))) {
     return Op;
   }
@@ -2305,8 +2244,6 @@ SDValue RL78TargetLowering::LowerAndOrXor(SDValue Op, SelectionDAG &DAG,
 
 SDValue RL78TargetLowering::LowerShift(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
-  // Op.dump();
-  // Op.getOperand(1).dump();
   // If shift amount is constant we can do this using one instruction.
   if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op.getOperand(1))) {
     return Op;
@@ -2351,8 +2288,6 @@ const char *GetRotLibCallName(unsigned int Opcode, EVT valueType) {
 
 SDValue RL78TargetLowering::LowerRotate(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
-  // Op.dump();
-  // DAG.dump();
   // if rotate amount is constant we can do this using a few instructions.
   if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op.getOperand(1))) {
     // For i8 we do this for all 8 possible values 0 through 7.
@@ -2413,7 +2348,6 @@ static SDValue LowerBitOpIntrinsic(unsigned int Opcode, SDValue Op,
 SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
                                                     SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  // Op.dump();
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
   switch (IntNo) {
   case Intrinsic::rl78_getpswisp: {
@@ -2469,9 +2403,6 @@ SDValue RL78TargetLowering::LowerIntrinsicWithChain(SDValue Op,
     return LowerBitOpIntrinsic(RL78ISD::XOR1CY, Op, DAG);
   case Intrinsic::rl78_set1:
   case Intrinsic::rl78_clr1: {
-    // Op.dump();
-    // Op.getOperand(0).dump();
-    // Op.getOperand(2).dump();
     SDValue bitOp = Op.getOperand(3);
     if (!isa<ConstantSDNode>(Op.getOperand(3))) {
       if (IntNo == Intrinsic::rl78_set1)
@@ -2560,7 +2491,6 @@ SDValue
 RL78TargetLowering::LowerIntrinsicWithoutChain(SDValue Op,
                                                SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  // Op.dump();
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   switch (IntNo) {
   case Intrinsic::rl78_rolb: {
@@ -2596,7 +2526,6 @@ RL78TargetLowering::LowerIntrinsicWithoutChain(SDValue Op,
                           false, 1);
   }
   case Intrinsic::rl78_mulu: {
-    // Op.getOperand(0).dump();
     SDValue Op0Zext =
         DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i16, Op.getOperand(1));
     SDValue Op1Zext =
@@ -2652,7 +2581,6 @@ RL78TargetLowering::LowerIntrinsicWithoutChain(SDValue Op,
 SDValue RL78TargetLowering::LowerIntrinsicVoid(SDValue Op,
                                                SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  // Op.dump();
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
   switch (IntNo) {
   case Intrinsic::rl78_setpswisp: {
@@ -3884,8 +3812,6 @@ SDValue RL78TargetLowering::LowerFRAMEADDR(SDValue Op,
 
 SDValue RL78TargetLowering::LowerOperation(SDValue Op,
                                            SelectionDAG &DAG) const {
-  // RL78Core coreType = Subtarget->GetCoreType();
-  // Op.dump();
   switch (Op.getOpcode()) {
   default:
     LLVM_DEBUG(Op.dump());
@@ -4436,8 +4362,6 @@ RL78TargetLowering::LowerSELECTCC(bool isI8, MachineInstr &MI,
       .addMBB(thisMBB);
   // The pseudo instruction is gone now.
   MI.eraseFromParent();
-  //
-  // F->dump();
   return sinkMBB;
 }
 
@@ -4826,7 +4750,6 @@ RL78TargetLowering::LowerCallCSRP(MachineInstr &MI,
 MachineBasicBlock *
 RL78TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                 MachineBasicBlock *BB) const {
-  // MI.dump();
   bool OptForSpeed = getTargetMachine().getOptLevel() == CodeGenOptLevel::Aggressive;
   auto AddDeadDef = [&](MCRegister Reg) {
     MI.addOperand(MachineOperand::CreateReg(Reg, /*isDef=*/true,
@@ -5162,7 +5085,6 @@ static void ReplaceOperand(const SDValue &N, SmallVectorImpl<SDValue> &Results,
   case ISD::UNDEF:
     if (N->getValueType(0) == MVT::i32)
       Results.push_back(DAG.getNode(ISD::UNDEF, dl, MVT::i16));
-    // else Results.push_back(N);
     return;
   case ISD::GlobalAddress: {
     if (N->getValueType(0) == MVT::i32) {
@@ -5250,7 +5172,6 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
 
   SDLoc dl(N);
 
-  // N->dump();
   switch (N->getOpcode()) {
   default:
     llvm_unreachable("Do not know how to custom type legalize this operation!");
@@ -5607,19 +5528,6 @@ void RL78TargetLowering::ReplaceNodeResults(SDNode *N,
     Results.push_back(DAG.getFrameIndex(cast<FrameIndexSDNode>(N)->getIndex(), MVT::i16));
     return;
   }
-  // case ISD::Constant: {
-  //  assert((N->getValueType(0) != MVT::i32) && "Invalid value type for
-  //  Constant!"); return;
-  //}
-  // case ISD::UNDEF: {
-  //  assert((N->getValueType(0) != MVT::i32) && "Invalid value type for
-  //  UNDEF!");
-  //  // UNDEF by itsels should be of the right type.
-  //  // In case like when it's second operand of an LOAD for example it is the
-  //  wrong size.
-  //  // We hanlde those case in LowerOperationWrapper.
-  //  return;
-  //}
   case ISD::BUILD_PAIR: {
     return;
   }
@@ -5824,7 +5732,6 @@ void RL78TargetLowering::LowerOperationWrapper(
     if (OpResults.empty())
         ReplaceOperand(N->getOperand(1), OpResults, DAG);
     if (!OpResults.empty()) {
-      // N->getOperand(0)->dump();
       Results.push_back(DAG.getNode(ISD::EXTRACT_ELEMENT, dl,
                                     N->getValueType(0), N->getOperand(0),
                                     OpResults[0]));

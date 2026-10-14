@@ -461,8 +461,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       MF.getSubtarget<RL78Subtarget>().getRegisterInfo()->getFrameRegister(MF);
   int stackSize = MF.getFrameInfo().getStackSize();
 
-  // MI.dump();
-  // MI.getParent()->dump();
   // The hardware [SP+byte] forms become [HL+byte] when the frame is
   // addressed through HL.
   auto UseFrameReg = [&](Register Reg) {
@@ -536,7 +534,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
         MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
       else
         MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
-      // MI.getParent()->dump();
       return false;
     }
     else if (isUInt<16>(Offset - 2 + offsetAdj)) {
@@ -555,7 +552,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
         MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_OUTLINE_SP);
       else
         MI.getOperand(FIOperandNum + 1).setTargetFlags(SPII::MO_NO_OUTLINE_SP);
-      // MI.getParent()->dump();
       return false;
     } else if (isUInt<16>(Offset - 2)) {
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::PUSH_rp))
@@ -572,7 +568,6 @@ bool RL78RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
           .add(MI.getOperand(2));
       BuildMI(*MI.getParent(), II, DL, TII->get(RL78::POP_rp), RL78::RP2);
 
-      // MI.getParent()->dump();
       MI.eraseFromParent();
       return true;
     }

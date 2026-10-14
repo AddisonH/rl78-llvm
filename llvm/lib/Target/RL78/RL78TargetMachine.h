@@ -20,7 +20,6 @@ namespace llvm {
 
 class RL78TargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
-  //RL78Subtarget Subtarget;
   mutable StringMap<std::unique_ptr<RL78Subtarget>> SubtargetMap;
 
 public:

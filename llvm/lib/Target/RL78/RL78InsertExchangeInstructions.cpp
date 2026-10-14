@@ -91,8 +91,6 @@ static void insert8BitExchange(MachineInstr &MI, unsigned opIndex, DebugLoc &DL,
 static bool insert16BitExchange(MachineInstr &MI, unsigned opIndex,
                                 DebugLoc &DL, MachineBasicBlock &MBB,
                                 const TargetInstrInfo *TII, bool isAXLive) {
-  // MBB.dump();
-  // MI.dump();
 
   unsigned Reg = MI.getOperand(opIndex).getReg();
   bool IsDef = MI.getOperand(opIndex).isDef();
@@ -763,9 +761,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
   const TargetInstrInfo *TII = MF.getSubtarget<RL78Subtarget>().getInstrInfo();
   LLVM_DEBUG(dbgs() << "********** INSERT EXCHANGE INSTRUCTIONS **********\n"
                     << "********** Function: " << MF.getName() << '\n');
-  // LiveIntervals *LIS = &getAnalysis<LiveIntervals>();
-  // LIS->dump();
-  // LiveDebugVariables *DebugVars = &getAnalysis<LiveDebugVariables>();
   LLVM_DEBUG(MF.dump());
   // first step remove pseudos and insert real intructions and XCH instructions
   // where necesarry
@@ -815,7 +810,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
         isALive = LB->second.first;
         isXLive = LB->second.second;
       }
-      // MI.dump();
       switch (MI.getOpcode()) {
       case RL78::MOV_r_i8:
         assert(MI.getOperand(1).isImm());
@@ -1008,7 +1002,6 @@ bool RL78InsertExchangeInstructionsPass::runOnMachineFunction(
                 // Erase the MOV and CMP instructions.
                 MI.eraseFromParent();
                 MI2.eraseFromParent();
-                // MBB.dump();
               }
             }
           }

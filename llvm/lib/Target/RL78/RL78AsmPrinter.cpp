@@ -117,7 +117,6 @@ void RL78AsmPrinter::emitInstruction(const MachineInstr *MI) {
     return;
   }
   
-  // MI->dump();
   if (MI->getOpcode() == TargetOpcode::BUNDLE) {
     MachineBasicBlock::const_instr_iterator I = MI->getIterator();
     MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();

@@ -27,23 +27,6 @@ using namespace llvm;
 
 STATISTIC(MCNumEmitted, "Number of MC instructions emitted");
 
-// Useful for debugging: enable to see from where RL78ReportError() is called (as there are
-// a lot of places with the same error message e.g. "Instruction using illegal register.")
-#if 0
-static void RL78ReportError_(bool condition, StringRef Reason, const char *file, int line) {
-  if (!condition) {
-    SmallVector<char, 64> Buffer;
-    raw_svector_ostream OS(Buffer);
-    OS << file << ':' << line << ' ';
-    StringRef MessageStr = OS.str();
-    ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
-    (void)written;
-    RL78ReportError(condition, Reason);
-  }
-}
-#define RL78ReportError(condition, Reason) RL78ReportError_(condition, Reason, __FILE__, __LINE__)
-#endif
-
 namespace {
 
 class RL78MCCodeEmitter : public MCCodeEmitter {

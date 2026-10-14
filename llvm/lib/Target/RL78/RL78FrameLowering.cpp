@@ -508,14 +508,9 @@ void RL78FrameLowering::emitEpilogue(MachineFunction &MF,
   const RL78InstrInfo &TII =
       *static_cast<const RL78InstrInfo *>(MF.getSubtarget().getInstrInfo());
   DebugLoc dl = MBBI->getDebugLoc();
-  // if (!FuncInfo->isLeafProc()) {
-  //  return;
-  //}
   MachineFrameInfo &MFI = MF.getFrameInfo();
 
   int NumBytes = (int)MFI.getStackSize();
-  // if (NumBytes == 0)
-  // return;
 
   unsigned NumBytesForCSRegs = 0;
   uint64_t Specs;

@@ -37,8 +37,6 @@ void RL78InstPrinter::printInst(const MCInst *MI, uint64_t Address,
 void RL78InstPrinter::printOperand(const MCInst *MI, int opNum,
                                    const MCSubtargetInfo &STI, raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(opNum);
-  // MI->dump();
-  // MO.dump();
 
   if (MO.isReg()) {
     printRegName(O, MO.getReg());

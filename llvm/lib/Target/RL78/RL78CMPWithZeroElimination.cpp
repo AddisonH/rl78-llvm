@@ -208,11 +208,9 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
     if (MBB.getLastNonDebugInstr() == MBB.end())
       continue;
     Changed |= sinkIncDecToCompare(MBB);
-    // MBB.dump();
     for (MachineBasicBlock::reverse_iterator prevI = MBB.rbegin(),
                                              e = MBB.rend();
          prevI != e; ++prevI) {
-      // prevI->dump();
       // If conditional branch
       if (prevI->getOpcode() == RL78::BRCC) {
         // We can only remove the compare instruction in case of "!= 0" and "==

@@ -40,7 +40,6 @@ RL78InstrInfo::RL78InstrInfo(RL78Subtarget &ST)
 /// any side effects other than loading from the stack slot.
 Register RL78InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                             int &FrameIndex) const {
-  // MI.dump();
   if ((MI.getOpcode() == RL78::LOAD8_r_stack_slot) ||
       (MI.getOpcode() == RL78::LOAD16_rp_stack_slot) ||
       (MI.getOpcode() == RL78::LOAD8_r_arg_slot) ||
@@ -83,7 +82,6 @@ void RL78InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                         Register VReg,
                                         MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
-  // dbgs() << "storeRegToStackSlot\n";
   if (I != MBB.end())
     DL = I->getDebugLoc();
   MachineFunction &MF = *MBB.getParent();
@@ -106,7 +104,6 @@ void RL78InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
         .addMemOperand(MMO)
         .setMIFlag(Flags);
   }
-  // MBB.dump();
 }
 
 void RL78InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
@@ -119,7 +116,6 @@ void RL78InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   DebugLoc DL;
   if (I != MBB.end())
     DL = I->getDebugLoc();
-  // dbgs() << "loadRegFromStackSlot\n";
   MachineFunction &MF = *MBB.getParent();
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
@@ -137,12 +133,7 @@ void RL78InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
         .addImm(0)
         .addMemOperand(MMO)
         .setMIFlag(Flags);
-    // We can't do this here becuase it's done during reg alloc.
-    // BuildMI(MBB, I, DL, get(RL78::LOAD16_rp_stack_slot),
-    // RL78::RP0).addFrameIndex(FI).addImm(0); BuildMI(MBB, I, DL,
-    // get(RL78::COPY)).addReg(DestReg).addReg(RL78::RP0, RegState::Kill);
   }
-  // MBB.dump();
 }
 
 static void BuildUnrolledShiftStep(const RL78InstrInfo *II,
@@ -878,7 +869,6 @@ static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
   Cond.push_back(MachineOperand::CreateImm(LastInst->getOperand(1).getImm()));
   Target = LastInst->getOperand(0).getMBB();
   // if BT/BF/BTCLR instruction add the remaining 2 operands (reg and bit)
-  // LastInst->dump();
   if (LastInst->getNumOperands() > 3) {
     Cond.push_back(MachineOperand::CreateImm(LastInst->getOpcode()));
     Cond.push_back(LastInst->getOperand(2));
@@ -917,7 +907,6 @@ bool RL78InstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     }
     return true; // Can't handle indirect branch.
   }
-  // MBB.dump();
   // Get the instruction before it if it is a terminator.
   MachineInstr *SecondLastInst = &*I;
   unsigned SecondLastOpc = SecondLastInst->getOpcode();
@@ -976,8 +965,6 @@ unsigned RL78InstrInfo::insertBranch(
     ArrayRef<MachineOperand> Cond, const DebugLoc &DL, int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
   assert(!BytesAdded && "code size not handled");
-  // MBB.dump();
-  // MBB.getParent()->dump();
   if (Cond.empty()) {
     assert(!FBB && "Unconditional branch with multiple successors!");
     BuildMI(&MBB, DL, get(RL78::BR)).addMBB(TBB);
@@ -989,13 +976,11 @@ unsigned RL78InstrInfo::insertBranch(
 
   // is this a BT/BF/BTCLR
   if (Cond.size() > 1) {
-    // Cond[1].dump();
     BuildMI(&MBB, DL, get(Cond[1].getImm()))
         .addMBB(TBB)
         .addImm(CC)
         .add(Cond[2])
         .add(Cond[3]);
-    // MBB.dump();
   } else {
     BuildMI(&MBB, DL, get(RL78::BRCC)).addMBB(TBB).addImm(CC);
   }
@@ -1010,8 +995,6 @@ unsigned RL78InstrInfo::insertBranch(
 unsigned RL78InstrInfo::removeBranch(MachineBasicBlock &MBB,
                                      int *BytesRemoved) const {
   assert(!BytesRemoved && "code size not handled");
-  // MBB.dump();
-  // MBB.getParent()->dump();
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
   while (I != MBB.begin()) {
@@ -1197,21 +1180,10 @@ void RL78InstrInfo::buildCopy(MachineBasicBlock &MBB,
   else if (RL78::RL78RegRegClass.contains(DestReg) &&
            RL78::RL78RPRegsRegClass.contains(SrcReg)) {
     llvm_unreachable("Don't know how to copy from 16 to 8 bit reg!");
-    // if the 8 bit reg is part of the 16 bit reg don't do anything
-    // else do a a bit copy of the low part
-    // const TargetRegisterInfo *TRI = &getRegisterInfo();
-    // unsigned int source = TRI->getSubReg(SrcReg, RL78::sub_lo);
-    // assert(DestReg != TRI->getSubReg(SrcReg, RL78::sub_hi) && "Unhandled copy
-    // form hi part!"); if(source != DestReg)
-    //  copyPhysReg(MBB, I, DL, DestReg, source, KillSrc);
   }
   // 8 to 16 bit copy:
   else if (RL78::RL78RPRegsRegClass.contains(DestReg) &&
            RL78::RL78RegRegClass.contains(SrcReg)) {
-    // const TargetRegisterInfo *TRI = &getRegisterInfo();
-    // unsigned int dstlo = TRI->getSubReg(SrcReg, RL78::sub_lo);
-    // BuildMI(MBB, I, DL, get(RL78::MOV_A_r), DestReg).addReg(SrcReg,
-    // getKillRegState(KillSrc));
     llvm_unreachable("Don't know how to copy from 8 to 16 bit reg!");
   }
   // SP reg to 16 bit reg
@@ -1308,7 +1280,6 @@ void RL78InstrInfo::buildCopy(MachineBasicBlock &MBB,
   }  
   else
     llvm_unreachable("Unknown copy!");
-  // MovMI->addRegisterDefined(DestReg, TRI);
 }
 
 unsigned RL78InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
@@ -1669,7 +1640,6 @@ void RL78InstrInfo::buildOutlinedFrame(
           MI.getOperand(i).setImm(newOffset);
         } 
       }
-      // MI.dump();
     }
   }
 

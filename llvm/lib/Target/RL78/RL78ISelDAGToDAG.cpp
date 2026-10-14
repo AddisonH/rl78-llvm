@@ -415,7 +415,6 @@ void RL78DAGToDAGISel::PostprocessISelDAG() {
 
 bool RL78DAGToDAGISel::SelectADDRSPi(SDValue Addr, SDValue &Base,
                                      SDValue &Offset) {
-  // Addr.dump(CurDAG);
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
     Base = CurDAG->getTargetFrameIndex(
         FIN->getIndex(), TLI->getPointerTy(CurDAG->getDataLayout()));
@@ -499,7 +498,6 @@ bool RL78DAGToDAGISel::SelectADDRr(SDValue Addr, SDValue &Base) {
 
 bool RL78DAGToDAGISel::SelectADDRri(SDValue Addr, unsigned Max, bool AllowWordBC, SDValue &Base,
                                     SDValue &Offset, bool PermitFrameIndex) {
-  // Addr.dump(CurDAG);
   if (Addr.getOpcode() == RL78ISD::LOW16)
     return false;
   if (Addr.getOpcode() == RL78ISD::HI16)
@@ -955,11 +953,9 @@ bool RL78DAGToDAGISel::MatchLOAD_SELECTCC(SDNode*& N) {
 
 SDNode *RL78DAGToDAGISel::SelectFI(SDNode *N) {
   SDLoc DL(N);
-  // N->dump();
   int FI = cast<FrameIndexSDNode>(N)->getIndex();
   EVT VT = N->getValueType(0);
   SDValue TFI = CurDAG->getTargetFrameIndex(FI, VT);
-  // CurDAG->dump();
   unsigned Opc = RL78::MOVW_rp_stack_slot;
   SDValue Imm = CurDAG->getTargetConstant(0, DL, MVT::i16);
   if (N->hasOneUse()) {
@@ -969,7 +965,6 @@ SDNode *RL78DAGToDAGISel::SelectFI(SDNode *N) {
     ReplaceNode(N, MN);
     return MN;
   }
-  // CurDAG->dump();
 }
 
 void RL78DAGToDAGISel::Select(SDNode *N) {
@@ -978,7 +973,6 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
     N->setNodeId(-1);
     return; // Already selected.
   }
-  // N->dump(CurDAG);
   switch (N->getOpcode()) {
   default:
     break;
@@ -1066,7 +1060,6 @@ void RL78DAGToDAGISel::Select(SDNode *N) {
     break;
   }
   }
-  // N->dump(CurDAG);
   SelectCode(N);
 }
 

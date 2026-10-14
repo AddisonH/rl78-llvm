@@ -86,7 +86,6 @@ bool RL78ExpandPseudoInsts::processBranch(MachineInstr &MI,
       (MI.getOpcode() != RL78::BTBF) && (MI.getOpcode() != RL78::BTBF_mem) &&
       (MI.getOpcode() != RL78::BTBF_sfr) && (MI.getOpcode() != RL78::BTBF_saddr))
     return false;
-  // MI.dump();
   MachineFunction::iterator MBBI = MBB.getIterator();
   MachineBasicBlock &targetMBB = *MI.getOperand(0).getMBB();
   MachineFunction::iterator NextMBBI = std::next(MBBI);
@@ -255,7 +254,6 @@ bool RL78ExpandPseudoInsts::runOnMachineFunction(MachineFunction &MF) {
     for (MachineBasicBlock &MBB : MF)
       bbSizeMap[&MBB] = calcBasicBlockSize(MBB, TII);
     buildBBOffsetMap(MF, TII);
-    // MF.dump();
     LocalChanged = false;
     for (MachineBasicBlock &MBB : MF) {
       if (MBB.empty())
@@ -284,7 +282,6 @@ bool RL78ExpandPseudoInsts::runOnMachineFunction(MachineFunction &MF) {
     Changed |= LocalChanged;
 
   } while (LocalChanged);
-  // MF.dump();
   bbSizeMap.clear();
   bbOffsetMap.clear();
   return Changed;

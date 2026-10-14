@@ -24,13 +24,11 @@ static MCOperand LowerSymbolOperand(const MachineInstr *MI,
   RL78MCExpr::VariantKind Kind =
       RL78MCExpr::VariantKindFromTargetFlag(MO.getTargetFlags());
   const MCSymbol *Symbol = nullptr;
-  // MO.dump();
   switch (MO.getType()) {
   default:
     llvm_unreachable("Unknown type in LowerSymbolOperand");
   case MachineOperand::MO_MachineBasicBlock:
     Symbol = MO.getMBB()->getSymbol();
-    // Symbol->dump();
     break;
 
   case MachineOperand::MO_GlobalAddress:
@@ -67,7 +65,6 @@ static MCOperand LowerSymbolOperand(const MachineInstr *MI,
   }
   if (Kind != RL78MCExpr::VK_RL78_None)
     Expr = RL78MCExpr::create(Kind, Expr, AP.OutContext);
-  // Expr->dump();
   return MCOperand::createExpr(Expr);
 }
 
@@ -103,14 +100,11 @@ void llvm::LowerRL78MachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                          AsmPrinter &AP) {
 
   OutMI.setOpcode(MI->getOpcode());
-  // MI->dump();
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
-    // MO.dump();
     MCOperand MCOp = LowerOperand(MI, MO, AP);
 
     if (MCOp.isValid())
       OutMI.addOperand(MCOp);
   }
-  // OutMI.dump();
 }
