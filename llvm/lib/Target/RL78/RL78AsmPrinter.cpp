@@ -387,23 +387,15 @@ const MCExpr *RL78AsmPrinter::lowerConstantGV(const GlobalValue *GV, int DstAS,
   if (DstSize != 4)
     llvm_unreachable("Unexpected pointer size.");
 
-  // Near -> far address space cast here.
-  OutStreamer->emitValue(lowPart, 2);
-  const MCExpr *segPart = nullptr;
-  if (SrcSize == 4) {
-    segPart = RL78MCExpr::create(
-        RL78MCExpr::VK_RL78_LOW,
-        RL78MCExpr::create(RL78MCExpr::VK_RL78_HIGHW, BaseExpr, Ctx), Ctx);
-  } else {
-    segPart = MCConstantExpr::create(GVType == ConstType::CODE ? 0x0 : 0xF, Ctx);
-  }
-  OutStreamer->emitValue(segPart, 1);
-  OutStreamer->emitValue(MCConstantExpr::create(0, Ctx), 1);
+  if (SrcSize == 4)
+    return BaseExpr;
 
-  // Note: As a convention, returning a null MCExpr from lowerConstant()
-  //       indicates that it already emitted the lowered value(s),
-  //       so its caller shouldn't do anything else.
-  return nullptr;
+  // A near address made far: near code is in the first 64 KiB, near data
+  // and the mirror of near constants in the last.
+  if (GVType == ConstType::CODE)
+    return lowPart;
+  return MCBinaryExpr::createAdd(lowPart, MCConstantExpr::create(0xF0000, Ctx),
+                                 Ctx);
 }
 
 const MCExpr *RL78AsmPrinter::lowerConstant(const Constant *CV,

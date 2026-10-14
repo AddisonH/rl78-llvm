@@ -34,8 +34,6 @@ define ptr @voidptr() addrspace(3) {
 ; CHECK-NEXT:  .short _f
 @vtable = constant [1 x ptr] [ptr addrspacecast (ptr addrspace(3) @f to ptr)]
 
-; The two halves of a far pointer keep their operators.
 ; CHECK-LABEL: _farptr:
-; CHECK-NEXT:  .short LOWW(_f)
-; CHECK-NEXT:  .byte LOW(HIGHW(_f))
+; CHECK-NEXT:  .long _f
 @farptr = global ptr addrspace(3) @f
