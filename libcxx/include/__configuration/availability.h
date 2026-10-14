@@ -309,8 +309,8 @@
 
 // This controls the availability of floating-point std::to_chars functions.
 // These overloads were added later than the integer overloads.
-#if defined(__RL78__) && defined(__RL78_32BIT_DOUBLES__)
-// RL78 with 32-bit double: the floating-point to_chars overloads are not built.
+#if __SIZEOF_DOUBLE__ != 8
+// The implementation assumes a 64-bit double; charconv.cpp is empty without it.
 #  define _LIBCPP_AVAILABILITY_HAS_TO_CHARS_FLOATING_POINT 0
 #  define _LIBCPP_AVAILABILITY_TO_CHARS_FLOATING_POINT __attribute__((unavailable))
 #else
