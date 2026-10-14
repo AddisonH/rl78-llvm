@@ -90,7 +90,10 @@
   ret
 ;
 9:
-  cmp a,#25   ; if the difference in the exponential part is large, y disappears
+  ; y disappears when it is below half the step of x's mantissa: 26 places
+  ; down. 25 is not enough when x is a power of two and y is subtracted (the
+  ; step below x is half as large).
+  cmp a,#26
   bnc $7b ; returns x
   movw  ax,[sp+4+4] ; lower mantissa of y
   xch a,x
