@@ -87,9 +87,9 @@ memory_resource* null_memory_resource() noexcept { return &res_init.resources.nu
 // default_memory_resource()
 
 static memory_resource* __default_memory_resource(bool set = false, memory_resource* new_res = nullptr) noexcept {
-#if defined(__RL78__) && !_LIBCPP_HAS_THREADS
-  // RL78 has no __atomic_* runtime; without threads a plain variable will do
-  // (as in LLVM 17's no-atomic-header configuration).
+#if !_LIBCPP_HAS_THREADS
+  // Without threads a plain variable will do, and a target without lock-free
+  // atomics needs no __atomic_* runtime for it.
   static constinit memory_resource* __res = &res_init.resources.new_delete_res;
   if (set) {
     new_res                  = new_res ? new_res : new_delete_resource();
