@@ -143,9 +143,9 @@ static bool addExceptionArgs(const ArgList &Args, types::ID InputType,
                              ArgStringList &CmdArgs) {
   const llvm::Triple &Triple = TC.getTriple();
 
-  if (KernelOrKext || Triple.isRL78()) {
-    // RL78, -mkernel and -fapple-kext imply no exceptions, so claim exception
-    // related arguments now to avoid warnings about unused arguments.
+  if (KernelOrKext) {
+    // -mkernel and -fapple-kext imply no exceptions, so claim exception related
+    // arguments now to avoid warnings about unused arguments.
     Args.ClaimAllArgs(options::OPT_fexceptions);
     Args.ClaimAllArgs(options::OPT_fno_exceptions);
     Args.ClaimAllArgs(options::OPT_fobjc_exceptions);
@@ -182,8 +182,9 @@ static bool addExceptionArgs(const ArgList &Args, types::ID InputType,
   }
 
   if (types::isCXX(InputType)) {
-    // Disable C++ EH by default on XCore, PS4/PS5 and GPU targets.
+    // Disable C++ EH by default on XCore, RL78, PS4/PS5 and GPU targets.
     bool CXXExceptionsEnabled = Triple.getArch() != llvm::Triple::xcore &&
+                                !Triple.isRL78() &&
                                 !Triple.isPS() && !Triple.isDriverKit() &&
                                 !(Triple.isGPU() && !IsDeviceOffloadAction);
     Arg *ExceptionArg = Args.getLastArg(
@@ -2036,6 +2037,17 @@ void Clang::AddRL78TargetArgs(const ArgList &Args,
                               ArgStringList &CmdArgs) const {
   // TODO: maybe this can be removed at some point.
   CmdArgs.push_back("-fno-aligned-allocation");
+
+  // The backend has no exception handling: C++ exceptions are off by
+  // default, and asking for them is an error.
+  if (Arg *A = Args.getLastArg(options::OPT_fexceptions,
+                               options::OPT_fno_exceptions,
+                               options::OPT_fcxx_exceptions,
+                               options::OPT_fno_cxx_exceptions))
+    if (A->getOption().matches(options::OPT_fexceptions) ||
+        A->getOption().matches(options::OPT_fcxx_exceptions))
+      getToolChain().getDriver().Diag(diag::err_drv_unsupported_opt_for_target)
+          << A->getAsString(Args) << getToolChain().getTriple().str();
 
   // -mllvm -minsert-nop-with-label= needs debug info.
   for (Arg *A : Args.filtered(options::OPT_mllvm)) {
