@@ -2597,20 +2597,6 @@ bool RL78AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
       return false;
     break;
   }
-  case AsmToken::Integer: {
-    // An absolute value in a relocation expression is passed to the linker
-    // as a symbol (see RL78MCExpr::HandleBinaryRelAbsOp): give every
-    // integer one.
-    int64_t Value = Lexer.getTok().getIntVal();
-    std::string Name = "@$IMM_" + std::to_string(Value);
-    if (!Ctx.lookupSymbol(Name)) {
-      MCSymbol *Sym = Ctx.getOrCreateSymbol(Name);
-      MCStreamer &Out = getParser().getStreamer();
-      Out.emitSymbolAttribute(Sym, MCSA_Local);
-      Out.emitAssignment(Sym, MCConstantExpr::create(Value, Ctx));
-    }
-    break;
-  }
   }
 
   if (getParser().parsePrimaryExpr(Res, EndLoc, nullptr))

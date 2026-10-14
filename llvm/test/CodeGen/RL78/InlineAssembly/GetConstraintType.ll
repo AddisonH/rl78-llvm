@@ -2,8 +2,6 @@
 
 ; CHECK: _test_constraint_r_u8:
 ; CHECK: 	;APP
-; CHECK: 	.local	@$IMM_5
-; CHECK: .set @$IMM_5, 5
 ; CHECK: 	add a, #5
 ; CHECK: 	;NO_APP
 define dso_local i8 @test_constraint_r_u8(i8 noundef %0) local_unnamed_addr #0 {

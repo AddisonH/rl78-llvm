@@ -192,12 +192,6 @@ bool GetAbsValueForVariant(RL78MCExpr::VariantKind Kind, int64_t &AbsVal) {
 
 bool RL78MCExpr::evaluateAsRelocatableImpl(MCValue &Res,
                                            const MCAssembler *Asm) const {
-  if (VKind == VariantKind::VK_RL78_IMM_SYM) {
-    Res = MCValue::get(&cast<MCSymbolRefExpr>(getSubExpr())->getSymbol(),
-                       nullptr, 0, VKind);
-    return true;
-  }
-
   if (!getSubExpr()->evaluateAsRelocatable(Res, Asm))
     return false;
 
@@ -451,17 +445,12 @@ RL78MCExpr::ConversionStatus RL78MCExpr::HandleBinaryRelAbsOp(
       CurrentStatus.SymWithPossibleOffset = MCBinaryExpr::createSub(
           SymWithPossibleOffset, MCConstantExpr::create(Abs, Ctx), Ctx);
   } else {
-    // Otherwise The symbol's value should be on the op stack already, we need
-    // to create a symbol for the ABS, a fixup for it and the fixup for the
-    // operation
-    MCSymbol *AbsSymbol = Ctx.lookupSymbol("@$IMM_" + utostr(Abs));
-    if (!AbsSymbol)
-      return ConversionStatus();
-    AbsSymbol->setUsedInReloc();
+    // Otherwise the symbol's value is on the operator stack already: push
+    // the constant (a SYM relocation against no symbol) and operate.
     NeedsPop = true;
     CurrentStatus.VariantKind = RL78MCExpr::VK_RL78_IMM_SYM;
-    fixups.push_back(RL78::createFixup(offset, RL78MCExpr::create(RL78MCExpr::VK_RL78_IMM_SYM,
-                           MCSymbolRefExpr::create(AbsSymbol, Ctx), Ctx), RL78::Fixups::fixup_RL78_SYM));
+    fixups.push_back(RL78::createFixup(offset, MCConstantExpr::create(Abs, Ctx),
+                                       RL78::Fixups::fixup_RL78_SYM));
     fixups.push_back(
         RL78::createFixup(offset, MCConstantExpr::create(0, Ctx), (IsAdd ? RL78::Fixups::fixup_RL78_OPadd
                                             : RL78::Fixups::fixup_RL78_OPsub)));

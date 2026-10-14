@@ -11,8 +11,6 @@ define dso_local i16 @test_weight_r_16(i16 noundef returned %0) local_unnamed_ad
 
 ; CHECK: _test_weight_r_8:
 ; CHECK: 	;APP
-; CHECK: 	.local	@$IMM_5
-; CHECK: .set @$IMM_5, 5
 ; CHECK: 	mov a, #5
 ; CHECK: 	;NO_APP
 define dso_local i8 @test_weight_r_8(i8 noundef returned %0) local_unnamed_addr #0 {
