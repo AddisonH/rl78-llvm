@@ -60,8 +60,8 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-NEXT:    movw ax, !0xffff0
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, !0xffff2
-; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    addw sp, #8
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    ret
 ;
 ; NOSINK-LABEL: dot4:
@@ -124,8 +124,8 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; NOSINK-NEXT:    movw ax, !0xffff0
 ; NOSINK-NEXT:    xchw ax, bc
 ; NOSINK-NEXT:    movw ax, !0xffff2
-; NOSINK-NEXT:    xchw ax, bc
 ; NOSINK-NEXT:    addw sp, #6
+; NOSINK-NEXT:    xchw ax, bc
 ; NOSINK-NEXT:    ret
   %4 = load i16, ptr %0, align 2
   %5 = sext i16 %4 to i32

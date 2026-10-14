@@ -92,8 +92,8 @@ define dso_local void @__dorand48(ptr nocapture noundef readonly %r, ptr nocaptu
 ; CHECK-NEXT:    movw ax, !0xffff2
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw [hl+4], ax
 ; CHECK-NEXT:    addw sp, #12
+; CHECK-NEXT:    movw [hl+4], ax
 ; CHECK-NEXT:    ret
 entry:
   %_mult = getelementptr inbounds %struct._reent, ptr %r, i16 0, i32 16, i32 0, i32 6, i32 1

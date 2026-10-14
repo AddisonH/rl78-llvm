@@ -49,8 +49,8 @@ define i16 @compare(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; CHECK-NEXT:    cmpw ax, [hl+6]
 ; CHECK-NEXT:    bc $.LBB1_2
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop bc
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    ret
@@ -63,8 +63,8 @@ define i16 @compare(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; RELOAD-NEXT:    cmpw ax, hl
 ; RELOAD-NEXT:    bc $.LBB1_2
 ; RELOAD-NEXT:  ; %bb.1:
-; RELOAD-NEXT:    push de
-; RELOAD-NEXT:    pop bc
+; RELOAD-NEXT:    movw ax, de
+; RELOAD-NEXT:    movw bc, ax
 ; RELOAD-NEXT:  .LBB1_2:
 ; RELOAD-NEXT:    movw ax, bc
 ; RELOAD-NEXT:    ret

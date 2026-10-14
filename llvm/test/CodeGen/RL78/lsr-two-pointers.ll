@@ -11,8 +11,7 @@ define ptr @copy(ptr returned %d, ptr %s) {
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:  .LBB0_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    mov a, [hl]

@@ -34,8 +34,8 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; CHECK-NEXT:    addw ax, bc
 ; CHECK-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw ax, [hl+4] ; 2-byte Folded Reload
-; CHECK-NEXT:    addw ax, [hl+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw sp, #8
+; CHECK-NEXT:    addw ax, [hl+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    ret
 ;
 ; STORE-LABEL: three:
@@ -65,8 +65,8 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; STORE-NEXT:    addw ax, bc
 ; STORE-NEXT:    addw ax, [hl+4] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
-; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw sp, #8
+; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    ret
   %x = call i16 @g(i16 %a)
   %y = call i16 @g(i16 %b)
@@ -119,9 +119,9 @@ define i16 @large(i16 %a) {
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw sp, #254
 ; CHECK-NEXT:    addw sp, #48
+; CHECK-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    ret
 ;
 ; STORE-LABEL: large:
@@ -135,9 +135,9 @@ define i16 @large(i16 %a) {
 ; STORE-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw hl, sp
-; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw sp, #254
 ; STORE-NEXT:    addw sp, #48
+; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    ret
   %buf = alloca [300 x i8]
   call void @h(ptr %buf)

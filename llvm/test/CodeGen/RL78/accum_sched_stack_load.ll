@@ -115,9 +115,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    xor a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    push de
-; NOSCHED-NEXT:    pop hl
 ; NOSCHED-NEXT:    movw ax, de
+; NOSCHED-NEXT:    movw hl, ax
 ; NOSCHED-NEXT:    xchw ax, de
 ; NOSCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; NOSCHED-NEXT:    xchw ax, de
@@ -309,8 +308,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; NOSCHED-NEXT:    xor a, l
 ; NOSCHED-NEXT:    xch a, x
 ; NOSCHED-NEXT:    movw bc, ax
-; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    addw sp, #20
+; NOSCHED-NEXT:    movw ax, de
 ; NOSCHED-NEXT:    ret
 ;
 ; SCHED-LABEL: g:
@@ -399,8 +398,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    push de
-; SCHED-NEXT:    pop hl
+; SCHED-NEXT:    movw ax, de
+; SCHED-NEXT:    movw hl, ax
 ; SCHED-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; SCHED-NEXT:    xchw ax, de
 ; SCHED-NEXT:    xor a, d
@@ -565,8 +564,8 @@ define dso_local i32 @g(i32 noundef %0, i32 noundef %1, i16 noundef %2) local_un
 ; SCHED-NEXT:    xor a, l
 ; SCHED-NEXT:    xch a, x
 ; SCHED-NEXT:    movw bc, ax
-; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    addw sp, #20
+; SCHED-NEXT:    movw ax, de
 ; SCHED-NEXT:    ret
   %4 = shl i32 %1, 3
   %5 = xor i32 %4, %0

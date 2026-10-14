@@ -146,9 +146,9 @@ define void @br_rel16_bc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
 ; CHECK-NEXT:    incw ax
-; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    cmpw ax, [hl+34] ; 2-byte Folded Reload
 ; CHECK-NEXT:    sknc
@@ -413,9 +413,9 @@ define void @br_rel16_bnc_backward_jump_substitute(i16 %current, i16 %limit) {
 ; CHECK-NEXT:    movw [sp+2], ax
 ; CHECK-NEXT:    movw [sp+0], ax
 ; CHECK-NEXT:    call !_padding_function
+; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw ax, [sp+32] ; 2-byte Folded Reload
 ; CHECK-NEXT:    decw ax
-; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    movw [sp+32], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    cmpw ax, [hl+34] ; 2-byte Folded Reload
 ; CHECK-NEXT:    skc

@@ -1,0 +1,94 @@
+# RUN: llc -mtriple=rl78 -run-pass=rl78-late-reorder -verify-machineinstrs %s -o - | FileCheck %s
+
+# RL78LateReorder: an instruction that forms an address with a register the
+# instruction before it wrote waits a clock (manual 7.2.3). An independent
+# instruction from nearby goes between the two.
+
+--- |
+  target triple = "rl78"
+  define void @from_above() { ret void }
+  define void @from_below() { ret void }
+  define void @dependent() { ret void }
+  define void @skipped() { ret void }
+  define void @size() optsize { ret void }
+...
+---
+# CHECK-LABEL: name: from_above
+# CHECK:      $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $rp2 = MOVW_rp_i16 5
+# CHECK-NEXT: $r1 = OR_A_mHLi killed $r1, killed $rp6, 4
+name: from_above
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0
+    $rp2 = MOVW_rp_i16 5
+    $rp6 = MOVW_rp_SP $spreg
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8))
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0, implicit killed $rp2
+...
+---
+# CHECK-LABEL: name: from_below
+# CHECK:      $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $rp2 = MOVW_rp_i16 5
+# CHECK-NEXT: $r1 = OR_A_mHLi killed $r1, killed $rp6, 4
+name: from_below
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0
+    $rp6 = MOVW_rp_SP $spreg
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8))
+    $rp2 = MOVW_rp_i16 5
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0, implicit killed $rp2
+...
+---
+# The pointer comes through AX from the instruction before: nothing moves.
+# CHECK-LABEL: name: dependent
+# CHECK:      $rp0 = MOVW_rp_i16 7
+# CHECK-NEXT: $rp6 = MOVW_rp_AX
+# CHECK-NEXT: $r1 = OR_A_mHLi
+# CHECK-NEXT: RET
+name: dependent
+tracksRegLiveness: true
+body: |
+  bb.0:
+    $rp0 = MOVW_rp_i16 7
+    $rp6 = MOVW_rp_AX $rp0
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8))
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0
+...
+---
+# The instruction after the skip stays there.
+# CHECK-LABEL: name: skipped
+# CHECK:      SKcc 2
+# CHECK-NEXT: $rp2 = MOVW_rp_i16 5
+# CHECK-NEXT: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $r1 = OR_A_mHLi
+name: skipped
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0, $rp2, $ccreg
+    SKcc 2, implicit $ccreg
+    $rp2 = MOVW_rp_i16 5
+    $rp6 = MOVW_rp_SP $spreg
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8))
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0, implicit killed $rp2
+...
+---
+# Not where size is what counts.
+# CHECK-LABEL: name: size
+# CHECK:      $rp2 = MOVW_rp_i16 5
+# CHECK-NEXT: $rp6 = MOVW_rp_SP $spreg
+# CHECK-NEXT: $r1 = OR_A_mHLi
+name: size
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rp0
+    $rp2 = MOVW_rp_i16 5
+    $rp6 = MOVW_rp_SP $spreg
+    $r1 = OR_A_mHLi killed $r1, killed $rp6, 4, implicit-def $ccreg :: (load (s8))
+    RET implicit-def dead $spreg, implicit $spreg, implicit killed $rp0, implicit killed $rp2
+...

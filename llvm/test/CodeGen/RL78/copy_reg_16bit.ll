@@ -27,10 +27,10 @@ define dso_local i16 @_test_rp_rp(i16 noundef %0, i16 noundef %1, i16 noundef %2
 ; CHECK-LABEL: _test_rp_rp:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, bc
-; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    xchw ax, de
@@ -38,7 +38,7 @@ define dso_local i16 @_test_rp_rp(i16 noundef %0, i16 noundef %1, i16 noundef %2
 ; CHECK-NEXT:    pop bc
 ; CHECK-NEXT:    call !_callee1
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw ax, [hl+6]
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret

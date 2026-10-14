@@ -1179,9 +1179,15 @@ void RL78InstrInfo::buildCopy(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, get(RL78::MOVW_rp_AX), DestReg)
           .addReg(SrcReg, getKillRegState(KillSrc));
     }
-    // movw BC/DE/HL, BC/DE/HL using push/pop 2 bytes and 2 cycles.
-    // Also used for ES when it is modeled as a 16-bit RP register.
-    else {
+    // Between BC, DE and HL: through AX when it is free, else PUSH and POP.
+    // Both are two bytes and two clocks, but POP waits a clock for the SP
+    // that PUSH wrote (manual 7.2.3).
+    else if (!isLiveBefore(MBB, After, RL78::RP0)) {
+      BuildMI(MBB, I, DL, get(RL78::MOVW_AX_rp), RL78::RP0)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+      BuildMI(MBB, I, DL, get(RL78::MOVW_rp_AX), DestReg)
+          .addReg(RL78::RP0, RegState::Kill);
+    } else {
       BuildMI(MBB, I, DL, get(RL78::PUSH_rp))
           .addReg(SrcReg, getKillRegState(KillSrc));
       BuildMI(MBB, I, DL, get(RL78::POP_rp), DestReg);

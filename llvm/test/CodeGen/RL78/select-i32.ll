@@ -71,8 +71,8 @@ define i32 @abs(i32 %a) optsize {
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:  .LBB2_2:
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    push de
@@ -132,14 +132,14 @@ define i16 @two(i16 %c, i16 %a, i16 %b, ptr %p) optsize {
 ; CHECK-NEXT:    cmpw ax, #7
 ; CHECK-NEXT:    bnc $.LBB5_2
 ; CHECK-NEXT:  ; %bb.1:
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop bc
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    br $.LBB5_3
 ; CHECK-NEXT:  .LBB5_2: ; %select.false
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:  .LBB5_3: ; %select.end
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw de, ax

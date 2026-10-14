@@ -36,9 +36,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB0_3:
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw ax, hl
 ; CHECK-NEXT:    ret
 ;
 ; PINNED-LABEL: find:
@@ -62,9 +60,7 @@ define ptr @find(ptr %n, i16 %key) {
 ; PINNED-NEXT:    movw ax, de
 ; PINNED-NEXT:    ret
 ; PINNED-NEXT:  .LBB0_3:
-; PINNED-NEXT:    push hl
-; PINNED-NEXT:    pop de
-; PINNED-NEXT:    movw ax, de
+; PINNED-NEXT:    movw ax, hl
 ; PINNED-NEXT:    ret
 entry:
   %e = icmp eq ptr %n, null

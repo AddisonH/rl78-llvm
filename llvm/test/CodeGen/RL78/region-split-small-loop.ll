@@ -22,16 +22,16 @@ define void @rev(ptr %list, i16 %a, i16 %b) {
 ; CHECK-NEXT:    clrw bc
 ; CHECK-NEXT:  .LBB0_3: ; %while.body
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw hl, ax
 ; CHECK-NEXT:    movw ax, [hl]
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    movw [hl], ax
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    or a, x
-; CHECK-NEXT:    push hl
-; CHECK-NEXT:    pop bc
+; CHECK-NEXT:    movw ax, hl
+; CHECK-NEXT:    movw bc, ax
 ; CHECK-NEXT:    bnz $.LBB0_3
 ; CHECK-NEXT:    br $.LBB0_4
 ; CHECK-NEXT:  .LBB0_1:
@@ -67,8 +67,8 @@ define void @rev(ptr %list, i16 %a, i16 %b) {
 ; NOSPLIT-NEXT:    movw ax, de
 ; NOSPLIT-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; NOSPLIT-NEXT:    or a, x
-; NOSPLIT-NEXT:    push hl
-; NOSPLIT-NEXT:    pop bc
+; NOSPLIT-NEXT:    movw ax, hl
+; NOSPLIT-NEXT:    movw bc, ax
 ; NOSPLIT-NEXT:    bnz $.LBB0_3
 ; NOSPLIT-NEXT:    br $.LBB0_4
 ; NOSPLIT-NEXT:  .LBB0_1:

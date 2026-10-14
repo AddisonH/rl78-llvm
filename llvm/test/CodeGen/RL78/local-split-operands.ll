@@ -65,8 +65,8 @@ define dso_local noundef i32 @ch(i32 noundef %0, i32 noundef %1, i32 noundef %2,
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addc a, h
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw sp, #6
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
 ;
 ; SPLIT-LABEL: ch:
@@ -128,8 +128,8 @@ define dso_local noundef i32 @ch(i32 noundef %0, i32 noundef %1, i32 noundef %2,
 ; SPLIT-NEXT:    xch a, x
 ; SPLIT-NEXT:    addc a, h
 ; SPLIT-NEXT:    movw bc, ax
-; SPLIT-NEXT:    movw ax, de
 ; SPLIT-NEXT:    addw sp, #6
+; SPLIT-NEXT:    movw ax, de
 ; SPLIT-NEXT:    ret
   %5 = xor i32 %2, %1
   %6 = and i32 %5, %0

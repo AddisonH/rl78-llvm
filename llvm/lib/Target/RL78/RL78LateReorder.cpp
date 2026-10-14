@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Changes the order of instructions where the order the earlier passes left
-// costs exchanges.
+// costs exchanges or clocks.
 //
 // A 16-bit AND, OR or XOR is the byte operation on A (the high byte of AX)
 // and, with XCH A, X around it, on X. Two in a row keep both exchanges in the
@@ -30,6 +30,13 @@
 // where one has to stay between two operations on a byte the run needs more
 // exchanges.
 //
+// An instruction that forms an address with a register the instruction
+// before it wrote waits a clock (manual 7.2.3): MOVW HL, SP before
+// [HL+byte], INCW DE before [DE], POP before RET. Where the writer can change
+// places with the independent instruction before it, or the user with the
+// one after it, and that leaves fewer such pairs, they do. Not in functions
+// optimized for size, where the order only perturbs the outliner.
+//
 //===----------------------------------------------------------------------===//
 
 #include "RL78.h"
@@ -44,6 +51,7 @@
 #define DEBUG_TYPE "rl78-late-reorder"
 using namespace llvm;
 
+STATISTIC(NumHazards, "Number of address hazards moved apart");
 STATISTIC(NumExchanges,
           "Number of XCH A, X removed by regrouping byte operations");
 
@@ -75,6 +83,10 @@ private:
   bool regroup(MachineBasicBlock &MBB, MachineBasicBlock::iterator Begin,
                MachineBasicBlock::iterator End);
   bool regroupExchanges(MachineBasicBlock &MBB);
+
+  bool hazard(const MachineInstr *Def, const MachineInstr *Use) const;
+  bool canSwap(const MachineInstr &A, const MachineInstr &B) const;
+  bool avoidHazards(MachineBasicBlock &MBB);
 };
 } // end anonymous namespace
 
@@ -300,17 +312,153 @@ bool RL78LateReorder::regroupExchanges(MachineBasicBlock &MBB) {
   return Changed;
 }
 
+// Does \p Use form an address with a register \p Def writes? BC, DE, HL and
+// their halves in an instruction that reads or writes memory (A, X and AX
+// carry the data, PUSH stores its register), SP in one that addresses the
+// stack.
+bool RL78LateReorder::hazard(const MachineInstr *Def,
+                             const MachineInstr *Use) const {
+  if (!Def || !Use || Def->isDebugInstr() || Use->isDebugInstr())
+    return false;
+  bool Stack = Use->mayLoadOrStore() || Use->isCall() || Use->isReturn();
+  bool Memory = Use->mayLoadOrStore() && Use->getOpcode() != RL78::PUSH_rp;
+  for (const MachineOperand &MO : Use->all_uses()) {
+    Register R = MO.getReg();
+    if (!R || MO.isUndef())
+      continue;
+    bool Address = R == RL78::SPreg
+                       ? Stack
+                       : Memory && R != RL78::CCreg &&
+                             !TRI->regsOverlap(R, RL78::RP0) &&
+                             (RL78::RL78RegRegClass.contains(R) ||
+                              RL78::RL78RPRegsRegClass.contains(R));
+    if (Address && Def->modifiesRegister(R, TRI))
+      return true;
+  }
+  return false;
+}
+
+// May \p A and the instruction \p B right after it change places?
+bool RL78LateReorder::canSwap(const MachineInstr &A,
+                              const MachineInstr &B) const {
+  for (const MachineInstr *MI : {&A, &B})
+    if (MI->isDebugInstr() || MI->isMetaInstruction() || MI->isBundle() ||
+        MI->isCall() || MI->isTerminator() || MI->isBranch() ||
+        MI->isInlineAsm() || isSkip(*MI) || MI->hasUnmodeledSideEffects() ||
+        MI->hasOrderedMemoryRef())
+      return false;
+  auto Overlap = [&](const MachineInstr &X, const MachineInstr &Y) {
+    for (const MachineOperand &D : X.operands()) {
+      if (D.isRegMask())
+        return true;
+      if (!D.isReg() || !D.isDef() || !D.getReg())
+        continue;
+      for (const MachineOperand &O : Y.operands())
+        if (O.isRegMask() || (O.isReg() && O.getReg() &&
+                              TRI->regsOverlap(D.getReg(), O.getReg())))
+          return true;
+    }
+    return false;
+  };
+  if (Overlap(A, B) || Overlap(B, A))
+    return false;
+  if (A.mayLoadOrStore() && B.mayLoadOrStore() &&
+      (A.mayStore() || B.mayStore()) &&
+      A.mayAlias(static_cast<AAResults *>(nullptr), B,
+                 /*UseTBAA=*/false))
+    return false;
+  return true;
+}
+
+bool RL78LateReorder::avoidHazards(MachineBasicBlock &MBB) {
+  // How far an instruction may come from to fill the gap.
+  const unsigned Window = 4;
+  bool Changed = false;
+  auto Prev = [&](MachineInstr *MI) -> MachineInstr * {
+    MachineBasicBlock::iterator I(MI);
+    if (I == MBB.begin())
+      return nullptr;
+    MachineBasicBlock::iterator P = prev_nodbg(I, MBB.begin());
+    return P->isDebugInstr() ? nullptr : &*P;
+  };
+  auto Next = [&](MachineInstr *MI) -> MachineInstr * {
+    MachineBasicBlock::iterator N =
+        next_nodbg(MachineBasicBlock::iterator(MI), MBB.end());
+    return N == MBB.end() ? nullptr : &*N;
+  };
+  // The instruction a skip skips stays where it is.
+  auto Skipped = [&](MachineInstr *MI) {
+    MachineInstr *P = Prev(MI);
+    return P && isSkip(*P);
+  };
+  // Is it better to take X from where it is to between D and U? It must
+  // change places with everything on its way, and leave fewer hazards.
+  auto Better = [&](MachineInstr *X, MachineInstr *D, MachineInstr *U) {
+    MachineInstr *XP = Prev(X), *XN = Next(X);
+    int Before = hazard(XP, X) + hazard(X, XN) + 1;
+    int After = hazard(XP, XN) + hazard(D, X) + hazard(X, U);
+    // X next to D or U: the pairs overlap.
+    if (XN == D)
+      After = hazard(XP, D) + hazard(D, X) + hazard(X, U),
+      Before = hazard(XP, X) + hazard(X, D) + 1;
+    if (XP == U)
+      After = hazard(D, X) + hazard(X, U) + hazard(U, XN),
+      Before = 1 + hazard(U, X) + hazard(X, XN);
+    return After < Before;
+  };
+  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E;
+       I = std::next(I)) {
+    MachineInstr *U = &*I;
+    MachineInstr *D = Prev(U);
+    if (U->isDebugInstr() || !hazard(D, U) || Skipped(U))
+      continue;
+    MachineInstr *Fill = nullptr;
+    // From above: X moves down past everything up to D.
+    SmallVector<MachineInstr *, 4> Crossed{D};
+    for (MachineInstr *X = Prev(D); X && !Fill && Crossed.size() <= Window;
+         X = Prev(X)) {
+      if (!Skipped(X) &&
+          all_of(Crossed, [&](MachineInstr *Y) { return canSwap(*X, *Y); }) &&
+          Better(X, D, U))
+        Fill = X;
+      Crossed.push_back(X);
+    }
+    // From below: X moves up past everything down to U.
+    Crossed.assign({U});
+    for (MachineInstr *X = Next(U); X && !Fill && Crossed.size() <= Window;
+         X = Next(X)) {
+      if (!Skipped(X) &&
+          all_of(Crossed, [&](MachineInstr *Y) { return canSwap(*Y, *X); }) &&
+          Better(X, D, U))
+        Fill = X;
+      Crossed.push_back(X);
+    }
+    if (!Fill)
+      continue;
+    MBB.splice(MachineBasicBlock::iterator(U), &MBB,
+               MachineBasicBlock::iterator(Fill));
+    ++NumHazards;
+    Changed = true;
+  }
+  return Changed;
+}
+
 bool RL78LateReorder::runOnMachineFunction(MachineFunction &MF) {
   if (skipFunction(MF.getFunction()))
     return false;
   TII = static_cast<const RL78InstrInfo *>(MF.getSubtarget().getInstrInfo());
   TRI = MF.getSubtarget().getRegisterInfo();
   bool Changed = false;
+  bool Hazards = !MF.getFunction().hasOptSize();
   for (MachineBasicBlock &MBB : MF) {
-    if (regroupExchanges(MBB)) {
+    bool BlockChanged = regroupExchanges(MBB);
+    if (Hazards)
+      BlockChanged |= avoidHazards(MBB);
+    // Two instructions that read a register may have changed places: the
+    // kill flags as well as the exchanges' flags.
+    if (BlockChanged)
       TII->setExchangeFlags(MBB);
-      Changed = true;
-    }
+    Changed |= BlockChanged;
   }
   return Changed;
 }

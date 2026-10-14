@@ -77,10 +77,10 @@ define void @overlap(ptr %r, ptr %a, ptr %b) {
 ; CHECK-LABEL: overlap:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
-; CHECK-NEXT:    push de
-; CHECK-NEXT:    pop hl
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
+; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw hl, ax
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [de]
 ; CHECK-NEXT:    addw ax, [hl+0]
 ; CHECK-NEXT:    movw bc, ax
@@ -144,8 +144,8 @@ define i64 @arguments(i64 %x, i64 %y) {
 ; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw [hl+2], ax
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:    movw [hl], ax
 ; CHECK-NEXT:    addw sp, #4
+; CHECK-NEXT:    movw [hl], ax
 ; CHECK-NEXT:    ret
   %c = add i64 %x, %y
   ret i64 %c

@@ -73,8 +73,8 @@ define i32 @dot(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:  .LBB0_5: ; %exit
 ; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
-; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    addw sp, #6
+; CHECK-NEXT:    xchw ax, bc
 ; CHECK-NEXT:    ret
 entry:
   %z = icmp eq i16 %n, 0
@@ -126,9 +126,8 @@ define i32 @dot_call(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw !0xffff2, ax
-; CHECK-NEXT:    push bc
-; CHECK-NEXT:    pop de
-; CHECK-NEXT:    movw ax, de
+; CHECK-NEXT:    movw ax, bc
+; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [de]
 ; CHECK-NEXT:    movw bc, ax
@@ -171,8 +170,8 @@ define i32 @dot_call(ptr %a, ptr %b, i16 %n) {
 ; CHECK-NEXT:  .LBB1_4: ; %exit
 ; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw sp, #10
+; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    ret
 entry:
   %z = icmp eq i16 %n, 0

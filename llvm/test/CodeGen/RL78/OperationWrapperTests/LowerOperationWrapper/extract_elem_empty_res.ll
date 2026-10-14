@@ -16,9 +16,9 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:    xchw ax, de
 ; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    xchw ax, de
+; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    movw [de], ax
 ; CHECK-NEXT:    movw de, #1
-; CHECK-NEXT:    cmpw ax, hl
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    mov a, h
 ; CHECK-NEXT:    xor1 cy, a.7
@@ -36,8 +36,8 @@ define dso_local i16 @test_add(i16 noundef %0, i16 noundef %1, ptr nocapture nou
 ; CHECK-NEXT:    xor a, h
 ; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    xor a, l
-; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    addw sp, #4
+; CHECK-NEXT:    xch a, x
 ; CHECK-NEXT:    ret
   %4 = tail call { i16, i1 } @llvm.sadd.with.overflow.i16(i16 %0, i16 %1)
   %5 = extractvalue { i16, i1 } %4, 1

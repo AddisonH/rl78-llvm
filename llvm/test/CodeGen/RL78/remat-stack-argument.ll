@@ -43,8 +43,8 @@ define i16 @f(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; COPY-NEXT:    movw hl, sp
 ; COPY-NEXT:    addw ax, bc
 ; COPY-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
-; COPY-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
 ; COPY-NEXT:    addw sp, #6
+; COPY-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
 ; COPY-NEXT:    ret
   %x = call i16 @g(i16 %d)
   %y = call i16 @g(i16 %e)
@@ -91,8 +91,8 @@ define i8 @realign(i16 %a, i16 %b, i16 %c, i8 %d, i8 %e) {
 ; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    movw ax, [sp+4]
 ; CHECK-NEXT:    movw sp, ax
-; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    addw sp, #8
+; CHECK-NEXT:    xchw ax, hl
 ; CHECK-NEXT:    ret
 ;
 ; COPY-LABEL: realign:
@@ -129,8 +129,8 @@ define i8 @realign(i16 %a, i16 %b, i16 %c, i8 %d, i8 %e) {
 ; COPY-NEXT:    xchw ax, hl
 ; COPY-NEXT:    movw ax, [sp+4]
 ; COPY-NEXT:    movw sp, ax
-; COPY-NEXT:    xchw ax, hl
 ; COPY-NEXT:    addw sp, #8
+; COPY-NEXT:    xchw ax, hl
 ; COPY-NEXT:    ret
   %v = alloca i32, align 8
   call void @h(ptr %v)
