@@ -21,8 +21,7 @@ using namespace llvm;
 namespace {
 class RL78CMPWithZeroElimPass : public MachineFunctionPass {
 public:
-  explicit RL78CMPWithZeroElimPass(bool Late = false)
-      : MachineFunctionPass(ID), Late(Late) {}
+  RL78CMPWithZeroElimPass() : MachineFunctionPass(ID) {}
 
   StringRef getPassName() const override {
     return "RL78 CMP with 0 elimination";
@@ -32,15 +31,14 @@ public:
 
 private:
   static char ID;
-  // The last run, when no later pass moves values through AX any more.
-  bool Late;
 };
 
 char RL78CMPWithZeroElimPass::ID = 0;
 } // end anonymous namespace
 
-FunctionPass *llvm::createRL78CMPWithZeroElimPass(bool Late) {
-  return new RL78CMPWithZeroElimPass(Late);
+// It runs before emission, when no later pass moves values through AX.
+FunctionPass *llvm::createRL78CMPWithZeroElimPass() {
+  return new RL78CMPWithZeroElimPass();
 }
 
 // True if only the Z flag of the flags \p CMP sets is read.
@@ -333,8 +331,7 @@ bool RL78CMPWithZeroElimPass::runOnMachineFunction(MachineFunction &MF) {
       Changed = true;
     }
 
-    if (Late)
-      Changed |= shortenCMPWWithZero(MBB);
+    Changed |= shortenCMPWWithZero(MBB);
   }
   return Changed;
 }

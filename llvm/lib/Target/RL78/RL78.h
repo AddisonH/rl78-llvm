@@ -43,7 +43,7 @@ FunctionPass *createRL78ExpandPseudoInstsPass();
 FunctionPass *createRL78SelectBTCLRPass();
 FunctionPass *createRL78AccumulatorCopiesPass();
 FunctionPass *createRL78LoadLateStoreEarlyPass();
-FunctionPass *createRL78CMPWithZeroElimPass(bool Late = false);
+FunctionPass *createRL78CMPWithZeroElimPass();
 FunctionPass *createRL78ConstPropAndOpSwap();
 FunctionPass *createRL78InsertNOPWithLabelPass();
 FunctionPass *createRL78ESOptPass();
