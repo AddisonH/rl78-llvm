@@ -47,6 +47,8 @@ struct RL78RegisterInfo : public RL78GenRegisterInfo {
   bool reverseLocalAssignment() const override { return true; }
 
   // No region splitting: see the definition.
+  bool shouldLocalSplitForVirtReg(const MachineFunction &MF,
+                                  const LiveInterval &VirtReg) const override;
   bool shouldRegionSplitForVirtReg(const MachineFunction &MF,
                                    const LiveInterval &VirtReg) const override;
 

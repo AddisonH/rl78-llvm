@@ -26,10 +26,9 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; CHECK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, de
 ; CHECK-NEXT:    addw ax, de
-; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
-; CHECK-NEXT:    movw ax, hl
-; CHECK-NEXT:    addw ax, de
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
+; CHECK-NEXT:    addw ax, hl
 ; CHECK-NEXT:    movw de, ax
 ; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw !0xffff0, ax
@@ -80,14 +79,16 @@ define i32 @dot4(ptr nofree noundef readonly captures(none) %0, ptr nofree nound
 ; NOSINK-NEXT:    movw bc, ax
 ; NOSINK-NEXT:    push de
 ; NOSINK-NEXT:    pop hl
+; NOSINK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
+; NOSINK-NEXT:    movw de, ax
 ; NOSINK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; NOSINK-NEXT:    mulh
 ; NOSINK-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; NOSINK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
-; NOSINK-NEXT:    movw de, ax
 ; NOSINK-NEXT:    addw ax, de
-; NOSINK-NEXT:    movw de, ax
 ; NOSINK-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; NOSINK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
+; NOSINK-NEXT:    movw de, ax
 ; NOSINK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; NOSINK-NEXT:    addw ax, de
 ; NOSINK-NEXT:    movw de, ax

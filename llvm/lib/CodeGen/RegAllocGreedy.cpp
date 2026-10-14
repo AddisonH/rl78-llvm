@@ -1982,9 +1982,11 @@ MCRegister RAGreedy::trySplit(const LiveInterval &VirtReg,
     NamedRegionTimer T("local_split", "Local Splitting", TimerGroupName,
                        TimerGroupDescription, TimePassesIsEnabled);
     SA->analyze(&VirtReg);
-    MCRegister PhysReg = tryLocalSplit(VirtReg, Order, NewVRegs);
-    if (PhysReg || !NewVRegs.empty())
-      return PhysReg;
+    if (TRI->shouldLocalSplitForVirtReg(*MF, VirtReg)) {
+      MCRegister PhysReg = tryLocalSplit(VirtReg, Order, NewVRegs);
+      if (PhysReg || !NewVRegs.empty())
+        return PhysReg;
+    }
     return tryInstructionSplit(VirtReg, Order, NewVRegs);
   }
 

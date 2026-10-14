@@ -17,23 +17,24 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; CHECK-NEXT:    push bc
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    push ax
+; CHECK-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, [sp+4]
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    movw [sp+0], ax
-; CHECK-NEXT:    movw ax, [sp+6]
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; CHECK-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    addw ax, bc
-; CHECK-NEXT:    addw ax, [hl+2]
-; CHECK-NEXT:    addw ax, [hl+4]
-; CHECK-NEXT:    addw ax, [hl+6]
+; CHECK-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
+; CHECK-NEXT:    addw ax, [hl+4] ; 2-byte Folded Reload
+; CHECK-NEXT:    addw ax, [hl+6] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw sp, #8
 ; CHECK-NEXT:    ret
 ;
@@ -41,29 +42,30 @@ define i16 @three(i16 %a, i16 %b, i16 %c) {
 ; STORE:       ; %bb.0:
 ; STORE-NEXT:    subw sp, #8
 ; STORE-NEXT:    xchw ax, de
-; STORE-NEXT:    movw [sp+0], ax
+; STORE-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; STORE-NEXT:    xchw ax, de
 ; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw [sp+2], ax
+; STORE-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
 ; STORE-NEXT:    xchw ax, bc
-; STORE-NEXT:    movw [sp+4], ax
+; STORE-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
+; STORE-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
-; STORE-NEXT:    movw [sp+6], ax
-; STORE-NEXT:    movw ax, [sp+2]
+; STORE-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
+; STORE-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw bc, ax
-; STORE-NEXT:    movw ax, [sp+6]
+; STORE-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw ax, bc
-; STORE-NEXT:    movw [sp+6], ax
-; STORE-NEXT:    movw ax, [sp+0]
+; STORE-NEXT:    movw [sp+6], ax ; 2-byte Folded Spill
+; STORE-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw bc, ax
-; STORE-NEXT:    movw ax, [sp+6]
+; STORE-NEXT:    movw ax, [sp+6] ; 2-byte Folded Reload
 ; STORE-NEXT:    movw hl, sp
 ; STORE-NEXT:    addw ax, bc
-; STORE-NEXT:    addw ax, [hl+4]
-; STORE-NEXT:    addw ax, [hl+2]
-; STORE-NEXT:    addw ax, [hl+0]
+; STORE-NEXT:    addw ax, [hl+4] ; 2-byte Folded Reload
+; STORE-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
+; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw sp, #8
 ; STORE-NEXT:    ret
   %x = call i16 @g(i16 %a)
@@ -82,18 +84,20 @@ define i16 @one(i16 %a) {
 ; CHECK-LABEL: one:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    push ax
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    addw ax, [hl+0]
+; CHECK-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    pop hl
 ; CHECK-NEXT:    ret
 ;
 ; STORE-LABEL: one:
 ; STORE:       ; %bb.0:
 ; STORE-NEXT:    push ax
+; STORE-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw hl, sp
-; STORE-NEXT:    addw ax, [hl+0]
+; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    pop hl
 ; STORE-NEXT:    ret
   %x = call i16 @g(i16 %a)
@@ -108,14 +112,14 @@ define i16 @large(i16 %a) {
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    subw sp, #254
 ; CHECK-NEXT:    subw sp, #48
-; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, sp
 ; CHECK-NEXT:    addw ax, #2
 ; CHECK-NEXT:    call !_h
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw hl, sp
-; CHECK-NEXT:    addw ax, [hl+0]
+; CHECK-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    addw sp, #254
 ; CHECK-NEXT:    addw sp, #48
 ; CHECK-NEXT:    ret
@@ -124,14 +128,14 @@ define i16 @large(i16 %a) {
 ; STORE:       ; %bb.0:
 ; STORE-NEXT:    subw sp, #254
 ; STORE-NEXT:    subw sp, #48
-; STORE-NEXT:    movw [sp+0], ax
+; STORE-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; STORE-NEXT:    movw ax, sp
 ; STORE-NEXT:    addw ax, #2
 ; STORE-NEXT:    call !_h
-; STORE-NEXT:    movw ax, [sp+0]
+; STORE-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    call !_g
 ; STORE-NEXT:    movw hl, sp
-; STORE-NEXT:    addw ax, [hl+0]
+; STORE-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
 ; STORE-NEXT:    addw sp, #254
 ; STORE-NEXT:    addw sp, #48
 ; STORE-NEXT:    ret

@@ -621,6 +621,57 @@ static cl::opt<unsigned>
                             "loop whose virtual registers are at most this "
                             "many bytes together (0: none)"));
 
+static cl::opt<bool> SplitOperandsLocally(
+    "rl78-split-operands-locally", cl::Hidden, cl::init(false),
+    cl::desc("Split a value that is only read as the second operand of "
+             "operations on A or AX within a block before spilling it"));
+
+// Whether Reg is only ever read as the second operand of an operation on A
+// or AX, or copied: ADDW AX, rp and the like, which read [HL+byte] as well.
+static bool isOperandOnly(const MachineRegisterInfo &MRI, Register Reg,
+                          const TargetRegisterInfo &TRI) {
+  auto IsAccumulator = [&](const MachineOperand &MO) {
+    if (!MO.isReg() || !MO.getReg().isValid())
+      return false;
+    if (MO.getReg().isPhysical())
+      return TRI.regsOverlap(MO.getReg(), RL78::RP0);
+    const TargetRegisterClass *RC = MRI.getRegClass(MO.getReg());
+    return RC->getNumRegs() == 1 && TRI.regsOverlap(*RC->begin(), RL78::RP0);
+  };
+  bool AnyOperand = false;
+  for (const MachineOperand &MO : MRI.reg_nodbg_operands(Reg)) {
+    const MachineInstr &MI = *MO.getParent();
+    if (MI.isCopy())
+      continue;
+    if (MO.isTied() || MI.isCall() || MI.isInlineAsm())
+      return false;
+    if (MO.isDef())
+      continue;
+    if (MI.mayLoad() || MI.mayStore() || MI.isBranch() || MI.isReturn())
+      return false;
+    if (none_of(MI.explicit_operands(), [&](const MachineOperand &Other) {
+          return &Other != &MO && IsAccumulator(Other);
+        }))
+      return false;
+    AnyOperand = true;
+  }
+  return AnyOperand;
+}
+
+bool RL78RegisterInfo::shouldLocalSplitForVirtReg(
+    const MachineFunction &MF, const LiveInterval &VirtReg) const {
+  // The pieces of a split value each need a register, and what joins them
+  // is a reload into one: MOV A or MOVW AX, [SP+byte] and a move, with an
+  // exchange on either side where the accumulator is taken, which it is in
+  // front of the second operand of an operation on it. Spilled as a whole,
+  // such an operand is read from its slot instead ([HL+byte] with SP in HL,
+  // RL78SlotOperands). The slot forms are a byte or two longer than the
+  // register forms, so not in a function optimized for size.
+  if (SplitOperandsLocally || MF.getFunction().hasOptSize())
+    return true;
+  return !isOperandOnly(MF.getRegInfo(), VirtReg.reg(), *this);
+}
+
 bool RL78RegisterInfo::shouldRegionSplitForVirtReg(
     const MachineFunction &MF, const LiveInterval &VirtReg) const {
   // A value split between two of BC, DE and HL is copied with PUSH and POP,

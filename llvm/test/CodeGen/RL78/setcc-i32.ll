@@ -62,7 +62,7 @@ define i16 @sel(i32 %a, i32 %b, i16 %x, i16 %y) {
 ; CHECK-NEXT:    movw ax, bc
 ; CHECK-NEXT:    cmpw ax, de
 ; CHECK-NEXT:    xor1 cy, a.7
-; CHECK-NEXT:    mov a, d
+; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    xor1 cy, a.7
 ; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    movw bc, ax

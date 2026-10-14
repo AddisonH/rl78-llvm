@@ -14,11 +14,11 @@ define i16 @f(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; CHECK-NEXT:    push ax
 ; CHECK-NEXT:    movw ax, [sp+6]
 ; CHECK-NEXT:    call !_g
-; CHECK-NEXT:    movw [sp+0], ax
+; CHECK-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
 ; CHECK-NEXT:    movw ax, [sp+8]
 ; CHECK-NEXT:    call !_g
 ; CHECK-NEXT:    movw bc, ax
-; CHECK-NEXT:    movw ax, [sp+0]
+; CHECK-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; CHECK-NEXT:    movw hl, sp
 ; CHECK-NEXT:    addw ax, bc
 ; CHECK-NEXT:    addw ax, [hl+6]
@@ -30,18 +30,20 @@ define i16 @f(i16 %a, i16 %b, i16 %c, i16 %d, i16 %e) {
 ; COPY:       ; %bb.0:
 ; COPY-NEXT:    subw sp, #6
 ; COPY-NEXT:    movw ax, [sp+10]
-; COPY-NEXT:    movw [sp+0], ax
+; COPY-NEXT:    movw [sp+0], ax ; 2-byte Folded Spill
+; COPY-NEXT:    movw ax, [sp+0] ; 2-byte Folded Reload
 ; COPY-NEXT:    call !_g
-; COPY-NEXT:    movw [sp+4], ax
+; COPY-NEXT:    movw [sp+4], ax ; 2-byte Folded Spill
 ; COPY-NEXT:    movw ax, [sp+12]
-; COPY-NEXT:    movw [sp+2], ax
+; COPY-NEXT:    movw [sp+2], ax ; 2-byte Folded Spill
+; COPY-NEXT:    movw ax, [sp+2] ; 2-byte Folded Reload
 ; COPY-NEXT:    call !_g
 ; COPY-NEXT:    movw bc, ax
-; COPY-NEXT:    movw ax, [sp+4]
+; COPY-NEXT:    movw ax, [sp+4] ; 2-byte Folded Reload
 ; COPY-NEXT:    movw hl, sp
 ; COPY-NEXT:    addw ax, bc
-; COPY-NEXT:    addw ax, [hl+0]
-; COPY-NEXT:    addw ax, [hl+2]
+; COPY-NEXT:    addw ax, [hl+0] ; 2-byte Folded Reload
+; COPY-NEXT:    addw ax, [hl+2] ; 2-byte Folded Reload
 ; COPY-NEXT:    addw sp, #6
 ; COPY-NEXT:    ret
   %x = call i16 @g(i16 %d)

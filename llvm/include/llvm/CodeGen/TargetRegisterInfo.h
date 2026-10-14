@@ -1037,6 +1037,17 @@ public:
   virtual bool shouldRegionSplitForVirtReg(const MachineFunction &MF,
                                            const LiveInterval &VirtReg) const;
 
+  /// Local splitting cuts a live range that is in one block into pieces
+  /// around the gaps between its uses, with the value in a stack slot or in
+  /// another register in between. This method is used to decide whether
+  /// \p VirtReg should go through it before it is spilled as a whole: a
+  /// target whose instructions read a spilled value from its slot may do
+  /// better without the pieces.
+  virtual bool shouldLocalSplitForVirtReg(const MachineFunction &MF,
+                                          const LiveInterval &VirtReg) const {
+    return true;
+  }
+
   /// Last chance recoloring has a high compile time cost especially for
   /// targets with a lot of registers.
   /// This method is used to decide whether or not \p VirtReg should
