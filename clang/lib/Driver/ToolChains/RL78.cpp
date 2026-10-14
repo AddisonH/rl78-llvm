@@ -238,7 +238,7 @@ static bool userProvidedPasses(const llvm::opt::ArgList &Args) {
   return false;
 }
 
-static llvm::StringRef getOptmizationLevel(const llvm::opt::ArgList &Args) {
+static llvm::StringRef getOptimizationLevel(const llvm::opt::ArgList &Args) {
   if (llvm::opt::Arg *A = Args.getLastArg(options::OPT_O_Group)) {
     if (A->getOption().matches(options::OPT_O)) {
       llvm::StringRef V = A->getValue();
@@ -297,7 +297,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("--relax");
     // When optimizing for size, call the most called functions through the
     // CALLT table: one byte less per call, two clocks more.
-    StringRef OptLevel = getOptmizationLevel(Args);
+    StringRef OptLevel = getOptimizationLevel(Args);
     if (OptLevel == "s" || OptLevel == "z")
       CmdArgs.push_back("--relax-callt");
   } else {
@@ -308,7 +308,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   CmdArgs.push_back("-Bstatic");
 
-  // Adding all paths pecified with -L
+  // Adding all paths specified with -L
   Args.AddAllArgs(CmdArgs, options::OPT_L);
 
   SmallString<128> Dir(TC.computeSysRoot());
@@ -322,7 +322,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     if (!userProvidedPasses(Args)) {
       // LLVM 23 has no Os/Oz pipelines: O2, with the functions' optsize /
       // minsize attributes (set at compile time) doing the size tuning.
-      if (StringRef O = getOptmizationLevel(Args); O == "s" || O == "z")
+      if (StringRef O = getOptimizationLevel(Args); O == "s" || O == "z")
         CmdArgs.push_back(
             Args.MakeArgString("--lto-newpm-passes=lto<O2>,globalopt,mergefunc"));
     }
@@ -377,14 +377,7 @@ void rl78::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  //Disable multiple threads to avoid race when using the relocation "stack".
-  //See ELF\Arch\RL78.cpp
-  CmdArgs.push_back("--threads=1");
-
-  const Arg *mCode =
-      Args.getLastArg(options::OPT_mnear_code, options::OPT_mfar_code);
-  if (/*(mCode == nullptr && CPU.lower() != "s1" && !TC.getDriver().CCCIsCXX()) ||*/
-      (mCode && mCode->getOption().getID() == options::OPT_mfar_code))
+  if (Args.hasFlag(options::OPT_mfar_code, options::OPT_mnear_code, false))
     CmdArgs.push_back("-mfar-code");
 
   C.addCommand(std::make_unique<Command>(
