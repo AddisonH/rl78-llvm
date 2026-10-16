@@ -21,7 +21,6 @@
 #include "llvm/MC/MCDecoderOps.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
 
@@ -56,81 +55,153 @@ LLVMInitializeRL78Disassembler() {
                                          createRL78Disassembler);
 }
 
-static DecodeStatus addReg(MCInst &MI, MCRegister Reg) {
+static DecodeStatus addReg(MCInst &MI, unsigned Reg) {
   MI.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
 
-// A register field holds the register's hardware encoding (X..H 0-7, AX..HL
-// 0, 2, 4, 6); it decodes only to a member of the operand's class.
-template <unsigned RC>
-static DecodeStatus decodeRegField(MCInst &MI, uint64_t Value,
-                                   const MCDisassembler *Decoder) {
-  const MCRegisterInfo *MRI = Decoder->getContext().getRegisterInfo();
-  for (MCRegister Reg : MRI->getRegClass(RC))
-    if (MRI->getEncodingValue(Reg) == Value)
-      return addReg(MI, Reg);
-  return MCDisassembler::Fail;
+// A register field holds the register's hardware encoding: X, A, C, B, E, D,
+// L, H are 0-7 and AX, BC, DE, HL are 0, 2, 4, 6. Each table holds the
+// members of one class at their encodings, and no register elsewhere.
+static const unsigned RegDecoderTable[] = {RL78::R0, RL78::R1, RL78::R2,
+                                           RL78::R3, RL78::R4, RL78::R5,
+                                           RL78::R6, RL78::R7};
+static const unsigned LowDecoderTable[] = {RL78::R0, RL78::R1, RL78::R2,
+                                           RL78::R3};
+static const unsigned XBCEDHLDecoderTable[] = {
+    RL78::R0, RL78::NoRegister, RL78::R2, RL78::R3,
+    RL78::R4, RL78::R5,         RL78::R6, RL78::R7};
+static const unsigned BCEDHLDecoderTable[] = {
+    RL78::NoRegister, RL78::NoRegister, RL78::R2, RL78::R3,
+    RL78::R4,         RL78::R5,         RL78::R6, RL78::R7};
+static const unsigned RPDecoderTable[] = {
+    RL78::RP0, RL78::NoRegister, RL78::RP2, RL78::NoRegister,
+    RL78::RP4, RL78::NoRegister, RL78::RP6};
+static const unsigned BCDEHLDecoderTable[] = {
+    RL78::NoRegister, RL78::NoRegister, RL78::RP2, RL78::NoRegister,
+    RL78::RP4,        RL78::NoRegister, RL78::RP6};
+static const unsigned AXBCDecoderTable[] = {RL78::RP0, RL78::NoRegister,
+                                            RL78::RP2};
+
+static DecodeStatus decodeRegFromTable(MCInst &MI, const unsigned *Table,
+                                       unsigned Size, uint64_t Value) {
+  if (Value >= Size || Table[Value] == RL78::NoRegister)
+    return MCDisassembler::Fail;
+  return addReg(MI, Table[Value]);
 }
 
-// A single-register class: not encoded.
-template <unsigned RC>
-static DecodeStatus decodeFixedReg(MCInst &MI, const MCDisassembler *Decoder) {
-  const MCRegisterInfo *MRI = Decoder->getContext().getRegisterInfo();
-  return addReg(MI, *MRI->getRegClass(RC).begin());
+static DecodeStatus DecodeRL78RegRegisterClass(MCInst &MI, uint64_t Value,
+                                               uint64_t Address,
+                                               const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, RegDecoderTable, std::size(RegDecoderTable),
+                            Value);
+}
+static DecodeStatus DecodeRL78LowRegisterClass(MCInst &MI, uint64_t Value,
+                                               uint64_t Address,
+                                               const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, LowDecoderTable, std::size(LowDecoderTable),
+                            Value);
+}
+static DecodeStatus
+DecodeRL78XBCEDHLRegRegisterClass(MCInst &MI, uint64_t Value, uint64_t Address,
+                                  const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, XBCEDHLDecoderTable,
+                            std::size(XBCEDHLDecoderTable), Value);
+}
+static DecodeStatus
+DecodeRL78BCEDHLRegRegisterClass(MCInst &MI, uint64_t Value, uint64_t Address,
+                                 const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, BCEDHLDecoderTable,
+                            std::size(BCEDHLDecoderTable), Value);
+}
+static DecodeStatus
+DecodeRL78RPRegsRegisterClass(MCInst &MI, uint64_t Value, uint64_t Address,
+                              const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, RPDecoderTable, std::size(RPDecoderTable),
+                            Value);
+}
+static DecodeStatus
+DecodeRL78BCDEHLRegisterClass(MCInst &MI, uint64_t Value, uint64_t Address,
+                              const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, BCDEHLDecoderTable,
+                            std::size(BCDEHLDecoderTable), Value);
+}
+static DecodeStatus
+DecodeRL78AXBCRPRegisterClass(MCInst &MI, uint64_t Value, uint64_t Address,
+                              const MCDisassembler *Decoder) {
+  return decodeRegFromTable(MI, AXBCDecoderTable, std::size(AXBCDecoderTable),
+                            Value);
 }
 
-#define RL78_FIELD_CLASS(NAME)                                                 \
-  static DecodeStatus Decode##NAME##RegisterClass(                             \
-      MCInst &MI, uint64_t Value, uint64_t, const MCDisassembler *Decoder) {   \
-    return decodeRegField<RL78::NAME##RegClassID>(MI, Value, Decoder);         \
-  }
-#define RL78_FIXED_CLASS(NAME)                                                 \
-  static DecodeStatus Decode##NAME##RegisterClass(                             \
-      MCInst &MI, const MCDisassembler *Decoder) {                             \
-    return decodeFixedReg<RL78::NAME##RegClassID>(MI, Decoder);                \
-  }
-RL78_FIELD_CLASS(RL78Reg)
-RL78_FIELD_CLASS(RL78Low)
-RL78_FIELD_CLASS(RL78XBCEDHLReg)
-RL78_FIELD_CLASS(RL78BCEDHLReg)
-RL78_FIELD_CLASS(RL78RPRegs)
-RL78_FIELD_CLASS(RL78BCDEHL)
-RL78_FIELD_CLASS(RL78AXBCRP)
-RL78_FIXED_CLASS(RL78AReg)
-RL78_FIXED_CLASS(RL78XReg)
-RL78_FIXED_CLASS(RL78BReg8)
-RL78_FIXED_CLASS(RL78CReg8)
-RL78_FIXED_CLASS(RL78AXRP)
-RL78_FIXED_CLASS(RL78BCRP)
-RL78_FIXED_CLASS(RL78DERP)
-RL78_FIXED_CLASS(RL78HL)
-RL78_FIXED_CLASS(RL78SPReg)
-RL78_FIXED_CLASS(RL78RegES)
-RL78_FIXED_CLASS(RL78RegCS)
-RL78_FIXED_CLASS(RL78RegPSW)
-#undef RL78_FIELD_CLASS
-#undef RL78_FIXED_CLASS
+// Single-register classes: not encoded.
+static DecodeStatus DecodeRL78ARegRegisterClass(MCInst &MI,
+                                                const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::R1);
+}
+static DecodeStatus DecodeRL78XRegRegisterClass(MCInst &MI,
+                                                const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::R0);
+}
+static DecodeStatus
+DecodeRL78BReg8RegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::R3);
+}
+static DecodeStatus
+DecodeRL78CReg8RegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::R2);
+}
+static DecodeStatus DecodeRL78AXRPRegisterClass(MCInst &MI,
+                                                const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::RP0);
+}
+static DecodeStatus DecodeRL78BCRPRegisterClass(MCInst &MI,
+                                                const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::RP2);
+}
+static DecodeStatus DecodeRL78DERPRegisterClass(MCInst &MI,
+                                                const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::RP4);
+}
+static DecodeStatus DecodeRL78HLRegisterClass(MCInst &MI,
+                                              const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::RP6);
+}
+static DecodeStatus
+DecodeRL78SPRegRegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::SPreg);
+}
+static DecodeStatus
+DecodeRL78RegESRegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::ES);
+}
+static DecodeStatus
+DecodeRL78RegCSRegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::CS);
+}
+static DecodeStatus
+DecodeRL78RegPSWRegisterClass(MCInst &MI, const MCDisassembler *Decoder) {
+  return addReg(MI, RL78::PSW);
+}
 
 // The encoder methods of RL78MCCodeEmitter, backwards.
-static DecodeStatus decodeIsC(MCInst &MI, uint64_t V, uint64_t,
-                              const MCDisassembler *) {
+static DecodeStatus decodeIsC(MCInst &MI, uint64_t V, uint64_t Address,
+                              const MCDisassembler *Decoder) {
   return addReg(MI, V ? RL78::R2 : RL78::R3);
 }
-static DecodeStatus decodeIsB(MCInst &MI, uint64_t V, uint64_t,
-                              const MCDisassembler *) {
+static DecodeStatus decodeIsB(MCInst &MI, uint64_t V, uint64_t Address,
+                              const MCDisassembler *Decoder) {
   return addReg(MI, V ? RL78::R3 : RL78::R2);
 }
-static DecodeStatus decodeIsHL(MCInst &MI, uint64_t V, uint64_t,
-                               const MCDisassembler *) {
+static DecodeStatus decodeIsHL(MCInst &MI, uint64_t V, uint64_t Address,
+                               const MCDisassembler *Decoder) {
   return addReg(MI, V ? RL78::RP6 : RL78::RP4);
 }
-static DecodeStatus decodeIsDE(MCInst &MI, uint64_t V, uint64_t,
-                               const MCDisassembler *) {
+static DecodeStatus decodeIsDE(MCInst &MI, uint64_t V, uint64_t Address,
+                               const MCDisassembler *Decoder) {
   return addReg(MI, V ? RL78::RP4 : RL78::RP6);
 }
-static DecodeStatus decodeDEHLDisp(MCInst &MI, uint64_t V, uint64_t,
-                                   const MCDisassembler *) {
+static DecodeStatus decodeDEHLDisp(MCInst &MI, uint64_t V, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
   if (V == 1)
     return addReg(MI, RL78::RP4);
   if (V == 2)
@@ -142,18 +213,18 @@ static DecodeStatus addCond(MCInst &MI, RL78CC::CondCodes CC) {
   MI.addOperand(MCOperand::createImm(CC));
   return MCDisassembler::Success;
 }
-static DecodeStatus decodeBcc(MCInst &MI, uint64_t V, uint64_t,
-                              const MCDisassembler *) {
+static DecodeStatus decodeBcc(MCInst &MI, uint64_t V, uint64_t Address,
+                              const MCDisassembler *Decoder) {
   static const RL78CC::CondCodes CC[4] = {RL78CC::RL78CC_C, RL78CC::RL78CC_Z,
                                           RL78CC::RL78CC_NC, RL78CC::RL78CC_NZ};
   return addCond(MI, CC[V & 3]);
 }
-static DecodeStatus decodeHcc(MCInst &MI, uint64_t V, uint64_t,
-                              const MCDisassembler *) {
+static DecodeStatus decodeHcc(MCInst &MI, uint64_t V, uint64_t Address,
+                              const MCDisassembler *Decoder) {
   return addCond(MI, V ? RL78CC::RL78CC_NH : RL78CC::RL78CC_H);
 }
-static DecodeStatus decodeBtBf(MCInst &MI, uint64_t V, uint64_t,
-                               const MCDisassembler *) {
+static DecodeStatus decodeBtBf(MCInst &MI, uint64_t V, uint64_t Address,
+                               const MCDisassembler *Decoder) {
   if (V == 1)
     return addCond(MI, RL78CC::RL78CC_Z);
   if (V == 2)
@@ -163,25 +234,25 @@ static DecodeStatus decodeBtBf(MCInst &MI, uint64_t V, uint64_t,
 
 // saddr: FFE20H-FFF1FH from its low byte; sfr: FFF00H-FFFFFH; !addr16 of
 // data: F0000H-FFFFFH.
-static DecodeStatus decodeSaddr(MCInst &MI, uint64_t V, uint64_t,
-                                const MCDisassembler *) {
+static DecodeStatus decodeSaddr(MCInst &MI, uint64_t V, uint64_t Address,
+                                const MCDisassembler *Decoder) {
   MI.addOperand(MCOperand::createImm((V < 0x20 ? 0xFFF00 : 0xFFE00) | V));
   return MCDisassembler::Success;
 }
-static DecodeStatus decodeSfr(MCInst &MI, uint64_t V, uint64_t,
-                              const MCDisassembler *) {
+static DecodeStatus decodeSfr(MCInst &MI, uint64_t V, uint64_t Address,
+                              const MCDisassembler *Decoder) {
   MI.addOperand(MCOperand::createImm(0xFFF00 | V));
   return MCDisassembler::Success;
 }
-static DecodeStatus decodeAddr16(MCInst &MI, uint64_t V, uint64_t,
-                                 const MCDisassembler *) {
+static DecodeStatus decodeAddr16(MCInst &MI, uint64_t V, uint64_t Address,
+                                 const MCDisassembler *Decoder) {
   MI.addOperand(MCOperand::createImm(0xF0000 | V));
   return MCDisassembler::Success;
 }
 
 // CALLT [addr5]: entry I is the word at 80H + 2 * I.
-static DecodeStatus decodeCallt(MCInst &MI, uint64_t V, uint64_t,
-                                const MCDisassembler *) {
+static DecodeStatus decodeCallt(MCInst &MI, uint64_t V, uint64_t Address,
+                                const MCDisassembler *Decoder) {
   MI.addOperand(MCOperand::createImm(0x80 + 2 * V));
   return MCDisassembler::Success;
 }
